@@ -2286,8 +2286,22 @@ field inside a file nobody opens. Files are compared by `(size, mtime)` -- every
 write a filesystem records moves it, and a file touched without its bytes
 changing reads as written, which is the safe direction for a guard about who
 wrote where. `.implementation/` is excluded, for the reason the dirty-tree guard
-excuses it. The same block, minus its constant note, is written into the
-terminal ledger event, so the reading survives the process that took it.
+excuses it.
+
+`wrote` also carries `ignored`: which of this run's own written products,
+under its declared roots, the repository's own ignore rules exclude. Answers
+the question `status`/`inside`/`outside` cannot -- a path can be entirely
+`own`, exactly where the step was told to write, and still never enter the
+repository's history, because a rule written for what existed some earlier
+day also excludes what was written today. `ignored` is always present, `[]`
+when nothing is excluded; it is computed over `inside` only, since a foreign
+write already gets the strongest reading this skill can give it. When
+`ignored` is non-empty, `ignoredNote` carries the same, singly-defined
+consequence sentence every sibling note in this file carries -- it reports
+what is excluded and never repairs it, exactly as this whole reading never
+gates on what it finds. The same block, minus its constant note and its
+ignoredNote, is written into the terminal ledger event, so both readings
+survive the process that took them.
 
 That same pair is also the only cost figure this skill has, and `step`
 publishes it: `lastRun` on every successful call carries the elapsed seconds

@@ -160,11 +160,11 @@ For every sub-task below: apply the exact named mutation, purge `__pycache__`, r
 
 ## Phase 5: Documentation
 
-- [ ] 5.1 Update `skills/proposal-implementation/SKILL.md:3014`'s `step` row: the `wrote` sub-key enumeration gains `ignored` and `ignoredNote`, states that `ignored` is computed over `inside` only, and states that the ledger event carries the paths without the prose.
+- [x] 5.1 Update `skills/proposal-implementation/SKILL.md:3014`'s `step` row: the `wrote` sub-key enumeration gains `ignored` and `ignoredNote`, states that `ignored` is computed over `inside` only, and states that the ledger event carries the paths without the prose.
   - Acceptance: the row reads all of `status`, `declared`, `inside`, `outside`, `ignored`, `note`, and (conditionally) `ignoredNote` — matching the spec requirement "The Documented Sub-Key Enumeration Names The New Field".
   - Check: manual read-back of the updated row against the spec scenario "The documented enumeration lists the new field". No derived guard checks this — it is a task, never a test (Decision D7).
 
-- [ ] 5.2 Update `skills/proposal-implementation/references/usage.md:2275-2290`'s `wrote` narrative paragraph with the same fact in its own register — including that the reading is written into the terminal ledger event without the prose sentence.
+- [x] 5.2 Update `skills/proposal-implementation/references/usage.md:2275-2290`'s `wrote` narrative paragraph with the same fact in its own register — including that the reading is written into the terminal ledger event without the prose sentence.
   - Acceptance: a reader of `usage.md` alone, without consulting `SKILL.md`, learns that `ignored`/`ignoredNote` exist, what they mean, and that the ledger drops the prose.
   - Check: manual read-back; confirm this edit did not stop at `SKILL.md` alone (the repository has already measured that failure shape once — `the-correction-reached-skillmd-and-stopped`).
 
