@@ -50,6 +50,33 @@ def present_files(target: Path) -> list[str]:
     return [p for p in relative if p not in ignored]
 
 
+def repository_ignored(target: Path, paths: list[str]) -> set[str]:
+    """Which of `paths` this repository declares it does not ship.
+
+    `paths` are repository-relative, POSIX-spelled, and asked in ONE batch.
+    Returns the subset git names, verbatim as supplied.
+
+    Never raises, never refuses, and deliberately does not route through
+    `git()` above: that helper raises `GIT_FAILED` on any non-zero exit, and
+    `check-ignore` exits 1 when nothing matched and 128 outside a work tree.
+    Both mean the same thing to a caller asking which paths to drop, so the
+    return code is not read at all -- a non-zero exit carries no output and
+    the parse below yields the empty set on its own. An empty `paths` spawns
+    nothing.
+    """
+    if not paths:
+        return set()
+    try:
+        proc = subprocess.run(
+            ["git", "check-ignore", "--stdin", "-z"], cwd=target,
+            input="\0".join(paths), capture_output=True, text=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+    return {p for p in proc.stdout.split("\0") if p}
+
+
 def text_files(target: Path, paths: list[str]) -> list[str]:
     return [p for p in paths if Path(p).suffix.lower() in TEXT_EXT]
 

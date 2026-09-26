@@ -58,7 +58,8 @@ from impl_domain_profile import PROFILE  # noqa: E402
 # INSIDE the engine cannot see one -- which is how it got called dead.
 from impl_layout import FORGE_ROOT, IGNORED_DIRS, LFS_POINTER_PREFIX  # noqa: E402
 from impl_refusals import NameRefused, Refused  # noqa: E402
-from impl_gitops import git, lfs_state, present_files, tracked_files  # noqa: E402
+from impl_gitops import (git, lfs_state, present_files,  # noqa: E402
+                         repository_ignored, tracked_files)
 from impl_guards import require_clean_worktree, require_non_forge_interpreter, resolve_target  # noqa: E402
 from impl_naming import normalize_name, package_name, validate_name  # noqa: E402
 from impl_references import (prefix_mappings, reference_pattern,  # noqa: E402
@@ -10694,6 +10695,26 @@ STEP_WROTE_FOREIGN = (
     "or its declared roots are wrong. Both are the target's to decide; this "
     "reports what changed and never repairs it.")
 
+#: Said only when the check below finds at least one own-and-written path the
+#: repository's own ignore rules exclude. Never repairs it, for the reason
+#: `undeclared_produces_state` already gives: by the time this runs, the
+#: subprocess has already executed and the product is already on disk.
+STEP_WROTE_IGNORED = (
+    "this run wrote paths under the roots this step declares that the "
+    "repository's own ignore rules exclude, so they will not enter the "
+    "history: the declaration reads satisfied, the run reports "
+    "`outcome: \"returned\"`, and the product is absent from every clone but "
+    "this one -- found today only by somebody going looking for a file that "
+    "was never committed. Either the ignore rule reaches further than it was "
+    "written to, or this product belongs somewhere the repository keeps. "
+    "Both are the target's to decide; this reports what is excluded and "
+    "never repairs it.")
+
+#: Ledger prose keys stripped from the terminal event -- a roster, never a
+#: `key.endswith("Note")` suffix test, so a key added to `wrote` without
+#: being classified stays visible rather than silently swept in or out.
+WROTE_PROSE_KEYS = ("note", "ignoredNote")
+
 
 def _step_wrote(declared: list[str] | None,
                 before: dict[str, tuple], after: dict[str, tuple]) -> dict:
@@ -10702,6 +10723,13 @@ def _step_wrote(declared: list[str] | None,
     Published on every run, in all four states, so a reader learns what the
     check watches rather than meeting it only when it has something to say --
     `undeclaredLadder`'s own doctrine.
+
+    Does not itself answer whether any of `inside` is excluded by the
+    repository's own ignore rules -- that reading is `wrote["ignored"]`,
+    joined on by `cmd_step` via `_step_wrote_ignored` rather than computed
+    here, because this function is the only pure one on this path (no
+    process, filesystem or git boundary) and a `git check-ignore` subprocess
+    would end that.
     """
     if not declared:
         return {"status": "undeclared", "declared": [], "inside": [],
@@ -10717,6 +10745,29 @@ def _step_wrote(declared: list[str] | None,
         status, note = "own", STEP_WROTE_OWN
     return {"status": status, "declared": list(declared),
             "inside": inside, "outside": outside, "note": note}
+
+
+def _step_wrote_ignored(target: Path, name: str, inside: list[str]) -> list[str]:
+    """Which of this run's own written products the repository will not take.
+
+    `inside` is product-relative and the ignore rules are repository-relative,
+    so the product name is joined on before the question is asked and the
+    answer is mapped back -- the reported spelling stays `inside`'s, in
+    `inside`'s order, because a field beside `inside` and `outside` that read
+    in a different base would need explaining every time it is read.
+
+    Computed over `inside` alone: `outside` is already the strongest reading
+    this skill gives for the other half. No existence guard anywhere -- a
+    removal counts as a write (`changed_paths`), and `check-ignore` matches
+    patterns rather than the filesystem, so a deleted path still gets a real
+    answer.
+    """
+    if not inside:
+        return []
+    joined = [f"{name}/{path}" for path in inside]
+    answered = repository_ignored(target, joined)
+    return [path for path, joined_path in zip(inside, joined)
+            if joined_path in answered]
 
 
 def _step_verdicts(target: Path, name: str) -> dict:
@@ -16807,6 +16858,10 @@ def cmd_step(args: argparse.Namespace) -> dict:
 
     wrote = _step_wrote(produces, before_product,
                         product_snapshot(target, name))
+    ignored = _step_wrote_ignored(target, name, wrote["inside"])
+    wrote["ignored"] = ignored
+    if ignored:
+        wrote["ignoredNote"] = STEP_WROTE_IGNORED
     recorded_at = _now_iso8601()
     event = {
         **identity,
@@ -16816,9 +16871,10 @@ def cmd_step(args: argparse.Namespace) -> dict:
         # Durable, not merely printed. The incident this closes was found by
         # a digest somebody compared by hand and thrown away; a reading that
         # lives only in one process's stdout is the same thing with extra
-        # steps. The constant `note` is not carried -- it is the same
-        # sentence for every event and belongs where it is defined.
-        "wrote": {key: value for key, value in wrote.items() if key != "note"},
+        # steps. Prose keys are not carried -- they are the same sentence for
+        # every event and belong where they are defined.
+        "wrote": {key: value for key, value in wrote.items()
+                  if key not in WROTE_PROSE_KEYS},
     }
     impl_position.append_event(ledger_path, event)
 
