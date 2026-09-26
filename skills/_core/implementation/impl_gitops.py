@@ -83,7 +83,7 @@ def lfs_state(target: Path) -> dict:
     if not patterns:
         return {"status": "none", "patterns": []}
 
-    pointers, materialized = [], 0
+    pointers, materialized = [], []
     for path in target.rglob("*"):
         if not path.is_file() or ".git" in path.parts:
             continue
@@ -104,14 +104,28 @@ def lfs_state(target: Path) -> dict:
                     declared = int(line.split()[1]) if line.split()[1].isdigit() else 0
             pointers.append({"path": relative, "bytes": declared})
         else:
-            materialized += 1
+            # Named, not merely counted. The contract promises to report
+            # "which large files are real content and which are unfetched
+            # pointers"; a count answers the second half and tallies the
+            # first, so a reader needing one specific checkpoint could not
+            # tell whether it had arrived. The size here is what is ON DISK,
+            # a different measurement from a pointer's declared size, which
+            # is a claim printed inside the placeholder -- which is why
+            # `bytesToFetch` below stays about pointers alone.
+            try:
+                on_disk = path.stat().st_size
+            except OSError:
+                on_disk = 0
+            materialized.append({"path": relative, "bytes": on_disk})
 
     total = sum(p["bytes"] for p in pointers)
     return {
         "status": "pointers" if pointers else "materialized",
         "patterns": patterns,
         "pointerCount": len(pointers),
-        "materializedCount": materialized,
+        "materializedCount": len(materialized),
+        "materialized": sorted(materialized, key=lambda entry: -entry["bytes"])[:20],
+        "materializedTruncated": max(0, len(materialized) - 20),
         "bytesToFetch": total,
         "humanBytesToFetch": f"{total / 1024**3:.2f} GiB" if total else "0",
         "pointers": sorted(pointers, key=lambda p: -p["bytes"])[:20],

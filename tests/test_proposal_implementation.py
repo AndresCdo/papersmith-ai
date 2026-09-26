@@ -715,6 +715,55 @@ class ProbeStateTests(unittest.TestCase):
         # costs the same, the browser's download button included.
         self.assertIn("download button", state["quota"])
 
+    def test_the_real_content_is_named_the_same_way_the_pointers_are(self):
+        """The skill's own table promises `lfs` reports "which large files are
+        real content and which are unfetched pointers". It answered the right
+        half by path and the left half by tally: `materializedCount: 3` tells
+        you three are present and not which three, so a reader who needs one
+        specific checkpoint cannot tell whether it is among them. A question
+        answered by a number is not the question the contract states.
+
+        The size reported for real content is what is ON DISK. A pointer's
+        size is a claim printed inside the placeholder -- the two are
+        different measurements and must not be presented as one, which is why
+        `bytesToFetch` stays about pointers alone.
+        """
+        box = Path(tempfile.mkdtemp(prefix="pp-lfs-named-"))
+        (box / ".gitattributes").write_text("*.pth filter=lfs diff=lfs merge=lfs -text\n")
+        (box / "Models").mkdir()
+        (box / "Models" / "placeholder.pth").write_bytes(
+            impl.LFS_POINTER_PREFIX + b"v1\noid sha256:abc\nsize 1073741824\n")
+        (box / "Models" / "small.pth").write_bytes(b"\x80\x02" + b"x" * 10)
+        (box / "Models" / "big.pth").write_bytes(b"\x80\x02" + b"y" * 500)
+
+        state = impl.lfs_state(box)
+        self.assertEqual(state["materializedCount"], 2)
+        named = state["materialized"]
+        self.assertEqual(
+            [entry["path"] for entry in named],
+            ["Models/big.pth", "Models/small.pth"],
+            "real content must be named, largest first, the same ordering the "
+            "pointers already use")
+        self.assertEqual(named[0]["bytes"], 502)
+        self.assertEqual(named[1]["bytes"], 12)
+        # The two halves stay separate measurements: a pointer's declared size
+        # is a claim in a text file, a materialized file's size is the file.
+        self.assertEqual(state["bytesToFetch"], 1073741824)
+
+    def test_a_complete_repository_names_its_content_too(self):
+        """The status word changes when nothing is a pointer, and the naming
+        must not change with it: `materialized` is where a reader looks to
+        confirm a specific file arrived, and that need does not depend on
+        whether some OTHER file is still missing."""
+        box = Path(tempfile.mkdtemp(prefix="pp-lfs-complete-"))
+        (box / ".gitattributes").write_text("*.pth filter=lfs diff=lfs merge=lfs -text\n")
+        (box / "Models").mkdir()
+        (box / "Models" / "real.pth").write_bytes(b"\x80\x02real")
+
+        state = impl.lfs_state(box)
+        self.assertEqual(state["status"], "materialized")
+        self.assertEqual([e["path"] for e in state["materialized"]], ["Models/real.pth"])
+
     def test_a_repository_with_no_lfs_says_so_rather_than_guessing(self):
         box = Path(tempfile.mkdtemp(prefix="pp-lfs-"))
         self.assertEqual(impl.lfs_state(box)["status"], "none")
