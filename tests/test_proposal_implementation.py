@@ -36439,7 +36439,12 @@ class StepWriteScopeTests(unittest.TestCase):
         """Lock 5 -- the consequence prose is a single named constant,
         asserted by identity, exactly as
         `test_a_step_declaring_no_roots_is_graded_against_nothing` does for
-        `PRODUCES_UNDECLARED_CONSEQUENCE`."""
+        `PRODUCES_UNDECLARED_CONSEQUENCE`. This identity assertion still
+        technically passes if `STEP_WROTE_IGNORED` were mutated to `""` --
+        its real assurance is against drift between the field and the
+        constant, never against an empty constant. Guarding a non-empty,
+        doctrine-bearing constant is a separate, hand-read fact, not
+        something this assertion alone locks."""
         box = self._box("ignorednote", {"run": self._entry("write_own")},
                         ignore=("__pycache__/", ".ipynb_checkpoints/",
                                 ".implementation/", "/Method/Results/own/"))

@@ -120,39 +120,39 @@ Every task in this phase MUST be run and observed failing (for the right reason 
 
 For every sub-task below: apply the exact named mutation, purge `__pycache__`, run the associated test and confirm it now FAILS, then revert the mutation, purge `__pycache__` again, and confirm the test PASSES again. `git diff --stat` does not prove a mutation landed — read the actual diff or grep the anchor before trusting the run.
 
-- [ ] 4.1 **[Lock 1]** Delete the `f"{name}/"` join in `_step_wrote_ignored` (pass `path` unjoined to `repository_ignored`). Confirm Task 2.1's test now fails (its fixture rule is anchored `/Method/Results/own/`, which cannot match the unjoined `Results/own/a.json`). Revert.
+- [x] 4.1 **[Lock 1]** Delete the `f"{name}/"` join in `_step_wrote_ignored` (pass `path` unjoined to `repository_ignored`). Confirm Task 2.1's test now fails (its fixture rule is anchored `/Method/Results/own/`, which cannot match the unjoined `Results/own/a.json`). Revert.
   - Acceptance: test fails with the mutation in place, passes after revert.
   - Check: `grep -n 'f"{name}/' skills/_core/implementation/engine/implementation_engine.py` confirms the join line exists after revert.
 
-- [ ] 4.2 **[Lock 2]** Flip `check=False` to `check=True` in `impl_gitops.repository_ignored` (or route through `impl_gitops.git()`). Confirm Task 2.2's test now fails/raises on the clean, tracked-write case (exit 1). Revert.
+- [x] 4.2 **[Lock 2]** Flip `check=False` to `check=True` in `impl_gitops.repository_ignored` (or route through `impl_gitops.git()`). Confirm Task 2.2's test now fails/raises on the clean, tracked-write case (exit 1). Revert.
   - Acceptance: mutation raises `CalledProcessError` or `Refused("GIT_FAILED")` where the test expects a clean `[]`; reverted code passes again.
   - Check: read the exception type/message during the mutated run to confirm it is the exit-code branch failing, not an unrelated error.
 
-- [ ] 4.3 **[Lock 3]** Comment out the call to `_step_wrote_ignored` in `cmd_step` entirely (field never set). Confirm this is caught by Task 2.1/2.2 (both fail with `KeyError: 'ignored'`), proving neither row alone would be a sufficient lock without the other. Revert.
+- [x] 4.3 **[Lock 3]** Comment out the call to `_step_wrote_ignored` in `cmd_step` entirely (field never set). Confirm this is caught by Task 2.1/2.2 (both fail with `KeyError: 'ignored'`), proving neither row alone would be a sufficient lock without the other. Revert.
   - Acceptance: both tests fail with the call removed; both pass after revert.
   - Check: same pytest invocation as 2.1/2.2.
 
-- [ ] 4.4 **[Lock 4, mutation A]** Move the `wrote["ignored"] = ...` assignment to after the event dict is built (`:16822`), so it only reaches the return, never the ledger. Confirm Task 2.4's test now fails (ledger event lacks `ignored`) while Task 2.1's test (return value) still passes. Revert.
+- [x] 4.4 **[Lock 4, mutation A]** Move the `wrote["ignored"] = ...` assignment to after the event dict is built (`:16822`), so it only reaches the return, never the ledger. Confirm Task 2.4's test now fails (ledger event lacks `ignored`) while Task 2.1's test (return value) still passes. Revert.
   - Acceptance: 2.4 fails, 2.1 passes, under the mutation; both pass after revert.
   - Check: read the terminal ledger event JSON directly during the mutated run.
 
-- [ ] 4.5 **[Lock 4, mutation B]** Revert Task 3.6's strip change back to `if key != "note"` (leaving `ignoredNote` prose in the ledger). Confirm Task 2.4's `assertNotIn("ignoredNote", terminal["wrote"])` now fails. Revert the mutation (restore `WROTE_PROSE_KEYS`).
+- [x] 4.5 **[Lock 4, mutation B]** Revert Task 3.6's strip change back to `if key != "note"` (leaving `ignoredNote` prose in the ledger). Confirm Task 2.4's `assertNotIn("ignoredNote", terminal["wrote"])` now fails. Revert the mutation (restore `WROTE_PROSE_KEYS`).
   - Acceptance: test fails under the mutation, passes after revert.
   - Check: read the terminal ledger event JSON directly during the mutated run; confirm `ignoredNote` is literally present.
 
-- [ ] 4.6 **[Lock 5]** Replace `STEP_WROTE_IGNORED`'s text with `""`. Confirm Task 2.5's identity assertion still technically "passes" only if it asserts identity — reconfirm the test is written as `assertEqual(wrote["ignoredNote"], impl.STEP_WROTE_IGNORED)`, which trivially holds even at `""`. This row's real assurance is that no test in this suite asserts a *non-empty* string; the identity assertion protects against drift between the field and the constant, not against an empty constant. State this explicitly in the test's docstring/comment. Revert the constant text to its real prose.
+- [x] 4.6 **[Lock 5]** Replace `STEP_WROTE_IGNORED`'s text with `""`. Confirm Task 2.5's identity assertion still technically "passes" only if it asserts identity — reconfirm the test is written as `assertEqual(wrote["ignoredNote"], impl.STEP_WROTE_IGNORED)`, which trivially holds even at `""`. This row's real assurance is that no test in this suite asserts a *non-empty* string; the identity assertion protects against drift between the field and the constant, not against an empty constant. State this explicitly in the test's docstring/comment. Revert the constant text to its real prose.
   - Acceptance: the identity assertion is present and the constant's final text is non-empty, doctrine-bearing prose (Task 3.2's output), not the mutated empty string.
   - Check: read `impl.STEP_WROTE_IGNORED` after revert; confirm it is the full drafted sentence, not `""`.
 
-- [ ] 4.7 **[Lock 6]** Add an existence guard to `_step_wrote_ignored` (e.g. `if (target / name / p).exists()`) before including a path in the query. Confirm Task 2.6's test (deleted file) now fails because the guard silently drops it. Revert.
+- [x] 4.7 **[Lock 6]** Add an existence guard to `_step_wrote_ignored` (e.g. `if (target / name / p).exists()`) before including a path in the query. Confirm Task 2.6's test (deleted file) now fails because the guard silently drops it. Revert.
   - Acceptance: test fails under the mutation, passes after revert.
   - Check: confirm the guard is fully removed after revert — `grep -n '\.exists()' skills/_core/implementation/engine/implementation_engine.py` shows no match introduced by this change.
 
-- [ ] 4.8 **[Lock 7]** Change `_step_wrote_ignored`'s call site to pass `changed` (the full changed-paths list) instead of `wrote["inside"]`. Confirm Task 2.7's test now fails or misbehaves once a foreign write is evaluated (or, at minimum, that scope has silently widened — assert the test still distinguishes `inside`-only scope before and after). Revert.
+- [x] 4.8 **[Lock 7]** Change `_step_wrote_ignored`'s call site to pass `changed` (the full changed-paths list) instead of `wrote["inside"]`. Confirm Task 2.7's test now fails or misbehaves once a foreign write is evaluated (or, at minimum, that scope has silently widened — assert the test still distinguishes `inside`-only scope before and after). Revert.
   - Acceptance: mutation changes what Task 2.7 observes (foreign path evaluated); reverted code restores `inside`-only scope.
   - Check: re-read `cmd_step`'s call to `_step_wrote_ignored` after revert — confirm it passes `wrote["inside"]` literally.
 
-- [ ] 4.9 Purge `__pycache__` one final time, run the entire `StepWriteScopeTests` class end to end, and confirm all tests (Phase 2's new ones and every pre-existing test) are GREEN with no mutations left in place.
+- [x] 4.9 Purge `__pycache__` one final time, run the entire `StepWriteScopeTests` class end to end, and confirm all tests (Phase 2's new ones and every pre-existing test) are GREEN with no mutations left in place.
   - Acceptance: `pytest tests/test_proposal_implementation.py -k StepWriteScopeTests` reports 0 failures.
   - Check: capture and read the actual pytest summary output.
 
