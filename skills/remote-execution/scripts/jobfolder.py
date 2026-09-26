@@ -2211,6 +2211,28 @@ printf '%s' "$PSMITH_REPO_CREDENTIAL"
 # have never needed.
 PIN_PUBLISHED_TIMEOUT_SECONDS = 240.0
 
+# `pin-published`'s LOCAL weight reader owns its own budget too --
+# deliberately a THIRD, separate constant from both of the two above,
+# never either one reused. Measured, not invented (Decision 5): five
+# consecutive warm-cache timings each of the reader's three calls
+# (`git config --local --get-regexp`, `git rev-parse --verify --quiet
+# <ref>^{commit}`, `git rev-list --count <anchor>..<pin> --`), on the
+# apply machine (macOS 26.5.2, Darwin 25.5.0, arm64), against this
+# repository (1,131 commits) and the largest other repository already on
+# that disk (48 commits). The observed max across every call and both
+# repositories was ~6.2ms (`rev-parse --verify`, this repository). This
+# budget governs a purely local history walk whose cost this measurement
+# cannot fully sample -- a much larger repository's history on a machine
+# that is not this one -- so unlike `PIN_PUBLISHED_TIMEOUT_SECONDS`'s
+# ~1.15x its own measured worst case, this constant is deliberately many
+# multiples above the ~6.2ms observed (5.0s is roughly 800x that
+# worst case): undershooting here only produces `unmeasurable`, a
+# first-class outcome documented in `SKILL.md`, never a wrong verdict --
+# the opposite failure mode of the network probe's own budget. Per
+# `_run_git()` call (`timeout=` reaches `subprocess.run`), so the
+# reader's wall-clock worst case is three times this constant (15.0s).
+PIN_WEIGHT_TIMEOUT_SECONDS = 5.0
+
 
 @dataclass(frozen=True)
 class JobFolder:
@@ -2329,6 +2351,126 @@ def _looks_like_ssh_remote(repo_url: str) -> bool:
     return bool(separator) and "/" not in host
 
 
+@dataclass(frozen=True)
+class _CachedWeight:
+    """What the local cache says the pin holds beyond the declared remote.
+
+    `measured` is the ONLY gate. A measured zero is a real answer -- the
+    cache already reaches the pin, so the probe most likely failed for a
+    local reason rather than the remote refusing -- and it is a different
+    fact from a read that could not be taken.
+    """
+
+    measured: bool
+    commits: int = 0
+    anchor_ref: str = ""
+    anchor_commit: str = ""
+    reason: str = ""
+
+
+# One clause per `_CachedWeight.reason` code, rendered into the
+# unmeasurable refusal shape. Every code the reader can produce has a
+# clause here; there is no fifth outcome.
+_WEIGHT_UNMEASURABLE_REASONS = {
+    "no-local-repository": "no local repository was available to read it from",
+    "no-exact-url-match": "no local remote is configured with exactly that URL",
+    "ambiguous-url-match": (
+        "more than one local remote is configured with exactly that URL, "
+        "and those records can disagree"
+    ),
+    "anchor-unreadable": "the local record of that remote's branch could not be read",
+}
+
+
+def _unpushed_weight_from_cache(
+    target: Path | None, commit: str, repo_url: str, repo_ref: str
+) -> _CachedWeight:
+    """How far `commit` sits beyond the last state this clone's cache
+    recorded for `repo_url`, read entirely from state already on disk.
+
+    Never raises. Never contacts a remote. Three local git calls at most
+    (`config`, `rev-parse`, `rev-list`), each bounded by
+    `PIN_WEIGHT_TIMEOUT_SECONDS`. Every internal failure -- a missing
+    `target`, zero or more than one exact URL match, a missing
+    remote-tracking ref, or any git invocation failure -- resolves to
+    `_CachedWeight(measured=False, reason=...)` inside this function;
+    nothing escapes it. A helper that can raise a second kind of refusal
+    has become a guard, and this is not one (Decision 3).
+
+    Anchor resolution (Decision 2), each step failing into unmeasurable:
+
+    1. `git config --local --get-regexp` for every configured remote URL.
+    2. Keep only entries whose value is byte-identical to `repo_url` --
+       no strip, no normalisation, no case folding. Zero matches or two
+       or more matches both resolve to unmeasurable: an ambiguous cache
+       is an answer the operator cannot see the basis for.
+    3. The anchor ref is `refs/remotes/<name>/<branch>`, `<branch>` being
+       `repo_ref` with one leading `refs/heads/` removed; a `repo_ref`
+       still `refs/`-prefixed after that removal has no general
+       remote-tracking mirror and resolves to unmeasurable.
+    """
+    if target is None:
+        return _CachedWeight(measured=False, reason="no-local-repository")
+    try:
+        try:
+            listed = _run_git(
+                ["config", "--local", "--get-regexp", r"^remote\..*\.url$"],
+                cwd=target,
+                timeout=PIN_WEIGHT_TIMEOUT_SECONDS,
+            ).stdout
+        except JobFolderError:
+            # `git config --get-regexp` signals "no key matches" with a
+            # non-zero exit and empty output -- the ordinary shape of "no
+            # remotes configured", not a failure. Reading it as zero
+            # matches (rather than letting it fall through to the
+            # generic `anchor-unreadable` outcome below) is what makes
+            # this case name the correct, specific reason.
+            listed = ""
+        matches = []
+        for line in listed.splitlines():
+            key, _, value = line.partition(" ")
+            if not key.startswith("remote.") or not key.endswith(".url"):
+                continue
+            if value == repo_url:
+                matches.append(key[len("remote."):-len(".url")])
+        if not matches:
+            return _CachedWeight(measured=False, reason="no-exact-url-match")
+        if len(matches) > 1:
+            return _CachedWeight(measured=False, reason="ambiguous-url-match")
+        remote_name = matches[0]
+
+        branch = repo_ref
+        if branch.startswith("refs/heads/"):
+            branch = branch[len("refs/heads/"):]
+        if branch.startswith("refs/"):
+            return _CachedWeight(measured=False, reason="anchor-unreadable")
+        anchor_ref = f"refs/remotes/{remote_name}/{branch}"
+
+        anchor_commit = _run_git(
+            ["rev-parse", "--verify", "--quiet", f"{anchor_ref}^{{commit}}"],
+            cwd=target,
+            timeout=PIN_WEIGHT_TIMEOUT_SECONDS,
+        ).stdout.strip()
+        if not anchor_commit:
+            return _CachedWeight(measured=False, reason="anchor-unreadable")
+
+        commits = int(
+            _run_git(
+                ["rev-list", "--count", f"{anchor_commit}..{commit}", "--"],
+                cwd=target,
+                timeout=PIN_WEIGHT_TIMEOUT_SECONDS,
+            ).stdout.strip()
+        )
+    except (JobFolderError, OSError):
+        return _CachedWeight(measured=False, reason="anchor-unreadable")
+    return _CachedWeight(
+        measured=True,
+        commits=commits,
+        anchor_ref=anchor_ref,
+        anchor_commit=anchor_commit,
+    )
+
+
 def _verify_commit_reachable(
     commit: str,
     repo_url: str,
@@ -2336,6 +2478,7 @@ def _verify_commit_reachable(
     *,
     decision: str = "generation",
     repo_credential_path: str | Path | None = None,
+    target: str | Path | None = None,
 ) -> None:
     """Confirm `commit` is actually fetchable from the declared `repo_url`
     — the exact operation a runner performs when it clones that remote and
@@ -2489,6 +2632,14 @@ def _verify_commit_reachable(
       credential would be presented to git as an empty token, a
       configuration accident this function must never launder into a
       network question.
+
+    `target` (Decision 4) is the operator's OWN repository -- never the
+    scratch probe directory above -- and is used for exactly one further
+    thing when the catch-all branch below fires: `_unpushed_weight_from_cache()`
+    reads it for a purely local, no-network weight measurement. `None`
+    (every call this suite made before this parameter existed) takes that
+    reader's `no-local-repository` unmeasurable path without a single git
+    call.
     """
     if repo_credential_path is not None:
         if repo_url.startswith("https://"):
@@ -2588,11 +2739,35 @@ def _verify_commit_reachable(
             if _looks_like_ssh_remote(repo_url)
             else ""
         )
-        raise JobFolderError(
+        base = (
             f"{decision} refuses: commit {commit!r} could not be confirmed "
             f"reachable on the declared remote {repo_url!r} — a runner "
             "would attempt and fail this same fetch inside the kernel, "
-            f"after quota is already spent{unauthenticated}: {exc}{remedy}"
+            f"after quota is already spent{unauthenticated}: {exc}"
+        )
+        # The local weight measurement is attempted only here, in the
+        # catch-all branch — never above, where `GitTimeoutError` means
+        # the question could not be finished asking at all. The reader
+        # never raises; `weight.measured` alone selects the shape below
+        # (never a truthiness test on `weight.commits` — a measured zero
+        # is a real answer, not an absence of one; Decision 3).
+        weight = _unpushed_weight_from_cache(target, commit, repo_url, repo_ref)
+        if weight.measured:
+            plural = "" if weight.commits == 1 else "s"
+            raise JobFolderError(
+                base + remedy +
+                f". Measured locally, no bytes moved: the pin is "
+                f"{weight.commits} commit{plural} beyond the last state this "
+                f"clone recorded for that remote ({weight.anchor_ref} at "
+                f"{weight.anchor_commit[:12]}, from the last fetch). That count is "
+                "exact about this clone's cached record and makes no claim about "
+                "the remote's state now."
+            ) from exc
+        raise JobFolderError(
+            base +
+            ". How much that push would carry could not be measured here: "
+            f"{_WEIGHT_UNMEASURABLE_REASONS[weight.reason]}. Nothing is "
+            "prescribed from a measurement that was not taken."
         ) from exc
 
 
@@ -2851,6 +3026,7 @@ def _refuse_unpublished_pin(
     repo_ref: str,
     decision: str,
     repo_credential_path: str | Path | None = None,
+    target: Path | None = None,
     **_unused: object,
 ) -> None:
     """The `pin-published` condition — the declared remote must be able
@@ -2863,11 +3039,11 @@ def _refuse_unpublished_pin(
     rather than to a chain of `if` statements a later condition could be
     inserted into out of order.
 
-    `repo_credential_path` (S3) is threaded explicitly here rather than
-    absorbed by `**_unused`: this is the one condition the credential
-    applies to, and a parameter that rides the catch-all would make the
-    credential silently droppable by a future signature edit that looks
-    harmless.
+    `repo_credential_path` (S3) and `target` (Decision 4) are threaded
+    explicitly here rather than absorbed by `**_unused`: this is the one
+    condition either input applies to, and a parameter that rides the
+    catch-all would make it silently droppable by a future signature edit
+    that looks harmless.
     """
     _verify_commit_reachable(
         commit,
@@ -2875,6 +3051,7 @@ def _refuse_unpublished_pin(
         repo_ref,
         decision=decision,
         repo_credential_path=repo_credential_path,
+        target=target,
     )
 
 

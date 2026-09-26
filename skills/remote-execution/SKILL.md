@@ -862,6 +862,37 @@ executable — no test in this suite reaches the network or a real account).
   written into your repository by the probe — no ref, no `FETCH_HEAD`, no
   object — and the tool never commits or pushes on your behalf.
 
+  **The refusal also states how much the recommended push would carry,
+  when that can be known from your own clone's cache — never from the
+  network.** Once the probe above has already failed for any reason
+  other than its own timeout, a second, purely local reader asks one
+  further question: how far is the pin beyond the last state *your
+  clone* recorded for the declared remote? It reads only `git config`,
+  `git rev-parse` and `git rev-list --count` against your own
+  repository — never `ls-remote`, never a fetch, no bytes moved and no
+  connection opened — and it owns its own small time budget,
+  `PIN_WEIGHT_TIMEOUT_SECONDS`, a THIRD constant distinct from both
+  `GIT_TIMEOUT_SECONDS` and `PIN_PUBLISHED_TIMEOUT_SECONDS`. The refusal
+  this produces takes exactly one of two shapes:
+
+  - **Measured** — your clone has a remote-tracking ref
+    (`refs/remotes/<name>/<branch>`) whose configured URL is an exact,
+    byte-for-byte match of the declared `--repo-url`. The refusal then
+    states the exact commit count between that cached ref and the pin,
+    and still names the push-and-pin remedy. That count is exact about
+    your clone's cached record of the last fetch — it is **not** a live
+    read of the remote, so it makes no claim about the remote's actual
+    state right now, and no claim about how much remains to be pushed.
+  - **Unmeasurable** — anything less than an exact URL match (a
+    different scheme, a trailing `.git`, an SSH form naming the same
+    host as an HTTPS form, two remotes sharing one URL, no matching
+    remote at all, or a matching remote with no tracking ref yet)
+    resolves to unmeasurable, on purpose: this tool never normalises or
+    guesses at a URL match, because a number anchored on the wrong
+    remote would look measured and would not be. The refusal states what
+    is known and prescribes no remedy from a measurement that was never
+    taken.
+
   **A timeout is refused through its own, separate message, never folded
   into the one above.** `_run_git()` raises `GitTimeoutError` (a distinct
   `JobFolderError` subclass) for an expired timeout; `_verify_commit_reachable()`

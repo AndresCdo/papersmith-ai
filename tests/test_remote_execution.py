@@ -11951,6 +11951,266 @@ class CommitReachabilityTests(unittest.TestCase):
 
             self.assertIn("not our ref", str(ctx.exception))
 
+    # -- the local weight reader, `_unpushed_weight_from_cache()` --
+    # (Design Decisions 1-3, 6; Spec R2, R5, R7)
+
+    def test_no_configured_remote_is_unmeasurable_no_remedy(self) -> None:
+        """(Lock 3) `origin` in `_real_repositories()` has no remote of its
+        own configured. Zero matches for the declared `--repo-url` MUST
+        resolve to unmeasurable -- never a fall back to whatever remote
+        happens to be named `origin`.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repos = self._real_repositories(tmp)
+
+            weight = JOBFOLDER._unpushed_weight_from_cache(
+                repos.origin, repos.unpushed,
+                "https://example.invalid/repo.git", "main",
+            )
+
+        self.assertFalse(weight.measured)
+        self.assertEqual(weight.reason, "no-exact-url-match")
+
+    def test_a_near_miss_url_spelling_is_unmeasurable(self) -> None:
+        """(Lock 4) A `.git`-suffixed remote must not match a bare
+        declared URL -- the strict rule admits no normalisation.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repos = self._real_repositories(tmp)
+            declared_url = str(repos.origin)
+            subprocess.run(
+                ["git", "-C", str(repos.target), "remote", "set-url",
+                 "origin", declared_url + ".git"],
+                check=True,
+            )
+
+            weight = JOBFOLDER._unpushed_weight_from_cache(
+                repos.target, repos.unpushed, declared_url, "main"
+            )
+
+        self.assertFalse(weight.measured)
+        self.assertEqual(weight.reason, "no-exact-url-match")
+
+    def test_two_remotes_sharing_one_url_is_unmeasurable_and_named_ambiguous(
+        self,
+    ) -> None:
+        """(Lock 5) Two remote-tracking refs fetched at different times can
+        disagree; picking either one is an answer the operator cannot see
+        the basis for, so ambiguity resolves the same way every other
+        non-exact case does.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repos = self._real_repositories(tmp)
+            declared_url = str(repos.origin)
+            subprocess.run(
+                ["git", "-C", str(repos.target), "remote", "add",
+                 "mirror", declared_url],
+                check=True,
+            )
+
+            weight = JOBFOLDER._unpushed_weight_from_cache(
+                repos.target, repos.unpushed, declared_url, "main"
+            )
+
+        self.assertFalse(weight.measured)
+        self.assertEqual(weight.reason, "ambiguous-url-match")
+
+    def test_exact_match_with_no_tracking_ref_yet_is_unmeasurable(self) -> None:
+        """(Threat Matrix: Push state) An exact-URL match with no
+        `refs/remotes/<name>/<branch>` yet -- the first-push case -- is
+        an honest unmeasurable, never a crash on a missing ref.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repos = self._real_repositories(tmp)
+            never_fetched = Path(tmp) / "never-fetched"
+            subprocess.run(["git", "init", "-q", str(never_fetched)], check=True)
+            (never_fetched / "f.py").write_text("F = 1\n", encoding="utf-8")
+            env = dict(os.environ)
+            env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "never-fetched"
+            env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "never-fetched@example.invalid"
+            subprocess.run(
+                ["git", "-C", str(never_fetched), "add", "-A"],
+                check=True, env=env,
+            )
+            subprocess.run(
+                ["git", "-C", str(never_fetched), "commit", "-q", "-m", "first"],
+                check=True, env=env,
+            )
+            declared_url = str(repos.origin)
+            subprocess.run(
+                ["git", "-C", str(never_fetched), "remote", "add", "origin",
+                 declared_url],
+                check=True,
+            )
+            pin = subprocess.run(
+                ["git", "-C", str(never_fetched), "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+
+            weight = JOBFOLDER._unpushed_weight_from_cache(
+                never_fetched, pin, declared_url, "main"
+            )
+
+        self.assertFalse(weight.measured)
+        self.assertEqual(weight.reason, "anchor-unreadable")
+
+    def test_every_internal_primitive_failing_degrades_to_the_careful_shape(
+        self,
+    ) -> None:
+        """(Lock 9) Every local primitive the reader depends on failing
+        must degrade inside the reader itself, never escape as a distinct
+        refusal and never crash. Exercised end-to-end through
+        `_verify_commit_reachable()` so the whole catch-all branch is
+        proven, not merely the reader in isolation.
+        """
+
+        def fake_run_git(args, *, cwd, timeout=None):
+            if list(args)[:1] == ["init"]:
+                return unittest.mock.Mock(returncode=0, stdout="", stderr="")
+            raise OSError("simulated primitive failure")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            with unittest.mock.patch.object(JOBFOLDER, "_run_git", side_effect=fake_run_git):
+                with self.assertRaises(JOBFOLDER.JobFolderError) as ctx:
+                    JOBFOLDER._verify_commit_reachable(
+                        "c" * 40, "https://example.invalid/repo.git", "main",
+                        target=target,
+                    )
+
+        message = str(ctx.exception)
+        self.assertIn("could not be confirmed reachable", message)
+        self.assertIn(
+            "could not be measured here", message,
+            "every internal weight-reader primitive failing must degrade to "
+            "the unmeasurable shape, not a crash and not a differently-shaped "
+            "refusal",
+        )
+
+    def test_the_readers_git_calls_use_the_resolved_target_as_cwd(self) -> None:
+        """(Threat Matrix: Git repository selection) `cwd=target` only --
+        never a raw `git -C` argument, and never a fallback to the process
+        cwd.
+        """
+        recorded_cwds = []
+
+        def fake_run_git(args, *, cwd, timeout=None):
+            recorded_cwds.append(cwd)
+            if list(args)[:1] == ["config"]:
+                return unittest.mock.Mock(
+                    returncode=0,
+                    stdout="remote.origin.url https://example.invalid/repo.git\n",
+                    stderr="",
+                )
+            if list(args)[:1] == ["rev-parse"]:
+                return unittest.mock.Mock(returncode=0, stdout="a" * 40 + "\n", stderr="")
+            return unittest.mock.Mock(returncode=0, stdout="3\n", stderr="")
+
+        target = Path("/some/resolved/target")
+        with unittest.mock.patch.object(JOBFOLDER, "_run_git", side_effect=fake_run_git):
+            weight = JOBFOLDER._unpushed_weight_from_cache(
+                target, "c" * 40, "https://example.invalid/repo.git", "main"
+            )
+
+        self.assertTrue(weight.measured)
+        self.assertTrue(recorded_cwds, "the reader made no _run_git calls to inspect")
+        for cwd in recorded_cwds:
+            self.assertEqual(cwd, target)
+
+    def test_the_reader_opens_no_network_connection_and_moves_no_bytes(self) -> None:
+        """(Lock 7) An argv allowlist restricted to `{config, rev-parse,
+        rev-list}`, plus a before/after census of `.git/objects` and the
+        absence of a new `FETCH_HEAD`.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repos = self._real_repositories(tmp)
+            branch = subprocess.run(
+                ["git", "-C", str(repos.target), "symbolic-ref", "--short", "HEAD"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            objects = repos.target / ".git" / "objects"
+            before_objects = sorted(
+                p.relative_to(objects) for p in objects.rglob("*") if p.is_file()
+            )
+            fetch_head = repos.target / ".git" / "FETCH_HEAD"
+            fetch_head_existed_before = fetch_head.exists()
+
+            recorded_verbs = []
+            real_run_git = JOBFOLDER._run_git
+
+            def recording_run_git(args, *, cwd, timeout=None):
+                recorded_verbs.append(list(args)[0] if args else None)
+                return real_run_git(args, cwd=cwd, timeout=timeout)
+
+            with unittest.mock.patch.object(
+                JOBFOLDER, "_run_git", side_effect=recording_run_git
+            ):
+                weight = JOBFOLDER._unpushed_weight_from_cache(
+                    repos.target, repos.unpushed, str(repos.origin), branch
+                )
+
+            after_objects = sorted(
+                p.relative_to(objects) for p in objects.rglob("*") if p.is_file()
+            )
+
+        self.assertTrue(weight.measured)
+        self.assertTrue(recorded_verbs, "the reader made no _run_git calls at all")
+        self.assertEqual(
+            set(recorded_verbs) - {"config", "rev-parse", "rev-list"}, set(),
+            f"the reader must only ever run config/rev-parse/rev-list, never "
+            f"a network verb: {recorded_verbs}",
+        )
+        self.assertEqual(before_objects, after_objects, "the reader deposited objects")
+        self.assertEqual(fetch_head.exists(), fetch_head_existed_before)
+
+    def test_the_reader_disturbs_neither_the_index_nor_the_working_tree(self) -> None:
+        """(Threat Matrix: Commit state) Extends the census above: the
+        reader must not touch `.git/index` or leave `git status
+        --porcelain` output any different than it found it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repos = self._real_repositories(tmp)
+            branch = subprocess.run(
+                ["git", "-C", str(repos.target), "symbolic-ref", "--short", "HEAD"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            index_path = repos.target / ".git" / "index"
+            # `git status` itself can rewrite `.git/index` to refresh its
+            # own racily-clean cached stat entries -- unrelated to
+            # anything this test measures. Reading the mtime immediately
+            # AFTER this call, not before it, keeps that noise out of the
+            # baseline; the reader makes no status-shaped call at all.
+            before_status = subprocess.run(
+                ["git", "-C", str(repos.target), "status", "--porcelain"],
+                capture_output=True, text=True, check=True,
+            ).stdout
+            before_mtime = index_path.stat().st_mtime_ns
+
+            JOBFOLDER._unpushed_weight_from_cache(
+                repos.target, repos.unpushed, str(repos.origin), branch
+            )
+
+            after_mtime = index_path.stat().st_mtime_ns
+            after_status = subprocess.run(
+                ["git", "-C", str(repos.target), "status", "--porcelain"],
+                capture_output=True, text=True, check=True,
+            ).stdout
+
+        self.assertEqual(before_mtime, after_mtime, "the reader touched .git/index")
+        self.assertEqual(before_status, after_status, "the reader disturbed the working tree")
+
+    def test_calling_without_target_takes_the_no_local_repository_path(self) -> None:
+        """(Decision 4) ~18 direct calls across this suite pass three
+        positional arguments and no `target`; with the keyword-only
+        default of `None` they take this same unmeasurable path, silently,
+        rather than erroring or crashing.
+        """
+        weight = JOBFOLDER._unpushed_weight_from_cache(
+            None, "c" * 40, "https://example.invalid/repo.git", "main"
+        )
+        self.assertFalse(weight.measured)
+        self.assertEqual(weight.reason, "no-local-repository")
+
 
 class ProbeAuthorityTests(unittest.TestCase):
     """The probe must carry no more authority than the runner it stands in for.
@@ -12871,6 +13131,21 @@ class PinConditionDoctrineTests(unittest.TestCase):
         text = SKILL_MD.read_text(encoding="utf-8").lower()
         self.assertIn("refuses at a decision point", text)
         self.assertIn("only reports", text)
+
+    def test_pin_conditions_gains_no_new_member(self) -> None:
+        """This change's own success criterion, stated as a regression
+        lock: the tuple's membership, order and length are untouched.
+        """
+        self.assertEqual(
+            JOBFOLDER.PIN_CONDITIONS,
+            (
+                "clean-worktree",
+                "pin-is-head",
+                "declared-paths-exist",
+                "declared-notebook-reachable",
+                "pin-published",
+            ),
+        )
 
 
 _ORDINAL_PIN_CONDITION_RE = re.compile(
@@ -19625,6 +19900,145 @@ class PublishedPinResolutionTests(unittest.TestCase):
             output = completed.stdout + completed.stderr
             self.assertIn("could not be confirmed reachable", output)
 
+    def test_measured_shape_names_the_exact_cache_relative_count_and_keeps_the_remedy(
+        self,
+    ) -> None:
+        """(Lock 1) The measured shape states the exact commit count
+        between the cached anchor and the pin -- never floor ("at least")
+        or ceiling ("no more than") language -- and keeps the existing
+        push-and-pin remedy.
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            origin, target, git, published = self.published_target(Path(raw))
+            pin = self.commit_local_only(target, git, "src/pkg/local_only.py")
+            self.assertNotEqual(pin, published)
+
+            with self.assertRaises(JOBFOLDER.JobFolderError) as ctx:
+                JOBFOLDER._verify_commit_reachable(
+                    pin, str(origin), "main", target=target,
+                )
+
+        message = str(ctx.exception)
+        self.assertIn("could not be confirmed reachable", message)
+        self.assertIn(
+            f"1 commit beyond the last state this clone recorded for that "
+            f"remote (refs/remotes/origin/main at {published[:12]}, from "
+            "the last fetch)",
+            message,
+        )
+        self.assertIn(
+            "exact about this clone's cached record and makes no claim "
+            "about the remote's state now",
+            message,
+        )
+        self.assertNotIn("at least", message)
+        self.assertNotIn("no more than", message)
+        self.assertIn("push it to 'main'", message)
+
+    def test_a_measured_zero_still_takes_the_measured_shape(self) -> None:
+        """(Lock 2) A measured zero is a real answer distinct from
+        unmeasurable: the cache already reaches the pin, and the probe
+        most likely failed for a local reason rather than the remote
+        refusing. Forced to fail locally, never over an actual
+        reachability question.
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            origin, target, git, published = self.published_target(Path(raw))
+
+            real_run_git = JOBFOLDER._run_git
+
+            def fail_only_the_fetch(args, *, cwd, timeout=None):
+                if list(args)[:1] == ["fetch"]:
+                    raise JOBFOLDER.JobFolderError(
+                        "could not run git: simulated local proxy failure"
+                    )
+                return real_run_git(args, cwd=cwd, timeout=timeout)
+
+            with unittest.mock.patch.object(
+                JOBFOLDER, "_run_git", side_effect=fail_only_the_fetch
+            ):
+                with self.assertRaises(JOBFOLDER.JobFolderError) as ctx:
+                    JOBFOLDER._verify_commit_reachable(
+                        published, str(origin), "main", target=target,
+                    )
+
+        message = str(ctx.exception)
+        self.assertIn(
+            f"0 commits beyond the last state this clone recorded for that "
+            f"remote (refs/remotes/origin/main at {published[:12]}",
+            message,
+            "a measured zero must still take the measured shape, not the "
+            "unmeasurable one",
+        )
+        self.assertIn("push it to 'main'", message)
+
+    def test_generate_job_stderr_states_the_exact_cache_relative_count(self) -> None:
+        """(Lock 10) End to end through `generate-job`, real git, real
+        subprocess: the operator-facing stderr carries the corrected
+        cache-relative wording, not a floor.
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            origin, target, git, published = self.published_target(Path(raw))
+            self.commit_local_only(target, git, "src/pkg/later2.py")
+
+            completed = self.generate(target, origin)
+
+        self.assertNotEqual(completed.returncode, 0)
+        output = completed.stdout + completed.stderr
+        self.assertIn("could not be confirmed reachable", output)
+        self.assertIn(
+            "1 commit beyond the last state this clone recorded for that remote",
+            output,
+        )
+        self.assertIn(f"refs/remotes/origin/main at {published[:12]}", output)
+        self.assertNotIn("at least", output)
+        self.assertNotIn("no more than", output)
+
+    def test_the_existing_reachable_prefix_survives_unedited_in_both_shapes(
+        self,
+    ) -> None:
+        """(Spec R9) `tests:12124` and `tests:19626` assert on the literal
+        substring `"could not be confirmed reachable"` without editing
+        either test. This exercises both shapes in one run and confirms
+        the prefix's exact position is untouched.
+        """
+        def expected_prefix(commit: str) -> str:
+            return f"generation refuses: commit {commit!r} could not be confirmed reachable"
+
+        def unmeasurable_fake_run_git(args, *, cwd, timeout=None):
+            if list(args)[:1] == ["fetch"]:
+                raise JOBFOLDER.JobFolderError(
+                    "git fetch --dry-run exited 128: fatal: remote error: "
+                    f"upload-pack: not our ref {'e' * 40}"
+                )
+            return unittest.mock.Mock(returncode=0, stdout="", stderr="")
+
+        with unittest.mock.patch.object(
+            JOBFOLDER, "_run_git", side_effect=unmeasurable_fake_run_git
+        ):
+            with self.assertRaises(JOBFOLDER.JobFolderError) as unmeasurable_ctx:
+                JOBFOLDER._verify_commit_reachable(
+                    "e" * 40, "https://example.invalid/repo.git", "main"
+                )
+
+        with tempfile.TemporaryDirectory() as raw:
+            origin, target, git, published = self.published_target(Path(raw))
+            pin = self.commit_local_only(target, git, "src/pkg/later3.py")
+
+            with self.assertRaises(JOBFOLDER.JobFolderError) as measured_ctx:
+                JOBFOLDER._verify_commit_reachable(
+                    pin, str(origin), "main", target=target,
+                )
+
+        for ctx, commit in ((unmeasurable_ctx, "e" * 40), (measured_ctx, pin)):
+            message = str(ctx.exception)
+            region = expected_prefix(commit)
+            self.assertEqual(
+                message[: len(region)], region,
+                "the prefix must sit at the exact same position as before "
+                "this change",
+            )
+
 
 class ServiceResolutionTests(unittest.TestCase):
     """The defect `BackendResolutionTests` closed, surviving under a second
@@ -20610,6 +21024,127 @@ class PinPublishedTimeoutBudgetTests(unittest.TestCase):
                 )
         self.assertIn("timed out", str(ctx.exception))
         self.assertNotIn("not pushed", str(ctx.exception).lower())
+
+    def test_the_weight_reader_is_never_called_on_the_timeout_branch(self) -> None:
+        """(Lock 6) `except GitTimeoutError` (`:2559-2578`) is
+        byte-unchanged and must never reach the weight reader: sharing one
+        message between a timeout and a confirmed refusal is the exact
+        defect this branch split already exists to prevent (Finding 4
+        case A).
+        """
+
+        def fake_run_git(args, *, cwd, timeout=None):
+            raise JOBFOLDER.GitTimeoutError(
+                f"git {' '.join(args)} timed out after {timeout}s"
+            )
+
+        with unittest.mock.patch.object(
+            JOBFOLDER, "_unpushed_weight_from_cache"
+        ) as mock_weight_reader:
+            with unittest.mock.patch.object(JOBFOLDER, "_run_git", side_effect=fake_run_git):
+                with self.assertRaises(JOBFOLDER.JobFolderError) as ctx:
+                    JOBFOLDER._verify_commit_reachable(
+                        "c" * 40, "https://example.invalid/repo.git", "main"
+                    )
+            mock_weight_reader.assert_not_called()
+
+        message = str(ctx.exception)
+        self.assertIn("could not be finished asking", message)
+        self.assertNotIn("push it to", message)
+        self.assertNotIn("beyond the last state", message)
+
+
+class PinWeightTimeoutBudgetTests(unittest.TestCase):
+    """(Design Decision 5) The weight reader's own timeout budget is a
+    THIRD distinct module constant -- not `GIT_TIMEOUT_SECONDS` (the
+    ordinary local-call default) and not `PIN_PUBLISHED_TIMEOUT_SECONDS`
+    (the network probe's own budget) -- and only the reader's own three
+    git calls may carry it. Measured, not invented: see
+    `apply-progress.md` for the raw timings this value was derived from.
+    """
+
+    def test_pin_weight_timeout_is_a_third_distinct_constant(self) -> None:
+        self.assertTrue(
+            hasattr(JOBFOLDER, "PIN_WEIGHT_TIMEOUT_SECONDS"),
+            "jobfolder.py declares no PIN_WEIGHT_TIMEOUT_SECONDS at all",
+        )
+        self.assertNotEqual(
+            JOBFOLDER.PIN_WEIGHT_TIMEOUT_SECONDS, JOBFOLDER.GIT_TIMEOUT_SECONDS
+        )
+        self.assertNotEqual(
+            JOBFOLDER.PIN_WEIGHT_TIMEOUT_SECONDS,
+            JOBFOLDER.PIN_PUBLISHED_TIMEOUT_SECONDS,
+        )
+        self.assertLess(
+            JOBFOLDER.PIN_WEIGHT_TIMEOUT_SECONDS, JOBFOLDER.GIT_TIMEOUT_SECONDS,
+            "the local walk's own budget must read as the cheap local "
+            "read at a glance, unambiguously below the ordinary local "
+            "git default",
+        )
+
+    def test_only_the_readers_three_calls_receive_the_new_budget(self) -> None:
+        recorded = []
+
+        def fake_run_git(args, *, cwd, timeout=None):
+            recorded.append((list(args)[0] if args else None, timeout))
+            if list(args)[:1] == ["config"]:
+                return unittest.mock.Mock(
+                    returncode=0,
+                    stdout="remote.origin.url https://example.invalid/repo.git\n",
+                    stderr="",
+                )
+            if list(args)[:1] == ["rev-parse"]:
+                return unittest.mock.Mock(returncode=0, stdout="a" * 40 + "\n", stderr="")
+            return unittest.mock.Mock(returncode=0, stdout="0\n", stderr="")
+
+        with unittest.mock.patch.object(JOBFOLDER, "_run_git", side_effect=fake_run_git):
+            weight = JOBFOLDER._unpushed_weight_from_cache(
+                Path("/some/target"), "c" * 40,
+                "https://example.invalid/repo.git", "main",
+            )
+
+        self.assertTrue(weight.measured)
+        self.assertEqual(len(recorded), 3, recorded)
+        for _verb, timeout in recorded:
+            self.assertEqual(timeout, JOBFOLDER.PIN_WEIGHT_TIMEOUT_SECONDS)
+
+    def test_the_probes_own_init_and_fetch_calls_never_receive_the_weight_budget(
+        self,
+    ) -> None:
+        """Mutation to survive: passing the new budget to the probe's
+        local `init` call too, widening it along with the reader.
+        """
+        recorded = []
+
+        def fake_run_git(args, *, cwd, timeout=None):
+            recorded.append((list(args)[0] if args else None, timeout))
+            if list(args)[:1] == ["fetch"]:
+                raise JOBFOLDER.JobFolderError(
+                    "git fetch --dry-run exited 128: not our ref"
+                )
+            return unittest.mock.Mock(returncode=0, stdout="", stderr="")
+
+        with unittest.mock.patch.object(JOBFOLDER, "_run_git", side_effect=fake_run_git):
+            with self.assertRaises(JOBFOLDER.JobFolderError):
+                JOBFOLDER._verify_commit_reachable(
+                    "c" * 40, "https://example.invalid/repo.git", "main",
+                    target=Path("/some/target"),
+                )
+
+        by_verb: dict[str | None, list] = {}
+        for verb, timeout in recorded:
+            by_verb.setdefault(verb, []).append(timeout)
+
+        self.assertNotIn(
+            JOBFOLDER.PIN_WEIGHT_TIMEOUT_SECONDS, by_verb.get("init", []),
+            "the probe's local init call must not be widened along with "
+            "the reader's own budget",
+        )
+        self.assertNotIn(
+            JOBFOLDER.PIN_WEIGHT_TIMEOUT_SECONDS, by_verb.get("fetch", []),
+            "the network probe's own fetch call keeps its own "
+            "PIN_PUBLISHED_TIMEOUT_SECONDS budget",
+        )
 
 
 class EntrypointJobFolderDirectoryTests(unittest.TestCase):
