@@ -36393,6 +36393,90 @@ class StepWriteScopeTests(unittest.TestCase):
         self.assertEqual(impl.changed_paths(before, {}),
                          ["Results/neighbour/b.json"])
 
+    def test_a_product_anchored_ignore_rule_catches_the_real_written_path(self):
+        """Lock 1 -- the path base is repository-relative. The fixture rule
+        MUST be anchored to the product folder (`/Method/Results/own/`): an
+        unanchored `Results/own/` would match the unjoined, product-relative
+        path just as well, so a mutation dropping the product-name join
+        would pass silently. Only an anchored rule distinguishes the two."""
+        box = self._box("ignoredown", {"run": self._entry("write_own")},
+                        ignore=("__pycache__/", ".ipynb_checkpoints/",
+                                ".implementation/", "/Method/Results/own/"))
+        wrote = self._wrote(box)
+        self.assertEqual(wrote["ignored"], ["Results/own/a.json"])
+        self.assertEqual(wrote["status"], "own")
+
+    def test_a_tracked_write_reports_ignored_empty_and_never_raises(self):
+        """Lock 2 -- a non-zero `check-ignore` exit (nothing matched) MUST
+        read as an empty result, never an error. This is the only row that
+        exercises exit 1: the default ignore set never matches the tracked
+        `a.json`."""
+        box = self._box("trackedown", {"run": self._entry("write_own")})
+        proc = self._run(box)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        wrote = json.loads(proc.stdout)["wrote"]
+        self.assertEqual(wrote["status"], "own")
+        self.assertIn("ignored", wrote)
+        self.assertEqual(wrote["ignored"], [])
+        self.assertNotIn("ignoredNote", wrote)
+
+    def test_the_ignored_reading_is_written_into_the_terminal_ledger_event(self):
+        """Lock 4 -- durable, not merely returned. Mirrors
+        `test_the_reading_is_written_into_the_terminal_ledger_event`; the
+        ledger carries the fact and never the constant prose."""
+        box = self._box("ignoredledger", {"run": self._entry("write_own")},
+                        ignore=("__pycache__/", ".ipynb_checkpoints/",
+                                ".implementation/", "/Method/Results/own/"))
+        self._wrote(box)
+        events = [json.loads(line) for line in
+                  (box / "Method" / ".implementation" / "position.jsonl")
+                  .read_text(encoding="utf-8").splitlines()]
+        terminal = events[-1]
+        self.assertEqual(terminal["wrote"]["ignored"], ["Results/own/a.json"])
+        self.assertNotIn("ignoredNote", terminal["wrote"])
+
+    def test_the_ignored_consequence_is_asserted_by_identity(self):
+        """Lock 5 -- the consequence prose is a single named constant,
+        asserted by identity, exactly as
+        `test_a_step_declaring_no_roots_is_graded_against_nothing` does for
+        `PRODUCES_UNDECLARED_CONSEQUENCE`."""
+        box = self._box("ignorednote", {"run": self._entry("write_own")},
+                        ignore=("__pycache__/", ".ipynb_checkpoints/",
+                                ".implementation/", "/Method/Results/own/"))
+        wrote = self._wrote(box)
+        self.assertEqual(wrote["ignoredNote"], impl.STEP_WROTE_IGNORED)
+
+    def test_a_removed_own_path_is_still_reported_as_ignored(self):
+        """Lock 6 -- removals are checked, not dropped. `check-ignore`
+        matches path patterns rather than the filesystem, so a deleted path
+        still gets a real answer; an existence guard would silently drop
+        exactly the half of the input the incident is most likely to live
+        in."""
+        box = self._box("ignoreddeleted", {"run": self._entry("delete_own")},
+                        ignore=("__pycache__/", ".ipynb_checkpoints/",
+                                ".implementation/", "/Method/Results/own/"))
+        wrote = self._wrote(box)
+        self.assertEqual(wrote["ignored"], ["Results/own/a.json"])
+        self.assertFalse((box / "Method" / "Results" / "own" / "a.json").exists())
+
+    def test_a_foreign_write_is_never_evaluated_for_ignored_status(self):
+        """Lock 7 -- scope is `inside` only. `wrote.outside` is already the
+        strongest reading this skill gives for a foreign write; this
+        capability adds no further reading there."""
+        box = self._box("ignoredforeign", {"run": self._entry("write_neighbour")},
+                        ignore=("__pycache__/", ".ipynb_checkpoints/",
+                                ".implementation/", "/Method/Results/neighbour/"))
+        wrote = self._wrote(box)
+        self.assertEqual(wrote["status"], "foreign")
+        self.assertEqual(wrote["outside"], ["Results/neighbour/b.json"])
+        self.assertEqual(wrote["ignored"], [])
+
+    def test_the_ignored_consequence_borrows_no_target_vocabulary(self):
+        """Lock 8 -- repository convention, not spec-derived. Following the
+        measured precedent at
+        `test_nothing_this_change_ships_borrows_a_repository_s_vocabulary`."""
+        self.assertEqual(leaks_in(impl.STEP_WROTE_IGNORED), [])
+
 
 class UndeclaredProducesReportTests(unittest.TestCase):
     """`verify.undeclaredProduces` -- the from-zero half of the same
