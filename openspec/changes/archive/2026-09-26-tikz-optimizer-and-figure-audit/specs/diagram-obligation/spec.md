@@ -39,9 +39,24 @@ be checked against both the manifest and that prose. The audit's subject is the
 
 #### Scenario: An uncheckable pair is unmeasured, never pass
 
-- GIVEN a contract declaring no `components_from`, or a call with no block bound
+- GIVEN a contract declaring no `components_from`, or a manifest declaring no
+  components, or a components fact that does not resolve
 - WHEN the audit runs
 - THEN the verdict is `unmeasured` naming its reason, never `pass`
+
+#### Scenario: One absent input does not unmeasure a comparison that ran
+
+- GIVEN a call with no block bound, and a manifest and prose that CAN be
+  compared to each other
+- WHEN the audit runs
+- THEN the pipeline-step half reports `CONTRACT_FIGURE_ABSENT` as its own
+  reason, and the component comparison keeps the verdict it reached
+
+The two halves are separated on purpose. `unmeasured` exists to stop a verdict
+being claimed where nothing was measured; applying it to a comparison that DID
+run, because a different comparison lacked an input, is that rule read
+backwards — it would hide a real measurement behind another's gap. So each
+half carries its own reason and neither poisons the other.
 
 #### Scenario: A content finding is not a CLI refusal
 
