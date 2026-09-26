@@ -11,6 +11,40 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.3.0
+
+### Fixed
+
+- **A campaign submitted with `--unit` now distributes the work.** Both
+  per-submission facts already reached the worker — the packer splits the unit
+  list across workers and writes each worker's own slice, `--smoke` sets the
+  mode the same way, and the adapter merges both into the job folder's
+  `run-config.json`. Nothing read them. Every worker received its slice in a
+  file nobody opened and ran the identical whole job, so a distributed
+  campaign distributed the ledger and not the work. `submission_environment()`
+  is now the one place either name is decided, applied by both the notebook
+  and callable branches and kept separate from `kernel_environment()`, which
+  the callable branch has no clone or `PYTHONPATH` to compose for. An absent
+  mode or absent units leave the environment as it was rather than
+  substituting an empty string for a value nobody declared; a DECLARED empty
+  list still sets the variable, because only a present key can say that zero
+  units was the answer.
+- **`lfs` names the large files that are real content.** It reported the
+  pointers by path and the materialized side by tally, so a reader needing one
+  specific checkpoint could not tell whether it had arrived — while the
+  skill's own table promises to report which files are which.
+
+### Internal
+
+- The D2 grounding tripwire counts recorded runs before judging, instead of
+  failing permanently. Below ten it announces the silence; at or above it, it
+  applies the falsifier and either names what fired or asks for the discharge.
+  A permanently red test is not a signal, and this repository has already paid
+  for that lesson once.
+- `init`'s tests derive the recorded version from the kit instead of restating
+  `0.1.0`, a literal that passed for a thousand commits and broke on the first
+  real bump.
+
 ## 0.2.0
 
 The first release where the version means anything: `0.1.0` had been frozen
