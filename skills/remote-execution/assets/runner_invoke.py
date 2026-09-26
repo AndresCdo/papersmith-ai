@@ -93,6 +93,36 @@ SRC_DIRNAME = "src"
 CLONE_ROOT_ENV = "FORGE_CLONE_ROOT"
 CLONE_COMMIT_ENV = "FORGE_CLONE_COMMIT"
 
+# Two more forge-owned names, composed for the same reason and by the same
+# kind of function as the two above, but carrying a different kind of fact.
+# `run_config["mode"]` and `run_config["units"]` are written by the packer
+# and by `remote_cli.py`'s `--smoke` flag PER WORKER SLICE
+# (`remote_cli.py:1260-1261`): one job can fan out into several
+# submissions, and each submission gets its own units and its own mode.
+# A CALLABLE block's `kwargs`, by contrast, is written once, at job
+# generation, and is therefore IDENTICAL for every worker that shares the
+# job. Neither shape has anywhere else for a per-submission fact to travel
+# — a notebook's kernel is a separate process that inherits only what this
+# file's environment composition hands it, and a callable's kwargs are
+# fixed before any worker exists — so the environment is the one channel
+# either shape has for "which units am I" or "am I the smoke variant".
+#
+# `units` is JSON-encoded rather than joined on a delimiter: a delimiter
+# invites exactly the ambiguity this handoff cannot afford (a unit name
+# that happens to contain it, or what an empty run between two delimiters
+# is supposed to mean), while JSON already round-trips a list of strings
+# without this file inventing its own escaping rule. The absent-vs-empty
+# distinction is carried by WHETHER THE KEY EXISTS, never by its value: a
+# `run_config` that never mentions `units` leaves `FORGE_RUN_UNITS` unset
+# entirely, so `os.environ.get(UNITS_ENV)` reads `None` for "no units were
+# declared", while a `run_config` that declares an empty list still sets
+# the variable, to the JSON text `"[]"` — present, parseable, and meaning
+# "units were declared, and there are zero of them". Collapsing those two
+# into the same unset-key reading would make a legitimately empty campaign
+# indistinguishable from a config that never mentioned units at all.
+MODE_ENV = "FORGE_RUN_MODE"
+UNITS_ENV = "FORGE_RUN_UNITS"
+
 
 def kernel_python_path(clone_root: str | Path, existing: str | None) -> str:
     """`PYTHONPATH` for the kernel a notebook executes in — the clone's own
@@ -117,34 +147,84 @@ def kernel_python_path(clone_root: str | Path, existing: str | None) -> str:
     return clone_src
 
 
+def submission_environment(mode: Any = None, units: list[str] | None = None) -> dict:
+    """Compose `FORGE_RUN_MODE` and `FORGE_RUN_UNITS` — the two
+    per-submission facts described beside `MODE_ENV`/`UNITS_ENV` above —
+    on their own, apart from `kernel_environment()`.
+
+    Kept separate rather than folded silently into `kernel_environment()`
+    because the CALLABLE branch of `invoke()` has no clone and no
+    `PYTHONPATH` to compose: it runs in the runner's own process, on the
+    `sys.path` `runner_bootstrap.py` already prepared, never in a kernel
+    subprocess. Forcing a `clone_root`/`commit` pair onto a caller that has
+    neither would trade one kind of accidental default for another.
+    `kernel_environment()` still ends up composing both of these names for
+    the notebook branch — it calls this function and merges the result in
+    — so this remains the one function that decides what either name is
+    worth; a divergence between what a kernel sees and what a callable
+    sees could never come from two encodings disagreeing with each other.
+
+    Absent `mode` (`None`): no `FORGE_RUN_MODE` key at all, never an empty
+    string standing in for it — a reader doing `os.environ.get(MODE_ENV)`
+    must see `None` for "no mode declared", not a present-but-empty value
+    a careless truthiness check could confuse with "declared and false".
+    Absent `units` (`None`, meaning `run_config` never mentioned the key):
+    no `FORGE_RUN_UNITS` key either. A DECLARED empty list still sets it,
+    to the JSON text `"[]"`, because only a present key can tell a reader
+    that zero units is what was decided, rather than what is missing.
+    """
+    result: dict[str, str] = {}
+    if mode is not None:
+        result[MODE_ENV] = str(mode)
+    if units is not None:
+        result[UNITS_ENV] = json.dumps(list(units))
+    return result
+
+
 def kernel_environment(
     clone_root: str | Path,
     commit: str,
     existing: Mapping[str, str] | None = None,
+    *,
+    mode: Any = None,
+    units: list[str] | None = None,
 ) -> dict:
     """Everything the kernel receives from this cell, composed in one place.
 
-    Three variables, and this function is the only thing that decides them:
-    the `PYTHONPATH` that makes the pinned code importable, and the two that
-    tell the notebook WHERE the pinned code is and WHICH commit it is. The
-    single composition point is the point — a second place that exported
-    either of these would be a second place that decides which tree a
-    notebook runs against, and the whole reason this handoff exists is that
-    a notebook left to work that out on its own resolves a directory that
-    exists on any worker and fails much later, naming a package rather than
-    a root.
+    Three variables always, and up to two more when this submission
+    declares them: the `PYTHONPATH` that makes the pinned code importable,
+    the two that tell the notebook WHERE the pinned code is and WHICH
+    commit it is, and `FORGE_RUN_MODE`/`FORGE_RUN_UNITS` — composed by
+    `submission_environment()` and merged in here — that tell it which
+    per-submission slice it is running. This function is the only thing
+    that decides any of them; a second place that exported one of the
+    first three would be a second place deciding which tree a notebook
+    runs against, and the whole reason that handoff exists is that a
+    notebook left to work it out resolves a directory that exists on any
+    worker and fails much later, naming a package rather than a root. The
+    same discipline applies to the newer two: `select_block()` already
+    reads `mode` off `run_config` to choose a block, so a second place
+    that re-derived `FORGE_RUN_MODE` from something other than that exact
+    value would be a second place a kernel's view of "which run is this"
+    could disagree with the runner's own.
 
     `existing` is the environment being extended, so `PYTHONPATH` is
-    prepended to rather than replaced; the two forge-owned names are set
-    outright, because the only thing that could already be carrying them is
-    an earlier runner and this one's clone is the one that counts.
+    prepended to rather than replaced; every forge-owned name, old or new,
+    is set outright, because the only thing that could already be carrying
+    one is an earlier runner, and this submission's own value is the one
+    that counts. `mode`/`units` default to `None`, so a caller that never
+    passes either gets exactly the three names this function has always
+    produced — see `submission_environment()` for the absent/empty
+    distinction that governs what either becomes when it is passed.
     """
     existing = {} if existing is None else existing
-    return {
+    composed = {
         "PYTHONPATH": kernel_python_path(clone_root, existing.get("PYTHONPATH")),
         CLONE_ROOT_ENV: str(Path(clone_root).resolve()),
         CLONE_COMMIT_ENV: str(commit),
     }
+    composed.update(submission_environment(mode, units))
+    return composed
 
 
 def block_kind(block: Mapping[str, Any]) -> str:
@@ -261,6 +341,8 @@ def execute_notebook(
     base_dir: str | Path | None = None,
     *,
     commit: Any = None,
+    mode: Any = None,
+    units: list[str] | None = None,
     client_factory: Callable[..., Any] = _default_notebook_client,
 ) -> dict:
     """Execute the declared notebook — the notebook half of cell 1.
@@ -274,13 +356,20 @@ def execute_notebook(
     returns, so an executed notebook written there needs nothing added
     anywhere else in this skill to arrive.
 
-    The kernel is started with `kernel_environment()`'s three variables:
-    the clone's `src` first on `PYTHONPATH`, and the clone's directory and
-    the pinned commit under the two forge-owned names the notebook's own
-    first cell reads. That handoff is why `commit` is a parameter of this
-    function at all — it comes from `run-config.json` by way of
-    `invoke()`, and it is the only thing that lets the notebook check the
-    checkout it is pointed at instead of trusting it.
+    The kernel is started with `kernel_environment()`'s variables: the
+    clone's `src` first on `PYTHONPATH`, the clone's directory and the
+    pinned commit under the two forge-owned names the notebook's own first
+    cell reads, and — when this submission declares either —
+    `FORGE_RUN_MODE`/`FORGE_RUN_UNITS` under the two names
+    `submission_environment()` composes. That handoff is why `commit`,
+    `mode` and `units` are all parameters of this function: they come from
+    `run-config.json` by way of `invoke()`, and `commit` is the only thing
+    that lets the notebook check the checkout it is pointed at instead of
+    trusting it, while `mode`/`units` are the only channel this particular
+    submission's own facts have for reaching a notebook at all — a
+    notebook's own cells are the pinned bytes cell 0 fetched, identical for
+    every worker that runs the same clone, so a per-submission fact has
+    nowhere to live but the environment its kernel starts in.
 
     Four things this refuses rather than works around:
 
@@ -351,7 +440,8 @@ def execute_notebook(
             f"(--environment-requirement): {exc}"
         ) from exc
 
-    handoff = kernel_environment(clone_root, commit, os.environ)
+    handoff = kernel_environment(clone_root, commit, os.environ,
+                                 mode=mode, units=units)
     saved = {variable: os.environ.get(variable) for variable in handoff}
     os.environ.update(handoff)
     try:
@@ -392,22 +482,59 @@ def invoke(
     function has no default branch, because the only default available
     costs the same quota as the right answer.
 
-    `run_config["commit"]` is read here and handed down rather than looked
-    up again lower: this is where the config is, and a pin re-read
-    somewhere else would be a second place that decides which commit a
-    notebook runs against. Read with `.get()` and never `[...]` — a
-    missing pin becomes `execute_notebook()`'s own refusal, which says
-    what could not be handed over, instead of a `KeyError` that says only
-    that a dictionary was missing a key.
+    `run_config["commit"]`, `run_config["mode"]` and `run_config["units"]`
+    are all read here and handed down rather than looked up again lower:
+    this is where the config is, and re-reading any of the three somewhere
+    else would be a second place that decides which commit, which mode, or
+    which units a submission runs against. Read with `.get()` and never
+    `[...]` — a missing pin becomes `execute_notebook()`'s own refusal,
+    which says what could not be handed over, instead of a `KeyError` that
+    says only that a dictionary was missing a key; a missing mode or units
+    is simply absent, and `submission_environment()` is what turns that
+    absence into no environment variable at all rather than a refusal,
+    because unlike the pin, neither one is required for either shape to
+    run.
+
+    The notebook branch hands `mode`/`units` down through
+    `execute_notebook()`'s own parameters, which compose them into the
+    kernel's environment the same way `commit` already is. The CALLABLE
+    branch has no kernel and no `execute_notebook()` to hand them through,
+    so it composes `submission_environment()` directly and applies it to
+    `os.environ` around the call, restoring it afterward with the exact
+    idiom `execute_notebook()` already uses for its own handoff — save
+    whatever each variable held before, update, run, then put every saved
+    value back (or remove the variable if there was nothing to restore).
+    The reason the callable branch needs this at all: `block["kwargs"]` is
+    written once, at job generation, and is therefore IDENTICAL for every
+    worker a job fans out to, while `mode` and `units` are written once per
+    SUBMISSION by the packer and the CLI (`remote_cli.py:1260-1261`). A
+    callable that needs to know which units it was handed, or whether it
+    is running the smoke variant, cannot learn either from `kwargs` no
+    matter how the job was generated — the environment is the only channel
+    either shape has for a fact that varies per submission rather than per
+    job.
     """
     block = select_block(run_config)
+    mode = run_config.get("mode")
+    units = run_config.get("units")
     if block_kind(block) == "notebook":
         return execute_notebook(block, base_dir,
                                 commit=run_config.get("commit"),
+                                mode=mode, units=units,
                                 client_factory=client_factory)
     func = resolve_callable(block, import_module=import_module)
     kwargs = dict(block.get("kwargs") or {})
-    return func(**kwargs)
+    handoff = submission_environment(mode, units)
+    saved = {variable: os.environ.get(variable) for variable in handoff}
+    os.environ.update(handoff)
+    try:
+        return func(**kwargs)
+    finally:
+        for variable, previous in saved.items():
+            if previous is None:
+                os.environ.pop(variable, None)
+            else:
+                os.environ[variable] = previous
 
 
 def _load_run_config(base_dir: str | Path | None = None) -> dict:

@@ -17291,6 +17291,234 @@ class PinnedCheckoutHandoffTests(unittest.TestCase):
                 sys.modules.pop(module_name, None)
 
 
+class SubmissionModeAndUnitsHandoffTests(unittest.TestCase):
+    """The other two per-submission facts a worker owes its kernel: the
+    packer's own `units` slice and the CLI's own `mode`
+    (`remote_cli.py:1260-1261`), neither of which a CALLABLE block's
+    `kwargs` can carry, because `kwargs` is written once per JOB — and is
+    therefore identical for every worker the job fans out to — while
+    `mode` and `units` are written once per SUBMISSION.
+
+    Reachable red: `kernel_environment()` took no `mode`/`units`,
+    `FORGE_RUN_MODE`/`FORGE_RUN_UNITS` did not exist, `execute_notebook()`
+    had no `mode`/`units` parameters, and the callable branch of `invoke()`
+    touched `os.environ` not at all.
+    """
+
+    PIN = "9f2c1e7a4b6d8035c1a9e4f70d2b8c6a5e310947"
+
+    def _clone_with_notebook(self, base: Path) -> Path:
+        notebook_dir = base / RUNNER_INVOKE.CLONE_DIRNAME / "Notebooks"
+        notebook_dir.mkdir(parents=True)
+        path = notebook_dir / "pilot.ipynb"
+        path.write_text(json.dumps({
+            "cells": [{"cell_type": "code", "execution_count": None,
+                       "metadata": {}, "outputs": [], "source": ["x = 1\n"]}],
+            "metadata": {"kernelspec": {"name": "kernel-under-test",
+                                        "display_name": "k",
+                                        "language": "python"},
+                         "language_info": {"name": "python"}},
+            "nbformat": 4, "nbformat_minor": 5,
+        }), encoding="utf-8")
+        return path
+
+    def test_kernel_environment_also_carries_the_mode_and_the_units(self) -> None:
+        """Both new names, asserted against values only they could hold:
+        the mode string verbatim, and the units round-tripped through JSON
+        rather than merely asserted present.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / RUNNER_INVOKE.CLONE_DIRNAME
+            clone.mkdir()
+            composed = RUNNER_INVOKE.kernel_environment(
+                clone, self.PIN, mode="smoke", units=["alpha", "beta"])
+
+        self.assertEqual(composed[RUNNER_INVOKE.MODE_ENV], "smoke")
+        self.assertEqual(
+            json.loads(composed[RUNNER_INVOKE.UNITS_ENV]), ["alpha", "beta"])
+
+    def test_kernel_environment_leaves_mode_and_units_out_when_absent(self) -> None:
+        """A job that declares neither is unchanged from before either name
+        existed: the same three keys, nothing added, and no empty string
+        exported in their place.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / RUNNER_INVOKE.CLONE_DIRNAME
+            clone.mkdir()
+            composed = RUNNER_INVOKE.kernel_environment(clone, self.PIN)
+
+        self.assertNotIn(RUNNER_INVOKE.MODE_ENV, composed)
+        self.assertNotIn(RUNNER_INVOKE.UNITS_ENV, composed)
+        self.assertEqual(
+            sorted(composed),
+            sorted(["PYTHONPATH", RUNNER_INVOKE.CLONE_ROOT_ENV,
+                    RUNNER_INVOKE.CLONE_COMMIT_ENV]),
+            "an absent mode/units must leave the kernel environment exactly "
+            "as it was before either name existed",
+        )
+
+    def test_kernel_environment_distinguishes_no_units_from_an_empty_list(self) -> None:
+        """The distinction the whole serialization choice exists for: an
+        absent `units` sets no key at all, while a DECLARED empty list
+        still sets one, to the JSON text for an empty array — present,
+        parseable, and never confusable with "not declared".
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / RUNNER_INVOKE.CLONE_DIRNAME
+            clone.mkdir()
+            absent = RUNNER_INVOKE.kernel_environment(clone, self.PIN, units=None)
+            declared_empty = RUNNER_INVOKE.kernel_environment(
+                clone, self.PIN, units=[])
+
+        self.assertNotIn(RUNNER_INVOKE.UNITS_ENV, absent)
+        self.assertIn(RUNNER_INVOKE.UNITS_ENV, declared_empty)
+        self.assertEqual(declared_empty[RUNNER_INVOKE.UNITS_ENV], "[]")
+        self.assertEqual(json.loads(declared_empty[RUNNER_INVOKE.UNITS_ENV]), [])
+
+    def test_execute_notebook_hands_the_mode_and_the_units_to_the_kernel(self) -> None:
+        """Threaded from a caller through to the kernel's own environment,
+        sampled at the one instant the kernel would see it.
+        """
+        seen: dict = {}
+
+        def factory(notebook, *, kernel_name, cwd):
+            client = unittest.mock.MagicMock()
+            client.execute.side_effect = lambda: seen.update(dict(os.environ))
+            return client
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            self._clone_with_notebook(base)
+            RUNNER_INVOKE.execute_notebook(
+                {"notebook": "Notebooks/pilot.ipynb"}, base,
+                commit=self.PIN, mode="smoke", units=["u1", "u2"],
+                client_factory=factory,
+            )
+
+        self.assertEqual(seen.get(RUNNER_INVOKE.MODE_ENV), "smoke")
+        self.assertEqual(
+            json.loads(seen.get(RUNNER_INVOKE.UNITS_ENV, "null")), ["u1", "u2"])
+
+    def test_invoke_threads_mode_and_units_from_the_config_into_the_notebook_branch(
+            self) -> None:
+        """Read once from `run_config`, in `invoke()`, and carried down —
+        the same discipline `commit` already gets.
+        """
+        seen: dict = {}
+
+        def factory(notebook, *, kernel_name, cwd):
+            client = unittest.mock.MagicMock()
+            client.execute.side_effect = lambda: seen.update(dict(os.environ))
+            return client
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            self._clone_with_notebook(base)
+            RUNNER_INVOKE.invoke(
+                {"commit": self.PIN, "mode": "campaign", "units": ["only-unit"],
+                 "run": {"notebook": "Notebooks/pilot.ipynb"}},
+                base_dir=base, client_factory=factory,
+            )
+
+        self.assertEqual(seen.get(RUNNER_INVOKE.MODE_ENV), "campaign")
+        self.assertEqual(
+            json.loads(seen.get(RUNNER_INVOKE.UNITS_ENV, "null")), ["only-unit"])
+
+    def test_the_callable_branch_receives_the_mode_and_the_units(self) -> None:
+        """The reason this branch needs the environment at all: `kwargs` is
+        fixed once per JOB and identical for every worker that shares it,
+        so a per-SUBMISSION fact like which units this worker was handed
+        has nowhere else to travel.
+        """
+        module_name = f"submission_handoff_callable_{os.getpid()}"
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, f"{module_name}.py").write_text(
+                "import json, os\n"
+                "def run(**kwargs):\n"
+                "    return {\n"
+                "        'mode': os.environ.get('FORGE_RUN_MODE'),\n"
+                "        'units': json.loads(os.environ.get('FORGE_RUN_UNITS', 'null')),\n"
+                "        'kwargs': kwargs,\n"
+                "    }\n",
+                encoding="utf-8")
+            saved_path = list(sys.path)
+            sys.path.insert(0, tmp)
+            try:
+                result = RUNNER_INVOKE.invoke(
+                    {"mode": "campaign", "units": ["u7"],
+                     "run": {"module": module_name, "function": "run",
+                             "kwargs": {"seed": 3}}})
+            finally:
+                sys.path[:] = saved_path
+                sys.modules.pop(module_name, None)
+
+        self.assertEqual(result["mode"], "campaign")
+        self.assertEqual(result["units"], ["u7"])
+        self.assertEqual(result["kwargs"], {"seed": 3})
+
+    def test_the_callable_branchs_own_environment_is_left_as_it_was_found(self) -> None:
+        """The failure a `pop()`-everything restore would pass: a variable
+        that was already set to something else comes back to that value,
+        not to nothing, and a variable this call introduced is removed
+        rather than left behind for the next submission on the same
+        worker.
+        """
+        module_name = f"submission_handoff_restore_{os.getpid()}"
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, f"{module_name}.py").write_text(
+                "def run(**kwargs):\n"
+                "    return 'ran'\n",
+                encoding="utf-8")
+            saved_path = list(sys.path)
+            sys.path.insert(0, tmp)
+            try:
+                with unittest.mock.patch.dict(
+                        os.environ,
+                        {RUNNER_INVOKE.MODE_ENV: "leftover-from-somewhere-else"},
+                        clear=False):
+                    self.assertNotIn(RUNNER_INVOKE.UNITS_ENV, os.environ)
+                    RUNNER_INVOKE.invoke(
+                        {"mode": "campaign", "units": ["u1"],
+                         "run": {"module": module_name, "function": "run",
+                                 "kwargs": {}}})
+                    self.assertEqual(
+                        os.environ.get(RUNNER_INVOKE.MODE_ENV),
+                        "leftover-from-somewhere-else")
+                    self.assertNotIn(RUNNER_INVOKE.UNITS_ENV, os.environ)
+            finally:
+                sys.path[:] = saved_path
+                sys.modules.pop(module_name, None)
+
+    def test_a_callable_run_with_no_mode_or_units_touches_no_environment(self) -> None:
+        """Absent from `run_config`, absent from the environment — no
+        `FORGE_RUN_MODE`/`FORGE_RUN_UNITS` key appears at all, so a job
+        that declares neither leaves a callable's environment exactly as
+        it would have been before either name existed.
+        """
+        module_name = f"submission_handoff_absent_{os.getpid()}"
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, f"{module_name}.py").write_text(
+                "import os\n"
+                "def run(**kwargs):\n"
+                "    return {\n"
+                "        'mode_present': 'FORGE_RUN_MODE' in os.environ,\n"
+                "        'units_present': 'FORGE_RUN_UNITS' in os.environ,\n"
+                "    }\n",
+                encoding="utf-8")
+            saved_path = list(sys.path)
+            sys.path.insert(0, tmp)
+            try:
+                result = RUNNER_INVOKE.invoke(
+                    {"run": {"module": module_name, "function": "run",
+                             "kwargs": {}}})
+            finally:
+                sys.path[:] = saved_path
+                sys.modules.pop(module_name, None)
+
+        self.assertFalse(result["mode_present"])
+        self.assertFalse(result["units_present"])
+
+
 class NotebookRepoRootCellTests(unittest.TestCase):
     """`assets/notebook_repo_root.py` — the READING side of the handoff,
     driven the way a kernel drives it: the whole cell executed, in a
