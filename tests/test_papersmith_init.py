@@ -11,6 +11,7 @@ from pathlib import Path
 
 from papersmith.cli import main
 from papersmith.core import config, init as init_module, manifest
+from papersmith.kit import resolve_and_validate
 from papersmith.errors import UserError
 from papersmith.yamllite import loads
 
@@ -35,7 +36,12 @@ class InitTests(unittest.TestCase):
         )
 
         assert result["name"] == "sparse-ae"
-        assert result["version"] == "0.1.0"
+        # Derived, not restated. This read `== "0.1.0"` and passed for more
+        # than a thousand commits because the version never moved; the first
+        # real bump broke it, which is what a copied literal always does
+        # eventually. What the test means is that init records the version
+        # the kit carries, so it asks the kit.
+        assert result["version"] == manifest.kit_version(resolve_and_validate())
         assert result["default_target"] == "kaggle-gpu-pool"
         for relpath in (
             ".papersmith/version",
@@ -100,7 +106,7 @@ class InitTests(unittest.TestCase):
 
         stored_manifest = json.loads((workspace / ".papersmith/manifest.json").read_text())
         assert stored_manifest["kind"] == "workspace"
-        assert stored_manifest["version"] == "0.1.0"
+        assert stored_manifest["version"] == manifest.kit_version(resolve_and_validate())
         expected = manifest.workspace_framework_files(workspace, Path(__file__).parents[1])
         assert stored_manifest["files"] == expected
 
