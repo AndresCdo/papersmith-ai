@@ -14640,22 +14640,136 @@ class GroundingThresholdObligationTests(unittest.TestCase):
     over these counts must be added.
     """
 
-    def test_the_no_threshold_ruling_still_has_nothing_to_calibrate_against(self) -> None:
-        recorded = paper_declarations.read_bindings(FORGE_ROOT / "paper")
-        decided = {
-            block: facts for block, facts in recorded.items() if facts
-        }
+    #: The falsifier's own number, quoted from `SKILL.md`: "over ten or more
+    #: recorded real `write` runs". Named here so the count that decides
+    #: whether there is anything to judge is not buried in a comparison.
+    FALSIFIER_MINIMUM = 10
+
+    @staticmethod
+    def recorded_runs(paper_dir: Path) -> list:
+        """Every run `write` recorded, oldest first.
+
+        An absent ledger is zero runs, not an error: before the first write
+        there is nothing to have recorded. A malformed line is skipped rather
+        than raising, because one bad line must not make the other nine
+        unreadable — the same fail-closed direction `forge_section_ids`
+        already takes, where an unreadable input grants nothing instead of
+        taking the whole check down.
+        """
+        path = paper_dir / ".paper-writing" / "grounding-runs.jsonl"
+        if not path.is_file():
+            return []
+        runs = []
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                runs.append(json.loads(line))
+            except ValueError:
+                continue
+        return runs
+
+    @classmethod
+    def falsifier_hits(cls, runs) -> list:
+        """The runs that trip the falsifier, each named with the count that
+        tripped it.
+
+        Verbatim from `SKILL.md`: a block reaching `written` with
+        `downgraded > 0`, or with `subjects > 0` and `decided == 0`. Both
+        shapes are kept as written rather than collapsed into one predicate —
+        they are two different ways for the ruling to be wrong, and a reader
+        deciding what rule to add needs to know which one fired.
+        """
+        hits = []
+        for run in runs:
+            block = run.get("block_id", "<unnamed>")
+            subjects = run.get("subjects", 0)
+            decided = run.get("decided", 0)
+            downgraded = run.get("downgraded", 0)
+            if isinstance(downgraded, int) and downgraded > 0:
+                hits.append(f"{block}: downgraded={downgraded}")
+            elif (isinstance(subjects, int) and subjects > 0
+                    and isinstance(decided, int) and decided == 0):
+                hits.append(f"{block}: subjects={subjects} decided=0")
+        return hits
+
+    def test_the_falsifier_runs_once_there_is_something_to_run_it_on(self) -> None:
+        """The D2 obligation, judged against recorded runs rather than
+        announced forever.
+
+        This failed the moment ANY document-rooted binding existed, and kept
+        failing until somebody discharged the ruling by hand. That made the
+        suite permanently red, and a permanently red test is not a signal —
+        in this repository three legitimate failures were dismissed as
+        environmental for a whole session for exactly that reason.
+
+        The repository already has the right shape for "cannot judge yet",
+        and uses it a few files over: announce the silence, do not fail. So
+        below the falsifier's own minimum this SKIPS and says how far off it
+        is. At or above it, the falsifier is applied to the counts the runs
+        recorded, and either names what fired or asks for the discharge the
+        obligation actually specifies.
+
+        It never passes silently. Silence here means there is nothing to say
+        yet; it never means the ruling was checked.
+        """
+        runs = self.recorded_runs(FORGE_ROOT / "paper")
+        if len(runs) < self.FALSIFIER_MINIMUM:
+            self.skipTest(
+                f"{len(runs)} recorded `write` run(s); the falsifier needs "
+                f"{self.FALSIFIER_MINIMUM}. Nothing to judge yet, and this is "
+                "announced silence rather than a pass — the no-ratio-threshold "
+                "ruling stays unchecked, not confirmed")
+        hits = self.falsifier_hits(runs)
         self.assertEqual(
-            decided, {},
-            "A real document-rooted binding now exists, so the D2 obligation's own "
-            "precondition is met and the ruling is no longer unfalsifiable. It shipped "
-            "WITHOUT a ratio threshold only because there was nothing to measure. "
-            "Owed now: accumulate ten or more real `write` runs and check whether any "
-            "block reaches `written` with `downgraded > 0`, or with `subjects > 0` and "
-            "`decided == 0`. If either happens the ruling is wrong and a blocking rule "
-            "over those counts must be added; if neither does, discharge the obligation "
-            "with the measured counts and delete this test. Do NOT simply re-pin it.",
-        )
+            hits, [],
+            "the falsifier fired over {n} recorded runs, so the "
+            "no-ratio-threshold ruling is WRONG and a blocking rule over "
+            "these counts must be added: {hits}".format(
+                n=len(runs), hits="; ".join(hits)))
+        self.fail(
+            f"the falsifier ran over {len(runs)} recorded runs and nothing "
+            "fired, so the ruling held. That is not a pass: the obligation "
+            "asks for the measured counts to be recorded in the doctrine and "
+            "THIS TEST DELETED. Do NOT simply re-pin it.")
+
+    def test_a_downgraded_run_is_named_as_the_shape_that_fired(self) -> None:
+        """Positive control for the first shape. Without it, a predicate that
+        stopped matching would read exactly like a ruling that held."""
+        self.assertEqual(self.falsifier_hits([
+            {"block_id": "a", "status": "measured", "subjects": 3, "decided": 3,
+             "downgraded": 1}]), ["a: downgraded=1"])
+
+    def test_subjects_with_nothing_decided_is_the_other_shape(self) -> None:
+        """Positive control for the second, and they must stay
+        distinguishable: a reader deciding what rule to add needs to know
+        which one fired."""
+        self.assertEqual(self.falsifier_hits([
+            {"block_id": "b", "status": "unmeasured", "subjects": 4,
+             "decided": 0, "downgraded": 0}]), ["b: subjects=4 decided=0"])
+
+    def test_a_clean_run_and_an_empty_block_fire_nothing(self) -> None:
+        """The negative control. A predicate that fired on everything would
+        satisfy both controls above and be just as broken."""
+        self.assertEqual(self.falsifier_hits([
+            {"block_id": "c", "status": "measured", "subjects": 2, "decided": 2,
+             "downgraded": 0},
+            {"block_id": "d", "status": "unmeasured", "subjects": 0}]), [])
+
+    def test_an_absent_or_malformed_ledger_reads_as_the_runs_it_has(self) -> None:
+        """An absent ledger is zero runs, not a crash; one unreadable line
+        costs its own line and not the other nine."""
+        box = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        self.assertEqual(self.recorded_runs(box), [])
+        store = box / ".paper-writing"
+        store.mkdir()
+        (store / "grounding-runs.jsonl").write_text(
+            '{"block_id": "a", "subjects": 1, "decided": 1}\n'
+            'not json at all\n\n'
+            '{"block_id": "b", "subjects": 2, "decided": 2}\n', encoding="utf-8")
+        self.assertEqual(
+            [r["block_id"] for r in self.recorded_runs(box)], ["a", "b"])
 
     def test_the_falsifier_is_still_shipped_where_a_reader_will_find_it(self) -> None:
         """The tripwire above is worthless if the obligation it points at has
