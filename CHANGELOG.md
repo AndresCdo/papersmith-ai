@@ -11,6 +11,42 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.4.0
+
+### Added
+
+- **A step now reports the product the repository was told to ignore.** A
+  `__steps__` step declares what it writes, `step` already compares those
+  declared roots against what the run actually wrote, and nothing asked whether
+  those written files were ones `.gitignore` excludes. So a step could declare a
+  product, produce it, and have git skip it silently: the declaration read
+  satisfied, the run read clean, and the artifact never entered history. Nobody
+  finds out until someone looks for a file that was never committed.
+
+  `wrote` now carries `ignored` -- always present, `[]` when clean -- the subset
+  of the run's own written paths the repository's ignore rules exclude, plus an
+  `ignoredNote` when it is non-empty. Both readings reach the terminal ledger
+  event, so the finding is durable rather than printed once.
+
+  It reports and never refuses, for the reason `undeclaredProduces` already
+  gives: it grades an act already taken. The step has run and the files are on
+  disk; refusing now undoes nothing and hides the finding behind an error.
+
+  The check runs over the paths actually written, never over the bare declared
+  roots. A declared root checked against a content-only rule (`Results/*`)
+  answers "not ignored" truthfully and uselessly, because every file under it
+  is. That distinction is what the test fixture proves: its rule is anchored to
+  the product folder, because an unanchored rule matches the product-relative
+  path at the repository root just as well and would pass with the path join
+  deleted.
+
+### Internal
+
+- This repository's own `.gitignore` already stated the insight behind the above
+  by hand, in the one file whose whole job is declaring what does not ship: *"una
+  regla escrita nombrando lo que existia ese dia no alcanza a lo que nace
+  despues"*. It was applied to two subtrees one at a time and derived nowhere.
+
 ## 0.3.1
 
 ### Fixed
