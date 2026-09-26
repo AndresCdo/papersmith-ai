@@ -172,11 +172,11 @@ For every sub-task below: apply the exact named mutation, purge `__pycache__`, r
 
 ## Phase 6: Empirical Confirmation and Final Verification
 
-- [ ] 6.1 Empirically confirm Decision D3's stated-but-unverified claim: that `git check-ignore`'s default (index-consulting) behavior reports an already-**tracked** path as not-ignored even when a rule matches it. Use the existing fixture machinery (a tracked file, plus a rule that would match it if untracked) in a scratch scenario, not by inspecting git's source or documentation alone.
+- [x] 6.1 Empirically confirm Decision D3's stated-but-unverified claim: that `git check-ignore`'s default (index-consulting) behavior reports an already-**tracked** path as not-ignored even when a rule matches it. Use the existing fixture machinery (a tracked file, plus a rule that would match it if untracked) in a scratch scenario, not by inspecting git's source or documentation alone.
   - Acceptance: the observed behavior is recorded (in a code comment near `repository_ignored`'s docstring, or in this task's completion note) as either confirming or contradicting D3's stated rationale for omitting `--no-index`. If it contradicts, correct D3's rationale in `impl_gitops.py`'s docstring in place — do not leave it as an unverified claim.
   - Check: the empirical test's exact command and observed exit code / stdout are recorded, not merely "should be fine".
 
-- [ ] 6.2 Run the domain word-count lock explicitly: `pytest tests/test_implementation_domain_lock.py`.
+- [x] 6.2 Run the domain word-count lock explicitly: `pytest tests/test_implementation_domain_lock.py`.
   - Acceptance: the suite is green, and specifically `test_l1_residue_pin_equals_the_measured_s0_baseline_minus_its_one_recorded_shrink` (`:833-894`) passes with `L1_EXPECTED_COUNT` unchanged.
   - Check: read the actual pytest output; a green run here is the only proof that Task 3.2's constant introduced zero new occurrences of "proposal".
 

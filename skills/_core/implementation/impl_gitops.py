@@ -63,6 +63,14 @@ def repository_ignored(target: Path, paths: list[str]) -> set[str]:
     return code is not read at all -- a non-zero exit carries no output and
     the parse below yields the empty set on its own. An empty `paths` spawns
     nothing.
+
+    `--no-index` is deliberately NOT passed. Empirically confirmed (scratch
+    repository, a tracked file plus a rule that would match it if it were
+    untracked): the default consults the index and reports exit 1 (not
+    ignored) for the tracked path, while `--no-index` on the identical path
+    reports exit 0 (ignored). The default is therefore exactly the intended
+    semantics -- a tracked path is already in the history, so it is not a
+    product the history never took.
     """
     if not paths:
         return set()

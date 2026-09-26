@@ -558,21 +558,21 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: no new unpinned leak either.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 92, "against": 197,
-    "agreed": 16, "answered": 95, "answers": 107, "approved": 47,
-    "audit": 19, "before": 260, "benchmark": 108, "beside": 110,
-    "check": 161, "checkable": 3, "claim": 36, "command": 277,
-    "commands": 18, "compares": 25, "declaration": 211,
+    "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
+    "audit": 19, "before": 261, "benchmark": 108, "beside": 111,
+    "check": 164, "checkable": 3, "claim": 36, "command": 277,
+    "commands": 18, "compares": 25, "declaration": 212,
     "destinations": 39, "empty": 132, "established": 5, "experiment": 25,
     "experiments": 6, "implementations": 4, "incomplete": 28,
     "invariant": 22, "isolated": 5, "leave": 11, "leaves": 38,
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
     "measured": 145, "measurement": 43, "module": 195, "notebooks": 110,
     "object": 33, "pilot": 123, "place": 58, "produces": 51,
-    "rather": 382, "recorded": 80, "remedy": 56, "remote": 65,
-    "reported": 148, "resolves": 34, "ruled": 9, "runnable": 15,
+    "rather": 385, "recorded": 80, "remedy": 56, "remote": 65,
+    "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,
     "scaffolded": 12, "sitting": 9, "small": 8, "something": 77,
     "steps": 139, "sweep": 11, "validated": 10, "value": 243, "whose": 156,
-    "write": 153, "wrong": 52
+    "write": 154, "wrong": 52
 }
 #: Unit 6b (Part B, the transitions): thirteen pins grew from the new
 #: engine prose alone (`_comparison_reuses_acid_test_question`,
@@ -620,6 +620,13 @@ M5_PINNED_RESIDUE: dict[str, int] = {
 #: rather than twice); `whose` 157->156 (the rewritten `elif`'s docstring
 #: reads differently from what it replaced). Zero admissions; the same
 #: restraint every prior unit's changelog block states.
+#: `the-product-the-history-never-took` (design D5, the ignored-path check
+#: and its new `STEP_WROTE_IGNORED`/`_step_wrote_ignored` prose alone):
+#: eight pins grew by the new constant's and helper's own prose -- `answered`
+#: 95->97, `before` 260->261, `beside` 110->111, `check` 161->164,
+#: `declaration` 211->212, `rather` 382->385, `reported` 148->149, `write`
+#: 153->154. Zero admissions, zero removals; the same restraint every prior
+#: unit's changelog block states.
 
 
 class DerivedDenylistTests(unittest.TestCase):
