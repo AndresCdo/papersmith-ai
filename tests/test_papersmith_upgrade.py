@@ -146,15 +146,31 @@ class UpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(UserError, "corrupted manifest"):
             upgrade_module.upgrade(workspace)
 
+    @staticmethod
+    def _one_minor_above(version: str) -> str:
+        """A version strictly newer than `version`, derived from it.
+
+        The fixture below needs a kit NEWER than the workspace it upgrades.
+        It used to say `0.2.0`, which was newer when it was written and
+        became older the moment the project reached `0.3.0` — at which
+        point the downgrade guard refused it and a test named "from a new
+        kit" was handing it an old one. A literal cannot stay newer than a
+        number that moves.
+        """
+        major, minor, _ = (int(part) for part in version.split(".")[:3])
+        return f"{major}.{minor + 1}.0"
+
     def test_upgrade_refreshes_version_from_a_new_kit(self) -> None:
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
-        kit = tmp_path / "kit-0.2"
+        newer = self._one_minor_above(
+            manifest.kit_version(upgrade_module.resolve_and_validate()))
+        kit = tmp_path / f"kit-{newer}"
         for relpath, content in {
             "skills/paper-ingestion/SKILL.md": "# upgraded skill\n",
             "scripts/setup_env.py": "# upgraded env\n",
             ".claude/agents/paper-ingestion.md": "---\nname: paper-ingestion\ndescription: upgraded\n---\n",
-            "package.json": '{"version": "0.2.0"}\n',
+            "package.json": '{"version": "%s"}\n' % newer,
             "requirements.txt": "kagglesdk==0.1.37\n",
             "CLAUDE.md": "# kit marker\n",
         }.items():
@@ -165,11 +181,11 @@ class UpgradeTests(unittest.TestCase):
 
         result = upgrade_module.upgrade(workspace)
 
-        assert result["version"] == "0.2.0"
-        assert (workspace / ".papersmith/version").read_text() == "0.2.0\n"
+        assert result["version"] == newer
+        assert (workspace / ".papersmith/version").read_text() == f"{newer}\n"
         assert (workspace / "skills/paper-ingestion/SKILL.md").read_text() == "# upgraded skill\n"
         stored = json.loads((workspace / ".papersmith/manifest.json").read_text())
-        assert stored["version"] == "0.2.0"
+        assert stored["version"] == newer
 
     def _kit_at(self, tmp_path, version: str):
         """A minimal kit whose only interesting property is its version."""
