@@ -36232,7 +36232,8 @@ class StepWriteScopeTests(unittest.TestCase):
     split by root is what discriminates it.
     """
 
-    def _box(self, suffix, steps):
+    def _box(self, suffix, steps, *, ignore=("__pycache__/", ".ipynb_checkpoints/",
+                                              ".implementation/")):
         box = FORGE / "implementations" / f"_e2e_scope_{suffix}_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
@@ -36267,10 +36268,13 @@ class StepWriteScopeTests(unittest.TestCase):
 
             def write_nothing():
                 return None
+
+            def delete_own():
+                time.sleep(0.01)
+                (PRODUCT / "Results" / "own" / "a.json").unlink()
             """), encoding="utf-8")
         (box / ".gitignore").write_text(
-            "__pycache__/\n.ipynb_checkpoints/\n.implementation/\n",
-            encoding="utf-8")
+            "\n".join(ignore) + "\n", encoding="utf-8")
         write_fixture_interpreter(
             box / ".venv" / ("Scripts" if os.name == "nt" else "bin"))
         git = ["git", "-c", "user.email=forge@example.invalid",
