@@ -11,6 +11,38 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.3.1
+
+### Fixed
+
+- **The `pin-published` refusal no longer prescribes a push nobody measured.**
+  It appended the same remedy -- push it and re-pin -- to every failure it
+  caught, so a remote answering `not our ref`, a DNS failure, a proxy refusal
+  and a scratch `git init` that could not write all arrived at one sentence
+  telling the operator to push. Nothing in the skill had ever asked how much
+  that push would carry. The refusal now takes one of two shapes, chosen only
+  by whether the weight could be read and never by how large it is: measured
+  states the count and keeps the remedy; unmeasurable states what is known and
+  prescribes nothing. That second shape is not new to this codebase -- the
+  `GitTimeoutError` branch one block above has always named no remedy, because
+  a question that could not be finished being asked is not the remote saying
+  no. That branch is untouched here; it was the model, not the patient.
+
+  The reader is local and transfers nothing. It matches a configured remote to
+  `--repo-url` by exact string comparison, resolves the cached
+  `refs/remotes/<name>/<branch>`, and counts commits. Two remotes sharing one
+  URL resolve to unmeasurable rather than picking one: they are independent
+  caches fetched at different moments, so a choice between them is an answer
+  the operator cannot audit. The measurement is therefore often unavailable,
+  and that is the intended trade -- a weight anchored on the wrong remote is a
+  number that looks measured and is not.
+
+  The clause states an exact distance from the cache and claims nothing about
+  the remote now. An earlier draft called that number a floor. It is a ceiling
+  on the real push: a remote that moved forward since the last fetch needs
+  fewer objects, not more. Both framings over-claim, and over-claiming from a
+  true measurement is the defect this change exists to close.
+
 ## 0.3.0
 
 ### Fixed
