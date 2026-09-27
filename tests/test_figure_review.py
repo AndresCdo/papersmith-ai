@@ -269,7 +269,10 @@ class ChainFallbackTests(unittest.TestCase):
     def _tmp(self) -> Path:
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
-        return Path(holder.name)
+        # `.resolve()` is not decoration: on macOS `/var` is a symlink to
+        # `/private/var`, so an unresolved fixture path compares unequal to
+        # production's own resolved answer for the same directory.
+        return Path(holder.name).resolve()
 
     def _pdf(self, tmp_dir: Path, name: str = "example-figure.pdf") -> Path:
         figures_dir = tmp_dir / "paper" / "Figures"
@@ -626,7 +629,10 @@ class PngReadThreatMatrixTests(unittest.TestCase):
     def _tmp_path(self) -> Path:
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
-        return Path(holder.name) / "fixture.png"
+        # `.resolve()` is not decoration: on macOS `/var` is a symlink to
+        # `/private/var`, so an unresolved fixture path compares unequal to
+        # production's own resolved answer for the same directory.
+        return Path(holder.name).resolve() / "fixture.png"
 
     def test_zero_byte_file_refuses(self) -> None:
         png_read = self._import_png_read()
@@ -1074,7 +1080,10 @@ class MeasureVerbTests(unittest.TestCase):
     def _tmp(self) -> Path:
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
-        return Path(holder.name)
+        # `.resolve()` is not decoration: on macOS `/var` is a symlink to
+        # `/private/var`, so an unresolved fixture path compares unequal to
+        # production's own resolved answer for the same directory.
+        return Path(holder.name).resolve()
 
     def _rasterize_first(self, tmp_dir: Path) -> tuple:
         figures_dir = tmp_dir / "paper" / "Figures"
