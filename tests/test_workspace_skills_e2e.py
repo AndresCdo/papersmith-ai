@@ -31,6 +31,7 @@ from workspace_series import (
 SKILL_NAMES = (
     "experimental-deliberation",
     "experimental-implementation",
+    "figure-review",
     "kaggle-accounts",
     "paper-ingestion",
     "paper-writing",
@@ -97,6 +98,14 @@ class SkillTreeTests(unittest.TestCase):
 
 class SkillFrontDoorTests(unittest.TestCase):
     """Each shipped front door explains its own accepted set, offline."""
+
+    def test_figure_review_front_door_lists_its_commands(self) -> None:
+        workspace = make_workspace(new_tmp(self))
+        proc = run_workspace_script(
+            workspace, "skills/figure-review/scripts/review_cli.py", ["--help"])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        for verb in ("probe", "raster"):
+            self.assertIn(verb, proc.stdout, f"review_cli must advertise {verb}")
 
     def test_paper_writing_front_door_lists_its_nineteen_verbs(self) -> None:
         workspace = make_workspace(new_tmp(self))

@@ -31,12 +31,13 @@ from papersmith.kit import resolve_and_validate
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The nine command-bearing skills, in the deterministic order
+#: The ten command-bearing skills, in the deterministic order
 #: ``collect_commands`` sorts them into. Pinned literally so a new or renamed
 #: top-level skill has to be acknowledged here.
 COMMAND_NAMES = (
     "experimental-deliberation",
     "experimental-implementation",
+    "figure-review",
     "kaggle-accounts",
     "paper-ingestion",
     "paper-writing",
@@ -102,10 +103,10 @@ class GeneratorsTests(unittest.TestCase):
     def test_command_derivation_is_scoped_to_the_command_tools(self) -> None:
         workspace = _workspace(self.new_tmp())
         opencode = render_files(workspace, tools=("opencode",))
-        assert sum(1 for path in opencode if path.startswith(".opencode/commands/")) == 9
+        assert sum(1 for path in opencode if path.startswith(".opencode/commands/")) == 10
         assert ".claude/commands/paper-ingestion.md" not in opencode
         claude = render_files(workspace, tools=("claude",))
-        assert sum(1 for path in claude if path.startswith(".claude/commands/")) == 9
+        assert sum(1 for path in claude if path.startswith(".claude/commands/")) == 10
         assert ".opencode/commands/paper-ingestion.md" not in claude
         assert not any(
             path.startswith(".opencode/commands/")
