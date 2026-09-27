@@ -185,7 +185,7 @@ No behaviour change to any existing caller. Depends on Commit 2's `skills/_core/
 
 - [x] 3.8 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_paper_figure_audit.py tests/test_figure_review.py`. All green. **89 passed, 13 subtests passed.**
 - [ ] 3.9 Run `npm run test:all` in full. Confirm no regression, and specifically confirm every existing `test_paper_figure_audit.py` test that predates this change still passes unchanged (proving "no behaviour change"). **Deferred by explicit orchestrator instruction** (same as tasks 1.24/2.24): a concurrent session shares this working tree; the orchestrator runs the full gate once, after all five commits. Run instead, all green: `tests/test_paper_writing.py` full (672 passed, 1 skipped, 57 subtests), `tests/test_paper_decisions.py` full (289 passed — confirms the shared `paper_mutation.py` harness fix below didn't regress its own mutation suite), `tests/test_forge_gate.py` full (10 passed), and the leak scan `tests/test_proposal_implementation.py -k "leak or guarded"` (9 passed).
-- [x] 3.10 Commit directly on `main`. Conventional Commit message: `feat(paper-writing): widen figure-audit's report schema with an always-present visual key`.
+- [x] 3.10 Commit directly on `main`. Conventional Commit message: `feat(paper-writing): widen figure-audit's report schema with an always-present visual key`. **Committed as `b171819`.**
 
 ---
 
