@@ -22,11 +22,15 @@ Three Tiers`).
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 import zlib
 from pathlib import Path
 
@@ -41,6 +45,14 @@ sys.path.insert(0, str(FORGE_ROOT / "skills" / "_core" / "implementation"))
 from impl_refusals import Refused  # noqa: E402
 
 sys.path.insert(0, str(CORE_FIGURE))
+
+# `the-figure-nobody-looked-at`, Phase 4 (task 4.6): `paper_cli.py`, for the
+# one end-to-end test that crosses the skill boundary the way an operator
+# or agent invocation would -- never a production import in either
+# direction (`figure-review`'s own scripts still import nothing from
+# `paper-writing`, proven unchanged by `RepairBudgetIsolationTests` above).
+sys.path.insert(0, str(FORGE_ROOT / "skills" / "paper-writing" / "scripts"))
+import paper_cli  # noqa: E402
 
 import unittest  # noqa: E402
 
@@ -1140,3 +1152,85 @@ Path(prefix + "-1.png").write_bytes(bytes.fromhex({real_png.hex()!r}))
         )
         self.assertNotIn("ledger.json", review_scripts_text)
         self.assertNotIn("_write_ledger", review_scripts_text)
+
+
+# =====================================================================
+# Task 4.6: the end-to-end join, over a REAL captured raster fixture
+# (task 2.19's `example-figure`, `border=2pt`) -- `probe` -> `raster` ->
+# `measure`, then `figure audit --visual-report` against the result.
+# `--visual-report` is resolved through `paper_cli._resolve_repo_path`
+# (design.md Decision 5), which requires the report to sit inside the
+# real repository root -- so this fixture, unlike every other class in
+# this file, lives under the already-gitignored `.scratch/` tree
+# (`.gitignore`'s own comment on why), never a bare `tempfile.
+# TemporaryDirectory()`.
+# =====================================================================
+
+class VisualReportEndToEndAuditTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.tmp_dir = (
+            FORGE_ROOT / ".scratch"
+            / f".figure-review-e2e-visual-report-test-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        )
+        self.tmp_dir.mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, self.tmp_dir, ignore_errors=True)
+
+    def test_probe_raster_measure_then_figure_audit_visual_report(self) -> None:
+        fixture_dir = FIXTURES / "example-figure"
+        pdf = self.tmp_dir / "paper" / "Figures" / "example-figure.pdf"
+        pdf.parent.mkdir(parents=True)
+        pdf.write_bytes(b"%PDF-1.4 stub\n%%EOF\n")
+
+        # An injected-`PATH` stub that reproduces the REAL captured PNG
+        # bytes at the front door's own expected output path -- the same
+        # "stub copies a committed fixture's bytes" tier this skill's own
+        # suite already uses (`ChainFallbackTests`), never a freshly
+        # rasterized or hand-drawn raster.
+        real_png_bytes = (fixture_dir / "example-figure.png").read_bytes()
+        stub_body = (
+            "import sys\nfrom pathlib import Path\n\n"
+            "argv = sys.argv\n"
+            "prefix = argv[-1]\n"
+            f"Path(prefix + '-1.png').write_bytes(bytes.fromhex({real_png_bytes.hex()!r}))\n"
+        )
+        bin_dir = _stub_dir(self.tmp_dir, {"pdftoppm": stub_body})
+
+        probe = raster.probe(path=str(bin_dir))
+        self.assertEqual(probe["resolved"], "pdftoppm")
+
+        out_dir = self.tmp_dir / "scratch"
+        raster_result = raster.rasterize(pdf, out_dir, path=str(bin_dir))
+        self.assertEqual(raster_result["tool"], "pdftoppm")
+
+        findings = _import_findings()
+        figure_dimensions = _import_figure_dimensions()
+        visual = findings.measure_figure(
+            Path(raster_result["png"]), raster_result, tex_path=fixture_dir / "example-figure.tex",
+        )
+        report_path = out_dir / "visual-report.json"
+        raster._atomic_write_json(report_path, visual)
+
+        manifest_path = self.tmp_dir / "example-figure.diagram.json"
+        manifest_path.write_text(json.dumps({"components": []}), encoding="utf-8")
+
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            exit_code = paper_cli.main([
+                "figure", "audit", "--file", str(fixture_dir / "example-figure.tex"),
+                "--manifest", str(manifest_path), "--section", "introduction",
+                "--visual-report", str(report_path),
+            ])
+        payload = json.loads(buf.getvalue())
+
+        self.assertEqual(exit_code, 0, payload)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            sorted(payload["visual"]["dimensions"].keys()),
+            sorted(figure_dimensions.ALL_DIMENSIONS),
+        )
+        # `example-figure` declares `border=2pt` (task 2.19's provenance
+        # note), so out-of-bounds is a COMPUTED verdict here, never the
+        # `unmeasured`/`NO_DECLARED_BORDER` a border-less source would get.
+        self.assertIn(payload["visual"]["dimensions"]["out-of-bounds"]["verdict"], ("pass", "fail"))
+        self.assertIsNotNone(payload["visual"]["provenance"])
+        self.assertEqual(payload["visual"]["provenance"]["tool"], "pdftoppm")

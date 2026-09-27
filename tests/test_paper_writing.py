@@ -55,13 +55,32 @@ import paper_guidance  # noqa: E402
 import paper_source_span  # noqa: E402
 import paper_marker  # noqa: E402
 import paper_grounding  # noqa: E402 -- the-block-asserts-only-what-its-section-carries: per-sentence support reconciliation against the bound section's own bytes
+import paper_figure  # noqa: E402 -- the-figure-nobody-looked-at, Phase 4: the repair-budget ledger `--visual-report`'s join must leave untouched
 
 sys.path.insert(0, str(FORGE_ROOT / "skills" / "_core" / "implementation"))
 from impl_refusals import Refused  # noqa: E402
 import impl_layout  # noqa: E402
 
+# `the-figure-nobody-looked-at`, Phase 4: `figure-review`'s own rasterizer/
+# measurement modules, imported here ONLY for this end-to-end TEST join --
+# `paper_cli.py` itself never imports `figure-review` (design.md: "Never an
+# edge: paper-writing --X--> figure-review"; the join is `--visual-report
+# <path>`, never an import, in either direction).
+sys.path.insert(0, str(FORGE_ROOT / "skills" / "figure-review" / "scripts"))
+import raster as figure_review_raster  # noqa: E402
+import findings as figure_review_findings  # noqa: E402
+
+sys.path.insert(0, str(FORGE_ROOT / "skills" / "_core" / "figure"))
+import figure_dimensions  # noqa: E402
+
 sys.path.insert(0, str(FORGE_ROOT / "tests"))
 from paper_mutation import _run_against_mutant  # noqa: E402
+# `the-figure-nobody-looked-at`, Phase 4: reuses the stub `latexmk`
+# `tests/test_paper_figure.py` already installs for its own repair-budget
+# ledger tests -- the same shape `tests/test_implementation_domain_
+# mutation.py` already establishes for cross-test-file reuse, never a
+# second copy of the same stub source that could drift from the original.
+from test_paper_figure import _install_stub_latexmk  # noqa: E402
 
 CLI = SKILL_SCRIPTS / "paper_cli.py"
 CORE_IMPLEMENTATION = FORGE_ROOT / "skills" / "_core" / "implementation"
@@ -1081,6 +1100,301 @@ class FigureVerbFrontDoorTests(unittest.TestCase):
                 self.assertEqual(exit_code, 2)
                 self.assertEqual(payload["status"], "refused")
                 self.assertEqual(payload["code"], "DIAGRAM_SOURCE_ABSENT")
+
+
+class FigureAuditVisualReportJoinTests(unittest.TestCase):
+    """`the-figure-nobody-looked-at`, Phase 4, tasks 4.1-4.4: `figure
+    audit` gains `--visual-report <path>`, resolved through the same
+    `_resolve_repo_path` `--draft`/`--audit`/`--transcript` already reuse
+    (design.md, Decision 5) -- never a derived scratch location, and
+    never an import of `figure-review` in either direction. Fixtures live
+    under the already-gitignored `.scratch/` tree: `_resolve_repo_path`
+    has no injectable `forge_root` (unlike `paper_scaffold.resolve_paper_
+    dir`), so every path this class supplies must resolve inside the
+    REAL repository root (`.gitignore`'s own comment on why `.scratch/`
+    exists for exactly this)."""
+
+    def setUp(self) -> None:
+        self.test_root = (
+            FORGE_ROOT / ".scratch"
+            / f".figure-audit-visual-report-test-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        )
+        self.test_root.mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, self.test_root, ignore_errors=True)
+        self.tex = self.test_root / "audited.tex"
+        self.tex.write_text(
+            "\\documentclass[tikz,border=2pt]{standalone}\n"
+            "\\begin{document}\n"
+            "\\begin{tikzpicture}\n"
+            "\\node (a) {A};\n"
+            "\\end{tikzpicture}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        self.manifest = self.test_root / "audited.diagram.json"
+        self.manifest.write_text(json.dumps({"components": []}), encoding="utf-8")
+
+    def _run(self, visual_report: Path | None = None, **extra_args: str) -> tuple:
+        args = [
+            "figure", "audit", "--file", str(self.tex), "--manifest", str(self.manifest),
+            "--section", "introduction",
+        ]
+        for flag, value in extra_args.items():
+            args += [f"--{flag}", value]
+        if visual_report is not None:
+            args += ["--visual-report", str(visual_report)]
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            exit_code = paper_cli.main(args)
+        return exit_code, json.loads(buf.getvalue())
+
+    def test_a_caller_supplied_visual_report_is_read_and_threaded_verbatim(self) -> None:
+        # Task 4.2 -- lock 3's schema-level guarantee (task 3.1), confirmed
+        # through the CLI front door rather than only `audit_semantics`
+        # directly.
+        visual = figure_dimensions.default_visual()
+        visual["dimensions"]["overlap"] = {"verdict": "pass", "reason": None, "collisions": []}
+        report_path = self.test_root / "visual-report.json"
+        report_path.write_text(json.dumps(visual), encoding="utf-8")
+
+        exit_code, payload = self._run(report_path)
+
+        self.assertEqual(exit_code, 0, payload)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["visual"], visual)
+
+    def test_omitting_visual_report_defaults_to_every_dimension_unmeasured(self) -> None:
+        # The `None` branch task 4.2 adds: no `--visual-report` at all
+        # still threads through to `audit_semantics(visual=None)`, which
+        # defaults (Commit 3, unchanged by this phase).
+        exit_code, payload = self._run(None)
+
+        self.assertEqual(exit_code, 0, payload)
+        self.assertEqual(payload["visual"], figure_dimensions.default_visual())
+
+    def test_an_absent_visual_report_refuses_diagram_source_absent(self) -> None:
+        report_path = self.test_root / "does-not-exist.json"
+
+        exit_code, payload = self._run(report_path)
+
+        self.assertEqual(exit_code, 2, payload)
+        self.assertEqual(payload["status"], "refused")
+        self.assertEqual(payload["code"], "DIAGRAM_SOURCE_ABSENT")
+
+    def test_an_unparseable_visual_report_refuses_diagram_source_absent(self) -> None:
+        report_path = self.test_root / "malformed.json"
+        report_path.write_text("not json{", encoding="utf-8")
+
+        exit_code, payload = self._run(report_path)
+
+        self.assertEqual(exit_code, 2, payload)
+        self.assertEqual(payload["status"], "refused")
+        self.assertEqual(payload["code"], "DIAGRAM_SOURCE_ABSENT")
+
+    def test_a_visual_report_outside_the_repository_refuses(self) -> None:
+        # Threat Matrix, "Path containment of the caller-supplied
+        # operand": `../../tmp/x.json`-shaped in spirit -- any path
+        # `_resolve_repo_path` cannot make relative to `FORGE_ROOT`.
+        outside = (
+            Path(tempfile.gettempdir())
+            / f"figure-audit-visual-report-outside-{os.getpid()}.json"
+        )
+        outside.write_text(json.dumps(figure_dimensions.default_visual()), encoding="utf-8")
+        self.addCleanup(outside.unlink, missing_ok=True)
+
+        exit_code, payload = self._run(outside)
+
+        self.assertEqual(exit_code, 2, payload)
+        self.assertEqual(payload["status"], "refused")
+        self.assertEqual(payload["code"], "PAPER_OUTSIDE_REPOSITORY")
+
+    def test_a_symlink_escaping_the_repository_tree_refuses(self) -> None:
+        # Threat Matrix, same row: a symlink INSIDE the repo whose target
+        # resolves outside it -- `_resolve_repo_path`'s `Path(raw).
+        # resolve()` follows the symlink before the containment check, so
+        # this is not distinguishable from the plain outside-path case
+        # above at the code level, and this test proves that directly.
+        outside = (
+            Path(tempfile.gettempdir())
+            / f"figure-audit-visual-report-symlink-target-{os.getpid()}.json"
+        )
+        outside.write_text(json.dumps(figure_dimensions.default_visual()), encoding="utf-8")
+        self.addCleanup(outside.unlink, missing_ok=True)
+        symlink_path = self.test_root / "visual-report-symlink.json"
+        symlink_path.symlink_to(outside)
+
+        exit_code, payload = self._run(symlink_path)
+
+        self.assertEqual(exit_code, 2, payload)
+        self.assertEqual(payload["status"], "refused")
+        self.assertEqual(payload["code"], "PAPER_OUTSIDE_REPOSITORY")
+
+    def test_a_visual_failure_alongside_a_semantic_pass_leaves_the_cli_verdict_at_pass(self) -> None:
+        # Lock 4, CLI-level confirmation of task 3.4's schema-level
+        # isolation (`VisualVerdictIsolationTests` in
+        # `tests/test_paper_figure_audit.py`). A custom one-block, one-
+        # section corpus under `.scratch/` (never the shipped `sections/`
+        # tree) whose prose deliberately agrees with the manifest, so the
+        # semantic verdict is a real, reached `pass` rather than an
+        # `unmeasured` that would make this assertion vacuous.
+        self.manifest.write_text(json.dumps({"components": ["alpha"]}), encoding="utf-8")
+        sections_dir = self.test_root / "sections"
+        sections_dir.mkdir()
+        header = {
+            "section": "join-demo", "position": 1,
+            "blocks": [{
+                "id": "only", "requires_facts": [], "requires_declarations": [], "citations": "none",
+            }],
+        }
+        (sections_dir / "01-join-demo.md").write_bytes(
+            b"---\n" + json.dumps(header).encode("utf-8")
+            + b"\n---\n\nThe pipeline is described here: alpha.\n"
+        )
+        visual = figure_dimensions.default_visual()
+        visual["dimensions"]["overlap"] = {
+            "verdict": "fail", "reason": None,
+            "collisions": [{"pixel": [[0, 0], [1, 1]], "point": [[0.0, 0.0], [0.48, 0.48]]}],
+        }
+        report_path = self.test_root / "visual-report.json"
+        report_path.write_text(json.dumps(visual), encoding="utf-8")
+
+        exit_code, payload = self._run(
+            report_path, sections=str(sections_dir), section="join-demo",
+        )
+
+        self.assertEqual(exit_code, 0, payload)
+        # The semantic half reached a real `pass` (components=["alpha"]
+        # matches the prose), independently of the visual `fail` above --
+        # the mutation this lock must survive is letting `visual` set this
+        # value.
+        self.assertEqual(payload["verdict"], "pass")
+        self.assertEqual(payload["visual"]["dimensions"]["overlap"]["verdict"], "fail")
+
+
+class VisualPassRepairBudgetLedgerIsolationTests(unittest.TestCase):
+    """Lock 5 (design.md lock table), task 4.5, full end-to-end
+    confirmation in BOTH directions: a full successful visual pass
+    (`raster` -> `measure` -> `figure audit --visual-report`) and a fully
+    failing rasterizer chain each leave `render`'s repair-budget ledger
+    byte-identical and its `attemptsUsed` count unchanged (`figure-raster`
+    spec, `Requirement: Consumes an Already-Compiled PDF, Compiles
+    Nothing`). The mutation this lock must survive: a single `_write_
+    ledger` call added anywhere on the visual path -- proven caught, by
+    hand, during implementation (see apply-progress); `figure-review`'s
+    own scripts already prove they contain no such call
+    (`RepairBudgetIsolationTests`, `tests/test_figure_review.py`)."""
+
+    #: A syntactically minimal, real, decodable 8-bit RGBA 1x1 PNG (the
+    #: same bytes `tests/test_cli_paper_e2e.py` already uses for its own
+    #: stubbed figure file) -- sufficient for `png_read.py` to decode and
+    #: `geometry.py` to measure; this class proves LEDGER isolation, not
+    #: geometry, so no committed capture is needed here.
+    _FAKE_PNG = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082"
+    )
+
+    def setUp(self) -> None:
+        self.test_root = (
+            FORGE_ROOT / ".scratch"
+            / f".figure-audit-ledger-isolation-test-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        )
+        self.paper_dir = self.test_root / "paper"
+        self.figure_id = "ledger-isolation"
+        figures_dir = self.paper_dir / "Figures"
+        figures_dir.mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, self.test_root, ignore_errors=True)
+        (figures_dir / f"{self.figure_id}.tex").write_text("% node: box\n", encoding="utf-8")
+        (figures_dir / f"{self.figure_id}.diagram.json").write_text(
+            json.dumps({"components": ["box"]}), encoding="utf-8",
+        )
+        self.bin_dir = self.test_root / "latexmk-bin"
+        _install_stub_latexmk(self.bin_dir)
+        os.environ["STUB_RECORD_PATH"] = str(self.test_root / "record.jsonl")
+        self.addCleanup(os.environ.pop, "STUB_RECORD_PATH", None)
+        self.addCleanup(os.environ.pop, "STUB_MODE", None)
+
+        # An "existing repair ledger": two ordinary repairable failures,
+        # well under `REPAIR_BUDGET` -- `render`'s own `_write_ledger`
+        # call, never anything this phase adds.
+        os.environ["STUB_MODE"] = "failure_error"
+        for _ in range(2):
+            paper_figure.render(self.paper_dir, self.figure_id, path=str(self.bin_dir))
+        # A clean compile leaves a compiled `<id>.pdf` beside that ledger
+        # WITHOUT growing it -- `render`'s success path returns early,
+        # before `_write_ledger` is ever reached (`paper_figure.py`).
+        os.environ["STUB_MODE"] = "success"
+        paper_figure.render(self.paper_dir, self.figure_id, path=str(self.bin_dir))
+
+        self.paths = paper_figure.figure_paths(self.paper_dir, self.figure_id)
+        self.assertTrue(self.paths["ledger"].is_file(), "setup must leave an existing ledger")
+        self.ledger_before = self.paths["ledger"].read_bytes()
+        self.attempts_before = json.loads(self.ledger_before)["attempts"]
+        self.assertEqual(len(self.attempts_before), 2)
+
+    def _visual_report_via_a_real_raster_and_measure_pass(self) -> Path:
+        """Runs `figure-review`'s own `raster` then `measure` over an
+        injected `PATH` stub -- never a real rasterizer, the same tier
+        the skill's own suite uses -- and writes the resulting plain-data
+        `visual-report.json` under this test's own `.scratch/` tree."""
+        stub_body = (
+            "import sys\nfrom pathlib import Path\n\n"
+            "argv = sys.argv\n"
+            "prefix = argv[-1]\n"
+            f"Path(prefix + '-1.png').write_bytes(bytes.fromhex({self._FAKE_PNG.hex()!r}))\n"
+        )
+        raster_bin = self.test_root / "raster-bin"
+        raster_bin.mkdir()
+        stub_path = raster_bin / "pdftoppm"
+        stub_path.write_text(f"#!{sys.executable}\n{stub_body}", encoding="utf-8")
+        stub_path.chmod(0o755)
+
+        raster_result = figure_review_raster.rasterize(
+            self.paths["pdf"], self.test_root / "raster-scratch", path=str(raster_bin),
+        )
+        visual = figure_review_findings.measure_figure(Path(raster_result["png"]), raster_result)
+        report_path = self.test_root / "visual-report.json"
+        report_path.write_text(json.dumps(visual), encoding="utf-8")
+        return report_path
+
+    def test_a_full_successful_visual_pass_leaves_the_ledger_byte_identical(self) -> None:
+        report_path = self._visual_report_via_a_real_raster_and_measure_pass()
+
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            exit_code = paper_cli.main([
+                "figure", "audit", "--paper", str(self.paper_dir), "--figure-id", self.figure_id,
+                "--section", "introduction", "--visual-report", str(report_path),
+            ])
+        payload = json.loads(buf.getvalue())
+
+        self.assertEqual(exit_code, 0, payload)
+        self.assertIn("visual", payload)
+        # `--figure-id` mode also persists the report to `figure_audit.json`
+        # in the id's own scratch dir (`paper_cli.py`); the persisted
+        # artifact carries the same join, not only the stdout payload.
+        persisted = json.loads((self.paths["scratch"] / "figure_audit.json").read_text(encoding="utf-8"))
+        self.assertEqual(persisted["visual"], payload["visual"])
+
+        ledger_after = self.paths["ledger"].read_bytes()
+        self.assertEqual(ledger_after, self.ledger_before)
+        self.assertEqual(json.loads(ledger_after)["attempts"], self.attempts_before)
+
+    def test_a_fully_failing_rasterizer_chain_also_leaves_the_ledger_byte_identical(self) -> None:
+        # `out_dir` is deliberately THIS id's own real scratch directory
+        # (`self.paths["scratch"]`, the same one `figure_paths` derives
+        # `paths["ledger"]` from: `scratch_dir / "ledger.json"`) -- never a
+        # throwaway path -- so a mutation that plants a ledger write on
+        # this failure branch would land on the exact file this test's
+        # own assertions read, making the mutation observable here rather
+        # than merely absent from an unrelated directory.
+        with self.assertRaises(Refused) as ctx:
+            figure_review_raster.rasterize(
+                self.paths["pdf"], self.paths["scratch"], path="",
+            )
+        self.assertEqual(ctx.exception.code, "RASTER_TOOLCHAIN_ABSENT")
+
+        ledger_after = self.paths["ledger"].read_bytes()
+        self.assertEqual(ledger_after, self.ledger_before)
+        self.assertEqual(json.loads(ledger_after)["attempts"], self.attempts_before)
 
 
 class MutationProofTests(unittest.TestCase):

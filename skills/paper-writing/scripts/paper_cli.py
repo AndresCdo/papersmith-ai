@@ -2940,12 +2940,31 @@ def _cmd_figure_audit(args: argparse.Namespace) -> dict:
             f"{tex_path} is not a readable figure source",
         )
 
+    visual = None
+    if args.visual_report:
+        # `_resolve_repo_path` (Decision 5, design.md): the same
+        # containment guard `--draft`/`--audit`/`--transcript` already
+        # reuse, never a second, freshly-invented code for the same
+        # condition. An absent or unparseable report reuses `DIAGRAM_
+        # SOURCE_ABSENT` -- the code this function already raises twice
+        # above for "this call cannot audit from these sources" -- rather
+        # than inventing a third code for a fourth unreadable source.
+        visual_report_path = _resolve_repo_path(args.visual_report)
+        try:
+            visual = json.loads(visual_report_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            raise Refused(
+                "DIAGRAM_SOURCE_ABSENT",
+                f"{visual_report_path} is not a readable visual report",
+            )
+
     report = paper_figure_audit.audit_semantics(
         tex=tex_text,
         manifest=manifest,
         section_text=body.decode("utf-8", errors="replace"),
         contract_figure=contract_figure,
         expected_components=expected_components,
+        visual=visual,
     )
     report["figureId"] = args.figure_id or tex_path.stem
     report["evidence"]["section"] = f"{args.section}.md"
@@ -3558,6 +3577,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--block", default=None,
         help="the block whose figure: obligation this diagram answers (optional; without it the "
              "audit reports unmeasured rather than guessing a binding)",
+    )
+    p_figure_audit.add_argument(
+        "--visual-report", default=None,
+        help="path to a figure-review `visual-report.json` (from `figure-review measure`); "
+             "an already-computed, plain-data dict passed straight to "
+             "audit_semantics(visual=...) -- this call never reads Figures/ or spawns a "
+             "rasterizer to produce it itself",
     )
     p_packet = sub.add_parser(
         "packet",
