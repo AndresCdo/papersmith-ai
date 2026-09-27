@@ -11,6 +11,71 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.5.0
+
+### Added
+
+- **`figure-review`, the tenth skill: the eye that looks at the rendered
+  diagram.** `render` compiled a figure to PDF and `figure audit` judged it
+  against the prose, and nothing ever looked at the picture. Overlapping boxes,
+  text running off the canvas and bad connections were all reported
+  `unmeasured` -- honestly, but unmeasured, and the socket for the skill that
+  would measure them had been written and left empty.
+
+  The skill rasterizes the already-compiled `Figures/<id>.pdf` through the
+  first of `pdftoppm`, `pdftocairo`, `gs`, `sips` that resolves, decodes the
+  PNG with a stdlib `zlib` reader, and computes what a raster can actually
+  support. It calls `latexmk` never, so it spends nothing against `render`'s
+  repair budget, and it imports nothing into `paper-writing` -- the join is
+  `--visual-report <path>`, a report already on disk read as plain data. A
+  test now holds that import edge absent rather than leaving it true by
+  accident.
+
+  What it reports is graded by what can be known, and the grading is the
+  point:
+
+  - **A verdict** for `out-of-bounds` and `overlap` -- computed, numeric,
+    with intersecting boxes in pixel and point coordinates, and reported as
+    unnamed regions. The raster found the collision; the source names the
+    nodes, and nothing here joins them.
+  - **A number with no verdict** for `canvas-occupancy`. "Too much whitespace"
+    is a judgement about composition, so the fraction is reported and nothing
+    fails on it.
+  - **An announced silence** for legibility, style, connection correctness and
+    which component an overlap belongs to, each with a named reason.
+  - **An assisted reading** for what the agent itself sees. It is labelled,
+    never appears in a verdict field, and may never upgrade an `unmeasured`
+    dimension to `pass`.
+
+  `out-of-bounds` is itself `unmeasured` when the source declares no border: a
+  standalone TikZ canvas is fitted to its own ink, so without one there is no
+  way to tell ink that ran off from a canvas that was drawn to fit.
+
+- **`figure audit`'s report carries a `visual` key**, always present, never
+  null, supplied by the caller and unable to change the semantic verdict. A
+  visual `fail` beside a semantic `pass` leaves the top-level verdict at
+  `pass`, and a test holds that in both places it could regress.
+
+### Fixed
+
+- **`figure-auditor`'s precondition is a command instead of a belief.** It read
+  "when that skill is available in this session" with nothing measuring it; it
+  now runs the skill's front door and quotes the exit.
+- **`legibility`'s reason for being unmeasured was false.** It named a missing
+  image tool. Glyph metrics come from the PDF's text layer, not an image, so
+  the tool was never the obstacle -- legibility is a threshold judgement, and
+  the reason code now says so. Deferring behind an honest reason is a note;
+  deferring behind a false one is the defect this release exists to remove.
+
+### Internal
+
+- Five sequential work units, each mutation-proved: every lock was broken on
+  purpose with the mutation a weaker lock would have survived, and watched to
+  go red. One lock did survive its mutation and was rewritten -- it had been
+  comparing literals rather than calling the function it claimed to guard.
+- A file this repository tracked inside the target's own repository, under a
+  path its own `.gitignore` declares it does not carry, is tracked no longer.
+
 ## 0.4.0
 
 ### Added
