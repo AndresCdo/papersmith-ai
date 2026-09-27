@@ -24773,6 +24773,244 @@ class SettleAttachCommandTests(unittest.TestCase):
                          ["an already-settled item"])
 
 
+class SettleReplaceCommandTests(unittest.TestCase):
+    """`settle --attach --replace` -- re-points an agreement checklist
+    line's `` `test_<id>` `` witness onto a different test, without
+    touching the tick or any other byte of the holder file
+    (`re-pointing-a-proof-is-not-retracting-a-claim`, design "the
+    `--replace` path lives inside the existing `--attach` branch"). The
+    only path that reached this end state before this capability existed
+    -- `--reverse` followed by a fresh placement -- de-ticks and
+    un-witnesses a line that was already measured and closed; this is the
+    instrument that avoids paying that cost.
+    """
+
+    def _box(self):
+        box = FORGE / "implementations" / f"_e2e_settle_replace_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "src" / "Method_Benchmark").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        (box / "Method").mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text("", encoding="utf-8")
+        (box / "src" / "Method_Benchmark" / "__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args, stdin=None):
+        return subprocess.run([sys.executable, str(CLI), *args], input=stdin,
+                              capture_output=True, text=True, cwd=FORGE)
+
+    def _settle(self, box, **overrides):
+        args = {"target": str(box), "name": "Method", "session": "s1",
+                "attach": True, "replace": True,
+                "text": "an already-settled item",
+                "witness": "test_the_new_thing"}
+        args.update(overrides)
+        argv = ["settle"]
+        for flag, value in args.items():
+            if value is None or value is False:
+                continue
+            if value is True:
+                argv += [f"--{flag}"]
+                continue
+            argv += [f"--{flag}", value]
+        return self.run_cli(*argv)
+
+    def _events(self, box):
+        ledger = box / "Method" / ".implementation" / "position.jsonl"
+        if not ledger.exists():
+            return []
+        return [json.loads(line)
+                for line in ledger.read_text(encoding="utf-8").splitlines()]
+
+    # --- the happy path: byte-identical except the spliced token ---
+
+    def test_replace_repoints_a_ticked_line_byte_identical_otherwise(self):
+        """Mutation this must survive: rebuilding the line as
+        `f"- [x] {text} \\`{witness}\\`"` instead of splicing at
+        `span("witness")` -- a lock asserting only "the new witness is
+        present and the mark is still `[x]`" survives that mutation; only
+        a whole-file byte comparison, on a fixture whose bullet is `*`
+        (never the create path's own `-`) and whose internal spacing is
+        doubled, fails against it.
+        """
+        box = self._box()
+        before = ("# Agreed\n\n## Ladder\n\n"
+                  "*  [x]  a  re-pointed  claim  `test_old_thing`\n")
+        (box / "Method" / "AGREED.md").write_text(before, encoding="utf-8")
+        proc = self._settle(box, text="a  re-pointed  claim",
+                            witness="test_new_thing")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["status"], "written")
+        self.assertEqual(result["witness"], "test_new_thing")
+
+        after = (box / "Method" / "AGREED.md").read_bytes()
+        expected = before.replace("test_old_thing", "test_new_thing").encode("utf-8")
+        self.assertEqual(after, expected)
+
+    def test_replace_repoints_an_unticked_line_and_stays_unticked(self):
+        """The lock that pays for the spec's mark-blindness requirement.
+        Mutation this must survive: `if located.group("mark") != "x":
+        raise` -- a plausible "only re-point what is proven" guard. The
+        ticked-line lock above survives that mutation entirely; only this
+        unticked fixture fails against it.
+        """
+        box = self._box()
+        before = ("# Agreed\n\n## Ladder\n\n"
+                  "- [ ] an unticked claim `test_old_thing`\n")
+        (box / "Method" / "AGREED.md").write_text(before, encoding="utf-8")
+        proc = self._settle(box, text="an unticked claim",
+                            witness="test_new_thing")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+        after = (box / "Method" / "AGREED.md").read_bytes()
+        expected = before.replace("test_old_thing", "test_new_thing").encode("utf-8")
+        self.assertEqual(after, expected)
+        self.assertIn(b"- [ ] an unticked claim", after)
+
+    # --- the refusal ladder `--replace` adds ---
+
+    def test_replace_refuses_nothing_to_replace_on_an_unwitnessed_line(self):
+        """Mutation this must survive: delete the `if not existing` check
+        so `--replace` degrades to a plain create -- an exit-code-only
+        lock survives a variant that refuses *after* writing; the byte
+        comparison below is what closes that gap.
+        """
+        box = self._box()
+        before = "# Agreed\n\n## Ladder\n\n- [ ] an unwitnessed claim\n"
+        (box / "Method" / "AGREED.md").write_text(before, encoding="utf-8")
+        proc = self._settle(box, text="an unwitnessed claim",
+                            witness="test_new_thing")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["code"], "SETTLE_NOTHING_TO_REPLACE")
+        self.assertIn("an unwitnessed claim", result["detail"])
+        self.assertIn("--attach", result["detail"])
+
+        after = (box / "Method" / "AGREED.md").read_bytes()
+        self.assertEqual(after, before.encode("utf-8"))
+
+    def test_replace_refuses_witness_unchanged_and_appends_no_event(self):
+        """Mutation this must survive: make it a silent no-op that still
+        returns `status: "written"` -- an exit-code-only lock survives a
+        no-op that refuses *and still appends* an event; the ledger census
+        below is what the spec's own argument for this refusal requires.
+        """
+        box = self._box()
+        before = "# Agreed\n\n## Ladder\n\n- [ ] a stable claim `test_same_thing`\n"
+        (box / "Method" / "AGREED.md").write_text(before, encoding="utf-8")
+        events_before = self._events(box)
+        proc = self._settle(box, text="a stable claim", witness="test_same_thing")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_WITNESS_UNCHANGED")
+
+        after = (box / "Method" / "AGREED.md").read_bytes()
+        self.assertEqual(after, before.encode("utf-8"))
+        self.assertEqual(self._events(box), events_before)
+
+    def test_replace_refuses_without_attach(self):
+        """Mutation this must survive: move the check below
+        `SETTLE_WITNESS_REQUIRED` -- this `--replace`-alone case would
+        still survive that (no `--attach`, so `WITNESS_REQUIRED` cannot
+        fire either); the sibling test below (`--remove --replace`) is
+        what pins the check's position ahead of the mode-specific conflict
+        codes.
+        """
+        box = self._box()
+        proc = self._settle(box, attach=False, witness=None)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_REPLACE_CONFLICT")
+
+    def test_replace_refuses_combined_with_remove(self):
+        """`--witness` is what pins this ahead of the mode-specific conflict
+        codes: without it, `--remove`'s own conflict guard does not fire on
+        `--replace` at all (it is not one of the flags `--remove` names),
+        so the mutation above would still reach `SETTLE_REPLACE_CONFLICT`
+        by falling through harmlessly. With `--witness` present, `--remove`'s
+        own guard fires on IT (`SETTLE_REMOVE_CONFLICT`) the moment
+        `SETTLE_REPLACE_CONFLICT`'s own check is moved anywhere after it --
+        which is exactly what pins this check ahead of the mode-specific
+        conflict codes rather than merely somewhere before dispatch.
+        """
+        box = self._box()
+        proc = self._settle(box, attach=False, remove=True, witness="test_x",
+                            text="a retired agreement")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_REPLACE_CONFLICT")
+
+    def test_the_three_new_codes_are_classified_invocation_defect(self):
+        """`reachable_refusal_codes()` (`tests:33581`) already proves
+        presence by construction -- this asserts the classification KIND
+        explicitly, so a code shipped as `WORK_STATE` instead (which would
+        also fail `test_every_work_state_publishes_something_runnable` for
+        a missing builder) is legible here rather than inferred from a
+        builder failure two tests away.
+        """
+        for code in ("SETTLE_REPLACE_CONFLICT", "SETTLE_NOTHING_TO_REPLACE",
+                     "SETTLE_WITNESS_UNCHANGED"):
+            with self.subTest(code=code):
+                self.assertIn(code, impl.GATING_REFUSALS)
+                self.assertEqual(impl.GATING_REFUSALS[code], impl.INVOCATION_DEFECT)
+
+    def test_already_witnessed_still_fires_without_replace_and_names_the_exit(self):
+        """Regression surface: this condition MUST NOT change. Two
+        mutations, each caught by a different half of this lock: (a)
+        inverting the guard to `if existing and replace:` is caught by the
+        existing byte-unchanged lock at `tests:24626-24639`, untouched by
+        this change; (b) shipping the flag while leaving the old sentence
+        unedited is caught only by the detail-substring assertion below,
+        asserting the exact token `--replace`, not merely that the detail
+        is non-empty.
+        """
+        box = self._box()
+        before = "# Agreed\n\n## Ladder\n\n- [ ] an already-settled item `test_prior_witness`\n"
+        (box / "Method" / "AGREED.md").write_text(before, encoding="utf-8")
+        proc = self._settle(box, text="an already-settled item",
+                            witness="test_new_thing", replace=False)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["code"], "SETTLE_ALREADY_WITNESSED")
+        self.assertIn("--replace", result["detail"])
+
+        after = (box / "Method" / "AGREED.md").read_bytes()
+        self.assertEqual(after, before.encode("utf-8"))
+
+    def test_replace_writes_an_unmeasured_token_and_agreements_state_then_disagrees(self):
+        """No test-suite measurement leaks into `--replace`. Mutation this
+        must survive: add an existence check inside the branch -- a lock
+        asserting only "the command succeeds" on a box whose `tests/`
+        happens to contain the real function survives that; this fixture's
+        `tests/` names a DIFFERENT function than the one this call writes,
+        so only a real read of `tests/` (which this call must never
+        perform) could have caught the mismatch before writing.
+        """
+        box = self._box()
+        before = "# Agreed\n\n## Ladder\n\n- [x] a claim measured elsewhere `test_old_thing`\n"
+        (box / "Method" / "AGREED.md").write_text(before, encoding="utf-8")
+        (box / "tests" / "test_something_else.py").write_text(
+            "def test_a_different_function():\n    pass\n", encoding="utf-8")
+        proc = self._settle(box, text="a claim measured elsewhere",
+                            witness="test_does_not_exist")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+        state = impl.agreements_state(box, "Method")
+        self.assertIn("a claim measured elsewhere", state["witness"]["disagrees"])
+
+    def test_agreements_state_call_sites_do_not_grow(self):
+        """The gating surface is unchanged. Mutation this must survive:
+        add `agreements_state(target, name)` inside `cmd_gate` -- a lock
+        asserting only `"cmd_gate" not in the set` survives a new call
+        added to `cmd_probe` instead; only the full-set equality below
+        catches either.
+        """
+        helper = AgreementWitnessSingleWritePathTests()
+        self.assertEqual(
+            helper.call_site_functions("agreements_state"),
+            {"holder_resolution", "cmd_close", "cmd_verify"})
+
+
 class SettleReversedQuoteMatchingTests(unittest.TestCase):
     """The pure predicate `settle --remove`'s own guard evaluates:
     whether `--text` is quoted, bold, inside the document's own
@@ -33263,6 +33501,12 @@ _ENGLISH_COUNTS = {
     # `POSITION_REPAIR_CONFLICT` -- both measured, never predicted.
     71: "Seventy-one",
     121: "One hundred and twenty-one",
+    # `re-pointing-a-proof-is-not-retracting-a-claim`: three new reachable
+    # invocation-defect codes, `SETTLE_REPLACE_CONFLICT`,
+    # `SETTLE_NOTHING_TO_REPLACE` and `SETTLE_WITNESS_UNCHANGED` -- the
+    # work-state count (71) is untouched, and the total moves 121 -> 124.
+    53: "Fifty-three",
+    124: "One hundred and twenty-four",
 }
 
 
@@ -33621,7 +33865,7 @@ class GatingRefusalRosterTests(unittest.TestCase):
             {("implementation_engine.py", "cmd_name"),
              ("impl_steps.py", "_verdict_result")})
 
-    def test_the_derivation_finds_the_measured_one_hundred_and_twenty_one(self):
+    def test_the_derivation_finds_the_measured_one_hundred_and_twenty_four(self):
         """Sanity check on the derivation itself, not on the roster: a change
         that adds, removes or renames a refusal anywhere a gating command can
         reach should move this number, never a typo in the walk above.
@@ -33671,9 +33915,14 @@ class GatingRefusalRosterTests(unittest.TestCase):
         measured here, exactly as design.md predicted (118 + 3 codes across
         this whole change, minus the interim 119 already recorded above
         leaves this phase's own delta at +2), never edited to match that
-        prediction.
+        prediction. One hundred and twenty-four
+        (`re-pointing-a-proof-is-not-retracting-a-claim`) is that reading
+        plus `SETTLE_REPLACE_CONFLICT`, `SETTLE_NOTHING_TO_REPLACE` and
+        `SETTLE_WITNESS_UNCHANGED`, all three raised inside `cmd_settle`'s
+        own `--attach` branch -- measured here at exactly +3, never
+        predicted.
         """
-        self.assertEqual(len(reachable_refusal_codes()), 121)
+        self.assertEqual(len(reachable_refusal_codes()), 124)
 
     def test_agree_joins_gating_commands_unconditionally_never_this_profiles_own_commands(self):
         """`the-agreement-nothing-computes` (Slice D, design.md D9, tasks.md

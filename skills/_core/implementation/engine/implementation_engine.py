@@ -14012,16 +14012,17 @@ def _settle_discussed_events(target: Path, name: str, about: dict) -> list[dict]
 
 
 def _render_settled_line(text: str, witness: str | None, *,
-                          raw_line: bytes | None = None) -> bytes:
+                          raw_line: bytes | None = None,
+                          replacing: bool = False) -> bytes:
     """The one construction of a settled checklist line's bytes, called
     only from `cmd_settle` -- the sole write path a witness token has
     (design D5, spec Group 5: "no other CLI surface edits one";
     `AgreementWitnessSingleWritePathTests` holds this by an `ast` walk of
     the whole CLI, the same discipline D3 already uses for
     `impl_availability`'s call-site sets). `cmd_settle` calls this from
-    both of its own modes; the lock's own `ast` walk asserts the calling
-    FUNCTION, not the call count, so a second call site inside the same
-    function was never what it guarded.
+    every one of its own modes that ever touches this token; the lock's
+    own `ast` walk asserts the calling FUNCTION, not the call count, so a
+    second call site inside the same function was never what it guarded.
 
     **Placing a NEW item** (`raw_line=None`, `cmd_settle`'s create path):
     builds `- [ ] {text}` from scratch. Byte-identical to the pre-witness
@@ -14030,22 +14031,42 @@ def _render_settled_line(text: str, witness: str | None, *,
     Always `[ ]`: this branch never authors a tick, witness or no witness.
 
     **Attaching a witness to an EXISTING line** (`raw_line` given,
-    `cmd_settle --attach`'s path, design "attach, not place"): `text` is
-    ignored entirely. `raw_line` is the located line's own bytes, taken
-    verbatim from disk by `_locate_settled_text`, never reconstructed from
-    a regex-captured group -- reconstructing `- [ ] {text}` the way the
-    create branch does would silently normalize whatever the original
-    line's own bullet character, internal spacing or mark case happened to
-    be, and the design's own "byte-identical afterward, only the witness
-    is added" requirement holds only because this branch never parses and
-    rebuilds; it only appends. The trailing newline is preserved exactly
-    as `raw_line` carried one, or not, at end of file -- the witness token
-    is inserted before it, never after.
+    `replacing=False`, `cmd_settle --attach`'s path, design "attach, not
+    place"): `text` is ignored entirely. `raw_line` is the located line's
+    own bytes, taken verbatim from disk by `_locate_settled_text`, never
+    reconstructed from a regex-captured group -- reconstructing
+    `- [ ] {text}` the way the create branch does would silently
+    normalize whatever the original line's own bullet character, internal
+    spacing or mark case happened to be, and the design's own
+    "byte-identical afterward, only the witness is added" requirement
+    holds only because this branch never parses and rebuilds; it only
+    appends. The trailing newline is preserved exactly as `raw_line`
+    carried one, or not, at end of file -- the witness token is inserted
+    before it, never after.
+
+    **Re-pointing an EXISTING witness** (`raw_line` given, `replacing=True`,
+    `cmd_settle --attach --replace`'s path,
+    `re-pointing-a-proof-is-not-retracting-a-claim`): `text` is ignored
+    here too. Only the characters `AGREEMENT_LINE`'s own `witness` group
+    matched are substituted -- the backticks, the space before them, the
+    bullet, the mark, the claim text and any trailing whitespace are never
+    re-emitted, so "every other byte identical" holds by construction
+    rather than by care. The group always participated when `replacing`
+    is true: `cmd_settle` refuses `SETTLE_NOTHING_TO_REPLACE` on a located
+    line carrying no token, ahead of this call. Not re-checked here, the
+    identical contract `_render_done_line` already keeps for `mark` --
+    the guard is that refusal and its lock (`SettleReplaceCommandTests`),
+    not a defensive re-check in this function.
     """
     if raw_line is not None:
         has_newline = raw_line.endswith(b"\n")
         body = raw_line[:-1] if has_newline else raw_line
-        if witness:
+        if replacing:
+            decoded = body.decode("utf-8")
+            located = AGREEMENT_LINE.match(decoded)
+            start, end = located.span("witness")
+            body = (decoded[:start] + witness + decoded[end:]).encode("utf-8")
+        elif witness:
             body += f" `{witness}`".encode("utf-8")
         return body + (b"\n" if has_newline else b"")
     if witness:
@@ -14344,7 +14365,10 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     -- OR, with `--done`, flip an already-settled line's own mark from
     `[ ]` to `[x]`, matched the identical way once more (design "the tick
     this class closes"). All five modes go through this one command; there
-    is still no second write path.
+    is still no second write path. `--attach` also takes `--replace`, which
+    re-points an EXISTING witness onto a different test instead of adding a
+    first one (`re-pointing-a-proof-is-not-retracting-a-claim`) -- a
+    modifier on `--attach`'s own write, not a sixth mode.
 
     The agent drafts the discussion and a proposed sentence; the create
     path validates, refuses, and performs the one write. It never authors:
@@ -14589,7 +14613,10 @@ def cmd_settle(args: argparse.Namespace) -> dict:
        new item to place under a heading, and nothing new to collide with),
        and silently ignoring a flag the caller bothered to type would be
        exactly the kind of surprise `SETTLE_STDIN_CONFLICT` already refuses
-       one level up.
+       one level up. `SETTLE_REPLACE_CONFLICT` -- `--replace` given without
+       `--attach`: it modifies that mode and names nothing on its own,
+       checked immediately after `--attach`'s own conflict above (design
+       "the `--replace` path lives inside the existing `--attach` branch").
     4. `SETTLE_REMOVE_CONFLICT` -- `--remove` combined with `--attach`,
        `--under`, `--supersedes`, or `--witness`: `--remove` is one of
        four other, mutually exclusive modes (never both `--attach` and
@@ -14716,15 +14743,25 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         one actually IN that computed list -- an unchecked string would be
         a rubber stamp on a supersession this command cannot itself verify
         happened in the document.
-    17. `--attach` path only: `SETTLE_ALREADY_WITNESSED` -- the one located
-        line already carries a `` `test_<id>` `` token. `--attach` never
-        replaces one; there is no separate flag that does, so the only way
-        to change an existing witness today is the same "unsupported,
-        never technically prevented" doctrine hand-typing already carries
-        (see `--witness`'s own help) -- adding a silent-replace path here
-        would let one automated call quietly overwrite a binding another
-        call, or a human, put there on purpose.
-    18. `--remove` path only: `SETTLE_NOT_REVERSED` -- the located line's
+    17. `--attach` path only, `--replace` absent: `SETTLE_ALREADY_WITNESSED`
+        -- the one located line already carries a `` `test_<id>` `` token.
+        Without `--replace`, `--attach` adds a witness, it never replaces
+        one -- the detail now names `--replace` as the exit
+        (`re-pointing-a-proof-is-not-retracting-a-claim`), where before it
+        stated the fact and named nothing the operator could do about it.
+    18. `--attach --replace` path only: `SETTLE_NOTHING_TO_REPLACE` -- the
+        located line carries no witness token at all, so there is nothing
+        for `--replace` to re-point; plain `--attach` (without `--replace`)
+        is the create path for a first witness. `SETTLE_WITNESS_UNCHANGED`
+        -- the incoming `--witness` token equals the one already on the
+        located line; refusing rather than silently writing keeps every
+        `replacedWitness` ledger event honest evidence of an actual change.
+        Neither check reads `tests/` or measures whether either witness
+        names a real test -- that is `verify`'s and `close`'s job, reached
+        only through `agreements_state()`, and `settle` writing a second,
+        independent check of the same fact would be a second gate, which
+        is the doctrine this mode is written not to disturb.
+    19. `--remove` path only: `SETTLE_NOT_REVERSED` -- the located line's
         own exact text is not quoted (bold, possibly truncated) under any
         `## Reversed` heading in the same holder file. See "The guard
         removal must pass," above, for the full argument. The mirror image
@@ -14780,6 +14817,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     remove = bool(getattr(args, "remove", False))
     reverse = bool(getattr(args, "reverse", False))
     done = bool(getattr(args, "done", False))
+    replace = bool(getattr(args, "replace", False))
 
     if attach and (args.under or args.supersedes is not None):
         raise Refused(
@@ -14790,6 +14828,12 @@ def cmd_settle(args: argparse.Namespace) -> dict:
 
     witness = getattr(args, "witness", None)
     witness = witness.strip() if witness else None
+    if replace and not attach:
+        raise Refused(
+            "SETTLE_REPLACE_CONFLICT",
+            "--replace modifies --attach: it re-points the witness on a "
+            "line that already carries one, and names nothing on its own. "
+            "Give it together with --attach, or omit it.")
     if remove and (attach or args.under or args.supersedes is not None or witness):
         raise Refused(
             "SETTLE_REMOVE_CONFLICT",
@@ -14938,6 +14982,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     heading = None
     supersedes = None
     collides: list[str] = []
+    replaced_witness = None
 
     if attach:
         candidates: list[tuple[Path, bytes, dict]] = []
@@ -14962,14 +15007,31 @@ def cmd_settle(args: argparse.Namespace) -> dict:
 
         raw_line = data[span["start"]:span["end"]]
         located = AGREEMENT_LINE.match(raw_line.decode("utf-8").rstrip())
-        if located.group("witness"):
+        existing = located.group("witness")
+        if existing and not replace:
             raise Refused(
                 "SETTLE_ALREADY_WITNESSED",
-                f"{text!r} already carries witness "
-                f"{located.group('witness')!r}; --attach never replaces "
-                "one.")
+                f"{text!r} already carries witness {existing!r}; --attach "
+                "adds a witness, it never replaces one. To re-point this "
+                "line at a different test, add --replace.")
+        if replace:
+            if not existing:
+                raise Refused(
+                    "SETTLE_NOTHING_TO_REPLACE",
+                    f"{text!r} carries no witness token; --replace "
+                    "re-points a binding that already exists, and this "
+                    "line has none. Plain --attach (without --replace) is "
+                    "the create path for a first witness.")
+            if existing == witness:
+                raise Refused(
+                    "SETTLE_WITNESS_UNCHANGED",
+                    f"{text!r} already carries witness {existing!r}, "
+                    "which is exactly the value given; nothing would "
+                    "change, so no write is made.")
+            replaced_witness = existing
 
-        new_line = _render_settled_line(text, witness, raw_line=raw_line)
+        new_line = _render_settled_line(text, witness, raw_line=raw_line,
+                                        replacing=replace)
         spliced = impl_position.splice(data, new_line, span)
     elif remove:
         candidates: list[tuple[Path, bytes, dict]] = []
@@ -15169,6 +15231,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         {"kind": "settle", "session": args.session, "about": about,
          "text": text, "under": heading, "witness": witness, "attach": attach,
          "remove": remove, "reverse": reverse, "done": done,
+         "replace": replace, "replacedWitness": replaced_witness,
          "paragraph": paragraph,
          "holder": str(target_path.relative_to(target)),
          "supersedes": supersedes, "collides": collides, "at": recorded_at})
@@ -15178,6 +15241,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         "status": "written", "holder": str(target_path.relative_to(target)),
         "about": about, "text": text, "under": heading, "witness": witness,
         "attach": attach, "remove": remove, "reverse": reverse, "done": done,
+        "replace": replace, "replacedWitness": replaced_witness,
         "paragraph": paragraph, "supersedes": supersedes,
         "collides": collides, "recordedAt": recorded_at,
     }
@@ -19045,6 +19109,9 @@ GATING_REFUSALS: dict[str, str] = {
     "SETTLE_SUPERSEDES_UNKNOWN": INVOCATION_DEFECT,
     "SETTLE_TEXT_ABSENT": INVOCATION_DEFECT,
     "SETTLE_ALREADY_WITNESSED": INVOCATION_DEFECT,
+    "SETTLE_REPLACE_CONFLICT": INVOCATION_DEFECT,
+    "SETTLE_NOTHING_TO_REPLACE": INVOCATION_DEFECT,
+    "SETTLE_WITNESS_UNCHANGED": INVOCATION_DEFECT,
     "SETTLE_ALREADY_DONE": INVOCATION_DEFECT,
     "SETTLE_ALREADY_REVERSED": INVOCATION_DEFECT,
     "SETTLE_NOT_DISCUSSED": WORK_STATE,
@@ -20680,8 +20747,11 @@ def main(argv: list[str] | None = None) -> int:
                                 "SETTLE_WITNESS_REQUIRED if omitted -- "
                                 "binding a witness is the whole point of "
                                 "that mode); refused SETTLE_ALREADY_WITNESSED "
-                                "if the located line already carries one -- "
-                                "--attach never replaces one. With --remove: "
+                                "if the located line already carries one and "
+                                "--replace is not also given -- --attach "
+                                "adds a witness, it never replaces one on "
+                                "its own; add --replace to re-point it "
+                                "instead. With --remove: "
                                 "refused SETTLE_REMOVE_CONFLICT if given at "
                                 "all -- the line is deleted outright, so "
                                 "there is no witness token left to bind. "
@@ -20701,21 +20771,47 @@ def main(argv: list[str] | None = None) -> int:
                                 "(design 'attach, not place'). The mark "
                                 "is never touched -- a ticked item stays "
                                 "ticked, an open one stays open; only the "
-                                "witness token is added. Skips the "
-                                "discussion precondition entirely (see "
-                                "cmd_settle's own docstring for why): a "
-                                "line this matches was already placed by a "
-                                "prior settle call, so it was already "
-                                "discussed once. --under and --supersedes "
-                                "do not apply with --attach and are refused "
-                                "SETTLE_ATTACH_CONFLICT if given. Refused "
-                                "SETTLE_REMOVE_CONFLICT if given together "
-                                "with --remove -- the two write modes are "
-                                "mutually exclusive; --attach combined with "
-                                "--reverse or --done is refused SETTLE_"
-                                "REVERSE_CONFLICT / SETTLE_DONE_CONFLICT "
-                                "instead, checked on that other flag's own "
-                                "side")
+                                "witness token is added (or, with "
+                                "--replace, re-pointed -- see --replace "
+                                "below). Skips the discussion precondition "
+                                "entirely (see cmd_settle's own docstring "
+                                "for why): a line this matches was already "
+                                "placed by a prior settle call, so it was "
+                                "already discussed once. --under and "
+                                "--supersedes do not apply with --attach "
+                                "and are refused SETTLE_ATTACH_CONFLICT if "
+                                "given. Refused SETTLE_REMOVE_CONFLICT if "
+                                "given together with --remove -- the two "
+                                "write modes are mutually exclusive; "
+                                "--attach combined with --reverse or "
+                                "--done is refused SETTLE_REVERSE_CONFLICT "
+                                "/ SETTLE_DONE_CONFLICT instead, checked on "
+                                "that other flag's own side")
+            p.add_argument("--replace", action="store_true",
+                           help="modifies --attach: re-points the located "
+                                "line's EXISTING witness onto the token "
+                                "given by --witness, instead of refusing "
+                                "SETTLE_ALREADY_WITNESSED "
+                                "(`re-pointing-a-proof-is-not-retracting-"
+                                "a-claim` -- the agreement's truth did not "
+                                "change, only the artefact that "
+                                "demonstrates it). The mark is never "
+                                "touched, mark-blind: a ticked line and an "
+                                "open line re-point identically. Refused "
+                                "SETTLE_REPLACE_CONFLICT if given without "
+                                "--attach; refused SETTLE_NOTHING_TO_"
+                                "REPLACE if the located line carries no "
+                                "witness at all (plain --attach is the "
+                                "create path for that case); refused "
+                                "SETTLE_WITNESS_UNCHANGED if the incoming "
+                                "--witness equals the one already there. "
+                                "Performs no read of tests/ and no check "
+                                "that either witness names a real test -- "
+                                "that is verify's and close's job, reached "
+                                "only through agreements_state(), never "
+                                "settle's. The previous token is recorded "
+                                "as replacedWitness in both the ledger "
+                                "event and this command's response")
             p.add_argument("--remove", action="store_true",
                            help="delete a line ALREADY settled outright, "
                                 "matched by its exact --text, instead of "

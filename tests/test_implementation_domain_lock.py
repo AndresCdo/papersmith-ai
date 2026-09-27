@@ -557,10 +557,10 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: 91->92, `against` 195->196. None left the denylist; `test_2` confirms
 #: no new unpinned leak either.
 M5_PINNED_RESIDUE: dict[str, int] = {
-    "actually": 83, "admissible": 3, "after": 92, "against": 197,
+    "actually": 83, "admissible": 3, "after": 93, "against": 197,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
-    "audit": 19, "before": 261, "benchmark": 108, "beside": 111,
-    "check": 164, "checkable": 3, "claim": 36, "command": 277,
+    "audit": 19, "before": 263, "benchmark": 108, "beside": 111,
+    "check": 168, "checkable": 3, "claim": 41, "command": 278,
     "commands": 18, "compares": 25, "declaration": 212,
     "destinations": 39, "empty": 132, "established": 5, "experiment": 25,
     "experiments": 6, "implementations": 4, "incomplete": 28,
@@ -568,11 +568,11 @@ M5_PINNED_RESIDUE: dict[str, int] = {
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
     "measured": 145, "measurement": 43, "module": 195, "notebooks": 110,
     "object": 33, "pilot": 123, "place": 58, "produces": 51,
-    "rather": 385, "recorded": 80, "remedy": 56, "remote": 65,
+    "rather": 387, "recorded": 81, "remedy": 56, "remote": 65,
     "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,
     "scaffolded": 12, "sitting": 9, "small": 8, "something": 77,
-    "steps": 139, "sweep": 11, "validated": 10, "value": 243, "whose": 156,
-    "write": 154, "wrong": 52
+    "steps": 139, "sweep": 11, "validated": 10, "value": 244, "whose": 156,
+    "write": 156, "wrong": 52
 }
 #: Unit 6b (Part B, the transitions): thirteen pins grew from the new
 #: engine prose alone (`_comparison_reuses_acid_test_question`,
@@ -627,6 +627,15 @@ M5_PINNED_RESIDUE: dict[str, int] = {
 #: `declaration` 211->212, `rather` 382->385, `reported` 148->149, `write`
 #: 153->154. Zero admissions, zero removals; the same restraint every prior
 #: unit's changelog block states.
+#: `re-pointing-a-proof-is-not-retracting-a-claim` (`settle --attach
+#: --replace`: the refusal ladder, the renderer's third case, the
+#: docstring roster's items 3/17/18/19, and the amended `--witness`/
+#: `--attach` argparse help -- engine prose alone, no new function):
+#: nine pins grew -- `after` 92->93, `before` 261->263, `check` 164->168,
+#: `claim` 36->41, `command` 277->278, `rather` 385->387, `recorded`
+#: 80->81, `value` 243->244, `write` 154->156. Zero admissions, zero
+#: removals; the same restraint every prior unit's changelog block
+#: states.
 
 
 class DerivedDenylistTests(unittest.TestCase):
