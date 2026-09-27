@@ -113,7 +113,7 @@ Claims no visual dimension. Wires nothing into `paper-writing`. Ends green.
 
 - [x] 1.23 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_workspace_skills_e2e.py tests/test_papersmith_generators.py tests/test_workspace_commands_e2e.py tests/test_figure_review.py`. All green.
 - [ ] 1.24 Run `npm run test:all` in full. Confirm no regression against the `v0.4.0` baseline (node 653/0, pytest 5188 passed/4 skipped/0 failed) plus this commit's new tests. **Deferred by explicit orchestrator instruction**: this apply session was told not to run the full `npm run test:all` (a concurrent session shares this working tree and collides on fixed-name scratch fixtures); the orchestrator runs the full gate once, after all five commits. The focused command (task 1.23) and the leak scan (task 1.22) were run directly by this session and are green.
-- [ ] 1.25 Commit directly on `main` (no branch). Conventional Commit message, e.g. `feat(figure-review): ship the tenth skill and its rasterizer chain`.
+- [x] 1.25 Commit directly on `main` (no branch). Conventional Commit message, e.g. `feat(figure-review): ship the tenth skill and its rasterizer chain`. **Committed as `e0dc535`.**
 
 ---
 
