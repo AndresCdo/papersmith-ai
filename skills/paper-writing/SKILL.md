@@ -1396,11 +1396,14 @@ ledger itself.
 
 **Auditing a diagram against its own prose delegates to the `figure-auditor` agent.**
 It runs `figure audit` and reports that JSON as the authoritative
-semantic verdict, bounds the visual half (overlaps, legibility, out-of-bounds
-text) to the `figure-review` skill when that skill is present — reporting those
-dimensions `unmeasured` when it is not — and checks typographic parity between
-the figure's preamble and the paper's own font setup. It never repairs the
-figure and never reports a visual verdict it did not measure.
+semantic verdict, and measures whether the visual half (overlaps, legibility,
+out-of-bounds text) is answerable by running `figure-review probe` and
+quoting its exit — bounding those dimensions to the `figure-review` skill's
+checklist when the probe resolves a rasterizer link, and reporting them
+`unmeasured` quoting the probe's own refusal code when it does not — and
+checks typographic parity between the figure's preamble and the paper's own
+font setup. It never repairs the figure and never reports a visual verdict it
+did not measure.
 
 **Measure this before delegating (figure-auditor):** confirm the block's
 `figure:` declaration is readable (`contract --file <path>`) and that the

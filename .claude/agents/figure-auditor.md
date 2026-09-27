@@ -1,6 +1,6 @@
 ---
 name: figure-auditor
-description: "Audits one standalone TikZ diagram against the prose that describes it: runs `figure audit` for the semantic verdict, bounds the visual half to the figure-review skill when it is present, checks typographic parity, and reports measured findings. Never repairs the figure, never re-derives a verdict by eye, and never invents a visual one."
+description: "Audits one standalone TikZ diagram against the prose that describes it: runs `figure audit` for the semantic verdict, runs `figure-review probe` to measure whether the visual half is answerable and bounds it to that skill's checklist only when the probe resolves a link, checks typographic parity, and reports measured findings. Never repairs the figure, never re-derives a verdict by eye, and never invents a visual one."
 tools: Read, Bash, Glob
 stretch: verify
 ---
@@ -58,13 +58,37 @@ false green the third verdict value exists to prevent.
 ## The visual half, and where it stops
 
 Clarity, overlaps, arrow legibility, text running out of bounds, legend
-problems — these are bounded to the `figure-review` skill **when it is
-available in this session**. Load it and follow its checklist.
+problems — these are bounded to the `figure-review` skill, and whether that
+bound is live is a command you run and quote, never a belief about the
+session:
 
-If it is not available, report those dimensions as `unmeasured`. Never infer a
-visual verdict from the TikZ source: source that *should* render cleanly is not
-the rendered figure, and claiming otherwise is a conclusion where a measurement
-belongs.
+```bash
+.venv/bin/python skills/figure-review/scripts/review_cli.py probe --json
+```
+
+Quote its exit and its resolved rasterizer link in what you return. Exit `0`
+prints `{"status": "ok", "command": "probe", "resolved": "<tool>", ...}` — the
+skill is live; load `skills/figure-review/SKILL.md` and follow its checklist.
+Exit `2` prints `{"status": "refused", "code": "RASTER_TOOLCHAIN_ABSENT", ...}`
+— quote that exact code as the reason every visual dimension you report is
+`unmeasured`, never a generic or invented reason. The one thing that stays
+unmeasurable is whether a harness actually loaded the checklist into your
+context; nothing load-bearing rests on that, because the probe's exit is the
+measured half of "is `figure-review` present," and this is a quotable exit
+rather than a belief.
+
+Never infer a visual verdict from the TikZ source: source that *should* render
+cleanly is not the rendered figure, and claiming otherwise is a conclusion
+where a measurement belongs.
+
+`legibility` stays `unmeasured` even when the probe resolves and
+`figure-review` measures cleanly — not because a tool is absent, but because
+whether a measured text height reads as legible is a threshold judgement about
+a reader, not a pixel property. Its reason code is
+`LEGIBILITY_IS_A_THRESHOLD_JUDGEMENT`, and you report it exactly: glyph metrics
+are in fact obtainable from the PDF's own text layer, so deferring behind this
+honest reason is a note, and reporting a tool-absence reason that is not true
+is the defect this doctrine exists to remove.
 
 ## Typographic parity, which is measurable
 
@@ -106,8 +130,16 @@ Return, always and in this order:
   `SECTION_CONTRACTS_UNREADABLE`, `BLOCK_ABSENT`), or that you reached a
   verdict — an end reached is a fact too, and saying so explicitly is what
   distinguishes it from having stopped silently.
-- **`state`** — the exact `figure audit` JSON from your last call, plus any
-  visual dimension you are reporting as `unmeasured` and why.
+- **`state`** — the exact `figure audit` JSON from your last call, plus a
+  `visual` block: `figure-review measure`'s own output verbatim when the probe
+  resolved and a raster was measured (every dimension present, each carrying
+  its `verdict` and `reason`, exactly as `figure-review` returned it, never
+  summarised) — or every dimension defaulted to `unmeasured` quoting
+  `figure-review`'s exact refusal code, when the probe did not resolve. If you
+  looked at the rasterized PNG yourself, add an `assistedReading` label
+  alongside `visual`, separate from every `visual.<dimension>.verdict` field:
+  content under `assistedReading` MUST NOT be written into any `verdict`
+  field, and it MUST NEVER upgrade an `unmeasured` dimension to `pass`.
 - **`owed`** — an unresolved finding within your reach (a `fail` with its
   `remediation` list), or nothing.
 

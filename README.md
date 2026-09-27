@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los once comandos del CLI, las nueve skills, los quince agentes,
+dentro, los once comandos del CLI, las diez skills, los quince agentes,
 cómputo remoto, desarrollo y solución de problemas.
 
 ## Índice
@@ -295,7 +295,7 @@ mi-paper/
 │   ├── runs_ledger.jsonl        #   cada corrida despachada, en orden
 │   └── version                  #   versión del framework que lo creó
 ├── .claude/agents/              # los catorce subagentes (fuente única de verdad)
-├── skills/                      # la copia del kit: las nueve skills + _core
+├── skills/                      # la copia del kit: las diez skills + _core
 │   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
 ├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
 ├── guidance/

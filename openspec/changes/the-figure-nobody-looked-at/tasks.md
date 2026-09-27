@@ -220,33 +220,33 @@ Depends on Commit 3's `visual` argument and Commit 2's `figure-review measure` o
 
 ### 5.1 — Agent precondition rewrite
 
-- [ ] 5.1 Modify `.claude/agents/figure-auditor.md:3`, `:58-67` — rewrite the precondition from a session-level judgement ("when it is available in this session") to a command whose exit it quotes ("run `figure-review probe` (or equivalent) and quote its exit and resolved rasterizer link"). Preserve every other doctrine sentence unchanged (e.g. "Never repairs the figure" at `:3`, `:20-24`).
-- [ ] 5.2 Modify `.claude/agents/figure-auditor.md:102-113` — `state` gains a `visual` block (mirroring the `visual` schema from Commit 3) and an `assistedReading` label, separate from every `visual.<dimension>.verdict` field, per `visual-finding-boundary`'s `Requirement: An Agent's Assisted Reading Is Labelled, Never a Verdict`. Explicitly state that content under `assistedReading` MUST NOT be written into any `verdict` field and MUST NEVER upgrade an `unmeasured` dimension to `pass`.
-- [ ] 5.3 **RED then GREEN**: Confirm `tests/test_agents.py:405-413`'s literal-preservation assertions (`never conclusions`, `measured again`) and `:393-403`'s four-field assertions (`did` / `stoppedAt` / `state` / `owed`) still pass after the rewrite — these are pre-existing guards, not new ones, but the rewrite must not accidentally drop either literal or field.
-- [ ] 5.4 Add the "an agent quotes the refusal as the unmeasured reason" behavior from `visual-finding-boundary`'s `Requirement: A Toolchain Refusal Is Not an Unmeasured Visual Finding` to `figure-auditor.md`'s worked example or state-shape documentation: when `figure-review` returns `RASTER_TOOLCHAIN_ABSENT`, every visual dimension is reported `unmeasured` quoting that exact refusal code as the reason.
+- [x] 5.1 Modify `.claude/agents/figure-auditor.md:3`, `:58-67` — rewrite the precondition from a session-level judgement ("when it is available in this session") to a command whose exit it quotes ("run `figure-review probe` (or equivalent) and quote its exit and resolved rasterizer link"). Preserve every other doctrine sentence unchanged (e.g. "Never repairs the figure" at `:3`, `:20-24`).
+- [x] 5.2 Modify `.claude/agents/figure-auditor.md:102-113` — `state` gains a `visual` block (mirroring the `visual` schema from Commit 3) and an `assistedReading` label, separate from every `visual.<dimension>.verdict` field, per `visual-finding-boundary`'s `Requirement: An Agent's Assisted Reading Is Labelled, Never a Verdict`. Explicitly state that content under `assistedReading` MUST NOT be written into any `verdict` field and MUST NEVER upgrade an `unmeasured` dimension to `pass`.
+- [x] 5.3 **RED then GREEN**: Confirm `tests/test_agents.py:405-413`'s literal-preservation assertions (`never conclusions`, `measured again`) and `:393-403`'s four-field assertions (`did` / `stoppedAt` / `state` / `owed`) still pass after the rewrite — these are pre-existing guards, not new ones, but the rewrite must not accidentally drop either literal or field.
+- [x] 5.4 Add the "an agent quotes the refusal as the unmeasured reason" behavior from `visual-finding-boundary`'s `Requirement: A Toolchain Refusal Is Not an Unmeasured Visual Finding` to `figure-auditor.md`'s worked example or state-shape documentation: when `figure-review` returns `RASTER_TOOLCHAIN_ABSENT`, every visual dimension is reported `unmeasured` quoting that exact refusal code as the reason.
 
 ### 5.2 — SKILL.md cross-reference
 
-- [ ] 5.5 Modify `skills/paper-writing/SKILL.md:1397-1403` — the visual half is now measured; update the precondition language to match the command-based check from task 5.1, and confirm the loaded checklist correctly names `figure-review` as the skill that answers it.
+- [x] 5.5 Modify `skills/paper-writing/SKILL.md:1397-1403` — the visual half is now measured; update the precondition language to match the command-based check from task 5.1, and confirm the loaded checklist correctly names `figure-review` as the skill that answers it.
 
 ### 5.3 — Six unenforced prose counts (hand-kept, never test assertions)
 
-- [ ] 5.6 Update `README.md:10` and `:298` — "nine" → "ten" (English; count of skills).
-- [ ] 5.7 Update `README.es.md:6` — "nueve" → "diez" (Spanish stays Spanish per this file's target-context language).
-- [ ] 5.8 Update `CLAUDE.md:20` — "nine" → "ten".
-- [ ] 5.9 Update `OPENCODE.md:20` — "nine" → "ten".
-- [ ] 5.10 Update `openspec/project-context.md:30` — "nine" → "ten".
-- [ ] 5.11 Manually read back all six edits against the actual on-disk skill count (10 directories under `skills/`, excluding `_core`) — no test enforces these, so this is a checklist read-back, not an automated check.
+- [x] 5.6 Update `README.md:10` and `:298` — "nine" → "ten" (English; count of skills).
+- [x] 5.7 Update `README.es.md:6` — "nueve" → "diez" (Spanish stays Spanish per this file's target-context language).
+- [x] 5.8 Update `CLAUDE.md:20` — "nine" → "ten".
+- [x] 5.9 Update `OPENCODE.md:20` — "nine" → "ten".
+- [x] 5.10 Update `openspec/project-context.md:30` — "nine" → "ten".
+- [x] 5.11 Manually read back all six edits against the actual on-disk skill count (10 directories under `skills/`, excluding `_core`) — no test enforces these, so this is a checklist read-back, not an automated check.
 
 ### 5.4 — Final vocabulary leak scan (comprehensive, after every slice's prose has landed)
 
-- [ ] 5.12 Run the target-vocabulary leak scan (`tests/test_proposal_implementation.py`'s `guarded_documents()`-derived scan) one final time across the entire change: `skills/figure-review/**`, `skills/_core/figure/**`, `.claude/agents/figure-auditor.md`, `skills/paper-writing/SKILL.md`, and all fixtures under `tests/fixtures/figure-review/`. Confirm zero hits against the fixed vocabulary floor and honestly report that the operator's `implementations/`-derived denylist portion is not fully knowable from this checkout, but that neutral placeholders were used by construction throughout.
+- [x] 5.12 Run the target-vocabulary leak scan (`tests/test_proposal_implementation.py`'s `guarded_documents()`-derived scan) one final time across the entire change: `skills/figure-review/**`, `skills/_core/figure/**`, `.claude/agents/figure-auditor.md`, `skills/paper-writing/SKILL.md`, and all fixtures under `tests/fixtures/figure-review/`. Confirm zero hits against the fixed vocabulary floor and honestly report that the operator's `implementations/`-derived denylist portion is not fully knowable from this checkout, but that neutral placeholders were used by construction throughout.
 
 ### Commit 5 close-out
 
-- [ ] 5.13 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_agents.py -k figure_auditor` plus `pytest tests/test_workspace_agents_e2e.py`.
-- [ ] 5.14 Run `npm run test:all` in full — this is the fifth and final commit; confirm the suite is green with node 653+ passed / 0 failed and pytest 5188+ passed / 0 failed (allowing for the net-new tests added across all five commits) against the `v0.4.0` baseline recorded above.
-- [ ] 5.15 Commit directly on `main`. Conventional Commit message, e.g. `docs(figure-review): retire the session-judged precondition for a command figure-auditor can quote`.
+- [x] 5.13 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_agents.py -k figure_auditor` plus `pytest tests/test_workspace_agents_e2e.py`.
+- [ ] 5.14 Run `npm run test:all` in full — this is the fifth and final commit; confirm the suite is green with node 653+ passed / 0 failed and pytest 5188+ passed / 0 failed (allowing for the net-new tests added across all five commits) against the `v0.4.0` baseline recorded above. **Deferred to the orchestrator by explicit instruction** — a second session shares this working tree and concurrent full-suite runs collide on fixed-name scratch fixtures; the orchestrator runs this once, after this commit.
+- [x] 5.15 Commit directly on `main`. Conventional Commit message, e.g. `docs(figure-review): retire the session-judged precondition for a command figure-auditor can quote`.
 
 ---
 
@@ -259,9 +259,9 @@ Depends on Commit 3's `visual` argument and Commit 2's `figure-review measure` o
 - [ ] With an emptied `PATH`, the verb refuses by name quoting every tool it probed, and the agent reports the visual dimensions `unmeasured` quoting that refusal. (Phases 1, 5)
 - [ ] Each of the thirteen locks (design's lock table) is proven RED by its named mutation before it is proven GREEN, and the mutation is recorded with the lock in `tests/test_figure_review.py` or the relevant test file's comments.
 - [ ] The three test tiers (fixture-driven, injected-PATH, empty-PATH) run unconditionally on a machine with no rasterizer; nothing is skipped, and no tier reports `pass` where it did not run. (Phase 1)
-- [ ] `figure-auditor` no longer judges availability: its precondition is a command it runs and an exit it quotes. (Phase 5)
-- [ ] `npm run test:all` passes on every one of the five commits. (All phases)
-- [ ] The six hand-written counts say ten (`diez`), and no test was invented to enforce a prose claim. (Phase 5)
+- [x] `figure-auditor` no longer judges availability: its precondition is a command it runs and an exit it quotes. (Phase 5)
+- [ ] `npm run test:all` passes on every one of the five commits. (All phases) — Commit 5's own scoped suites are green (see Verification below); the full `npm run test:all` run across all five commits is the orchestrator's, deferred per explicit instruction.
+- [x] The six hand-written counts say ten (`diez`), and no test was invented to enforce a prose claim. (Phase 5)
 
 ## Rollback Plan (per commit, newest first)
 
