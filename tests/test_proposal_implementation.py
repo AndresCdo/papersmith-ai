@@ -25050,6 +25050,57 @@ class SettleReplaceCommandTests(unittest.TestCase):
         self.assertIs(settled[0]["replace"], True)
         self.assertEqual(settled[0]["replacedWitness"], "test_old_thing")
 
+
+    # ------------------------------------------------------------------
+    # R11: the earlier tiers still take precedence WITH `--replace` given.
+    #
+    # Verification found the property true by reading the control flow and
+    # uncovered by any test: nothing in this class combined `--replace`
+    # with a failure from an earlier tier, and `SettleAttachCommandTests`
+    # exercises those refusals without ever passing `--replace`. So a
+    # refactor could reorder the ladder and every existing lock would stay
+    # green. These three close that, and each names the mutation that
+    # makes it fire: disabling the earlier check it asserts.
+
+    def _seeded(self, box):
+        """A holder whose one line is already settled and already witnessed
+        -- the state the replace ladder needs, so that a test reaching a
+        LATER code proves the earlier one did not fire."""
+        (box / "Method" / "AGREED.md").write_text(
+            "# Agreed\n\n## Ladder\n\n"
+            "- [x] an already-settled item `test_old_thing`\n",
+            encoding="utf-8")
+        return box
+
+    def test_an_absent_text_still_refuses_before_the_replace_ladder(self):
+        """Mutation: disable the `SETTLE_TEXT_ABSENT` raise inside the
+        `--attach` branch. Then a zero-match `--text` reaches the replace
+        ladder, which reports on a line it never located."""
+        box = self._seeded(self._box())
+        proc = self._settle(box, text="no line says this")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_TEXT_ABSENT")
+
+    def test_a_malformed_witness_still_refuses_before_the_replace_ladder(self):
+        """Mutation: disable the `SETTLE_WITNESS_MALFORMED` raise. Then a
+        witness that is not `test_<id>` reaches the ladder and is written
+        into the holder, which is the one thing the grammar exists to stop."""
+        box = self._seeded(self._box())
+        proc = self._settle(box, witness="not-a-test-id")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"],
+                         "SETTLE_WITNESS_MALFORMED")
+
+    def test_under_with_replace_still_refuses_the_attach_conflict(self):
+        """Mutation: disable the `SETTLE_ATTACH_CONFLICT` raise. Then
+        `--under` given alongside `--attach --replace` is silently ignored
+        rather than refused, and the caller believes a heading was honored."""
+        box = self._seeded(self._box())
+        proc = self._settle(box, under="## Ladder")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"],
+                         "SETTLE_ATTACH_CONFLICT")
+
 class SettleReversedQuoteMatchingTests(unittest.TestCase):
     """The pure predicate `settle --remove`'s own guard evaluates:
     whether `--text` is quoted, bold, inside the document's own

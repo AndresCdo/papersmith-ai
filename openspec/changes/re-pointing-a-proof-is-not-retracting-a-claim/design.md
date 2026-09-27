@@ -25,7 +25,7 @@ Two consequences follow from that placement and are load-bearing rather than inc
   file: the resolved holder. Adding a witness check would mean adding a reader that is not there,
   which is visible in review as a new call rather than as a changed condition.
 
-Spec coverage: `specs/implementation-witness-rebinding/spec.md`, all 13 requirements. Every line
+Spec coverage: `specs/implementation-witness-rebinding/spec.md`, all 12 requirements. Every line
 cited below was read from disk during this phase; the places where the inputs disagree with disk
 are recorded under *Disagreements with disk*, and one of them is a **four-item omission in the
 proposal's file list that would have reddened the suite**.
