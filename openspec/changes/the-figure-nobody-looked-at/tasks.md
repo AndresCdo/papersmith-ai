@@ -165,7 +165,7 @@ Claims no visual dimension. Wires nothing into `paper-writing`. Ends green.
 - [x] 2.22 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_figure_review.py`. **56 passed, 1 documented expected failure** (the cross-module half of lock 11, task 2.16 — confirmed GREEN in task 3.3, not here). Every other test, including all 13 locks' RED/GREEN/mutation evidence, is green.
 - [x] 2.23 Run the vocabulary leak scan (as task 1.22) against everything added in this phase. `pytest tests/test_proposal_implementation.py -k "leak or guarded"`: 9 passed. Manual `rg` cross-check against every new production/test/fixture file: zero hits.
 - [ ] 2.24 Run `npm run test:all` in full. Confirm no regression. **Deferred by explicit orchestrator instruction** (same as task 1.24): a concurrent session shares this working tree; the orchestrator runs the full gate once, after all five commits.
-- [x] 2.25 Commit directly on `main`. Conventional Commit message, e.g. `feat(figure-review): compute out-of-bounds, overlap, and occupancy from the raster`.
+- [x] 2.25 Commit directly on `main`. Conventional Commit message, e.g. `feat(figure-review): compute out-of-bounds, overlap, and occupancy from the raster`. **Committed as `2015efa`.**
 
 ---
 
