@@ -21,7 +21,7 @@ skills/paper-ingestion/.venv/
 # canonical `skills/` tree is the only versioned copy; each harness link is
 # a relative symlink rebuilt on demand.
 .claude/skills
-.pi/
+.pi/skills
 .opencode/skills
 .antigravity/skills
 
