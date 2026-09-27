@@ -1,0 +1,26 @@
+{
+  "tool": "pdftoppm",
+  "toolVersion": "pdftoppm version 26.08.0",
+  "argv": [
+    "pdftoppm",
+    "-png",
+    "-gray",
+    "-r",
+    "150",
+    "-f",
+    "1",
+    "-l",
+    "1",
+    "example-figure-noborder.pdf",
+    "example-figure-noborder"
+  ],
+  "sourcePdf": "example-figure-noborder.pdf",
+  "dpi": 150,
+  "dpiSource": "flag",
+  "colorModel": "rgb",
+  "pixelWidth": 120,
+  "pixelHeight": 61,
+  "capturedAt": "2026-09-26T19:30:00+00:00",
+  "os": "Darwin 25.5.0",
+  "note": "unmodified real capture; declares no border, so ink genuinely sits on every outer row/column by construction (measured, not edited)"
+}

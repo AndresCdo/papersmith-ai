@@ -1,0 +1,25 @@
+{
+  "tool": "pdftoppm",
+  "argv": [
+    "pdftoppm",
+    "-png",
+    "-gray",
+    "-r",
+    "12",
+    "-f",
+    "1",
+    "-l",
+    "1",
+    "blank-canvas.pdf",
+    "blank-canvas"
+  ],
+  "sourcePdf": "blank-canvas.pdf",
+  "dpi": 12,
+  "dpiSource": "flag",
+  "colorModel": "rgb",
+  "pixelWidth": 12,
+  "pixelHeight": 6,
+  "capturedAt": "2026-09-26T19:30:00+00:00",
+  "os": "Darwin 25.5.0",
+  "postProcessing": "base capture (blank-canvas) captured, then pixel (5,2) forced to (200,200,200) and pixel (6,2) forced to (201,201,201). Under integer BT.601 luminance with R=G=B=v the result is exactly v (299+587+114==1000), so these land on INK_MAX_LEVEL's exact boundary: 200 is ink, 201 is background."
+}

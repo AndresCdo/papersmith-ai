@@ -1,0 +1,25 @@
+{
+  "tool": "pdftoppm",
+  "argv": [
+    "pdftoppm",
+    "-png",
+    "-gray",
+    "-r",
+    "12",
+    "-f",
+    "1",
+    "-l",
+    "1",
+    "blank-canvas.pdf",
+    "blank-canvas"
+  ],
+  "sourcePdf": "blank-canvas.pdf",
+  "dpi": 12,
+  "dpiSource": "flag",
+  "colorModel": "rgb",
+  "pixelWidth": 12,
+  "pixelHeight": 6,
+  "capturedAt": "2026-09-26T19:30:00+00:00",
+  "os": "Darwin 25.5.0",
+  "postProcessing": "base capture (blank-canvas, all pixels 255) captured, then pixel (5,1) -- one row inward from the top edge -- forced to pure black (0,0,0). Row 0 and every border column are left at the unmodified 255 background, so this fixture alone must report pass."
+}

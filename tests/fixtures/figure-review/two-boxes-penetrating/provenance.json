@@ -1,0 +1,25 @@
+{
+  "tool": "pdftoppm",
+  "argv": [
+    "pdftoppm",
+    "-png",
+    "-gray",
+    "-r",
+    "12",
+    "-f",
+    "1",
+    "-l",
+    "1",
+    "blank-canvas.pdf",
+    "blank-canvas"
+  ],
+  "sourcePdf": "blank-canvas.pdf",
+  "dpi": 12,
+  "dpiSource": "flag",
+  "colorModel": "rgb",
+  "pixelWidth": 12,
+  "pixelHeight": 6,
+  "capturedAt": "2026-09-26T19:30:00+00:00",
+  "os": "Darwin 25.5.0",
+  "postProcessing": "base capture (blank-canvas) captured, then a single black block painted at columns [0,7), rows [0,4), for the same reason as two-boxes-abutting: the geometry test supplies the two boxes [0,4)x[0,4) and [3,7)x[0,4) directly to overlaps(), one column of interior penetration beyond their shared edge at x=4."
+}
