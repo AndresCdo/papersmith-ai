@@ -212,7 +212,7 @@ Depends on Commit 3's `visual` argument and Commit 2's `figure-review measure` o
 
 - [x] 4.7 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_paper_figure_audit.py tests/test_paper_writing.py -k "figure_audit or visual or ledger"` plus `pytest tests/test_cli_paper_e2e.py`. **Both green**: first command 51 passed; second command 32 passed. Additionally ran the full `tests/test_paper_writing.py`+`tests/test_figure_review.py`+`tests/test_paper_figure_audit.py` (771 passed, 1 skipped), `tests/test_paper_decisions.py` (289 passed), and the leak scan `tests/test_proposal_implementation.py -k "leak or guarded"` (9 passed).
 - [ ] 4.8 Run `npm run test:all` in full. Confirm no regression. **Deferred by explicit orchestrator instruction** (same as tasks 1.24/2.24/3.9): a concurrent session shares this working tree; the orchestrator runs the full gate once, after all five commits.
-- [x] 4.9 Commit directly on `main`. Conventional Commit message, e.g. `feat(paper-writing): join figure-review's visual report into figure audit via --visual-report`.
+- [x] 4.9 Commit directly on `main`. Conventional Commit message, e.g. `feat(paper-writing): join figure-review's visual report into figure audit via --visual-report`. **Committed as `ab4ae31`.**
 
 ---
 
