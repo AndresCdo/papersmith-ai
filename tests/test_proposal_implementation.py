@@ -25011,6 +25011,45 @@ class SettleReplaceCommandTests(unittest.TestCase):
             {"holder_resolution", "cmd_close", "cmd_verify"})
 
 
+
+    def test_the_event_and_the_response_both_name_the_displaced_token(self):
+        """The spec scenario task 2.8 promised a direct assertion for, and
+        shipped without one.
+
+        Every other lock in this class reads the holder's bytes or a
+        refusal, so the two keys that carry the DISPLACED witness -- the
+        one thing a later reader cannot recover from the file, because the
+        file now holds only the new token -- were asserted nowhere. The
+        task's own text asked for this and was ticked anyway, which is the
+        shape this repository keeps catching: a tick is a claim, and only a
+        measurement is evidence.
+
+        Mutation this must survive: drop `replacedWitness` from the
+        response dict, or pass the NEW witness there instead of the
+        displaced one. Nothing else in this class fails against either --
+        the bytes on disk are identical under both, and that is precisely
+        why the previous witness needs its own assertion.
+        """
+        box = self._box()
+        (box / "Method" / "AGREED.md").write_text(
+            "# Agreed\n\n## Ladder\n\n"
+            "- [x] an already-settled item `test_old_thing`\n",
+            encoding="utf-8")
+
+        proc = self._settle(box)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+        response = json.loads(proc.stdout)
+        self.assertIs(response["replace"], True)
+        self.assertEqual(response["replacedWitness"], "test_old_thing")
+        self.assertEqual(response["witness"], "test_the_new_thing")
+
+        settled = [event for event in self._events(box)
+                   if event.get("kind") == "settle"]
+        self.assertEqual(len(settled), 1, settled)
+        self.assertIs(settled[0]["replace"], True)
+        self.assertEqual(settled[0]["replacedWitness"], "test_old_thing")
+
 class SettleReversedQuoteMatchingTests(unittest.TestCase):
     """The pure predicate `settle --remove`'s own guard evaluates:
     whether `--text` is quoted, bold, inside the document's own
