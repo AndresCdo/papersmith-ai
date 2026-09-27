@@ -1243,3 +1243,63 @@ class VisualReportEndToEndAuditTests(unittest.TestCase):
         self.assertIn(payload["visual"]["dimensions"]["out-of-bounds"]["verdict"], ("pass", "fail"))
         self.assertIsNotNone(payload["visual"]["provenance"])
         self.assertEqual(payload["visual"]["provenance"]["tool"], "pdftoppm")
+
+
+class TheJoinIsAPathNeverAnImportTests(unittest.TestCase):
+    """`figure audit` reaches this skill's findings through a file path on the
+    command line, and through nothing else.
+
+    The constraint is architectural: `paper-writing` and `figure-review` are
+    separate skills with separate subprocess seams and separate repair
+    budgets, and an import edge would quietly make them one. It was checked by
+    hand twice while this change was written and both times it held -- which
+    is exactly the state this class exists to end. A property that is true and
+    unguarded and a property that is true because something holds it look the
+    same from outside, and only one of them survives the next edit.
+    """
+
+    #: The consumers. `paper_cli` parses `--visual-report` and `paper_figure_audit`
+    #: receives the already-read dict; between them they are the whole join.
+    CONSUMERS = (
+        FORGE_ROOT / "skills" / "paper-writing" / "scripts" / "paper_cli.py",
+        FORGE_ROOT / "skills" / "paper-writing" / "scripts" / "paper_figure_audit.py",
+    )
+
+    #: Every module name this skill ships, derived rather than listed, so a
+    #: module added later is covered without anybody remembering to add it here.
+    def _review_module_names(self) -> set[str]:
+        return {path.stem for path in REVIEW_SCRIPTS.glob("*.py")}
+
+    def test_the_derivation_finds_the_modules_it_claims_to_guard(self) -> None:
+        """Non-vacuity. An empty set would make every assertion below pass over
+        nothing, and a scan that found no modules reads exactly like a scan
+        that found no violations."""
+        names = self._review_module_names()
+        self.assertGreaterEqual(
+            len(names), 3,
+            f"derived only {sorted(names)} from {REVIEW_SCRIPTS}; the guard "
+            "below would be asserting over an empty roster")
+        self.assertIn("raster", names)
+
+    def test_no_consumer_imports_anything_this_skill_ships(self) -> None:
+        forbidden = self._review_module_names()
+        for source_path in self.CONSUMERS:
+            with self.subTest(module=source_path.name):
+                self.assertTrue(source_path.is_file(), f"missing {source_path}")
+                tree = ast.parse(source_path.read_text(encoding="utf-8"))
+                found = []
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        found += [a.name for a in node.names
+                                  if a.name.split(".")[0] in forbidden]
+                    elif isinstance(node, ast.ImportFrom) and node.module:
+                        if node.module.split(".")[0] in forbidden:
+                            found.append(node.module)
+                self.assertEqual(
+                    found, [],
+                    f"{source_path.name} imports {found} from figure-review. "
+                    "The join is `--visual-report <path>`: a report already "
+                    "written to disk, read as plain data. An import makes one "
+                    "skill's subprocess seam and repair budget the other's")
+
+
