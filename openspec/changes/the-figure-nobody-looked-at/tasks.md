@@ -246,7 +246,7 @@ Depends on Commit 3's `visual` argument and Commit 2's `figure-review measure` o
 
 - [x] 5.13 Run the focused command: `.micromamba/envs/papersmith/bin/python -m pytest tests/test_agents.py -k figure_auditor` plus `pytest tests/test_workspace_agents_e2e.py`.
 - [ ] 5.14 Run `npm run test:all` in full — this is the fifth and final commit; confirm the suite is green with node 653+ passed / 0 failed and pytest 5188+ passed / 0 failed (allowing for the net-new tests added across all five commits) against the `v0.4.0` baseline recorded above. **Deferred to the orchestrator by explicit instruction** — a second session shares this working tree and concurrent full-suite runs collide on fixed-name scratch fixtures; the orchestrator runs this once, after this commit.
-- [x] 5.15 Commit directly on `main`. Conventional Commit message, e.g. `docs(figure-review): retire the session-judged precondition for a command figure-auditor can quote`.
+- [x] 5.15 Commit directly on `main`. Conventional Commit message, e.g. `docs(figure-review): retire the session-judged precondition for a command figure-auditor can quote`. **Committed as `418fd2d`.**
 
 ---
 
