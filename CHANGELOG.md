@@ -11,6 +11,39 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.5.1
+
+### Added
+
+- **`settle --attach --replace`: re-pointing a proof is not retracting a
+  claim.** A checklist line's `` `test_<id>` `` witness could be attached
+  once and never moved -- `--attach` refused `SETTLE_ALREADY_WITNESSED` on a
+  line that already carried one, and the only path that reached a re-point
+  was `--reverse` followed by a fresh placement, which de-ticks and
+  un-witnesses a line that was already measured and closed. `--replace`
+  closes that gap as a modifier on `--attach`'s own write, not a sixth mode:
+  the mark is never touched (mark-blind between a ticked and an open line),
+  and every other byte of the holder file is identical before and after the
+  call. Three new refusals guard it, all `INVOCATION_DEFECT`:
+  `SETTLE_REPLACE_CONFLICT` (`--replace` without `--attach`),
+  `SETTLE_NOTHING_TO_REPLACE` (the located line carries no witness at all --
+  plain `--attach` is the create path), and `SETTLE_WITNESS_UNCHANGED` (the
+  incoming token equals the one already there). Performs no read of
+  `tests/`: gating on whether a witness names a real test stays exactly
+  where it already was, at `verify`/`close`. The previous token is recorded
+  as `replacedWitness` in both the `settle` ledger event and the command's
+  response, beside an always-present `replace` boolean that mirrors the
+  other four mode flags on every `settle` call.
+
+### Changed
+
+- The one sealed `settle` case's declared golden delta did not materialize:
+  that case already refuses `SETTLE_NOT_DISCUSSED` before reaching the
+  success path where `replace`/`replacedWitness` would appear, a
+  pre-existing condition unrelated to this change. `tests/seal/digests.json`
+  is therefore unchanged -- recaptured and confirmed byte-identical, not
+  regenerated.
+
 ## 0.5.0
 
 ### Added
