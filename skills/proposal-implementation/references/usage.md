@@ -1341,9 +1341,10 @@ back.
 
 **`settle` is the only command that ever writes this token.** There is no
 `patch` or `edit` subcommand, by design (spec Group 5): a witness token is
-bound either at the moment an agreement is placed (`--witness`, above) or,
-with `--attach` (below), afterward — both routes stay inside this one
-command; there is still no third way in. Hand-typing one into `AGREED.md`
+bound either at the moment an agreement is placed (`--witness`, above),
+with `--attach` (below) afterward, or re-pointed onto a different test
+with `--attach --replace` (further below) — all three routes stay inside
+this one command; there is still no fourth way in. Hand-typing one into `AGREED.md`
 is unsupported doctrine, not a technical prevention — the parser cannot,
 and does not try to, distinguish a skill-written token from a hand-typed
 one, so `verify` and `close` evaluate either exactly the same way.
@@ -1380,7 +1381,9 @@ decidable without a human choosing, the same reasoning
 `SETTLE_HEADING_AMBIGUOUS` already states one level up. `--witness` is
 required in this mode (`SETTLE_WITNESS_REQUIRED` if omitted — binding one
 is the entire point) and refused `SETTLE_ALREADY_WITNESSED` if the located
-line already carries a token: `--attach` never replaces one, only adds.
+line already carries a token and `--replace` is not also given: `--attach`
+adds a witness, it never replaces one on its own — the refusal's detail
+names `--replace` as the exit. See below for what `--replace` does.
 
 **The mark is never touched.** A ticked item stays ticked, an open one
 stays open — only the witness token is appended, and everything else in
@@ -1401,6 +1404,75 @@ there is no discussion gate left to check it against.
 already-settled line in a target is a separate, bounded, operator-directed
 pass — never something a flow does incrementally as it happens to
 encounter an unwired agreement.
+
+**`--replace` — re-pointing a witness onto a different test.** Re-pointing
+a proof is not retracting a claim: the agreement's truth did
+not change, only the artefact that demonstrates it. The only path that
+reached this end state before `--replace` existed — `--reverse` followed
+by a fresh placement — de-ticks and un-witnesses a line that was already
+measured and closed, forcing re-discussion and re-measurement to reach the
+state it already had. `--replace` closes that gap by modifying `--attach`
+itself, rather than adding a sixth mode: the mark is never touched, and
+the behaviour is mark-blind between a ticked and an open line, exactly as
+plain `--attach` already is.
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --attach --replace \
+  --text "the free scalar stays at its neutral and identical across arms" \
+  --witness test_the_free_scalar_stays_neutral_across_arms
+```
+
+```json
+{ "status": "written", "holder": "Method/AGREED.md", "attach": true,
+  "replace": true, "replacedWitness": "test_the_free_scalar_stays_neutral",
+  "about": null, "text": "the free scalar stays at its neutral and identical across arms",
+  "under": null, "witness": "test_the_free_scalar_stays_neutral_across_arms",
+  "supersedes": null, "collides": [] }
+```
+
+**The operator-facing surprise, shown explicitly.** `--text` is matched
+against `AGREEMENT_LINE`'s own `text` group, and that group stops before
+the trailing `` `test_<id>` `` token — the witness is never part of
+`--text`, in this mode or in plain `--attach`. Re-pointing a line that
+reads `` - [x] the free scalar stays at its neutral and identical across
+arms `test_the_free_scalar_stays_neutral` `` is `--text "the free scalar
+stays at its neutral and identical across arms"`, never `--text "the free
+scalar stays at its neutral and identical across arms
+\`test_the_free_scalar_stays_neutral\`"` — the latter matches zero lines
+and refuses `SETTLE_TEXT_ABSENT`, because no line's own text group ever
+contains its trailing token.
+
+Three refusals guard this path, each an `INVOCATION_DEFECT` — a fact about
+this call's argv, not about the state of the work:
+
+- **`SETTLE_REPLACE_CONFLICT`** — `--replace` given without `--attach`.
+  `--replace` modifies `--attach`'s own write; it names nothing on its own.
+- **`SETTLE_NOTHING_TO_REPLACE`** — the located line carries no witness at
+  all. The caller asked to replace a binding, and none existed; plain
+  `--attach` (without `--replace`) is the create path for a first witness.
+- **`SETTLE_WITNESS_UNCHANGED`** — the incoming `--witness` equals the one
+  already on the located line. Refusing rather than writing keeps every
+  `replacedWitness` ledger event honest evidence of an actual change,
+  instead of a no-op splice that claims one.
+
+**No test-suite measurement leaks in.** `--replace` never reads `tests/`
+and never checks whether either witness — the displaced one or the
+incoming one — names a real, existing test. Gating on that fact is
+`verify`'s and `close`'s job, reached only through `agreements_state()`;
+`settle` writing a second, independent check of the same fact would be a
+second gate on the witness axis, which is the doctrine this modifier is
+written not to disturb.
+
+**The mark is never touched, inherited rather than restated.** This is
+exactly `--attach`'s own rule, one caller further in — a ticked item stays
+ticked and an open one stays open, and every other byte of the holder file
+is identical before and after the call. The previous token is recorded as
+`replacedWitness` in both the appended `settle` ledger event and this
+call's own response, alongside an always-present `replace` boolean that
+mirrors the other four mode flags on every `settle` call, whether or not
+that call ever exercises `--replace`.
 
 ### `--remove` — the eraser, guarded by the record itself
 

@@ -26063,6 +26063,21 @@ class SettleRemoveReverseUsageDocumentedTests(unittest.TestCase):
         self.assertIn("one", body.lower())
         self.assertIn("SETTLE_ALREADY_REVERSED", body)
 
+    def test_attach_section_documents_replace_and_retires_the_old_sentence(self):
+        """`re-pointing-a-proof-is-not-retracting-a-claim`: the `### --attach`
+        section body gains `--replace`, its three refusals, and no longer
+        states the retired claim. A positive-only assertion would survive
+        leaving the old sentence standing beside the new one; the negative
+        assertion below is what makes the prose-outlives-mechanism risk
+        enforceable.
+        """
+        body = self.section("### `--attach`")
+        self.assertIn("--replace", body)
+        self.assertIn("SETTLE_REPLACE_CONFLICT", body)
+        self.assertIn("SETTLE_NOTHING_TO_REPLACE", body)
+        self.assertIn("SETTLE_WITNESS_UNCHANGED", body)
+        self.assertNotIn("never replaces one, only adds", body)
+
 
 class SettleFiveModesClassStatedOnceTests(unittest.TestCase):
     """Gap 3: `cmd_settle` now has five modes -- place, `--attach`,
@@ -26102,6 +26117,21 @@ class SettleFiveModesClassStatedOnceTests(unittest.TestCase):
         self.assertIn("SETTLE_PARAGRAPH_REQUIRED", refuses)
         self.assertIn("SETTLE_REMOVE_CONFLICT", refuses)
         self.assertIn("SETTLE_REVERSE_CONFLICT", refuses)
+
+    def test_the_settle_row_documents_replace(self):
+        """`re-pointing-a-proof-is-not-retracting-a-claim`: the settle row's
+        *What it writes* cell names `--replace`, and its *Refuses on* cell
+        names all three codes the modifier adds.
+        """
+        rows = markdown_table_rows(
+            self.skill_text(), "| Command | What it writes | Refuses on |")
+        self.assertEqual(len(rows), 1)
+        row = next(r for r in rows[0] if r[0].strip("`") == "settle")
+        writes, refuses = row[1], row[2]
+        self.assertIn("`--replace`", writes)
+        self.assertIn("SETTLE_REPLACE_CONFLICT", refuses)
+        self.assertIn("SETTLE_NOTHING_TO_REPLACE", refuses)
+        self.assertIn("SETTLE_WITNESS_UNCHANGED", refuses)
 
 
 class SettleUnderAboutRequirednessTests(unittest.TestCase):
