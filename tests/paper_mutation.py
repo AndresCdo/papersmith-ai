@@ -27,6 +27,7 @@ from pathlib import Path
 FORGE_ROOT = Path(__file__).resolve().parent.parent
 SKILL_SCRIPTS = FORGE_ROOT / "skills" / "paper-writing" / "scripts"
 CORE_IMPLEMENTATION = FORGE_ROOT / "skills" / "_core" / "implementation"
+CORE_FIGURE = FORGE_ROOT / "skills" / "_core" / "figure"
 
 
 def _run_against_mutant(
@@ -85,6 +86,17 @@ def _run_against_mutant(
         # or via `paper_graph.py` importing it) crashes on import before the
         # mutation is ever exercised.
         shutil.copy2(CORE_IMPLEMENTATION / "impl_layout.py", core_dst / "impl_layout.py")
+
+        # `paper_figure_audit.py` (copied unmutated below, as one of
+        # `source_path`'s siblings) imports `figure_dimensions` from
+        # `_core/figure/` via the same `parents[2] / "_core" / ...`
+        # pattern `impl_refusals` above already uses -- any mutant that
+        # transitively imports `paper_figure_audit` (e.g. `paper_cli.py`
+        # does) needs that shelf present at the same relative depth, or
+        # the import crashes before the mutation is ever exercised.
+        figure_dst = tmp_root / "_core" / "figure"
+        figure_dst.mkdir(parents=True)
+        shutil.copy2(CORE_FIGURE / "figure_dimensions.py", figure_dst / "figure_dimensions.py")
 
         scripts_dst = tmp_root / "paper-writing" / "scripts"
         scripts_dst.mkdir(parents=True)

@@ -36,8 +36,21 @@ Public surface:
     FigureEntities                                     -> what was extracted
     extract_entities(tex, manifest) -> FigureEntities
     normalize(token) -> str
-    audit_semantics(*, tex, manifest, section_text,
-                    contract_figure, expected_components=None) -> dict
+    audit_semantics(*, tex, manifest, section_text, contract_figure,
+                    expected_components=None, visual=None) -> dict
+
+**The `visual` argument (Commit 3, design.md Decision 4) is plain data
+only** -- a caller-supplied, already-computed dict, never resolved by this
+function reading disk or spawning a process, the same way
+`expected_components` is already supplied. It defaults to every classified
+visual dimension present as `{"verdict": "unmeasured", "reason": <code>}`,
+read from the one shared roster both this module and `figure-review` import
+(`skills/_core/figure/figure_dimensions.py`) so the two sides cannot drift
+apart. No value inside `visual` may change this module's own semantic
+`verdict`: it is written into the report in exactly one place, placed AFTER
+the semantic verdict is already bound to a local `str` (`visual-finding-
+boundary`, `Requirement: A Visual Verdict Never Changes The Semantic
+Verdict`).
 """
 from __future__ import annotations
 
@@ -52,6 +65,9 @@ import paper_obligation  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_core" / "implementation"))
 from impl_refusals import Refused  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_core" / "figure"))
+import figure_dimensions  # noqa: E402
 
 #: `\node[options] (name) {text}` — the shallow, explicitly non-AST grammar
 #: this module reads. Optional option list, optional node name.
@@ -179,6 +195,7 @@ def _excluded_finding(contract_figure: dict, components: list) -> dict | None:
 def audit_semantics(
     *, tex: str, manifest: dict, section_text: str,
     contract_figure: dict | None, expected_components: list | None = None,
+    visual: dict | None = None,
 ) -> dict:
     """The whole audit: what the figure declares, against what the prose says.
 
@@ -188,6 +205,13 @@ def audit_semantics(
     guessing one. `expected_components` is the `components_from` fact's
     already-resolved value, supplied by the caller because resolving a fact
     is a disk read and this function performs none.
+
+    `visual` is the figure pipeline's already-computed visual findings
+    (`figure-review measure`'s output shape), supplied by the caller the
+    same way `expected_components` is — never resolved here. When `None`,
+    the report's `visual` key defaults to every classified dimension
+    `unmeasured` (`figure_dimensions.default_visual()`). No value inside
+    `visual` changes this function's own semantic `verdict`.
     """
     components = [str(item) for item in (manifest.get("components") or [])]
     entities = extract_entities(tex, manifest)
@@ -270,7 +294,7 @@ def audit_semantics(
 
     remediation = _remediation(unmatched_nodes, missing_pipeline_steps, findings, label_mismatches)
 
-    return {
+    report = {
         "verdict": verdict,
         "warnings": warnings,
         "unmatched_nodes": unmatched_nodes,
@@ -289,6 +313,13 @@ def audit_semantics(
             "proseChars": len(section_text),
         },
     }
+    # Structural isolation (design.md, Decision 4, mechanism 1): `visual`
+    # is read in exactly ONE place, placed AFTER `verdict` is already
+    # bound to the local `str` above -- there is no code path from a
+    # caller-supplied visual finding to this function's own semantic
+    # verdict.
+    report["visual"] = visual if visual is not None else figure_dimensions.default_visual()
+    return report
 
 
 def _remediation(unmatched: list, missing: list, findings: list, mismatches: list) -> list:

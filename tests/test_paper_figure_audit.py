@@ -16,12 +16,16 @@ from pathlib import Path
 
 FORGE_ROOT = Path(__file__).resolve().parents[1]
 SKILL_SCRIPTS = FORGE_ROOT / "skills" / "paper-writing" / "scripts"
+CORE_FIGURE = FORGE_ROOT / "skills" / "_core" / "figure"
 sys.path.insert(0, str(SKILL_SCRIPTS))
 import paper_block  # noqa: E402
 import paper_coupling_evidence  # noqa: E402
 import paper_figure_audit  # noqa: E402
 import paper_scaffold  # noqa: E402
 import paper_verify  # noqa: E402
+
+sys.path.insert(0, str(CORE_FIGURE))
+import figure_dimensions  # noqa: E402
 
 FIGURE_WITH_THREE = (
     "% node: alpha\n"
@@ -55,6 +59,7 @@ def _audit(tex: str, manifest: dict, prose: str, **overrides) -> dict:
         section_text=prose,
         contract_figure=contract_figure,
         expected_components=overrides.pop("expected_components", ["alpha", "beta", "gamma"]),
+        visual=overrides.pop("visual", None),
     )
 
 
@@ -262,6 +267,124 @@ class ReportShapeTests(unittest.TestCase):
         report = _audit(FIGURE_WITH_THREE, {"components": ["alpha", "beta", "gamma"]}, "alpha beta gamma")
         self.assertIn(report["verdict"], paper_verify._VERDICTS)
         self.assertNotIn("WARN", report.values())
+
+
+class VisualKeyDefaultTests(unittest.TestCase):
+    """Lock 3 (design.md lock table): the schema gains its slot.
+
+    Traces to `diagram-obligation`'s delta spec, `Scenario: The report
+    always carries a visual key`. The mutation this must survive is
+    deleting the default-population line so `visual` is absent or
+    `None` -- which is why the assertion reads EVERY classified
+    dimension by key rather than only checking the top-level key
+    exists: a partial default would still pass a shallow check.
+    """
+
+    def test_no_visual_argument_still_carries_every_dimension_unmeasured(self) -> None:
+        report = _audit(FIGURE_WITH_THREE, {"components": ["alpha", "beta", "gamma"]}, "alpha beta gamma")
+        visual = report["visual"]
+        self.assertIn("dimensions", visual)
+        for dimension in figure_dimensions.ALL_DIMENSIONS:
+            # Reading any dimension by key must never raise `KeyError`
+            # (visual-finding-boundary, `Requirement: Every Dimension Is
+            # Always Present, Never Absent or Null`) -- this is the RED
+            # signal for the "delete the default-population line"
+            # mutation: a missing/None `visual` breaks this loop at the
+            # FIRST dimension, not merely at the last.
+            entry = visual["dimensions"][dimension]
+            self.assertEqual(entry["verdict"], "unmeasured")
+            self.assertEqual(entry["reason"], figure_dimensions.DEFAULT_REASONS[dimension])
+
+    def test_visual_key_is_never_absent_or_null(self) -> None:
+        report = _audit(FIGURE_WITH_THREE, {"components": ["alpha", "beta", "gamma"]}, "alpha beta gamma")
+        self.assertIn("visual", report)
+        self.assertIsNotNone(report["visual"])
+
+    def test_paper_figure_audit_roster_equals_the_shared_shelf(self) -> None:
+        # Lock 11, cross-module half (task 2.16 / `RosterDriftLockCross
+        # ModuleHalfStaysRedUntilCommit3` in tests/test_figure_review.py):
+        # `paper_figure_audit.py` reads the shared roster rather than
+        # re-declaring it, so the two sides cannot drift apart.
+        report = _audit(FIGURE_WITH_THREE, {"components": ["alpha", "beta", "gamma"]}, "alpha beta gamma")
+        self.assertEqual(
+            sorted(report["visual"]["dimensions"].keys()),
+            sorted(figure_dimensions.ALL_DIMENSIONS),
+        )
+
+
+class VisualVerdictIsolationTests(unittest.TestCase):
+    """Lock 4 (design.md lock table), schema-level half -- the CLI-level
+    end-to-end confirmation is task 4.4. No value inside `visual` may
+    change the semantic `verdict`.
+
+    Traces to `diagram-obligation`'s delta spec, `Scenario: A visual
+    failure alongside a semantic pass leaves the top-level verdict at
+    pass`, and to `visual-finding-boundary`'s `Requirement: A Visual
+    Verdict Never Changes The Semantic Verdict`.
+    """
+
+    def test_a_caller_supplied_visual_failure_leaves_the_semantic_verdict_at_pass(self) -> None:
+        visual = figure_dimensions.default_visual()
+        visual["dimensions"]["overlap"] = {
+            "verdict": "fail",
+            "reason": None,
+            "collisions": [{"pixel": [[10, 20], [40, 60]], "point": [[4.8, 9.6], [19.2, 28.8]]}],
+        }
+        report = _audit(
+            FIGURE_WITH_THREE,
+            {"components": ["alpha", "beta", "gamma"]},
+            "The pipeline runs alpha, then beta, then gamma.",
+            visual=visual,
+        )
+        # The semantic verdict is bound to a local `str` before `visual`
+        # is ever touched -- the "let visual set the top-level verdict"
+        # mutation would flip this exact assertion.
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["visual"]["dimensions"]["overlap"]["verdict"], "fail")
+
+    def test_a_caller_supplied_visual_dict_is_used_verbatim_not_merged(self) -> None:
+        visual = figure_dimensions.default_visual()
+        report = _audit(FIGURE_WITH_THREE, {"components": ["alpha", "beta", "gamma"]}, "alpha beta gamma", visual=visual)
+        self.assertIs(report["visual"], visual)
+
+
+class VisualIsNeverPathTypedTests(unittest.TestCase):
+    """Task 3.6: re-proving `Requirement: The Audit Is Read Without Its
+    Module` against the widened schema -- no value inside `visual` may
+    be a `pathlib.Path`, so whatever check later reads it stays free to
+    avoid a disk read."""
+
+    def _assert_no_path_anywhere(self, value, where: str) -> None:
+        self.assertNotIsInstance(value, Path, where)
+        if isinstance(value, dict):
+            for key, item in value.items():
+                self._assert_no_path_anywhere(item, f"{where}[{key!r}]")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                self._assert_no_path_anywhere(item, f"{where}[{index}]")
+
+    def test_the_default_visual_dict_carries_no_path_typed_field(self) -> None:
+        report = _audit(FIGURE_WITH_THREE, {"components": ["alpha", "beta", "gamma"]}, "alpha beta gamma")
+        self._assert_no_path_anywhere(report["visual"], "report['visual']")
+
+    def test_paper_verify_import_allowlist_is_untouched_by_this_change(self) -> None:
+        # `paper_verify.py`'s own AST-enforced import lock
+        # (`ReadOnlyTests` in tests/test_paper_writing.py) already proves
+        # this structurally; this is a direct, local confirmation that
+        # this phase added no import to that module at all.
+        sys.path.insert(0, str(FORGE_ROOT / "tests"))
+        import ast as _ast
+
+        tree = _ast.parse((SKILL_SCRIPTS / "paper_verify.py").read_text(encoding="utf-8"))
+        real_imports = set()
+        import_from_modules = set()
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Import):
+                real_imports.update(alias.name for alias in node.names)
+            elif isinstance(node, _ast.ImportFrom):
+                import_from_modules.add(node.module)
+        self.assertEqual(real_imports, {"re"})
+        self.assertEqual(import_from_modules, {"__future__"})
 
 
 class VerifyWiringTests(unittest.TestCase):
