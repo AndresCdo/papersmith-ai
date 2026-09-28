@@ -117,7 +117,7 @@ class InitTests(unittest.TestCase):
         # pi/OpenCode/Antigravity can read a skill at all.
         tmp_path = self.new_tmp()
         workspace = tmp_path / "sparse-ae"
-        init_module.initialize(
+        result = init_module.initialize(
             workspace,
             tools=("claude", "opencode", "pi", "antigravity"),
             run_npm=False,
@@ -128,6 +128,9 @@ class InitTests(unittest.TestCase):
             assert link.is_symlink(), f"{relpath} is not a symlink"
             assert not link.readlink().is_absolute(), f"{relpath} must be a relative link"
             assert link.resolve() == canonical, relpath
+            # A wired harness link is reported the same way every other kit
+            # file is, so a filesystem that cannot create it shows up here.
+            assert relpath in result["copied_files"], relpath
 
     def test_link_harness_skills_never_deletes_real_content_and_scopes_to_tools(self) -> None:
         tmp_path = self.new_tmp()
