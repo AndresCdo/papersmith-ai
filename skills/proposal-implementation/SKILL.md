@@ -146,6 +146,18 @@ not the rule. Discovering it there costs a whole round trip to learn something
 measurable before leaving, and the orchestrator that delegated has to be able to
 tell "it could not start" from "it started and failed".
 
+**On a harness with no Task-tool delegation** (no sub-agent mechanism is
+documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+run whichever stretch, Build or Walk, in-process, as one step, in the same
+order, holding to the same measure-before-delegating gate before starting.
+The tool boundary each agent would have enforced differs by row —
+`implementation-build`'s grant (`Read, Write, Edit, Bash, Glob, Grep`)
+versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
+`Write`/`Edit`) — and either becomes the orchestrator's own discipline to
+hold for whichever stretch is running, not a structural guarantee: treat
+any action that would have needed a scoped-out tool as a stop, not a
+workaround.
+
 ### `remote-execution` is driven, not delegated to
 
 An agent of its own was considered and rejected, and the reasoning is kept
