@@ -194,6 +194,7 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     name = root.name
     _create_topology(root)
     copied = _copy_kit(root, kit_root)
+    manifest.link_harness_skills(root, tools=tools)
     _write_workspace_seed(root, name=name, title=title.strip(), topic=topic.strip(),
                           target=target, version=version, tools=tools)
 

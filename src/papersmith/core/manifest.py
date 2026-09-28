@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -163,6 +164,65 @@ def walk_kit_files(kit_root: Path) -> dict[str, str]:
         else:
             _walk_dir(path, kit_root, files)
     return files
+
+
+#: Harness directories that read the workspace's skills through a projected
+#: symlink to the canonical ``skills/`` tree — the same shape
+#: ``scripts/setup-harnesses.sh`` creates for this repository's own checkout
+#: (see that script; it targets the identical four paths). A generated
+#: workspace needs this wired at ``init`` time, not left for the operator to
+#: reproduce by hand with a separate setup step.
+HARNESS_SKILL_LINKS = (
+    ".claude/skills",
+    ".pi/skills",
+    ".opencode/skills",
+    ".antigravity/skills",
+)
+
+
+def link_harness_skills(root: Path, tools: Sequence[str] | None = None) -> list[str]:
+    """Create or repair the relative ``skills`` symlink for each selected harness.
+
+    Mirrors ``scripts/setup-harnesses.sh``: relative (so the workspace stays
+    relocatable) and idempotent (re-running converges to the same layout — a
+    stale symlink with the wrong target is replaced, never nested into). A
+    path already holding real, non-symlinked content is left untouched and
+    omitted from the result, never deleted. ``tools`` narrows which harnesses
+    are linked; ``None`` links all of them. Returns only the relpaths this
+    call actually created or repaired, so a caller can report it the same
+    way it reports every other change it makes; a path already correct, or
+    one this could not (re)create because of a damaged or unwritable
+    parent, is silently omitted, the same fail-soft contract
+    :func:`copy_kit_file` already uses for the files it copies.
+    """
+    canonical = root / "skills"
+    if not fs.is_dir(canonical):
+        return []
+    linked: list[str] = []
+    for relpath in HARNESS_SKILL_LINKS:
+        if tools is not None and relpath.split("/", 1)[0].lstrip(".") not in tools:
+            continue
+        target = root / relpath
+        want = os.path.relpath(canonical, target.parent)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.is_symlink():
+                if os.readlink(target) == want:
+                    continue
+            elif target.exists():
+                continue
+            # Build the replacement next to `target` and rename it into
+            # place atomically, so a failed create never leaves `target`
+            # deleted with nothing put back (os.replace(2) has no such gap;
+            # unlink-then-symlink_to does).
+            tmp = target.with_name(target.name + ".papersmith-tmp")
+            tmp.unlink(missing_ok=True)
+            tmp.symlink_to(want)
+            tmp.replace(target)
+        except OSError:
+            continue
+        linked.append(relpath)
+    return linked
 
 
 def copy_kit_file(kit_root: Path, relpath: str, dest_root: Path) -> bool:

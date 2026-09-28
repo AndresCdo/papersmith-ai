@@ -195,6 +195,12 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
                            unsynchronized=unsynchronized):
             changed.append(relpath)
 
+    # Repair a missing or stale harness `skills` symlink for the active
+    # tools, the same way a missing kit file is repaired above, and report
+    # it the same way. Never touches real, non-symlinked content at that
+    # path.
+    changed.extend(manifest.link_harness_skills(root, tools=active_tools))
+
     if tools is not None:
         workspace_config["active_tools"] = active_tools
     workspace_config["updated_at"] = config.utc_timestamp()

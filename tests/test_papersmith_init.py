@@ -110,6 +110,48 @@ class InitTests(unittest.TestCase):
         expected = manifest.workspace_framework_files(workspace, Path(__file__).parents[1])
         assert stored_manifest["files"] == expected
 
+    def test_initialize_wires_harness_skill_symlinks(self) -> None:
+        # `scripts/setup-harnesses.sh` projects the canonical `skills/` tree
+        # into every harness for THIS repository's own checkout; a freshly
+        # generated workspace must not need that manual step re-run before
+        # pi/OpenCode/Antigravity can read a skill at all.
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "sparse-ae"
+        init_module.initialize(
+            workspace,
+            tools=("claude", "opencode", "pi", "antigravity"),
+            run_npm=False,
+        )
+        canonical = (workspace / "skills").resolve()
+        for relpath in (".claude/skills", ".opencode/skills", ".pi/skills", ".antigravity/skills"):
+            link = workspace / relpath
+            assert link.is_symlink(), f"{relpath} is not a symlink"
+            assert not link.readlink().is_absolute(), f"{relpath} must be a relative link"
+            assert link.resolve() == canonical, relpath
+
+    def test_link_harness_skills_never_deletes_real_content_and_scopes_to_tools(self) -> None:
+        tmp_path = self.new_tmp()
+        (tmp_path / "skills").mkdir()
+        real = tmp_path / ".opencode" / "skills"
+        real.mkdir(parents=True)
+        (real / "keep.txt").write_text("mine")
+        linked = manifest.link_harness_skills(tmp_path, tools=("claude", "opencode"))
+        assert ".opencode/skills" not in linked
+        assert (real / "keep.txt").read_text() == "mine"
+        assert (tmp_path / ".claude/skills").is_symlink()
+        assert not (tmp_path / ".pi/skills").exists()
+
+    def test_link_harness_skills_repairs_a_stale_symlink(self) -> None:
+        tmp_path = self.new_tmp()
+        (tmp_path / "skills").mkdir()
+        (tmp_path / "elsewhere").mkdir()
+        link = tmp_path / ".claude" / "skills"
+        link.parent.mkdir(parents=True)
+        link.symlink_to("../elsewhere")
+        linked = manifest.link_harness_skills(tmp_path, tools=("claude",))
+        assert linked == [".claude/skills"]
+        assert link.resolve() == (tmp_path / "skills").resolve()
+
     def test_remote_selects_the_declared_default_target(self) -> None:
         tmp_path = self.new_tmp()
         for remote, target in [
