@@ -47,6 +47,12 @@ CONDA_BASE_PACKAGES = [
     "python=3.12",
     "pip",
     "pytest",
+    # `tests/test_remote_execution.py` imports requests at module scope, and
+    # `tests/test_forge_gate.py` derives every top-level third-party import the
+    # forge's own code requires and probes the gate's interpreter for each one.
+    # It lived only in `requirements.txt`, which this script never reads, so a
+    # correctly provisioned environment failed that probe.
+    "requests",
     "numpy",
     "pymupdf",
     "pyyaml",

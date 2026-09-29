@@ -44,18 +44,18 @@ jobs:
           # "workspace node dependencies are missing".
           node-version: 24.x
           cache: "npm"
-      - name: Create the development venv
-        # `.venv/bin/python -m pytest` is the documented runner, and the
-        # skill-audit self-guarded-facts probe executes `.venv/bin/python`
-        # directly -- a system-python-only install leaves that probe
-        # unprobeable and cascades KeyErrors through the audit suite.
+      - name: Provision the forge environment (micromamba)
+        # The gate names `.micromamba/envs/papersmith/bin/pytest` -- package.json
+        # `test:py`, enforced by tests/test_forge_gate.py -- so CI must
+        # provision THAT environment, not a `.venv` no script in this
+        # repository creates. `.venv` is linked to it because the skill-audit
+        # self-guarded-facts probe runs `<repo>/.venv/bin/python` directly, and
+        # `--no-ingestion` skips only `PIP_PACKAGES` (`marker-pdf`), which the
+        # gate's own derivation declares skippable.
         run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python -m pip install pytest pytest-asyncio pytest-mock faker anyio
-          .venv/bin/python -m pip install -e .
+          python3 scripts/setup_env.py install --no-ingestion
+          ln -s .micromamba/envs/papersmith .venv
       - name: Install node dependencies
         run: npm ci
       - name: Run pytest
-        run: .venv/bin/python -m pytest
+        run: .micromamba/envs/papersmith/bin/python -m pytest
