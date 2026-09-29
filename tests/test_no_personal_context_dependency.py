@@ -85,6 +85,13 @@ MEMORY_TOOL_PATTERN = re.compile(r"\b(?:mem_[a-z_]+|engram_mem_[a-z_]+)\b")
 
 CODE_SUFFIXES = (".py", ".ts", ".mjs", ".js", ".sh")
 
+#: This file, excluded from the call scan. A scanner has to contain the pattern it
+#: scans for, and the inversion controls below plant provider calls on purpose, so
+#: a scan that reached this file would fire on its own fixtures and prove nothing.
+#: Excluded by identity rather than by name: the one file that cannot be checked
+#: for a pattern is the file that holds it.
+SELF = Path(__file__).resolve()
+
 
 def tracked_files() -> list[Path]:
     """Every tracked file except completed history, by `git ls-files`.
@@ -218,7 +225,10 @@ class MemoryProviderCallTests(unittest.TestCase):
     """No tracked code calls a provider tool. A regression lock, not proof."""
 
     def test_no_tracked_code_calls_a_memory_provider_tool(self):
-        paths = [p for p in tracked_files() if p.suffix in CODE_SUFFIXES]
+        paths = [
+            path for path in tracked_files()
+            if path.suffix in CODE_SUFFIXES and path.resolve() != SELF
+        ]
         found = scan_memory_tool_calls(text_sources(paths))
         self.assertEqual(
             found, [],
@@ -273,6 +283,16 @@ class ScannerInversionTests(unittest.TestCase):
             ["engram_mem_search"],
             "the scanner covers only the Pi-native `mem_*` spelling and misses "
             "the MCP `engram_mem_*` rows")
+
+    def test_the_call_scan_does_not_reach_this_file(self):
+        """The exclusion that keeps the rule honest. Without it the scan fires on
+        this file's own planted fixtures, which is a failure that says nothing
+        about papersmith and would train a reader to ignore the rule."""
+        self.assertNotIn(
+            SELF, [path.resolve() for path in tracked_files()
+                   if path.suffix in CODE_SUFFIXES and path.resolve() != SELF],
+            "this guard's own file is still in the call scan, so its fixtures "
+            "make the rule fail for a reason that is not a dependency")
 
 
 class DifferentialControlTests(unittest.TestCase):
@@ -334,6 +354,20 @@ class DifferentialControlTests(unittest.TestCase):
         self.assertEqual(
             control.failure_signature(node_output), ["not ok a suite name"],
             "the signature does not read the Node half's TAP failure lines")
+
+    def test_the_failure_signature_reads_subfailures(self):
+        """Measured the hard way: without this, a real run reported three
+        failing tests where pytest counted six, because `SUBFAILED` lines do not
+        match `^(FAILED|ERROR)`. Two runs differing only in a subfailure would
+        have been called equal -- an under-observing control, which is the same
+        defect class this whole feature exists to close."""
+        control = self.module()
+        line = ("SUBFAILED(document='a/b.py') tests/test_x.py::ProseTests::test_y")
+        self.assertEqual(
+            control.failure_signature(line),
+            ["SUBFAILED document='a/b.py' tests/test_x.py::ProseTests::test_y"],
+            "a subfailure is invisible to the signature, so the differential "
+            "control cannot see a difference that lives in one")
 
     def test_the_decoy_home_carries_personal_context(self):
         """Non-vacuous: a decoy home that held nothing would prove only that

@@ -28,6 +28,26 @@ own working session; it does not stay in the verification path.
    removing Engram from the operator's session: "i want engram to be disable for
    the testing ... the idea is to test without engram, so we can verify that
    papersmith works without my personal context."
+6. **(Round 1, operator-directed)** Implement E1–E5, then the merge feature's
+   T4–T5, then **one** Judgment Day on the combined tree — not two.
+
+## Defects found while implementing, by the gate rather than by me
+
+Recorded because both are the failure class this feature exists to close, and
+both were mine:
+
+1. **The guard fired on itself.** `MemoryProviderCallTests` failed because the
+   guard's own inversion controls contain the literal `mem_save` and
+   `engram_mem_search`. A scanner must contain the pattern it scans for, so the
+   scan now excludes this file by identity — and a control asserts that it does,
+   so the exclusion cannot silently widen.
+2. **The signature reader under-observed.** A 21-minute run reported *three*
+   failing tests where pytest counted *six*, because `SUBFAILED` lines do not
+   match `^(FAILED|ERROR)`. Two runs differing only in a subfailure would have
+   been called equal. This is precisely the under-observing control the judges
+   caught in the first E4 design, reproduced one level down; it is fixed, with an
+   inversion control for the subfailure reader, and the fixed reader was first
+   verified against the logs the flawed run produced (6 entries, identical).
 
 ## Revision log (round 1)
 
@@ -173,41 +193,68 @@ differ.
   `feat/engram-optional` from `integration/command-center`.
   - Evidence: `075f8e9`. The session mirror is operator-side and optional
     (decision 5); it is not a tracked requirement of this feature.
-- [ ] E1 — Canonical context stops naming a provider store.
-  - `openspec/project-context.md` declares a filesystem-only store and drops the
-    `Engram mirrors:` line (both lines — row `JD-A-003`).
-  - The reason is written into the file as a courtesy to the next reader; it is
+- [x] E1 — Canonical context stops naming a provider store.
+  - `openspec/config.yaml` gained `store: openspec` — the single
+    repository-local source the guard derives its expectation from.
+  - `openspec/project-context.md` now declares `openspec` and the
+    `Engram mirrors:` line is gone (both lines — row `JD-A-003`).
+  - `openspec/specs/.gitkeep` no longer declares `(hybrid)` — row `JD-B-005`.
+  - **Token deviation from operator decision 2, reported rather than taken
+    silently:** `files` was the label I offered, and it is not in the
+    generator's vocabulary. gentle-pi's own preflight
+    (`lib/sdd-preflight.ts:956`) accepts exactly `openspec|engram|hybrid|none`,
+    and the file said `both` — a token that vocabulary rejects. `openspec` is
+    the only file-backed-only mode, so it is what was written.
+  - The reason is recorded in the file as a courtesy to the next reader; it is
     **not** the mitigation, because the file is generator output and a refresh
     supersedes it wholesale (row `JD-B-006`).
-- [ ] E2 — De-machine the same file. Drop or explicitly date-stamp the `Root:`
-  and runtime-version facts.
-- [ ] E3 — Guard: `tests/test_no_personal_context_dependency.py`. Two rules, and
-  the second is the one that must be able to fire:
-  - **Rule A (store).** Every tracked declaration of an artifact store — scanned
-    by shape, across the repository, not in one named file — must name a store in
-    the guard's declared **provider-free set** (`openspec`, `files`, `none`).
-    Rows `JD-B-005`, `JD-A-003`.
-  - **Rule B (calls).** No tracked code calls a memory-provider tool. The roster
-    is a single declared **namespace** (`mem_*`, `engram_mem_*`), never a list of
-    twenty tool names, and the rule ships with a **planted-call inversion
-    control** proving it fires — the `kind=guard-never-fires` control this
-    repository's own audit doctrine requires. Rows `JD-A-002`, `JD-B-002`.
-  - Stated plainly: Rule B passes before and after E1, because the tree holds
-    zero calls. It is a regression lock, not the fail-before/pass-after proof.
-    That proof is E4's.
-- [ ] E4 — Differential context control. The load-bearing deliverable.
-  - `scripts/clean-context-gate.sh` runs the **declared gate** — `npm run
-    test:all`, named rather than restated (row `JD-B-007`) — twice: once under
-    the operator's real `HOME`, once under an empty `HOME`, and fails if the two
-    differ.
-  - `.github/workflows/test.yml` gains the stage, so the property is enforced
-    where it is already nearly true, and *named* instead of incidental.
-  - It cannot be a false green: absence is enforced by construction, and F8 shows
-    the baseline is zero, so any difference is a real dependency.
-- [ ] E5 — Prove the flows. The declared gate, plus the differential control, with
-  raw output recorded here. Read for collection errors, not only pass counts.
-- [ ] E6 — Judgment Day re-judgment on the frozen severe rows, then a final
-  verification on the implementation tree.
+  - Evidence: `45ee097`.
+- [x] E2 — De-machine the same file.
+  - The absolute `Root:` is gone and the measured-runtime row is date-stamped as
+    a measurement on the initializing machine, never a requirement.
+  - Two further false facts corrected while in the file, since a canonical
+    context that misinforms is the defect family this feature is about: the
+    Python dependency row predated the command center's four dependencies, and
+    the CI row still described `pip install -r requirements.txt` after CI moved
+    to the micromamba environment the gate names.
+  - Evidence: `45ee097`.
+- [x] E3 — Guard: `tests/test_no_personal_context_dependency.py`.
+  - **Rule A (store).** Every tracked declaration, found by anchored shape
+    anywhere in the repository, must carry the mode declared in
+    `openspec/config.yaml`. Anchoring matters: the plan document quotes `both`,
+    `engram` and `hybrid` while discussing them, and an unanchored scanner would
+    fire on its own documentation. History is excluded — completed changes are
+    an audit trail that is never rewritten, so demanding they be edited would be
+    demanding a lie.
+  - **Rule B (calls).** One declared namespace (`mem_*`, `engram_mem_*`), never a
+    roster of tool names, excluding this file by identity.
+  - **RED first, kept in history:** `a79d972` fails 4 assertions on three real
+    declarations. That is the fail-before evidence, not a claim.
+  - Nine inversion controls prove every scanner fires on a planted input.
+  - Evidence: `a79d972` (red) -> `45ee097` (green); 19 passed.
+- [x] E4 — Differential context control, the load-bearing deliverable.
+  - `scripts/clean_context_gate.py` runs the **declared gate**, read from
+    `package.json`'s `test:all` rather than restated (row `JD-B-007`), under an
+    empty `HOME` and under a **decoy** `HOME` carrying `.pi/agent/mcp.json`,
+    `.agents/skills/`, `.claude/skills/`, `.config/opencode/`, `.engram/`, and
+    fails naming any difference.
+  - Synthetic homes, deliberately: comparing the operator's real home against an
+    empty one would be trivially green on CI. A decoy is present on every
+    machine, so the control fires on a runner exactly as on a laptop.
+  - Its comparator, signature reader and decoy builder carry their own inversion
+    controls in E3's guard.
+  - `.github/workflows/test.yml` gained the stage (`e8f7ffe`), with the doubled
+gate time recorded in the step's own comment.
+- [x] E5 — Prove the flows.
+  - `python3 scripts/clean_context_gate.py` (19m08s): Node `exit 0` under both
+    homes; Python `exit 1` under both with **5 failing tests and an identical
+    signature**. Verdict: identical, so the verification path does not read the
+    operator's context.
+  - The 5 are the context-independent ones F8 named: `test_mcp_registry`,
+    `test_version_sources`, and the three `kaggle` subfailures that T4 removes.
+  - Guard: 19 passed.
+- [ ] E6 — **One** Judgment Day, on the combined tree (operator decision 6),
+  shared with the merge feature's T6 rather than run twice.
 - [ ] E7 — Close-out. Commit identities, raw gate output, the cross-repo
   follow-up for `sdd-init`'s default store, and removal of worktrees.
 

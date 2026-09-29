@@ -76,6 +76,11 @@ DECOY_FILES: dict[str, str] = {
 #: set, because two runs that fail the same tests in a different order have not
 #: disagreed about anything that matters.
 PYTEST_FAILURE = re.compile(r"(?m)^(FAILED|ERROR) (\S+)")
+#: pytest reports a subtest failure on its own line, and `^(FAILED|ERROR)` does not
+#: match it. Measured the hard way: without this pattern a run reported three
+#: failing tests where pytest counted six, so two runs differing only in a
+#: subfailure were called equal -- an under-observing control.
+PYTEST_SUBFAILURE = re.compile(r"(?m)^SUBFAILED\(([^)]*)\) (\S+)")
 TAP_FAILURE = re.compile(r"(?m)^not ok \d+ - (.+?)\s*$")
 
 
@@ -148,6 +153,7 @@ def failure_signature(log_text: str) -> list[str]:
     them equal.
     """
     found = {f"{kind} {target}" for kind, target in PYTEST_FAILURE.findall(log_text)}
+    found |= {f"SUBFAILED {subject} {test}" for subject, test in PYTEST_SUBFAILURE.findall(log_text)}
     found |= {f"not ok {name}" for name in TAP_FAILURE.findall(log_text)}
     return sorted(found)
 
