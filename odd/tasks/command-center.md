@@ -54,11 +54,13 @@ folder, impose no Node/npm runtime dependency there, and be reachable through
   - `npm run build` emits `skills/_core/command_center/static/`; commit output.
   - Evidence: WU4 commit; `tsc` clean, `vite build` reproduces the same asset
     hashes, and the running server serves `/` plus both assets with HTTP 200.
-- [ ] T5 — Smoke test + CI wrapper + docs.
+- [x] T5 — Smoke test + CI wrapper + docs.
   - `scripts/command-center-smoke.sh` (startup, liveness, payload contract,
     SSE reactivity, wiring smoke runner, graceful teardown).
   - pytest test that subprocess-runs it to a zero exit.
   - README section for `papersmith ui`.
+  - Evidence: WU5 commit; `bash scripts/command-center-smoke.sh` exits 0 and
+    the pytest wrapper passes in 2.7 s with no orphan process on the port.
 
 ## Non-goals
 
@@ -73,4 +75,5 @@ Each task records its work-unit commit below as it closes.
 - T1 — `ed5716f`
 - T2 — `f0fa523`
 - T3 — `abb1d0a`
-- T4 — WU4 commit
+- T4 — `5f288c3`
+- T5 — WU5 commit

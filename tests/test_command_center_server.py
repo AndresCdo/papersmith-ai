@@ -13,12 +13,18 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from skills._core.command_center import server
 
 
 def _routes(app) -> dict:
-    return {route.path: route.endpoint for route in app.routes if hasattr(route, "path")}
+    # Mounts (StaticFiles) expose `.app`, not `.endpoint`; keep only API routes.
+    return {
+        route.path: route.endpoint
+        for route in app.routes
+        if hasattr(route, "path") and hasattr(route, "endpoint")
+    }
 
 
 def _json(response) -> dict:
@@ -70,14 +76,16 @@ class ServerEndpointTests(unittest.TestCase):
 
     def test_placeholder_root_is_served_without_a_build(self) -> None:
         root = self.new_workspace()
-        app = server.create_app(root)
+        with mock.patch.object(server, "resolve_static_dir", return_value=None):
+            app = server.create_app(root)
         body = _routes(app)["/"]()
         assert "Paper Command Center" in body
 
     def test_export_static_refuses_an_empty_build(self) -> None:
         root = self.new_workspace()
         destination = root / "exported"
-        assert server.export_static(root, destination) == 2
+        with mock.patch.object(server, "resolve_static_dir", return_value=None):
+            assert server.export_static(root, destination) == 2
         assert not destination.exists()
 
     def test_export_static_copies_a_workspace_build(self) -> None:
@@ -101,12 +109,25 @@ class ServerEndpointTests(unittest.TestCase):
 
         assert server.resolve_static_dir(root) == override
 
-    def test_resolve_static_dir_returns_none_without_assets(self) -> None:
+    def test_resolve_static_dir_prefers_a_workspace_build(self) -> None:
         root = self.new_workspace()
+        build = root / "ui" / "dist"
+        build.mkdir(parents=True)
+        (build / "index.html").write_text("<html>workspace</html>", encoding="utf-8")
         previous = os.environ.pop("PAPERSMITH_UI_DIST", None)
         self.addCleanup(self._restore_env, previous)
 
-        assert server.resolve_static_dir(root) is None
+        assert server.resolve_static_dir(root) == build
+
+    def test_resolve_static_dir_falls_back_to_the_shipped_build(self) -> None:
+        root = self.new_workspace()
+        previous = os.environ.pop("PAPERSMITH_UI_DIST", None)
+        self.addCleanup(self._restore_env, previous)
+        shipped = Path(server.__file__).resolve().parent / "static"
+        if not (shipped / "index.html").is_file():
+            self.skipTest("no shipped dashboard build in this checkout")
+
+        assert server.resolve_static_dir(root) == shipped
 
     @staticmethod
     def _restore_env(previous: str | None) -> None:
