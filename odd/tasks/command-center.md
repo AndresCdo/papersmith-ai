@@ -1,6 +1,6 @@
 # Feature: Paper Command Center (`papersmith ui`)
 
-Status: in progress
+Status: complete
 Branch: `feat/command-center`
 Created: 2026-05-18
 
@@ -76,4 +76,17 @@ Each task records its work-unit commit below as it closes.
 - T2 — `f0fa523`
 - T3 — `abb1d0a`
 - T4 — `5f288c3`
-- T5 — WU5 commit
+- T5 — `66dd265`
+
+## Close-out
+
+All five work units are committed on `feat/command-center`. Verified:
+
+- `bash scripts/command-center-smoke.sh` exits 0 (payload contract, SSE
+  reactivity, wiring smoke runner, clean teardown, no orphan on the port).
+- 57 command-center pytest cases green.
+- A fresh `papersmith init` workspace receives
+  `skills/_core/command_center/static/index.html`, so `papersmith ui` serves
+  the dashboard with no Node/npm dependency in the paper directory.
+- `python -m skills._core.command_center.server` runs standalone from the
+  workspace root, as the smoke test requires.
