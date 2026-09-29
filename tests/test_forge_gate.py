@@ -49,12 +49,28 @@ GATE_SITES = (("rules", "apply", "test_command"),
 DECIDING_SCRIPTS = FORGE / "skills" / "remote-execution" / "scripts"
 
 #: Every tracked `.py` this guard scans for third-party imports: the
-#: suites, the source distribution, and every skill's own `scripts/` tree
-#: (any depth). `*.py` on every segment, never a bare directory name --
-#: `src/` and `skills/*/assets/` also carry non-Python tracked files
-#: (templates, notebooks), and asking `ast` to parse those would be asking
-#: the wrong question, not a merely slower one.
-IMPORT_SCOPE_PATHSPECS = ("tests/*.py", "src/*.py", "skills/*/scripts/*.py")
+#: suites, the source distribution, every skill's own `scripts/` tree, and
+#: every engine shelf under `skills/_core/` -- any depth on all four, since
+#: git pathspec `*` crosses `/`. `*.py` on every segment, never a bare
+#: directory name -- `src/` and `skills/*/assets/` also carry non-Python
+#: tracked files (templates, notebooks), and asking `ast` to parse those
+#: would be asking the wrong question, not a merely slower one.
+#:
+#: The shelf row is the one that was missing, and what the gap cost was
+#: measured: `skills/_core/command_center/server.py` imports `fastapi` at
+#: module scope, and while that file sat outside every pathspec the derived
+#: required-import set never held it. The failure that followed was real but
+#: reported as its own symptom -- `test_suite_collects` naming a module that
+#: did not load -- which is the reading this guard exists to replace with the
+#: cause. The shelves are `_`-prefixed engine trees that reach a workspace
+#: through the same `skills` kit entry every skill does, which is why their
+#: Python belongs here rather than in a resolution step of its own.
+IMPORT_SCOPE_PATHSPECS = (
+    "tests/*.py",
+    "src/*.py",
+    "skills/*/scripts/*.py",
+    "skills/_core/*/*.py",
+)
 
 #: The tracked asset files a skill's own scripts stage and later execute as
 #: subprocesses -- resolved by basename against the `_ASSET`-suffixed
