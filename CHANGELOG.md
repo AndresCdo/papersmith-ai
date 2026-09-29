@@ -11,6 +11,23 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.6.0
+
+### Added
+
+- **`papersmith ui`: the Paper Command Center.** A local dashboard and
+  health/wiring control plane for an initialized workspace, reachable through
+  one command. It serves the workspace's own state -- paper metadata, the ten
+  section contracts, the four quality gates, the pipeline stages, and the
+  evidence ledgers -- over `/api/state`, reports harness, skill, agent and
+  environment wiring over `/api/health/wiring`, and streams changes over SSE
+  within about a second of a section edit. The backend ships in the kit
+  (`skills/_core/command_center/`), so a workspace can run
+  `python -m skills._core.command_center.server` standalone with no Node/npm
+  dependency in the paper directory; the React/Vite dashboard is committed as a
+  built bundle beside it, and `--export-static` writes a copy anywhere. The
+  server is read-only: it observes a paper and never edits one.
+
 ## 0.5.1
 
 ### Added
