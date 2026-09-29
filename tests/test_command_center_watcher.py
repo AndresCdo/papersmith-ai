@@ -100,6 +100,25 @@ class WorkspaceWatcherTests(unittest.TestCase):
 
         assert workspace_watcher.watch_paths() == [root]
 
+    def test_watch_paths_include_health_surfaces(self) -> None:
+        """Harness dirs and skill manifests are watched so the health branch of
+        the flush callback is reachable at all."""
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name).resolve()
+        (root / "sections").mkdir()
+        (root / "papersmith.yaml").write_text("name: x\n", encoding="utf-8")
+        (root / ".claude" / "agents").mkdir(parents=True)
+        skill = root / "skills" / "paper-writing"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("# paper-writing\n", encoding="utf-8")
+
+        paths = watcher.WorkspaceWatcher(root, lambda paths: None).watch_paths()
+
+        assert (root / ".claude" / "agents") in paths
+        assert (skill / "SKILL.md") in paths
+        assert root / "paper" not in paths  # absent, so never watched
+
     def test_stop_is_idempotent(self) -> None:
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)

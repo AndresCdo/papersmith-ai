@@ -31,6 +31,13 @@ def _json(response) -> dict:
     return json.loads(bytes(response.body).decode("utf-8"))
 
 
+class _FakeRequest:
+    """Minimal stand-in for the Starlette request the endpoint reads headers from."""
+
+    def __init__(self, headers: dict | None = None) -> None:
+        self.headers = headers or {}
+
+
 class ServerEndpointTests(unittest.TestCase):
     def new_workspace(self) -> Path:
         holder = tempfile.TemporaryDirectory()
@@ -68,11 +75,79 @@ class ServerEndpointTests(unittest.TestCase):
     def test_run_wiring_smoke_reports_absence_without_crashing(self) -> None:
         root = self.new_workspace()
         app = server.create_app(root)
-        payload = _json(_routes(app)["/api/health/run-wiring-smoke"]())
+        payload = _json(_routes(app)["/api/health/run-wiring-smoke"](_FakeRequest()))
 
         assert payload["available"] is False
         assert payload["exit_code"] is None
         assert "cli-paper-wiring-smoke.sh" in payload["detail"]
+
+    def test_run_wiring_smoke_rejects_a_cross_origin_post(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+        request = _FakeRequest({"origin": "https://evil.example", "host": "127.0.0.1:8080"})
+
+        response = _routes(app)["/api/health/run-wiring-smoke"](request)
+
+        assert response.status_code == 403
+        assert _json(response)["detail"] == "cross-origin request rejected"
+
+    def test_run_wiring_smoke_allows_a_same_origin_post(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+        request = _FakeRequest({"origin": "http://127.0.0.1:8080", "host": "127.0.0.1:8080"})
+
+        response = _routes(app)["/api/health/run-wiring-smoke"](request)
+
+        assert response.status_code == 200
+
+    def test_run_wiring_smoke_returns_409_while_one_is_running(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+        app.state.smoke_lock.acquire()
+        self.addCleanup(app.state.smoke_lock.release)
+
+        response = _routes(app)["/api/health/run-wiring-smoke"](_FakeRequest())
+
+        assert response.status_code == 409
+        assert "already in progress" in _json(response)["detail"]
+
+    def test_a_health_path_flush_publishes_health_update(self) -> None:
+        """Editing a harness surface must publish `health_update`; otherwise
+        the Health tab can never refresh live."""
+        root = self.new_workspace()
+        (root / ".claude" / "agents").mkdir(parents=True)
+        app = server.create_app(root)
+
+        events = self._flush_events(app, root / ".claude" / "agents" / "redactor.md")
+        kinds = {event["event"] for event in events}
+
+        assert "state_update" in kinds
+        assert "health_update" in kinds
+
+    def test_a_section_flush_does_not_publish_health_update(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+
+        events = self._flush_events(app, root / "sections" / "01-x.md")
+        kinds = {event["event"] for event in events}
+
+        assert "state_update" in kinds
+        assert "health_update" not in kinds
+
+    @staticmethod
+    def _flush_events(app, changed: Path) -> list[dict]:
+        async def scenario() -> list[dict]:
+            bus = app.state.bus
+            bus.bind_loop(asyncio.get_running_loop())
+            queue = bus.subscribe()
+            app.state.watcher.on_flush([changed])
+            await asyncio.sleep(0.1)
+            events = []
+            while not queue.empty():
+                events.append(await queue.get())
+            return events
+
+        return asyncio.run(scenario())
 
     def test_placeholder_root_is_served_without_a_build(self) -> None:
         root = self.new_workspace()
@@ -87,6 +162,17 @@ class ServerEndpointTests(unittest.TestCase):
         with mock.patch.object(server, "resolve_static_dir", return_value=None):
             assert server.export_static(root, destination) == 2
         assert not destination.exists()
+
+    def test_export_static_refuses_a_destination_that_is_a_file(self) -> None:
+        root = self.new_workspace()
+        build = root / "ui" / "dist"
+        build.mkdir(parents=True)
+        (build / "index.html").write_text("<html>dashboard</html>", encoding="utf-8")
+        destination = root / "already-a-file"
+        destination.write_text("not a directory", encoding="utf-8")
+
+        assert server.export_static(root, destination) == 2
+        assert destination.read_text(encoding="utf-8") == "not a directory"
 
     def test_export_static_copies_a_workspace_build(self) -> None:
         root = self.new_workspace()

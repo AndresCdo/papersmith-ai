@@ -17,14 +17,35 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-#: Watch targets, relative to the workspace root.
-WATCH_TARGETS = ("sections", "openspec", "experiments", "papersmith.yaml")
+#: Watch targets, relative to the workspace root. ``paper/`` is included
+#: because the drafting stage, the word counts, the citation signals and the
+#: figure gate all read `paper/main.tex`, `paper/refs.bib` and
+#: `paper/Figures/`; without it the live channel is blind to the one artifact
+#: the drafting stage is about.
+WATCH_TARGETS = ("sections", "openspec", "experiments", "paper", "papersmith.yaml")
+
+#: Health surfaces watched in addition to the state targets. These are the
+#: concrete projections whose drift the health payload reports -- targeted at
+#: subdirectories so the `.claude/skills` / `.pi/skills` symlinks are not
+#: followed into a duplicate of the skills tree. Without at least one of these
+#: the health branch of the flush callback can never fire, since
+#: ``HEALTH_PREFIXES`` and ``WATCH_TARGETS`` would be disjoint.
+HEALTH_WATCH_TARGETS = (
+    ".claude/agents",
+    ".claude/commands",
+    ".opencode/commands",
+    ".opencode/plugins",
+    ".pi",
+    ".antigravity",
+    "scripts",
+    "requirements.txt",
+)
 
 #: Directory names never worth waking for.
 IGNORED_DIRS = frozenset({
     ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
     ".pytest_cache", ".micromamba", ".mypy_cache", ".ruff_cache",
-    "dist", "build", ".scratch",
+    "dist", "build", ".scratch", "worktrees",
 })
 
 #: LaTeX and editor artifacts that change on every compile or save.
@@ -34,7 +55,9 @@ IGNORED_SUFFIXES = (
 )
 
 #: Paths that change the health payload rather than the paper state.
-HEALTH_PREFIXES = ("skills", ".claude", ".opencode", ".pi", ".antigravity", "scripts")
+HEALTH_PREFIXES = (
+    "skills", ".claude", ".opencode", ".pi", ".antigravity", "scripts", "requirements.txt",
+)
 
 
 def is_ignored(path: Path, root: Path) -> bool:
@@ -139,6 +162,15 @@ class WorkspaceWatcher:
             candidate = self.root / relative
             if candidate.exists():
                 paths.append(candidate)
+        for relative in HEALTH_WATCH_TARGETS:
+            candidate = self.root / relative
+            if candidate.exists() and candidate not in paths:
+                paths.append(candidate)
+        skills_dir = self.root / "skills"
+        if skills_dir.is_dir():
+            paths.extend(
+                path for path in sorted(skills_dir.glob("*/SKILL.md")) if path not in paths
+            )
         if not paths:
             paths.append(self.root)
         return paths

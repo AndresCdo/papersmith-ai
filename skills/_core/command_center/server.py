@@ -86,9 +86,13 @@ def export_static(root: Path, destination: Path) -> int:
         print("papersmith ui: no built dashboard assets found", file=sys.stderr)
         return 2
     destination = destination.expanduser().resolve()
-    if destination.exists() and any(destination.iterdir()):
-        print(f"papersmith ui: destination is not empty: {destination}", file=sys.stderr)
-        return 2
+    if destination.exists():
+        if not destination.is_dir():
+            print(f"papersmith ui: destination is not a directory: {destination}", file=sys.stderr)
+            return 2
+        if any(destination.iterdir()):
+            print(f"papersmith ui: destination is not empty: {destination}", file=sys.stderr)
+            return 2
     shutil.copytree(source, destination, dirs_exist_ok=True)
     print(f"papersmith ui: exported {source} -> {destination}")
     return 0
@@ -102,6 +106,23 @@ def format_sse(event: str, payload: Any) -> str:
     client that reads only ``data:`` still sees the event type."""
     body = json.dumps({"type": event, "payload": payload}, separators=(",", ":"))
     return f"event: {event}\ndata: {body}\n\n"
+
+
+def origin_is_same(request: Request) -> bool:
+    """Whether an action request came from this server's own origin.
+
+    A bodyless cross-origin POST is a simple request browsers do not
+    preflight, so without this check any page the operator visits while the
+    dashboard runs could trigger the wiring-smoke subprocess. A request with no
+    ``Origin`` header (curl, the smoke test, same-origin navigations) is
+    allowed; a present-but-different origin is rejected.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    from urllib.parse import urlparse
+
+    return urlparse(origin).netloc == request.headers.get("host", "")
 
 
 # --------------------------------------------------------------------------
@@ -143,6 +164,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             bus.publish("health_update", health)
 
     watcher = WorkspaceWatcher(root_path, on_flush, debounce_ms=debounce_ms)
+    smoke_lock = threading.Lock()
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -158,6 +180,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     app.state.bus = bus
     app.state.watcher = watcher
     app.state.measure_health = measure_health
+    # One in-flight wiring-smoke run at a time: repeated or concurrent POSTs
+    # must not multiply the subprocess.
+    app.state.smoke_lock = smoke_lock
 
     @app.get("/api/state")
     def api_state() -> JSONResponse:
@@ -168,8 +193,23 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         return JSONResponse(measure_health())
 
     @app.post("/api/health/run-wiring-smoke")
-    def api_run_wiring_smoke() -> JSONResponse:
-        return JSONResponse(_run_wiring_smoke(root_path, bus))
+    def api_run_wiring_smoke(request: Request) -> JSONResponse:
+        if not origin_is_same(request):
+            return JSONResponse(
+                {"available": False, "exit_code": None,
+                 "detail": "cross-origin request rejected"},
+                status_code=403,
+            )
+        if not smoke_lock.acquire(blocking=False):
+            return JSONResponse(
+                {"available": True, "exit_code": None,
+                 "detail": "a wiring smoke run is already in progress"},
+                status_code=409,
+            )
+        try:
+            return JSONResponse(_run_wiring_smoke(root_path, bus))
+        finally:
+            smoke_lock.release()
 
     @app.get("/api/events")
     async def api_events(request: Request) -> StreamingResponse:

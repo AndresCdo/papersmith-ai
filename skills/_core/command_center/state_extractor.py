@@ -668,7 +668,10 @@ def _papersmith_yaml(root: Path) -> dict[str, Any]:
 
 
 def _paper_metadata(root: Path) -> dict[str, Any]:
-    config = _load_json(root / ".papersmith" / "config.json") or {}
+    # A workspace config that is valid JSON but not an object (a list, a bare
+    # string) must degrade the metadata, not abort `/api/state` with a 500.
+    config = _load_json(root / ".papersmith" / "config.json")
+    config = config if isinstance(config, dict) else {}
     yaml_data = _papersmith_yaml(root)
     yaml_data = yaml_data if isinstance(yaml_data, dict) else {}
     compute = config.get("execution_engine") if isinstance(config.get("execution_engine"), dict) else {}
@@ -711,10 +714,18 @@ def get_workspace_state(root: Path | str) -> dict[str, Any]:
     draft = _parse_main_tex(root_path / "paper" / "main.tex")
 
     paths: list[Path] = []
-    if sections_dir.is_dir():
-        paths = sorted(sections_dir.glob("*.md"))
-    if not paths:
-        paths = [root_path / "sections" / f"{name}.md" for name in SECTION_ORDER]
+    present = sorted(sections_dir.glob("*.md")) if sections_dir.is_dir() else []
+    by_name = {path.stem: path for path in present}
+    canonical = set(SECTION_ORDER)
+    # The ten canonical slots are always rendered, whether or not their
+    # contract file exists. A partially scaffolded sections/ directory must
+    # report the missing contracts instead of passing readiness over the files
+    # it happens to hold.
+    paths = [
+        by_name.get(name, root_path / "sections" / f"{name}.md")
+        for name in SECTION_ORDER
+    ]
+    paths.extend(path for path in present if path.stem not in canonical)
 
     sections = [_section_payload(root_path, path, draft, bib) for path in paths]
     gates = _gates(root_path, sections)

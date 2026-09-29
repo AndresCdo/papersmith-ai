@@ -230,6 +230,37 @@ class StateExtractorTests(unittest.TestCase):
         assert metadata["tools"] == ["claude"]
         assert metadata["compute_target"] == "local-workstation"
 
+    def test_non_dict_workspace_config_degrades_without_raising(self) -> None:
+        """A `.papersmith/config.json` that is valid JSON but not an object
+        must not abort `/api/state`; the metadata degrades to workspace defaults."""
+        root = self.new_workspace()
+        (root / ".papersmith").mkdir()
+        (root / ".papersmith" / "config.json").write_text("[1, 2, 3]", encoding="utf-8")
+
+        state = state_extractor.get_workspace_state(root)
+
+        assert state["paper_metadata"]["name"] == root.name
+        assert set(state) >= {"paper_metadata", "sections", "gates", "pipeline_stages"}
+
+    def test_a_partial_scaffold_blocks_writing_readiness(self) -> None:
+        """One contract present is not a complete scaffold: the ten canonical
+        slots are always reported, so the nine missing ones block readiness."""
+        root = self.new_workspace()
+        (root / "sections" / "01-materials-and-methods.md").write_text(
+            _contract("materials-and-methods", 5, [
+                {"id": "mm-proposal", "requires_facts": [],
+                 "requires_declarations": [], "citations": "none"},
+            ]),
+            encoding="utf-8",
+        )
+
+        state = state_extractor.get_workspace_state(root)
+
+        assert len(state["sections"]) == 10
+        gate = next(g for g in state["gates"] if g["id"] == "writing-readiness")
+        assert gate["state"] == "BLOCKED"
+        assert gate["parts"] == {"contracts_total": 10, "contracts_ok": 1}
+
     def test_the_repository_contracts_parse(self) -> None:
         """The ten real contracts in this repository must all parse."""
         repository = Path(__file__).resolve().parent.parent
