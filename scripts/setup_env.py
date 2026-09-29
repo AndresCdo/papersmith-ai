@@ -10,7 +10,9 @@ conda-forge rather than Homebrew, so the same command works everywhere.
 What it installs
     conda-forge: python=3.12, pip, pytest, numpy, pymupdf, pyyaml, jsonschema,
                  kagglesdk, llama.cpp (provides llama-server), nbformat, nbclient
-                 and ipykernel (remote-execution runs notebooks), and torch —
+                 and ipykernel (remote-execution runs notebooks), fastapi,
+                 uvicorn, watchfiles and pydantic (the Paper Command Center
+                 server the kit ships), and torch —
                  `pytorch-gpu`+`torchvision` on CUDA machines, else
                  `pytorch-cpu`+`torchvision`.
     pip:         this project itself, editable (`pip install -e .`), and
@@ -75,6 +77,32 @@ CONDA_BASE_PACKAGES = [
     "nbformat",
     "nbclient",
     "ipykernel",
+    # The Paper Command Center (`skills/_core/command_center/`) ships into every
+    # initialized workspace, and `requirements.txt` -- itself a kit entry, so it
+    # ships too -- names these four as that server's dependencies. This script
+    # never reads that file, so the declaration and the provisioning disagreed:
+    # the interpreter `package.json` names could not import `fastapi`, and
+    # `tests/test_command_center_server.py` failed to LOAD. A module that fails
+    # to load reports itself as a defect in the suite, which is the reading this
+    # gap produced for as long as it existed; `tests/test_suite_collects.py`
+    # names the module and never the missing distribution.
+    #
+    # `uvicorn` is imported unguarded inside `server.main`, so its absence is a
+    # hard failure at launch. `watchfiles` sits under a `try/except
+    # ModuleNotFoundError`, so its absence is silent instead -- the SSE channel
+    # simply stops updating, which is the worse of the two shapes and the reason
+    # it is named here rather than left to resolve transitively. `pydantic` is
+    # `fastapi`'s own requirement; it is listed so that this list and the
+    # manifest stay one declaration instead of two that can drift.
+    #
+    # `tests/test_forge_gate.py` derives its required-import set from every
+    # tracked `.py` under `tests/`, `src/`, `skills/*/scripts/` and
+    # `skills/_core/`, so a fifth dependency added to that tree fails the gate
+    # the day it lands instead of arriving as an unloadable suite.
+    "fastapi",
+    "uvicorn",
+    "watchfiles",
+    "pydantic",
 ]
 
 MICROMAMBA_URL = (
