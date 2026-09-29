@@ -256,12 +256,52 @@ ledger: `.scratch/jd-engram-plan/ledger.jsonl`,
 - Then exactly one final verification on the implementation tree, and the
   terminal `JUDGMENT: APPROVED` or `JUDGMENT: ESCALATED`.
 
+## Judgment Day outcome — plan review, CLOSED
+
+- **Verdict: `JUDGMENT: APPROVED`.**
+- **Bound revision:** `66ed57f`, artifact sha256
+  `8ff5163625a618d3ed1086e8e9b24b74090c7194b438c8fd3ede3e5a76cb2a1f` — the
+  revision the re-judges actually read. This block is post-verdict bookkeeping;
+  it is not part of the reviewed artifact.
+- **Frozen ledger:** `.scratch/jd-engram-plan/ledger.jsonl`,
+  `sha256:60875fd340f68967bbb07d16768a9de1ffd704fce9ae8cd1959ca3383c663c19`,
+  unchanged through the whole run.
+- **Discovery:** two blind judges, identical criteria, one exhaustive read-only
+  sweep each. 12 rows — 3 CRITICAL, 6 WARNING, 3 SUGGESTION.
+- **Round 1:** one scoped fix batch on the three severe rows, plus the labeled
+  diagnosis correction the operator authorized.
+- **Re-judgment:** cross-assigned, so no judge resolved its own row.
+
+  | Row | Raised by | Re-judged by | Outcome |
+  | --- | --- | --- | --- |
+  | `JD-B-001` | judge B | judge A | `verified` |
+  | `JD-A-001` | judge A | judge B | `verified` |
+  | `JD-A-002` | judge A | judge B | `verified` |
+
+- **No round 2.** No severe row survived, so the single remaining round was
+  never needed.
+- **Independently reproduced.** Both re-judges re-ran the differential
+  measurement themselves rather than accepting the plan's word: Node 653 pass,
+  exit 0, under both `HOME`s; Python `5 failed, 5353 passed, 8 skipped` under
+  both, with the same five names F8 lists.
+- **Falsifiability demonstrated, not argued.** Judge B pointed `HOME` at
+  `kaggle-inbox` and
+  `test_recognises_what_came_from_the_inbox_and_what_did_not` flipped pass to
+  fail — the replacement control genuinely fires. The control it replaced could
+  not fire at all: nothing tracked read `ENGRAM_BIN` or `ENGRAM_URL`.
+- **Roster coverage confirmed.** The provider exposes 19 tools, all matching
+  `engram_mem_*` with short aliases matching `mem_*`, so the declared namespace
+  covers every tool the frozen row listed as omitted.
+- **Informational rows.** The six WARNING/SUGGESTION rows never scheduled fixes;
+  each is answered in the revision log above.
+- **The agent-session claim** is now an explicit operator-authorized non-goal
+  (decision 5), not a hidden over-claim.
+
 ## Close-out
 
 (to be completed at E7)
 
 - Gate evidence:
 - Differential control evidence:
-- Judgment Day verdict:
 - Commit identities:
 - Cross-repo follow-up:
