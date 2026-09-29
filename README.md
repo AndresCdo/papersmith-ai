@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los once comandos del CLI, las diez skills, los quince agentes,
+dentro, los once comandos del CLI, las once skills, los dieciocho agentes,
 cómputo remoto, desarrollo y solución de problemas.
 
 ## Índice
@@ -55,7 +55,7 @@ vas a usar un agente de IA como copiloto, los que ya vienen definidos están en
 
 ## Flujo de uso — el camino corto
 
-Nueve skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
+Once skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
 castellano (*"ingerí los papers"*). **No hace falta usarlas todas ni en este orden**: cada
 una declara qué necesita antes y se niega si falta, así que si arrancás por el medio te
 lo va a decir ella.
@@ -65,14 +65,16 @@ El camino completo, de un PDF a un paper compilado:
 | # | Invocás | Qué hace | Dónde deja el resultado |
 |---|---------|----------|-------------------------|
 | 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
-| 2 | `/proposal-deliberation` | Discute la matemática con vos y publica cada acuerdo como una revisión gestionada | `proposals/` |
-| 3 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
-| 4 | `/proposal-implementation` | Convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
-| 5 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
-| 6 | `/kaggle-accounts` | Prueba que las credenciales de Kaggle autentican de verdad | `store/` (nunca sale del disco) |
-| 7 | `/remote-execution` | Manda trabajo a un worker remoto y lleva el registro de lo que volvió | el ledger del repo destino |
-| 8 | `/paper-writing` | Escribe el paper bloque por bloque, con cada afirmación atada a su evidencia | `paper/` |
-| 9 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
+| 2 | `/sota-graph` | Mapea cada paper ingerido a un grafo sistema-solar (≤20 nodos: temas, problema, 3–5 familias, novedad, resultados, conclusiones), cada nodo con su cita | `guidance/<carpeta>/<stem>.graph.json` |
+| 3 | `/proposal-deliberation` | Discute la matemática con vos y publica cada acuerdo como una revisión gestionada | `proposals/` |
+| 4 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
+| 5 | `/proposal-implementation` | Convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
+| 6 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
+| 7 | `/kaggle-accounts` | Prueba que las credenciales de Kaggle autentican de verdad | `store/` (nunca sale del disco) |
+| 8 | `/remote-execution` | Manda trabajo a un worker remoto y lleva el registro de lo que volvió | el ledger del repo destino |
+| 9 | `/paper-writing` | Escribe el paper bloque por bloque, con cada afirmación atada a su evidencia | `paper/` |
+| 10 | `/figure-review` | Mira el render: rasteriza cada `Figures/<id>.pdf` y mide lo que un raster puede sostener (tinta fuera del canvas, colisiones) | un informe visual, nunca un cambio |
+| 11 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
 
 **Lo mínimo para empezar.** Si sólo querés probar la forja, alcanza con los pasos 1 y 2:
 poné un PDF en `guidance/reference-papers/`, corré `/paper-ingestion`, y después
@@ -294,8 +296,8 @@ mi-paper/
 │   ├── manifest.json            #   hashes de todo lo que generó el framework
 │   ├── runs_ledger.jsonl        #   cada corrida despachada, en orden
 │   └── version                  #   versión del framework que lo creó
-├── .claude/agents/              # los catorce subagentes (fuente única de verdad)
-├── skills/                      # la copia del kit: las diez skills + _core
+├── .claude/agents/              # los dieciocho subagentes (fuente única de verdad)
+├── skills/                      # la copia del kit: las once skills + _core
 │   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
 ├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
 ├── guidance/
@@ -415,7 +417,7 @@ repo).
 
 ## Los agentes
 
-Un workspace trae **quince subagentes** en `.claude/agents/`. No son
+Un workspace trae **dieciocho subagentes** en `.claude/agents/`. No son
 reemplazos del CLI: son tiradas cortas de trabajo que tu harness lanza (por
 ejemplo, con la Task tool) cuando vos se lo pedís. La forma es siempre la
 misma — **una tirada entre dos compuertas del operador**: el agente decide
@@ -438,13 +440,15 @@ establecerlo. Las compuertas las abrís y cerrás vos.
 | `diagram-author` | Escribe un diagrama TikZ standalone (`<id>.tex` + `<id>.diagram.json`) y lo compila en su propio loop, hasta el presupuesto de reparaciones. Nunca dibuja un gráfico a partir de números medidos — eso es el verbo `place`. | `paper-writing` |
 | `figure-auditor` | Compara los componentes declarados en el manifest contra la prosa de la sección y los pasos del pipeline; reporta veredicto estructurado. | `paper-writing` |
 | `insumos-observer` | Lee las cuatro fuentes de entrada declaradas del paper —`proposals/`, `experiments/`, el código del repo destino y sus propias salidas de corrida— y reporta, por cada hecho observable, si se cumple y con qué evidencia. Nunca decide un valor ni corre `declare`. | `paper-writing` |
+| `novelty-screener` | La etapa `screened`: contrasta la hipótesis contra el SOTA ingerido (`reference-papers` + `paper-guide`), califica novedad y plausibilidad con cita exacta y propone ingesta externa para los claims huérfanos. No publica, no escribe, no delibera. | `proposal-deliberation` |
+| `sota-grapher` | Mapea un paper ingerido a su grafo sistema-solar —temas, problema, 3 a 5 familias SOTA, novedad, resultados y conclusiones, 20 nodos máximo— como JSON viewer-ready junto al paper, cada nodo con su cita, y corre el checker propio hasta el verde. | `sota-graph` |
 | `audit-report` | Audita un sujeto que enumera un conjunto cerrado —operaciones, subcomandos, códigos, assets— buscando la brecha entre lo que su código acepta y lo que su documentación promete. Reporta; nunca repara. | `skill-audit` |
 
 Tres reglas que ordenan todo lo demás:
 
 - **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
   harness (`CLAUDE.md`, `PI.md`, `OPENCODE.md`, `.antigravity/rules.md`) listan
-  a los quince enteros, y se generan: si querés cambiar un agente, se cambia
+  a los dieciocho enteros, y se generan: si querés cambiar un agente, se cambia
   ahí, no en la proyección.
 - **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa
   atadura se verifica: un agente que apunte a una skill que el workspace no
@@ -478,7 +482,7 @@ verifica**. El agente propone un cambio; el motor comprueba que ese cambio no
 rompió nada y, si lo rompió, se niega. Un agente puede equivocarse. Un motor
 determinista no cambia de opinión.
 
-**Y cómo se encadenan.** Las nueve no son islas: cada una recibe algo concreto de
+**Y cómo se encadenan.** Las once no son islas: cada una recibe algo concreto de
 otra y le entrega algo concreto a la siguiente. Este es el mapa; cada skill explica
 su propia costura en detalle, en su apartado. Las flechas dicen **qué** pasa por la
 costura, no sólo que existe — y cada una de las etiquetas de abajo está leída de la
@@ -488,30 +492,34 @@ declaración de la skill que la recibe, no inferida del nombre de la carpeta.
 flowchart TD
     PDF["PDFs que dejás en guidance/"] --> PI["1. paper-ingestion"]
 
-    PI -- "guidance/paper-guide (opcional)" --> PD["2. proposal-deliberation"]
-    PI -- "guidance/data-paper (obligatoria)" --> ED["6. experimental-deliberation"]
+    PI -- "el .md de cada paper" --> SG["2. sota-graph"]
+    SG -- "el grafo solar de cada paper" --> PD["3. proposal-deliberation"]
+    PI -- "guidance/paper-guide (opcional)" --> PD
+    PI -- "guidance/data-paper (obligatoria)" --> ED["4. experimental-deliberation"]
     PI -- "guidance/paper-guide (opcional)" --> ED
 
     PD -- "proposals/ — la revisión publicada" --> ED
-    PD -- "STATUS + el texto de la revisión" --> IMP["3. proposal-implementation"]
-    ED -- "experiments/ — el protocolo publicado" --> EIM["7. experimental-implementation"]
+    PD -- "STATUS + el texto de la revisión" --> IMP["5. proposal-implementation"]
+    ED -- "experiments/ — el protocolo publicado" --> EIM["8. experimental-implementation"]
     PD -- "proposals/ — el documento 1 del par" --> EIM
 
     IMP -- "correcciones, detrás de compuerta" --> PD
     EIM -- "correcciones, detrás de compuerta" --> ED
 
     IMP -- "el repo destino en implementations/" --> EIM
-    IMP -- "carpeta del trabajo en tools/" --> RE["5. remote-execution"]
+    IMP -- "carpeta del trabajo en tools/" --> RE["7. remote-execution"]
     EIM -- "carpeta del trabajo en tools/" --> RE
-    KA["4. kaggle-accounts"] -- "worker + ruta al token, nunca el valor" --> RE
+    KA["6. kaggle-accounts"] -- "worker + ruta al token, nunca el valor" --> RE
     RE -- "el registro, sólo lectura" --> IMP
 
-    PD -- "proposals/" --> PW["8. paper-writing"]
+    PD -- "proposals/" --> PW["9. paper-writing"]
     ED -- "experiments/" --> PW
     EIM -- "el código del destino y lo que sus corridas devolvieron" --> PW
     PW --> PAPER["paper/main.tex + Figures/"]
+    PAPER -- "Figures/<id>.pdf ya compilado" --> FR["10. figure-review"]
 
-    SA["9. skill-audit"] -. "informa, nunca cambia" .-> PI
+    SA["11. skill-audit"] -. "informa, nunca cambia" .-> PI
+    SA -. " " .-> SG
     SA -. " " .-> PD
     SA -. " " .-> IMP
     SA -. " " .-> KA
@@ -519,6 +527,7 @@ flowchart TD
     SA -. " " .-> ED
     SA -. " " .-> EIM
     SA -. " " .-> PW
+    SA -. " " .-> FR
     SA -. "y a sí misma" .-> SA
 ```
 
