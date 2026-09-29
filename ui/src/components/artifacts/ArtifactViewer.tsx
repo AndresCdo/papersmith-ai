@@ -49,7 +49,11 @@ function FigureTile({ name, kind }: { name: string; kind: 'pdf' | 'raster' }) {
 
 /**
  * Artifact ledger: compiled figures and rasters from `figures`, the
- * `experiments` files, and the kaggle-inbox drop list.
+ * `experiments` files, and the workspace's ingestion inbox drop list.
+ *
+ * The inbox's own directory name comes from the payload, never from this file:
+ * which skill owns a drop-zone is the workspace's business, and a label spelled
+ * here would be one target's vocabulary shipped to every other one.
  *
  * The API exposes figure names only, so tiles are name plates. Inline previews
  * would require a served path for `paper/Figures/*`, which the command center
@@ -106,9 +110,13 @@ export default function ArtifactViewer({ state }: { state: WorkspaceState | null
           emptyLabel="No experiment artifacts recorded."
         />
         <LedgerCard
-          title="Kaggle inbox"
+          title="Ingestion inbox"
           count={inbox?.count ?? 0}
-          hint="Entries waiting under kaggle-inbox/ for ingestion."
+          hint={
+            inbox?.directory
+              ? `Entries waiting under ${inbox.directory}/ for ingestion.`
+              : 'No skill in this workspace declares an ingestion drop-zone.'
+          }
           items={inbox?.paths ?? []}
           emptyLabel="Inbox is empty."
         />

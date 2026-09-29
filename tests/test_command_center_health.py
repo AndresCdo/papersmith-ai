@@ -38,17 +38,26 @@ class WiringInspectorTests(unittest.TestCase):
         return root
 
     def test_skill_manifests_report_missing_manifests(self) -> None:
+        """Every skill directory is reported, and `core` means it ships a front door.
+
+        This used to assert that a skill absent from the workspace was still
+        reported as MISSING-and-core, which was the old hardcoded roster showing
+        through. The roster is derived now, so what is not installed is not
+        described. The signal that mattered survives one level down: a skill
+        directory with no `SKILL.md` is still MISSING, and a workspace with no
+        `skills/` at all raises a warning rather than an empty, healthy silence.
+        """
         root = self.new_workspace()
         _skill(root, "paper-writing")
-        _skill(root, "figure-review")
-        # kaggle-accounts is a core skill but has no SKILL.md here.
+        (root / "skills" / "figure-review").mkdir(parents=True)  # no SKILL.md
+        self._stub_cli(root, "paper-writing", "scripts/paper_cli.py")
         rows = health_inspector.skill_manifests(root)
 
         by_name = {row["name"]: row for row in rows}
         assert by_name["paper-writing"]["state"] == "WIRED"
-        assert by_name["figure-review"]["state"] == "WIRED"
-        assert by_name["kaggle-accounts"]["state"] == "MISSING"
-        assert by_name["kaggle-accounts"]["core"] is True
+        assert by_name["paper-writing"]["core"] is True
+        assert by_name["figure-review"]["state"] == "MISSING"
+        assert by_name["figure-review"]["core"] is False
 
     def test_agent_integrity_flags_an_unbound_tool(self) -> None:
         root = self.new_workspace()
@@ -116,10 +125,14 @@ class WiringInspectorTests(unittest.TestCase):
 
     def test_full_payload_shape_on_a_fully_wired_workspace(self) -> None:
         root = self.new_workspace()
-        core = [name for name, _ in health_inspector.CORE_SKILLS]
+        # The roster is derived from the repository's own inventory, so this
+        # workspace is stubbed with exactly what the repository ships a front
+        # door for -- no restated list to drift from it.
+        roster = health_inspector.front_door_skills(Path(__file__).resolve().parent.parent)
+        core = [name for name, _ in roster]
         for name in core:
             _skill(root, name)
-        for name, relative in health_inspector.CORE_SKILLS:
+        for name, relative in roster:
             self._stub_cli(root, name, relative)
         for required in health_inspector.REQUIRED_AGENTS:
             _agent(root, Path(required).stem, skill="paper-writing")
@@ -161,3 +174,8 @@ class WiringInspectorTests(unittest.TestCase):
         core = {row["name"]: row["state"] for row in rows if row["core"]}
         assert core, "the repository must expose its core skills"
         assert all(state == "WIRED" for state in core.values())
+        # Derived, so the roster is whatever ships a front door today. The five
+        # this repository used to hardcode were a subset of the seven it has.
+        assert set(core) == {
+            name for name, _ in health_inspector.front_door_skills(repository)
+        }

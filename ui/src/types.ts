@@ -109,7 +109,7 @@ export interface WorkspaceState {
   pipeline_stages?: PipelineStage[];
   experiments?: { count?: number; files?: string[] };
   figures?: { count?: number; pdf?: string[]; rasters?: string[] };
-  inbox?: { count?: number; paths?: string[] };
+  inbox?: { count?: number; paths?: string[]; directory?: string | null };
   totals?: WorkspaceTotals;
 }
 

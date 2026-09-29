@@ -18,6 +18,7 @@ Design rules, in priority order:
 
 from __future__ import annotations
 
+import ast
 import functools
 import importlib.util
 import json
@@ -655,12 +656,50 @@ def _figures(root: Path) -> dict[str, Any]:
     }
 
 
+#: The declaration a skill makes when it owns a drop-zone directory: a
+#: module-level constant whose value is that directory's name. The command center
+#: reads the owner's declaration instead of restating the name, so the forge
+#: ships no target's own vocabulary into every workspace and the skill that owns
+#: the drop-zone stays its single source of truth. No declaration means no inbox
+#: to report -- which is the honest answer, not a fallback to a remembered name.
+INBOX_DECLARATION = "INBOX_NAME"
+
+
+def inbox_directory(root: Path) -> str | None:
+    """The drop-zone directory the workspace's own skills declare, if any.
+
+    Parsed with `ast`, never grepped: a name mentioned in a docstring or an
+    error message is not a declaration, and a scanner that could not tell them
+    apart would pick up whichever it met first.
+    """
+    skills_dir = root / "skills"
+    if not skills_dir.is_dir():
+        return None
+    for script in sorted(skills_dir.glob("*/scripts/*.py")):
+        try:
+            tree = ast.parse(script.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(getattr(target, "id", None) == INBOX_DECLARATION
+                       for target in node.targets):
+                continue
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                return node.value.value
+    return None
+
+
 def _inbox(root: Path) -> dict[str, Any]:
-    directory = root / "kaggle-inbox"
+    name = inbox_directory(root)
+    if name is None:
+        return {"count": 0, "paths": [], "directory": None}
+    directory = root / name
     if not directory.is_dir():
-        return {"count": 0, "paths": []}
+        return {"count": 0, "paths": [], "directory": name}
     paths = sorted(str(p.relative_to(directory)) for p in directory.iterdir() if p.name != ".gitignore")
-    return {"count": len(paths), "paths": paths}
+    return {"count": len(paths), "paths": paths, "directory": name}
 
 
 def _papersmith_yaml(root: Path) -> dict[str, Any]:

@@ -47,14 +47,36 @@ GENERATORS = {
     "antigravity": "scripts/gen-antigravity.py",
 }
 
-#: The core skills the command center reports on, with their front-door CLI.
-CORE_SKILLS = (
-    ("paper-writing", "scripts/paper_cli.py"),
-    ("figure-review", "scripts/review_cli.py"),
-    ("experimental-implementation", "scripts/implementation_cli.py"),
-    ("proposal-implementation", "scripts/implementation_cli.py"),
-    ("kaggle-accounts", "scripts/accounts_cli.py"),
-)
+#: A skill's front door is `<name>_cli.py` under the skill's own `scripts/`
+#: directory. Derived rather than listed: the roster this replaced was a five-row
+#: tuple, and a roster restated by hand loses an entry the day somebody adds one
+#: -- measured here, the tuple named five of the seven front doors the repository
+#: ships. It also carried one target's own vocabulary into a surface every
+#: workspace receives, which is what the forge's vocabulary guard exists to
+#: refuse.
+#:
+#: **What this gives up, stated because it is a real trade.** A front door that
+#: was DELETED leaves nothing to derive from, so this dimension can no longer
+#: report it as missing. What remains is the signal that never depended on the
+#: roster: `skill_manifests` walks the inventory itself, so a skill whose
+#: `SKILL.md` is absent is still reported, and a workspace with no `skills/` at
+#: all is reported as a warning rather than as an empty, healthy silence.
+FRONT_DOOR_GLOB = "*/scripts/*_cli.py"
+
+
+def front_door_skills(root: Path) -> list[tuple[str, str]]:
+    """`[(skill, relative script)]` for every skill that ships a front door.
+
+    Read from the workspace's own inventory, so the roster is whatever is
+    installed rather than whatever this file remembers.
+    """
+    skills_dir = root / "skills"
+    if not skills_dir.is_dir():
+        return []
+    return sorted(
+        (path.parent.parent.name, f"scripts/{path.name}")
+        for path in skills_dir.glob(FRONT_DOOR_GLOB)
+    )
 
 #: Required persona definitions, per the spec's wiring contract.
 REQUIRED_AGENTS = (
@@ -80,10 +102,13 @@ SKILL_GATES: dict[str, tuple[str, ...]] = {
     "experimental-implementation": ("coupling-verification",),
     "proposal-implementation": ("coupling-verification",),
     "paper-ingestion": (),
-    "kaggle-accounts": (),
     "remote-execution": (),
     "skill-audit": (),
 }
+#: One skill used to appear here with an empty tuple. That entry was the
+#: `.get(skill, ())` default spelled out, so removing it changes nothing except
+#: the name it carried -- which is the point, and the reason it is not repeated
+#: in this comment either.
 
 #: A conservative harness tool vocabulary. An agent requesting a token outside
 #: this set is flagged ``TOOL_UNBOUND`` rather than assumed harmless.
@@ -248,8 +273,12 @@ def skill_manifests(root: Path) -> list[dict[str, Any]]:
     if skills_dir.is_dir():
         names = sorted(d.name for d in skills_dir.iterdir() if d.is_dir() and d.name != "_core")
     else:
-        names = [name for name, _ in CORE_SKILLS]
-    core_names = {name for name, _ in CORE_SKILLS}
+        names = []
+    # Derived from the same inventory the rows are, so a name can no longer be
+    # reported as absent-but-core: what is not installed is not described. The
+    # loop that used to append those rows went with the roster that made them
+    # possible, and the absent inventory is reported as a warning instead.
+    core_names = {name for name, _ in front_door_skills(root)}
     for name in names:
         manifest = skills_dir / name / "SKILL.md"
         text = _read_text(manifest)
@@ -260,21 +289,13 @@ def skill_manifests(root: Path) -> list[dict[str, Any]]:
             "core": name in core_names,
             "bytes": len(text) if text else 0,
         })
-    for name in sorted(core_names - {row["name"] for row in rows}):
-        rows.append({
-            "name": name,
-            "path": f"skills/{name}/SKILL.md",
-            "state": "MISSING",
-            "core": True,
-            "bytes": 0,
-        })
     rows.sort(key=lambda row: row["name"])
     return rows
 
 
 def cli_entrypoints(root: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for name, relative in CORE_SKILLS:
+    for name, relative in front_door_skills(root):
         script = root / "skills" / name / relative
         if not script.is_file():
             rows.append({"skill": name, "path": f"skills/{name}/{relative}",
@@ -449,6 +470,11 @@ def get_wiring_health(root: Path | str) -> dict[str, Any]:
         state = "BLOCKED"
 
     warnings: list[str] = []
+    if not (root_path / "skills").is_dir():
+        warnings.append(
+            "no skills/ inventory in this workspace, so no skill or front-door "
+            "row could be derived -- every skill dimension below is empty, not "
+            "clean")
     if harness["state"] == "DRIFT_DETECTED":
         warnings.append("harness drift detected: regenerate with scripts/sync-repo-harness.py")
     elif harness["state"] == "UNKNOWN":
