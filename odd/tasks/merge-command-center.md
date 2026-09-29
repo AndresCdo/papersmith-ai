@@ -116,15 +116,48 @@ not merge effects.
     `try/except ModuleNotFoundError`, which declares it optional there. That is
     why it is named in `scripts/setup_env.py` instead.
   - Evidence: `789e2be`.
-- [ ] T4 -- P1 vocabulary repair.
-  - Derive the `kaggle-accounts` skill/script table and the `kaggle-inbox`
-    directory from the workspace's own inventory; rebuild the committed SPA so
-    the bundle no longer carries the token.
-  - Evidence: prose guard green; `vite build` reproduces the asset hashes.
-- [ ] T5 -- Materialize and run the full gate in a proper environment (main
-  checkout with `node_modules` and the provisioned env):
-  `npm ci && npm test && .micromamba/envs/papersmith/bin/python -m pytest`.
-  - Evidence: raw output recorded verbatim.
+- [x] T4 -- P1 vocabulary repair.
+  - **Operator decision (round 1):** the core-skill roster cannot be derived
+    as-is, because seven skills ship a front door (`remote_cli.py` and
+    `audit_cli.py` were invisible to the five-row tuple) and nothing else
+    declares the five. Chosen: derive all seven and accept the payload change.
+  - `health_inspector.front_door_skills(root)` derives the roster from the
+    workspace's own `skills/*/scripts/*_cli.py`. The `SKILL_GATES` entry that
+    carried the name was the `.get(skill, ())` default spelled out.
+  - `state_extractor.inbox_directory(root)` reads the declaration the owning
+    skill already makes (`INBOX_NAME`), parsed with `ast`; the payload gained
+    `inbox.directory` and the SPA renders its label from that field.
+  - The committed bundle was rebuilt (`vite build`), so the asset hash moves
+    from `index-Du6DExVG.js` to `index-CUXqyhFi.js`; the CSS hash is unchanged,
+    which is evidence the change reached only what it should.
+  - The guard caught this work's own first draft: an explanatory comment named
+    the word. Rewritten, not admitted -- shipped prose carries vocabulary
+    exactly as data does.
+  - Trade recorded in the code: a front door that was DELETED leaves nothing to
+    derive from, so the CLI dimension can no longer report it missing.
+    `skill_manifests` still walks the inventory, so a missing `SKILL.md` is
+    still reported, and a workspace with no `skills/` now raises a warning.
+  - Evidence: `1a79063`; the prose guard goes from 1 failed / 3 subfailures to
+    **16 passed / 284 subtests**; the six command-center modules run 71 passed.
+- [x] T5 -- Full gate in a properly provisioned environment.
+  - First run: **2 failed / 5353 passed** -- T4's three subfailures gone, and
+    two real branch defects surfaced, both failing identically under a real and
+    an empty `HOME`, so neither was an environment artifact:
+    - `test_mcp_registry`: `papersmith ui` landed and the MCP registry never
+      learned it. `CLI_COMMANDS` gains `ui` in the parser's own order, and
+      `CLI_DISPOSITIONS` gains `ui: out` -- it starts a server and opens a
+      browser, so it is an operator's command, never a tool an agent calls
+      mid-turn. The second lock went red only after the first fix, which is the
+      guard chain working. Evidence: `4bd6103`.
+    - `test_version_sources`: 18 shipped files had changed since `v0.5.1` with
+      the version unmoved. `package.json` and `papersmith.__version__` move to
+      `0.6.0` together and `CHANGELOG.md` gains the `## 0.6.0` section the lock
+      requires -- a minor bump, per the semver policy the changelog states.
+      Evidence: `52c905e`.
+  - Final run: `npm run test:all` -> **exit 0, 5355 passed, 8 skipped, zero
+    failures**, 14m59s, no collection errors.
+  - Left alone deliberately: `package-lock.json` states `0.1.0`, was already
+    stale before this work, and no test reads it.
 - [ ] T6 -- Judgment Day on the frozen merged tree, before any delivery.
   - Two blind judges, identical criteria, read-only, one exhaustive sweep each
     (two permitted: more than 400 changed lines). The findings above are NOT
