@@ -58,9 +58,28 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * One SSE frame body as the backend emits it: the event name plus its
+ * payload, JSON-encoded by `format_sse`. The event type is repeated in the
+ * body so a client that reads only `data:` still sees it.
+ */
+interface ServerFrame {
+  type?: string;
+  payload?: unknown;
+}
+
 function parseFrame<T>(event: MessageEvent<string>): T | null {
   try {
-    return JSON.parse(event.data) as T;
+    const body = JSON.parse(event.data) as T & ServerFrame;
+    // Every `/api/events` frame wraps its payload as `{type, payload}`; return
+    // the inner payload so consumers read `payload.state`/`payload.changed`.
+    // The initial HTTP snapshots do not go through `parseFrame`, so they keep
+    // their unwrapped shape. A frame that already carries its fields at the
+    // top level (older server) is returned as-is.
+    if (body && typeof body === 'object' && 'payload' in body) {
+      return body.payload as T;
+    }
+    return body;
   } catch {
     return null;
   }

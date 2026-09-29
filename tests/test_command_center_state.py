@@ -14,6 +14,13 @@ from pathlib import Path
 
 from skills._core.command_center import state_extractor
 
+try:
+    import yaml  # noqa: F401  (PyYAML is a kit dependency)
+
+    HAS_YAML = True
+except ModuleNotFoundError:  # pragma: no cover - kit venv installs PyYAML
+    HAS_YAML = False
+
 
 def _contract(section: str, position: int, blocks: list[dict]) -> str:
     meta = {"section": section, "position": position, "mode": {"value": "argument"}, "blocks": blocks}
@@ -147,7 +154,7 @@ class StateExtractorTests(unittest.TestCase):
         root = self.new_workspace()
         (root / "sections" / "01-materials-and-methods.md").write_text(
             _contract("materials-and-methods", 5, [
-                {"id": "mm-proposal", "requires_facts": [{"value": "formulation"}],
+                {"id": "mm-proposal", "requires_facts": [{"value": "no-such-fact"}],
                  "requires_declarations": [], "citations": "none"},
             ]),
             encoding="utf-8",
@@ -156,7 +163,28 @@ class StateExtractorTests(unittest.TestCase):
 
         gate = next(g for g in state["gates"] if g["id"] == "coupling-verification")
         assert gate["state"] == "BLOCKED"
-        assert gate["parts"]["unmatched"] == ["formulation"]
+        assert gate["parts"]["unmatched"] == ["no-such-fact"]
+
+    def test_external_and_structural_facts_clear_the_coupling_gate(self) -> None:
+        """A demanded fact is resolved by its external `FACT_SOURCE_ROOT` route
+        (`formulation`) or by skeleton-startup (`skeleton`), so neither may
+        block the gate. Only a fact with no route at all blocks it."""
+        root = self.new_workspace()
+        (root / "sections" / "01-materials-and-methods.md").write_text(
+            _contract("materials-and-methods", 5, [
+                {"id": "mm-a", "requires_facts": [{"value": "formulation"}],
+                 "requires_declarations": [], "citations": "none"},
+                {"id": "mm-b", "requires_facts": [{"value": "skeleton"}],
+                 "requires_declarations": [], "citations": "none"},
+            ]),
+            encoding="utf-8",
+        )
+        state = state_extractor.get_workspace_state(root)
+
+        gate = next(g for g in state["gates"] if g["id"] == "coupling-verification")
+        assert gate["state"] == "PASSED"
+        assert gate["parts"]["unmatched"] == []
+        assert "formulation" in gate["parts"]["external"]
 
     def test_a_produced_fact_clears_the_coupling_gate(self) -> None:
         root = self.new_workspace()
@@ -211,3 +239,32 @@ class StateExtractorTests(unittest.TestCase):
         assert all(section["has_contract"] for section in state["sections"])
         assert all(section["blocks_total"] > 0 for section in state["sections"])
         assert state["totals"]["blocks_total"] > 0
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is required for YAML frontmatter")
+    def test_a_scalar_mode_contract_degrades_without_raising(self) -> None:
+        """A scalar frontmatter field where a mapping is expected (`mode:
+        argument`) degrades exactly that field to `None` instead of aborting
+        `get_workspace_state` and blanking the whole `/api/state` payload."""
+        root = self.new_workspace()
+        (root / "sections" / "01-materials-and-methods.md").write_text(
+            "---\n"
+            "section: materials-and-methods\n"
+            "position: 5\n"
+            "mode: argument\n"
+            "blocks:\n"
+            "  - id: mm-proposal\n"
+            "    requires_facts: []\n"
+            "    requires_declarations: []\n"
+            "    citations: none\n"
+            "---\n\n"
+            "# materials-and-methods\n\n"
+            "**Extent** 100–250 words\n",
+            encoding="utf-8",
+        )
+        state = state_extractor.get_workspace_state(root)
+
+        section = state["sections"][0]
+        assert section["has_contract"] is True
+        assert section["mode"] is None
+        assert section["section"] == "materials-and-methods"
+

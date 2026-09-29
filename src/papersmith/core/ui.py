@@ -31,6 +31,28 @@ DEFAULT_PORT = 8080
 #: How many consecutive ports to try when the preferred one is taken.
 PORT_SCAN_ATTEMPTS = 25
 
+#: Workspace-relative virtualenv interpreter, POSIX first then Windows.
+VENV_INTERPRETERS = (
+    Path(".venv") / "bin" / "python",
+    Path(".venv") / "Scripts" / "python.exe",
+)
+
+
+def workspace_interpreter(workspace: Path) -> str:
+    """Return the interpreter that should run the workspace's backend.
+
+    ``pipx install .`` installs ``papersmith-ai`` with no runtime dependencies,
+    so the CLI's own ``sys.executable`` cannot import the dashboard backend.
+    The workspace's kit venv (provisioned by ``scripts/setup_env.py``) holds
+    those dependencies, so prefer its ``python`` when it is an executable file
+    and fall back to the running interpreter otherwise.
+    """
+    for relative in VENV_INTERPRETERS:
+        candidate = workspace / relative
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return sys.executable
+
 
 def command_center_entry(workspace: Path) -> Path:
     """Resolve the workspace-local backend entry point, or refuse."""
@@ -144,11 +166,12 @@ def run_cli(args) -> int:
     if not fs.is_dir(workspace):
         raise UserError(f"not a directory: {workspace}")
     command_center_entry(workspace)
+    interpreter = workspace_interpreter(workspace)
 
     if args.export_static:
         argv = build_server_argv(
             workspace, args.host, args.port, no_browser=True,
-            export_static=args.export_static,
+            export_static=args.export_static, interpreter=interpreter,
         )
         return _run_child(argv, workspace)
 
@@ -161,7 +184,8 @@ def run_cli(args) -> int:
     url = f"http://{args.host}:{port}/"
     print(f"papersmith ui: serving {workspace} at {url}")
     print("papersmith ui: press Ctrl+C to stop")
-    argv = build_server_argv(workspace, args.host, port, no_browser=args.no_browser)
+    argv = build_server_argv(workspace, args.host, port, no_browser=args.no_browser,
+                             interpreter=interpreter)
     return _run_child(argv, workspace)
 
 
@@ -187,5 +211,5 @@ def register(subparsers) -> None:
 __all__ = [
     "register", "run_cli", "find_available_port", "port_is_free",
     "build_server_argv", "command_center_entry", "COMMAND_CENTER_ENTRY",
-    "COMMAND_CENTER_MODULE",
+    "COMMAND_CENTER_MODULE", "workspace_interpreter",
 ]

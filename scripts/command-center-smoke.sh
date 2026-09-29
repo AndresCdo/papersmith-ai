@@ -128,17 +128,45 @@ if unwired:
 print(f"payload contract: ok ({len(core)} core skills wired)")
 PYEOF
 
-# Check 4: SSE reactivity within 2 seconds of a section touch.
+# Check 4: SSE reactivity within 2 seconds of a section touch, and the frame
+# carries the wrapped `{type, payload}` envelope whose payload holds `state`
+# and `changed` (the shape the dashboard hook unwraps).
 curl -sN --max-time 8 "$BASE/api/events" >"$SSE_FILE" 2>/dev/null &
 SSE_PID=$!
 sleep 1
 touch "$ROOT/sections/01-materials-and-methods.md"
 sse_deadline=$((SECONDS + 2))
 while [[ $SECONDS -lt $sse_deadline ]]; do
-  grep -q "state_update" "$SSE_FILE" && break
+  grep -q '"type":"state_update"' "$SSE_FILE" && break
   sleep 0.1
 done
-grep -q "state_update" "$SSE_FILE" || fail 4 "no state_update SSE frame within 2s of touching a section"
+grep -q '"type":"state_update"' "$SSE_FILE" \
+  || fail 4 "no state_update SSE frame within 2s of touching a section"
+"$PY" - "$SSE_FILE" <<'PYEOF' || fail 4 "state_update SSE frame has no wrapped payload"
+import json
+import sys
+
+frames = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    if not line.startswith("data:"):
+        continue
+    try:
+        frames.append(json.loads(line[len("data:"):].strip()))
+    except json.JSONDecodeError:
+        continue
+
+updates = [f for f in frames if isinstance(f, dict) and f.get("type") == "state_update"]
+if not updates:
+    raise SystemExit("no state_update frame parsed from the SSE body")
+payload = updates[-1].get("payload")
+if not isinstance(payload, dict):
+    raise SystemExit("state_update frame carries no payload object")
+if not isinstance(payload.get("state"), dict):
+    raise SystemExit("state_update payload is missing the state object")
+if not isinstance(payload.get("changed"), list):
+    raise SystemExit("state_update payload is missing the changed list")
+print("state_update SSE payload: ok")
+PYEOF
 
 # Check 5: the wiring smoke runner.
 curl -s -X POST "$BASE/api/health/run-wiring-smoke" >"$SMOKE_JSON" \

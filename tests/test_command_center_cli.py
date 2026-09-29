@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import socket
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -99,6 +100,47 @@ class ServerArgvTests(unittest.TestCase):
         argv = ui_command.build_server_argv(Path("/tmp/paper"), "127.0.0.1", 8123,
                                             no_browser=True, export_static="/tmp/out")
         assert "--export-static" in argv and "/tmp/out" in argv
+
+
+class WorkspaceInterpreterTests(unittest.TestCase):
+    def new_dir(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        return Path(holder.name).resolve()
+
+    def seed_venv(self, root: Path) -> Path:
+        interpreter = root / ".venv" / "bin" / "python"
+        interpreter.parent.mkdir(parents=True)
+        interpreter.write_text("#!/bin/sh\n", encoding="utf-8")
+        interpreter.chmod(0o755)
+        return interpreter
+
+    def test_workspace_venv_interpreter_is_preferred(self) -> None:
+        root = self.new_dir()
+        interpreter = self.seed_venv(root)
+
+        assert ui_command.workspace_interpreter(root) == str(interpreter)
+
+    def test_missing_venv_falls_back_to_the_running_interpreter(self) -> None:
+        root = self.new_dir()
+
+        assert ui_command.workspace_interpreter(root) == sys.executable
+
+    def test_run_cli_spawns_the_workspace_interpreter(self) -> None:
+        root = self.new_dir()
+        _seed_command_center(root)
+        interpreter = self.seed_venv(root)
+        captured: list[list[str]] = []
+        original = ui_command._run_child
+        ui_command._run_child = lambda argv, workspace: captured.append(argv) or 0
+        self.addCleanup(setattr, ui_command, "_run_child", original)
+
+        args = argparse.Namespace(directory=str(root), host="127.0.0.1", port=8080,
+                                  no_browser=True, export_static=str(root / "out"))
+        code = ui_command.run_cli(args)
+
+        assert code == 0
+        assert captured[0][0] == str(interpreter)
 
 
 class ExportStaticEndToEndTests(unittest.TestCase):

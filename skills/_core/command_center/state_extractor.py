@@ -18,6 +18,8 @@ Design rules, in priority order:
 
 from __future__ import annotations
 
+import functools
+import importlib.util
 import json
 import re
 from datetime import datetime, timezone
@@ -83,6 +85,23 @@ _FIGURE_OBLIGATION_RE = re.compile(
     r"(^\s*[-*]\s*\*\*Figure\b)|(\bobligation:\s*figure\b)|(^\s*figure:\s*\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
+
+#: The five external fact ids documented by
+#: ``openspec/specs/fact-production/spec.md``: every one resolves through
+#: ``paper_declarations.FACT_SOURCE_ROOT`` (an external source), never through
+#: a block's ``produces_facts``. Used as a fallback when the workspace's own
+#: ``paper-writing/scripts/`` copy is unavailable.
+_EXTERNAL_FACT_IDS = frozenset({
+    "formulation",
+    "dataset",
+    "experimental-design",
+    "implementation",
+    "results",
+})
+
+#: Structural facts resolved outside the producer/external split: ``skeleton``
+#: is resolved by skeleton-startup and is owned by no section contract.
+_STRUCTURAL_FACT_IDS = frozenset({"skeleton"})
 
 
 # --------------------------------------------------------------------------
@@ -197,6 +216,16 @@ def _blocks_of(meta: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(blocks, list):
         return []
     return [block for block in blocks if isinstance(block, dict)]
+
+
+def _mapping_get(value: Any, key: str) -> Any:
+    """Read ``key`` from a mapping, or ``None`` for any non-mapping value.
+
+    Frontmatter is hand-authorable, so a scalar where a mapping is expected
+    (``mode: argument``) must degrade exactly one field to ``None`` rather
+    than abort the whole payload.
+    """
+    return value.get(key) if isinstance(value, dict) else None
 
 
 def _facts_of(block: dict[str, Any], key: str) -> list[str]:
@@ -348,7 +377,7 @@ def _section_payload(root: Path, path: Path, draft: dict[str, dict[str, Any]],
         "file": f"sections/{path.name}",
         "section": section_name,
         "position": meta.get("position") if isinstance(meta, dict) else None,
-        "mode": (meta.get("mode") or {}).get("value") if isinstance(meta, dict) else None,
+        "mode": _mapping_get(meta.get("mode") if isinstance(meta, dict) else None, "value"),
         "status": status,
         "has_contract": meta is not None,
         "extent": {"min_words": min_words, "max_words": max_words},
@@ -403,11 +432,48 @@ def _gate_writing_readiness(sections: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _gate_coupling_verification(sections: list[dict[str, Any]]) -> dict[str, Any]:
+@functools.lru_cache(maxsize=None)
+def _external_fact_ids(workspace: str) -> frozenset[str]:
+    """Read the external fact vocabulary, never fatal to the payload.
+
+    Prefers ``paper_declarations.FACT_SOURCE_ROOT`` from the workspace's own
+    ``skills/paper-writing/scripts/`` tree so a widened vocabulary is honored,
+    and falls back to the five documented external fact ids when that module is
+    missing or cannot be imported. The import is read-only and best-effort: a
+    failure must degrade this gate's vocabulary, never raise. Results are
+    cached per workspace because the loader runs on every state derivation.
+    """
+    module_path = (
+        Path(workspace) / "skills" / "paper-writing" / "scripts" / "paper_declarations.py"
+    )
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_papersmith_command_center_declarations", module_path
+        )
+        if spec is None or spec.loader is None:
+            return _EXTERNAL_FACT_IDS
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        roots = getattr(module, "FACT_SOURCE_ROOT", None)
+        if isinstance(roots, dict) and roots:
+            return frozenset(str(fact) for fact in roots)
+    except Exception:
+        return _EXTERNAL_FACT_IDS
+    return _EXTERNAL_FACT_IDS
+
+
+def _gate_coupling_verification(root: Path, sections: list[dict[str, Any]]) -> dict[str, Any]:
     produced = {fact for s in sections for fact in s["facts"]["produces"]}
     demanded = sorted({fact for s in sections for fact in s["facts"]["demands"]})
     declared = {fact for s in sections for fact in s["facts"]["declarations"]}
-    unmatched = [fact for fact in demanded if fact not in produced]
+    external = _external_fact_ids(str(root))
+    # A demanded fact is resolved when any block produces it, when an external
+    # ``FACT_SOURCE_ROOT`` route owns it, or when it is the structural
+    # ``skeleton`` fact. Only a fact with no route at all blocks the gate --
+    # reporting an externally resolvable fact as BLOCKED is a false negative no
+    # writing action could clear.
+    resolvable = produced | external | _STRUCTURAL_FACT_IDS
+    unmatched = [fact for fact in demanded if fact not in resolvable]
     if not sections:
         state, reasons = "VERIFYING", ["no section contracts found under sections/"]
     elif unmatched:
@@ -423,6 +489,7 @@ def _gate_coupling_verification(sections: list[dict[str, Any]]) -> dict[str, Any
         "reasons": reasons,
         "parts": {
             "produced": sorted(produced),
+            "external": sorted(external),
             "demanded": demanded,
             "declarations": sorted(declared),
             "unmatched": unmatched,
@@ -485,7 +552,7 @@ def _gate_diagram_raster(root: Path, sections: list[dict[str, Any]]) -> dict[str
 def _gates(root: Path, sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         _gate_writing_readiness(sections),
-        _gate_coupling_verification(sections),
+        _gate_coupling_verification(root, sections),
         _gate_grounding_style(sections),
         _gate_diagram_raster(root, sections),
     ]
