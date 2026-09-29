@@ -35,15 +35,19 @@ folder, impose no Node/npm runtime dependency there, and be reachable through
   - Declare deps in `requirements.txt` and `src/papersmith/_kit/requirements.txt`.
   - Evidence: `ed5716f`; 20 tests green; real `papersmith init` workspace reports
     health 39/39 HEALTHY and all four harnesses IN_SYNC via the canonical generator.
-- [ ] T2 — Server + watcher + SSE.
+- [x] T2 — Server + watcher + SSE.
   - Deliver `server.py` (FastAPI app, `/api/state`, `/api/health/wiring`,
     `/api/health/run-wiring-smoke`, `/api/events` SSE, static mount) and
     `watcher.py` (watchfiles, 300 ms debounce, ignore set).
   - Integration test exercises endpoints on an ephemeral port.
-- [ ] T3 — CLI `papersmith ui [--port] [--host] [--no-browser] [--export-static <dir>]`.
+  - Evidence: `f0fa523`; 24 tests green; live SSE `state_update` observed
+    within 1.5 s of touching `sections/01-materials-and-methods.md`.
+- [x] T3 — CLI `papersmith ui [--port] [--host] [--no-browser] [--export-static <dir>]`.
   - Register in `src/papersmith/cli.py`; port fallback; browser open;
     SIGINT/SIGTERM teardown; spawn the workspace-local backend.
   - Tests for argument parsing and port selection.
+  - Evidence: `feat/command-center` WU3; 11 tests green; live `papersmith ui`
+    served 200 and shut down cleanly on SIGTERM with exit 0 and no orphan.
 - [ ] T4 — Frontend source + committed build.
   - `ui/` Vite + React + TS: React Flow DAG with dagre layout, health/wiring
     matrix, section matrix, artifacts, SSE hook.
@@ -65,3 +69,5 @@ folder, impose no Node/npm runtime dependency there, and be reachable through
 Each task records its work-unit commit below as it closes.
 
 - T1 — `ed5716f`
+- T2 — `f0fa523`
+- T3 — WU3 commit
