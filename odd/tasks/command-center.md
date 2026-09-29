@@ -48,10 +48,12 @@ folder, impose no Node/npm runtime dependency there, and be reachable through
   - Tests for argument parsing and port selection.
   - Evidence: `feat/command-center` WU3; 11 tests green; live `papersmith ui`
     served 200 and shut down cleanly on SIGTERM with exit 0 and no orphan.
-- [ ] T4 — Frontend source + committed build.
+- [x] T4 — Frontend source + committed build.
   - `ui/` Vite + React + TS: React Flow DAG with dagre layout, health/wiring
     matrix, section matrix, artifacts, SSE hook.
   - `npm run build` emits `skills/_core/command_center/static/`; commit output.
+  - Evidence: WU4 commit; `tsc` clean, `vite build` reproduces the same asset
+    hashes, and the running server serves `/` plus both assets with HTTP 200.
 - [ ] T5 — Smoke test + CI wrapper + docs.
   - `scripts/command-center-smoke.sh` (startup, liveness, payload contract,
     SSE reactivity, wiring smoke runner, graceful teardown).
@@ -70,4 +72,5 @@ Each task records its work-unit commit below as it closes.
 
 - T1 — `ed5716f`
 - T2 — `f0fa523`
-- T3 — WU3 commit
+- T3 — `abb1d0a`
+- T4 — WU4 commit
