@@ -89,17 +89,33 @@ not merge effects.
     exactly the 3 harness files against its first parent.
   - Evidence: `fb5da52`; `.github/workflows/test.yml` (22), `scripts/setup_env.py`
     (6), `tests/test_proposal_implementation.py` (21); +29/-20.
-- [ ] T2 -- P0 provisioning repair on the integration branch.
-  - `scripts/setup_env.py` gains `fastapi`, `uvicorn`, `watchfiles`, `pydantic`
-    (all resolvable from conda-forge), with the derivation stated in the
-    comment: the shipped `requirements.txt` names them and the shipped skill
-    imports them.
-  - Evidence: the gate interpreter imports all four; `test_command_center_server.py`
-    collects.
-- [ ] T3 -- P1 gate scope.
-  - Widen `IMPORT_SCOPE_PATHSPECS` so `skills/_core/*/*.py` is scanned. The lock
-    must fail before T2 and pass after it.
-  - Evidence: both runs, raw output.
+- [x] T2 -- P0 provisioning repair on the integration branch.
+  - `scripts/setup_env.py` gained `fastapi`, `uvicorn`, `watchfiles`, `pydantic`
+    in `CONDA_BASE_PACKAGES`, with the derivation stated in the comment (the
+    shipped `requirements.txt` names them; the shipped skill imports them).
+  - Evidence: `50cfcb3`; provisioning re-run through the script itself
+    (`python3 scripts/setup_env.py install --no-ingestion`) installed
+    fastapi 0.141.1, uvicorn 0.54.0, watchfiles 1.3.0, pydantic 2.13.5 into
+    `.micromamba/envs/papersmith`.
+- [x] T3 -- P1 gate scope.
+  - `IMPORT_SCOPE_PATHSPECS` gained `skills/_core/*/*.py`, so the derivation
+    reaches the engine shelves. Proven by running the widened lock against the
+    tree BEFORE the T2 repair:
+
+    ```
+    AssertionError: the interpreter the gate names cannot import 2
+    distribution(s) this forge's own code requires: fastapi (e.g.
+    skills/_core/command_center/server.py); uvicorn (e.g.
+    skills/_core/command_center/server.py)
+    ```
+
+    and after it: `tests/test_forge_gate.py tests/test_suite_collects.py
+    tests/test_command_center_server.py` -> 32 passed. The eight
+    command-center modules plus the collection check -> 83 passed.
+  - `watchfiles` stays out of the derived set on purpose: its import sits under
+    `try/except ModuleNotFoundError`, which declares it optional there. That is
+    why it is named in `scripts/setup_env.py` instead.
+  - Evidence: `789e2be`.
 - [ ] T4 -- P1 vocabulary repair.
   - Derive the `kaggle-accounts` skill/script table and the `kaggle-inbox`
     directory from the workspace's own inventory; rebuild the committed SPA so
