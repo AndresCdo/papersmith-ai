@@ -84,9 +84,11 @@ not merge effects.
   Engram mirror `odd/merge-command-center/tasks`; `integration/command-center`
   created from `feat/command-center`.
   - Evidence: this document's work-unit commit on the branch.
-- [ ] T1 -- Merge `fix/harness-skills-wiring` into `integration/command-center`.
-  - No conflicts expected; the merge commit carries exactly the 3 harness files.
-  - Evidence: merge commit identity; staged diff stat.
+- [x] T1 -- Merge `fix/harness-skills-wiring` into `integration/command-center`.
+  - No conflicts: the `ort` strategy merged cleanly and the merge commit carries
+    exactly the 3 harness files against its first parent.
+  - Evidence: `fb5da52`; `.github/workflows/test.yml` (22), `scripts/setup_env.py`
+    (6), `tests/test_proposal_implementation.py` (21); +29/-20.
 - [ ] T2 -- P0 provisioning repair on the integration branch.
   - `scripts/setup_env.py` gains `fastapi`, `uvicorn`, `watchfiles`, `pydantic`
     (all resolvable from conda-forge), with the derivation stated in the
