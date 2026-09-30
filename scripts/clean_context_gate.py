@@ -81,7 +81,25 @@ PYTEST_FAILURE = re.compile(r"(?m)^(FAILED|ERROR) (\S+)")
 #: failing tests where pytest counted six, so two runs differing only in a
 #: subfailure were called equal -- an under-observing control.
 PYTEST_SUBFAILURE = re.compile(r"(?m)^SUBFAILED\(([^)]*)\) (\S+)")
+#: What `node --test` ACTUALLY prints for a failing test, measured rather than
+#: assumed: with stdout redirected to a file -- the condition `run_gate` creates --
+#: it prints `\u2716 a suite that fails (0.955203ms)`, never TAP's `not ok N - ...`.
+#: The previous pattern matched a shape this repository's own Node never emits, so
+#: the Node half compared exit codes alone and its inversion control proved a
+#: reader on a line no run produces. The trailing duration is optional because the
+#: summary block repeats the name without it in some versions.
+NODE_FAILURE = re.compile(r"(?m)^\u2716 (.+?)(?:\s+\([\d.]+ms\))?$")
+#: Kept for a run that emits TAP (a different reporter, or a future default).
 TAP_FAILURE = re.compile(r"(?m)^not ok \d+ - (.+?)\s*$")
+
+#: Exit codes that mean a stage could not LAUNCH, rather than failed a test: the
+#: shell's "not executable" and "not found". A gate that never ran is not evidence
+#: of anything, so the control refuses to call such a run "identical" -- before
+#: this, a missing interpreter made both halves exit 127 with no failure lines,
+#: and the step printed OK while the declared gate could not run at all.
+UNRUNNABLE_EXIT_CODES = (126, 127)
+UNRUNNABLE_OUTPUT = re.compile(
+    r"(?m)^(?:/bin/)?sh: .*(?:No such file or directory|not found)$")
 
 
 def declared_gate() -> list[list[str]]:
@@ -154,8 +172,24 @@ def failure_signature(log_text: str) -> list[str]:
     """
     found = {f"{kind} {target}" for kind, target in PYTEST_FAILURE.findall(log_text)}
     found |= {f"SUBFAILED {subject} {test}" for subject, test in PYTEST_SUBFAILURE.findall(log_text)}
+    # The summary block's own header (`x failing tests:`) is not a test name; it
+    # would otherwise be reported as a failing test that never existed.
+    found |= {f"node {name}" for name in NODE_FAILURE.findall(log_text)
+              if not name.endswith(":")}
     found |= {f"not ok {name}" for name in TAP_FAILURE.findall(log_text)}
     return sorted(found)
+
+
+def gate_could_not_run(log_text: str, code: int) -> bool:
+    """Whether a stage failed to launch, rather than failed a test.
+
+    Both are non-zero exits and only one of them is a test result. A differential
+    over a gate that never started proves nothing about personal context, and
+    reporting it as agreement is a false green.
+    """
+    if code in UNRUNNABLE_EXIT_CODES:
+        return True
+    return bool(UNRUNNABLE_OUTPUT.search(log_text))
 
 
 def compare(left: dict, right: dict) -> list[str]:
@@ -170,6 +204,12 @@ def compare(left: dict, right: dict) -> list[str]:
         differences.append(
             f"exit code differs: {left['home']} -> {left['code']}, "
             f"{right['home']} -> {right['code']}")
+    if left.get("unrunnable") or right.get("unrunnable"):
+        differences.append(
+            "the declared gate could not run in this environment "
+            f"(empty: {left.get('unrunnable')}, decoy: {right.get('unrunnable')}). "
+            "Two runs of a gate that never started agree about nothing, so this "
+            "is a failure of the control rather than a clean result")
     only_left = sorted(set(left["failures"]) - set(right["failures"]))
     only_right = sorted(set(right["failures"]) - set(left["failures"]))
     for name in only_left:
@@ -197,14 +237,19 @@ def main(argv: list[str] | None = None) -> int:
         empty_code, empty_note = run_gate(empty, stages, root / "empty.log")
         decoy_code, decoy_note = run_gate(decoy, stages, root / "decoy.log")
         empty_result = {"home": "empty", "code": empty_code,
-                        "failures": failure_signature((root / "empty.log").read_text("utf-8"))}
+                        "failures": failure_signature((root / "empty.log").read_text("utf-8")),
+                        "unrunnable": gate_could_not_run(
+                            (root / "empty.log").read_text("utf-8"), empty_code)}
         decoy_result = {"home": "decoy", "code": decoy_code,
-                        "failures": failure_signature((root / "decoy.log").read_text("utf-8"))}
+                        "failures": failure_signature((root / "decoy.log").read_text("utf-8")),
+                        "unrunnable": gate_could_not_run(
+                            (root / "decoy.log").read_text("utf-8"), decoy_code)}
 
         print(empty_note)
         print(decoy_note)
         for result in (empty_result, decoy_result):
-            print(f"[clean-context] {result['home']}: exit {result['code']}, "
+            state = "COULD NOT RUN" if result["unrunnable"] else f"exit {result['code']}"
+            print(f"[clean-context] {result['home']}: {state}, "
                   f"{len(result['failures'])} failing test(s)")
 
         differences = compare(empty_result, decoy_result)

@@ -346,14 +346,69 @@ class DifferentialControlTests(unittest.TestCase):
     def test_the_failure_signature_reads_both_halves(self):
         control = self.module()
         pytest_output = "FAILED tests/test_a.py::test_b\nERROR tests/test_c.py\n1 failed"
-        node_output = "not ok 3 - a suite name\n# fail 1\n"
+        tap_output = "not ok 3 - a suite name\n# fail 1\n"
         self.assertEqual(
             control.failure_signature(pytest_output),
             ["ERROR tests/test_c.py", "FAILED tests/test_a.py::test_b"],
             "the signature does not read pytest's own failure lines")
         self.assertEqual(
-            control.failure_signature(node_output), ["not ok a suite name"],
-            "the signature does not read the Node half's TAP failure lines")
+            control.failure_signature(tap_output), ["not ok a suite name"],
+            "the signature does not read a TAP-shaped Node run")
+
+    def test_the_failure_signature_reads_the_measured_node_shape(self):
+        """The shape `node --test` actually prints, measured, not the one TAP
+        would print.
+
+        This control previously planted `not ok 3 - ...` and asserted the reader
+        saw it, while a real run emitted `x a suite that fails (0.95ms)` and the
+        reader saw nothing: an inversion control proving a reader on a line no
+        run produces, which is the `kind=guard-never-fires` defect this
+        repository's audit doctrine names.
+        """
+        control = self.module()
+        measured = (
+            "\u2716 a suite that fails (0.955203ms)\n"
+            "\u2714 a suite that passes (0.133999ms)\n"
+            "\u2716 failing tests:\n"
+            "\u2716 a suite that fails (0.955203ms)\n")
+        self.assertEqual(
+            control.failure_signature(measured),
+            ["node a suite that fails"],
+            "the reader does not see the Node shape a real run emits, so the "
+            "Node half compares exit codes alone")
+
+    def test_an_unrunnable_gate_is_detected(self):
+        """A gate that never started is not a differential result."""
+        control = self.module()
+        self.assertTrue(
+            control.gate_could_not_run("", 127),
+            "exit 127 -- the interpreter is not there -- was read as a test result")
+        self.assertTrue(
+            control.gate_could_not_run(
+                "sh: .micromamba/envs/papersmith/bin/pytest: No such file or directory", 1),
+            "a missing interpreter reported in the output was not detected")
+
+    def test_a_normally_failing_run_is_not_called_unrunnable(self):
+        """Non-vacuity: a red gate must stay a red gate, not become a broken
+        control, or the step would fail for the wrong reason on every red run."""
+        control = self.module()
+        self.assertFalse(
+            control.gate_could_not_run("FAILED tests/test_a.py::test_b\n1 failed", 1),
+            "an ordinary failing run was mistaken for a gate that could not run")
+        self.assertFalse(control.gate_could_not_run("", 0))
+
+    def test_the_comparator_refuses_an_unrunnable_gate(self):
+        """The hole this closes: identical exit codes and identical (empty)
+        failure sets read as agreement even when neither run started."""
+        control = self.module()
+        unrunnable = {"home": "empty", "code": 127, "failures": [], "unrunnable": True}
+        same = {"home": "decoy", "code": 127, "failures": [], "unrunnable": True}
+        differences = control.compare(unrunnable, same)
+        self.assertTrue(
+            differences,
+            "two runs of a gate that never started were reported as identical, "
+            "so a green control would not mean the gate ran")
+        self.assertTrue(any("could not run" in line for line in differences), differences)
 
     def test_the_failure_signature_reads_subfailures(self):
         """Measured the hard way: without this, a real run reported three
