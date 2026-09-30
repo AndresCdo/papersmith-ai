@@ -19,10 +19,12 @@ Design rules, in priority order:
 from __future__ import annotations
 
 import ast
+import contextlib
 import functools
 import importlib.util
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -433,6 +435,29 @@ def _gate_writing_readiness(sections: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+@contextlib.contextmanager
+def _no_bytecode():
+    """Load a workspace module without leaving bytecode inside the workspace.
+
+    This loader runs in the SERVER process, so the child environment's
+    ``PYTHONDONTWRITEBYTECODE`` cannot reach it -- ``sys.dont_write_bytecode``
+    is the in-process equivalent, and it is restored afterwards because the rest
+    of the process has no business inheriting the setting.
+
+    Measured before this existed: the first ``/api/state`` derivation created 12
+    ``__pycache__`` paths inside the paper folder the extractor claims only to
+    observe, which falsified three shipped read-only claims at once. The
+    workspace's own ``.gitignore`` hides ``__pycache__``, which is why no gate
+    saw it.
+    """
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        yield
+    finally:
+        sys.dont_write_bytecode = previous
+
+
 @functools.lru_cache(maxsize=None)
 def _external_fact_ids(workspace: str) -> frozenset[str]:
     """Read the external fact vocabulary, never fatal to the payload.
@@ -454,7 +479,8 @@ def _external_fact_ids(workspace: str) -> frozenset[str]:
         if spec is None or spec.loader is None:
             return _EXTERNAL_FACT_IDS
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        with _no_bytecode():
+            spec.loader.exec_module(module)
         roots = getattr(module, "FACT_SOURCE_ROOT", None)
         if isinstance(roots, dict) and roots:
             return frozenset(str(fact) for fact in roots)

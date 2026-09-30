@@ -27,6 +27,52 @@ def _contract(section: str, position: int, blocks: list[dict]) -> str:
     return "---\n" + json.dumps(meta, indent=2) + "\n---\n\n# " + section + "\n\n**Extent** 100–250 words · one subsection\n"
 
 
+class ReadOnlyObserverTests(unittest.TestCase):
+    """Deriving state must not write into the workspace it observes.
+
+    The extractor loads the workspace's own `paper_declarations` module, and an
+    unsuppressed import leaves `__pycache__` behind. Measured before this lock:
+    the first derivation created 12 paths inside the paper folder, falsifying
+    three shipped read-only claims at once. The workspace's own `.gitignore`
+    hides `__pycache__`, so nothing else would ever have seen it.
+    """
+
+    def new_workspace(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name).resolve()
+        (root / "sections").mkdir(parents=True)
+        scripts = root / "skills" / "paper-writing" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "paper_declarations.py").write_text(
+            "FACT_SOURCE_ROOT = {'a-fact': 'a reason'}\n", encoding="utf-8")
+        return root
+
+    def file_set(self, root: Path) -> list[str]:
+        return sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file())
+
+    def test_deriving_state_writes_nothing_into_the_workspace(self) -> None:
+        root = self.new_workspace()
+        before = self.file_set(root)
+
+        state = state_extractor.get_workspace_state(root)
+
+        assert self.file_set(root) == before, (
+            "deriving state wrote into the workspace it only observes. An "
+            "unsuppressed module import leaves `__pycache__` behind, which the "
+            "workspace's own .gitignore hides from every other gate")
+        assert state["gates"], "the payload lost its gates"
+
+    def test_the_loader_still_reaches_the_workspace_declaration(self) -> None:
+        """Non-vacuity: the suppression must not silently break the load it
+        wraps, which would look identical from the outside."""
+        root = self.new_workspace()
+
+        facts = state_extractor._external_fact_ids(str(root))
+
+        assert "a-fact" in facts, sorted(facts)
+
+
 class StateExtractorTests(unittest.TestCase):
     def new_workspace(self) -> Path:
         holder = tempfile.TemporaryDirectory()
