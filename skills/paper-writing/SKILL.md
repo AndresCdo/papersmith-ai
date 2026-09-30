@@ -767,7 +767,8 @@ it — the same shuttle shape `write --draft <path>` already establishes for
 the redactor's account, never trusting an agent's account unjudged.
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`insumos-observer` cannot write to disk) becomes
@@ -1115,7 +1116,8 @@ readable; an agent asked to draft or audit against a source it cannot read
 cannot distinguish "nothing to cite" from "cannot be checked."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agents would have enforced (`redactor` and `contract-auditor` cannot write
@@ -1137,7 +1139,8 @@ agent asked to sample against a registry that classes nothing cannot
 distinguish "no style channel wanted" from "nothing to sample yet."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`style-sampler` cannot write to disk) becomes
@@ -1265,7 +1268,8 @@ support against a section that never resolved cannot distinguish "nothing to
 ground" from "cannot be checked."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`section-grounding-auditor` cannot write to
@@ -1447,7 +1451,8 @@ figure's `<id>.tex` and `<id>.diagram.json` both exist; an agent asked to audit
 a figure it cannot read cannot distinguish "clean" from "unreadable."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`figure-auditor` cannot write to disk) becomes
@@ -1464,7 +1469,8 @@ an obligation it cannot read cannot distinguish "no components yet" from
 "cannot be checked."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. `diagram-author`'s own
 doctrine says it only touches its `<id>.tex`/`<id>.diagram.json` pair, but

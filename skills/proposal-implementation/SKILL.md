@@ -147,7 +147,8 @@ measurable before leaving, and the orchestrator that delegated has to be able to
 tell "it could not start" from "it started and failed".
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
-documented today for pi, OpenCode, or Antigravity — see `.pi/README.md`):
+documented today for pi, OpenCode, or Antigravity — see the workspace's own
+`PI.md`, `OPENCODE.md` and `.antigravity/rules.md`):
 run whichever stretch, Build or Walk, in-process, as one step, in the same
 order, holding to the same measure-before-delegating gate before starting.
 The tool boundary each agent would have enforced differs by row —
