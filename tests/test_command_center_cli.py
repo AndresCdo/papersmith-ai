@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from papersmith.cli import build_parser
+from papersmith.core import init as init_module
 from papersmith.core import ui as ui_command
 from papersmith.errors import SourceError, UserError
 
@@ -21,6 +28,148 @@ COMMAND_CENTER = REPOSITORY / "skills" / "_core" / "command_center"
 def _seed_command_center(root: Path) -> None:
     destination = root / ui_command.COMMAND_CENTER_ENTRY.parent
     shutil.copytree(COMMAND_CENTER, destination)
+
+
+class ProvisionerAgreementTests(unittest.TestCase):
+    """The thing that BUILDS the environment and the thing that FINDS it must
+    name the same path.
+
+    The defect this feature fixed was exactly that disagreement: the shipped
+    `scripts/setup_env.py` built `.micromamba/envs/papersmith` while
+    `workspace_interpreter` looked for a `.venv/` that nothing creates, and a
+    `pipx install .` user got a raw `ModuleNotFoundError` from a child process.
+    Stub-level tests could not catch it, because each side was checked against
+    its own fixture. This drives the workspace's own provisioning script and then
+    asks the resolver where the interpreter is.
+    """
+
+    def new_dir(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        return Path(holder.name).resolve()
+
+    def seed_creating_script(self, root: Path) -> Path:
+        """A stand-in that CREATES the interpreter at the path it declares.
+
+        The real script downloads an environment; this one only has to make the
+        same promise about where the interpreter lands, which is the property
+        under test.
+        """
+        script = root / "scripts" / "setup_env.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(
+            "from pathlib import Path\n"
+            "PROJECT_ROOT = Path(__file__).resolve().parent.parent\n"
+            "MAMBA_ROOT = PROJECT_ROOT / '.micromamba'\n"
+            "ENV_NAME = 'papersmith'\n"
+            "binary = MAMBA_ROOT / 'envs' / ENV_NAME / 'bin'\n"
+            "binary.mkdir(parents=True, exist_ok=True)\n"
+            "target = binary / 'python'\n"
+            "target.write_text('#!/bin/sh\\n')\n"
+            "target.chmod(0o755)\n",
+            encoding="utf-8")
+        return root / ".micromamba" / "envs" / "papersmith" / "bin" / "python"
+
+    def test_the_provisioned_path_is_the_resolved_path(self) -> None:
+        root = self.new_dir()
+        created = self.seed_creating_script(root)
+
+        assert init_module._run_env_install(root) is None
+
+        assert created.is_file(), "the provisioning stand-in created nothing"
+        assert ui_command.provisioned_interpreters(root)[0] == created, (
+            "the resolver derives a different path than the provisioner "
+            "creates -- the disagreement that made `papersmith ui` fail for "
+            "every pipx user")
+        assert ui_command.workspace_interpreter(root) == str(created)
+
+    def test_init_provisions_the_path_ui_then_resolves(self) -> None:
+        """The same property through init's own wiring, with only the heavy
+        download replaced: a real `init` writes the real kit, whose
+        `scripts/setup_env.py` is the declaration both sides read."""
+        root = self.new_dir() / "paper"
+        calls: list[Path] = []
+        original = init_module._run_env_install
+        init_module._run_env_install = lambda workspace: calls.append(workspace) or None
+        self.addCleanup(setattr, init_module, "_run_env_install", original)
+
+        init_module.initialize(root, run_npm=False, run_env=True)
+
+        assert calls == [root.resolve()], calls
+        assert ui_command.provisioned_interpreters(root), (
+            "a freshly initialized workspace declares no interpreter path, so "
+            "`papersmith ui` would fall back to an interpreter with no "
+            "runtime dependencies")
+
+
+class LiveServerEndToEndTests(unittest.TestCase):
+    """`papersmith ui` must reach a running dashboard in a workspace it created.
+
+    The row this closes: every piece of evidence for the interpreter fix was
+    stub-level -- a hand-seeded `setup_env.py`, a `#!/bin/sh` file at the derived
+    path, and `_run_child` replaced wholesale -- so nothing ever observed a
+    server starting. This drives the real command in a freshly initialized
+    workspace, with no stubs, and asks the backend for its own state.
+
+    It is offline: with no workspace environment the resolver falls back to this
+    test's own interpreter, which carries the backend's dependencies.
+    """
+
+    def new_workspace(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        workspace = Path(holder.name).resolve() / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        return workspace
+
+    def free_port(self) -> int:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+
+    def poll_state(self, port: int, process: subprocess.Popen) -> dict | None:
+        deadline = time.monotonic() + 60
+        url = f"http://127.0.0.1:{port}/api/state"
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                return None                     # it exited instead of serving
+            try:
+                with urllib.request.urlopen(url, timeout=5) as response:
+                    if response.status == 200:
+                        return json.loads(response.read().decode("utf-8"))
+            except (urllib.error.URLError, OSError, json.JSONDecodeError):
+                time.sleep(0.25)
+        return None
+
+    def test_the_dashboard_answers_in_a_workspace_this_framework_created(self) -> None:
+        workspace = self.new_workspace()
+        port = self.free_port()
+        environment = dict(os.environ, PYTHONPATH=str(REPOSITORY / "src"))
+        process = subprocess.Popen(
+            [sys.executable, "-m", "papersmith.cli", "ui", str(workspace),
+             "--port", str(port), "--no-browser"],
+            cwd=str(workspace), env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.addCleanup(process.kill)
+
+        payload = self.poll_state(port, process)
+        output = ""
+        if payload is None and process.poll() is not None:
+            output = (process.stdout.read() if process.stdout else "")[-800:]
+        process.terminate()
+        try:
+            code = process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            code = None
+
+        assert payload is not None, (
+            "`papersmith ui` never served `/api/state` in a workspace this "
+            f"framework created. Exit {process.returncode}, output tail:\n{output}")
+        for key in ("workspace", "sections", "gates", "pipeline_stages"):
+            assert key in payload, (key, sorted(payload))
+        assert payload["workspace"]["root"] == str(workspace), payload["workspace"]
+        assert code == 0, f"`papersmith ui` exited {code} after SIGTERM"
 
 
 class CommandCenterResolutionTests(unittest.TestCase):
