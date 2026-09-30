@@ -158,15 +158,57 @@ not merge effects.
     failures**, 14m59s, no collection errors.
   - Left alone deliberately: `package-lock.json` states `0.1.0`, was already
     stale before this work, and no test reads it.
-- [ ] T6 -- Judgment Day on the frozen merged tree, before any delivery.
-  - Two blind judges, identical criteria, read-only, one exhaustive sweep each
-    (two permitted: more than 400 changed lines). The findings above are NOT
-    injected into the judge prompts; independent rediscovery is the verification.
-  - Criteria: does the merged tree keep every declared gate green in the
-    environment the gate names, and does every shipped contract stay coherent
-    (manifest <-> provisioning <-> guard scope <-> shipped surface)?
-  - At most two scoped fix/re-judgment rounds; terminal
-    `JUDGMENT: APPROVED` or `JUDGMENT: ESCALATED`.
+- [x] T6 -- Judgment Day on the combined tree (shared with the engram feature's
+  E6, per operator decision 6).
+
+  **Verdict: `JUDGMENT: APPROVED`.**
+
+  - **Frozen candidate:** `81f4c3a`, `git diff main..81f4c3a` = 68 files,
+    +10831/-37, sha256 `845b82ce...`. **The verdict binds to the post-fix
+    revision `a162749`** (`git diff main..a162749` sha256 `9ebafb86...`).
+  - **Frozen ledger:** `.scratch/jd-combined/ledger.jsonl`, sha256
+    `8ed2c0f8afe408d5aa500f5965f40211bf3f794061dfec8262e5e5984aec56f4`,
+    unchanged through both rounds. 14 rows: 3 CRITICAL, 6 WARNING, 5 SUGGESTION.
+  - **Discovery:** two blind judges, identical criteria, one exhaustive read-only
+    sweep each. Four defects were found independently by BOTH: the
+    `papersmith ui` interpreter path, the unexecutable `run-wiring-smoke`
+    endpoint, the hand-restated gate roster, and the dangling `.pi/README.md`
+    citation.
+  - **Round 1** (5 commits, `c2d8c22`..`1227799`): the three severe rows, plus
+    the two corroborated warnings the operator expanded the batch to cover.
+  - **Resolutions:**
+
+    | Row | Raised by | Re-judged by | Outcome |
+    | --- | --- | --- | --- |
+    | `JD-A-001` | judge A | judge B | `verified` |
+    | `JD-A-002` | judge A | judge B | `verified` |
+    | `JD-B-001` | judge B | judge A | `corroborated` (round 1) |
+    | `JD-B-001` | judge B | fresh validator | `verified` (round 2) |
+
+  - **Round 2** (`a162749`, test-only, **no source changed**): `JD-B-001`'s
+    re-judge confirmed the defect and the fix of its stated mechanism, and
+    declined to certify the *outcome* because every piece of evidence was
+    stub-level -- no server ever started, and nothing observed that anything
+    CREATES the derived path. It named two things it needed; both were added.
+    That no source changed is itself the finding: the fix was right and the
+    evidence was missing.
+  - **Two of two rounds used; no severe row survived either.**
+  - **Measured evidence:** the differential control on the fixed tree reports
+    both halves `exit 0`, zero failing tests, identical under an empty home and
+    under a decoy home carrying personal agent context (24m57s). The round-2
+    end-to-end test was observed by hand: init 0.05s, first HTTP 200 at 0.36s,
+    clean exit 0 after SIGTERM.
+  - **Open informational rows** (never scheduled fixes; recorded for delivery):
+    `JD-A-003`/`JD-B-005` the `run-wiring-smoke` endpoint needs a script no
+    workspace receives; `JD-A-004`/`JD-B-006` the quality-gate roster is restated
+    in three places; `JD-A-005` `--export-static` needs the full web stack just
+    to copy files; `JD-B-007` the port scan overflows past 65535; `JD-B-008` the
+    0.6.0 changelog omits the harness-symlink and dependency changes, and
+    `package-lock.json` still reads `0.1.0`.
+  - **Process correction, for the record:** both ledgers contain a `JD-B-001`
+    (the engram plan's, and this one's). Prompts carried each row's JSON with its
+    location, so no reference was ambiguous, but the IDs are not lineage-unique
+    and the next review should number rows per lineage.
 - [ ] T7 -- Delivery and close-out. PR `integration/command-center` -> `main`
   (base must be `main` so CI runs); record commit identities and raw gate output
   here; remove worktrees; mirror to Engram. Commit, push, PR and merge stay the

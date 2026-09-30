@@ -253,8 +253,18 @@ gate time recorded in the step's own comment.
   - The 5 are the context-independent ones F8 named: `test_mcp_registry`,
     `test_version_sources`, and the three `kaggle` subfailures that T4 removes.
   - Guard: 19 passed.
-- [ ] E6 — **One** Judgment Day, on the combined tree (operator decision 6),
+- [x] E6 — **One** Judgment Day, on the combined tree (operator decision 6),
   shared with the merge feature's T6 rather than run twice.
+  - Outcome: **`JUDGMENT: APPROVED`**, recorded in full in
+    `odd/tasks/merge-command-center.md`'s T6. Two rounds; no severe row survived.
+  - The one row that reached this feature's own surface is `JD-A-002`
+    (CRITICAL): the differential control's Node reader matched a shape `node
+    --test` never emits, so the Node half compared exit codes alone and its
+    inversion control proved a reader on a line no run produces. `verified`
+    after `1227799`, which also closed the second hole — a gate that could not
+    run reading as agreement. Both were the same under-observation class as the
+    two holes found and fixed while building the control, which is four in one
+    deliverable and worth remembering about it.
 - [ ] E7 — Close-out. Commit identities, raw gate output, the cross-repo
   follow-up for `sdd-init`'s default store, and removal of worktrees.
 
