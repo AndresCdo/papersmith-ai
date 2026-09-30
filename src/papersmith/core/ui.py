@@ -8,7 +8,9 @@ dashboard runs standalone without Node/npm in the workspace.
 
 from __future__ import annotations
 
+import ast
 import contextlib
+import importlib.util
 import os
 import signal
 import socket
@@ -31,11 +33,57 @@ DEFAULT_PORT = 8080
 #: How many consecutive ports to try when the preferred one is taken.
 PORT_SCAN_ATTEMPTS = 25
 
-#: Workspace-relative virtualenv interpreter, POSIX first then Windows.
-VENV_INTERPRETERS = (
+#: The workspace-relative script that BUILDS the environment the backend runs
+#: in. Its own declarations are where the interpreter's path is read from.
+PROVISIONING_SCRIPT = Path("scripts") / "setup_env.py"
+
+#: Fallbacks, in order. A workspace may carry a hand-made virtualenv -- this
+#: repository's own checkouts do -- so one is still honored, but only after the
+#: environment the shipped provisioning actually produces.
+FALLBACK_INTERPRETERS = (
     Path(".venv") / "bin" / "python",
     Path(".venv") / "Scripts" / "python.exe",
 )
+
+#: The modules the backend imports at module scope, asked of the interpreter
+#: itself rather than restated as a dependency list. `fastapi` is the one whose
+#: absence produces the raw traceback this preflight replaces.
+BACKEND_PROBE = (
+    "import importlib.util as u, sys;"
+    "missing = [m for m in ('fastapi', 'uvicorn') if u.find_spec(m) is None];"
+    "sys.exit(1 if missing else 0)"
+)
+
+
+def provisioned_interpreters(workspace: Path) -> tuple[Path, ...]:
+    """The interpreter paths the workspace's own provisioning script declares.
+
+    Read by importing ``scripts/setup_env.py`` and asking it, exactly as
+    ``tests/test_forge_gate.py`` derives the gate's interpreter from the same
+    script. The script that BUILDS the environment is the one declaration of
+    where it lives; a path restated here is a path that can disagree with it,
+    and it did: this module used to look for a ``.venv/`` that no script in this
+    repository creates, while the provisioning script built
+    ``.micromamba/envs/<name>``. A ``pipx install .`` user then got a raw
+    ``ModuleNotFoundError`` from a child process instead of a dashboard, and the
+    repository had already written that exact disagreement down as a lesson.
+    """
+    script = workspace / PROVISIONING_SCRIPT
+    if not script.is_file():
+        return ()
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_papersmith_workspace_setup_env", script)
+        if spec is None or spec.loader is None:
+            return ()
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = Path(module.MAMBA_ROOT)
+        env_name = str(module.ENV_NAME)
+    except Exception:                      # noqa: BLE001 -- any failure is "cannot derive"
+        return ()
+    binary = root / "envs" / env_name / "bin"
+    return (binary / "python", binary / "python.exe")
 
 
 def workspace_interpreter(workspace: Path) -> str:
@@ -43,15 +91,52 @@ def workspace_interpreter(workspace: Path) -> str:
 
     ``pipx install .`` installs ``papersmith-ai`` with no runtime dependencies,
     so the CLI's own ``sys.executable`` cannot import the dashboard backend.
-    The workspace's kit venv (provisioned by ``scripts/setup_env.py``) holds
-    those dependencies, so prefer its ``python`` when it is an executable file
-    and fall back to the running interpreter otherwise.
+    The environment the workspace's own provisioning script builds holds those
+    dependencies, so it is preferred; a hand-made ``.venv`` is honored next, and
+    the running interpreter is the last resort.
     """
-    for relative in VENV_INTERPRETERS:
-        candidate = workspace / relative
+    for candidate in provisioned_interpreters(workspace) + tuple(
+            workspace / relative for relative in FALLBACK_INTERPRETERS):
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     return sys.executable
+
+
+def backend_is_importable(interpreter: str) -> bool:
+    """Whether this interpreter can import the backend's own dependencies.
+
+    Asked of the interpreter as a process, so the answer is a measurement rather
+    than a version number somebody chose.
+    """
+    try:
+        done = subprocess.run([interpreter, "-c", BACKEND_PROBE],
+                              capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
+
+
+def require_runnable_backend(workspace: Path, interpreter: str) -> None:
+    """Refuse with a papersmith-level diagnostic, never a child traceback.
+
+    A child that dies on ``ModuleNotFoundError`` reports a Python fact to a
+    person who asked for a dashboard, and names no remedy. This says which
+    interpreter was tried, that it cannot import the backend, and the one command
+    that provisions the environment the workspace's own kit ships.
+    """
+    if backend_is_importable(interpreter):
+        return
+    provisioned = provisioned_interpreters(workspace)
+    expected = str(provisioned[0]) if provisioned else \
+        f"the environment {PROVISIONING_SCRIPT} builds"
+    raise UserError(
+        f"no interpreter in {workspace} can run the command center: "
+        f"{interpreter} cannot import fastapi.\n"
+        f"Provision the workspace's environment and run this again:\n"
+        f"  python3 {PROVISIONING_SCRIPT} install\n"
+        f"That creates {expected}. `papersmith init` runs this step itself "
+        "unless it is given `--no-env`."
+    )
 
 
 def command_center_entry(workspace: Path) -> Path:
@@ -117,6 +202,12 @@ def _child_env(workspace: Path) -> dict[str, str]:
     env = dict(os.environ)
     existing = env.get("PYTHONPATH")
     env["PYTHONPATH"] = str(workspace) + (os.pathsep + existing if existing else "")
+    # The dashboard reads a workspace and must not write into it. Importing the
+    # workspace's own modules would otherwise leave `__pycache__` directories
+    # behind, which is how a read-only observer quietly modifies the paper
+    # folder it was pointed at. The MCP bridge already sets this; the child here
+    # did not.
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
 
@@ -182,6 +273,7 @@ def run_cli(args) -> int:
         print(f"papersmith ui: port {args.port} is busy; using {port}", file=sys.stderr)
 
     url = f"http://{args.host}:{port}/"
+    require_runnable_backend(workspace, interpreter)
     print(f"papersmith ui: serving {workspace} at {url}")
     print("papersmith ui: press Ctrl+C to stop")
     argv = build_server_argv(workspace, args.host, port, no_browser=args.no_browser,

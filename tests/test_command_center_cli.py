@@ -115,11 +115,79 @@ class WorkspaceInterpreterTests(unittest.TestCase):
         interpreter.chmod(0o755)
         return interpreter
 
+    def seed_provisioning(self, root: Path) -> Path:
+        """A workspace carrying the shipped provisioning script and its env."""
+        script = root / "scripts" / "setup_env.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(
+            "from pathlib import Path\n"
+            "PROJECT_ROOT = Path(__file__).resolve().parent.parent\n"
+            "MAMBA_ROOT = PROJECT_ROOT / '.micromamba'\n"
+            "ENV_NAME = 'papersmith'\n",
+            encoding="utf-8")
+        binary = root / ".micromamba" / "envs" / "papersmith" / "bin"
+        binary.mkdir(parents=True)
+        interpreter = binary / "python"
+        interpreter.write_text("#!/bin/sh\n", encoding="utf-8")
+        interpreter.chmod(0o755)
+        return interpreter
+
     def test_workspace_venv_interpreter_is_preferred(self) -> None:
         root = self.new_dir()
         interpreter = self.seed_venv(root)
 
         assert ui_command.workspace_interpreter(root) == str(interpreter)
+
+    def test_the_provisioned_environment_outranks_a_venv(self) -> None:
+        """The path nothing creates used to be preferred over the one the shipped
+        script builds, which is how `papersmith ui` failed for every
+        `pipx install .` user while passing in this repository's own checkout."""
+        root = self.new_dir()
+        self.seed_venv(root)
+        interpreter = self.seed_provisioning(root)
+
+        assert ui_command.workspace_interpreter(root) == str(interpreter)
+
+    def test_the_interpreter_path_is_read_from_the_workspace_script(self) -> None:
+        """Derived, never restated: the script that builds the environment is the
+        one declaration of where it lives."""
+        root = self.new_dir()
+        self.seed_provisioning(root)
+
+        derived = ui_command.provisioned_interpreters(root)
+
+        assert derived, "the derivation found nothing in a workspace carrying the script"
+        # Absolute, because the workspace's own script resolves it against its own
+        # root; the caller must not re-join it to the workspace.
+        assert derived[0] == root / ".micromamba" / "envs" / "papersmith" / "bin" / "python"
+
+    def test_no_provisioning_script_derives_nothing(self) -> None:
+        """Non-vacuity the other way: the derivation must not invent a path."""
+        assert ui_command.provisioned_interpreters(self.new_dir()) == ()
+
+    def test_a_backend_that_cannot_be_imported_is_refused_with_a_remedy(self) -> None:
+        """A child dying on ModuleNotFoundError reports a Python fact to somebody
+        who asked for a dashboard and names no remedy. This must name one."""
+        root = self.new_dir()
+        self.seed_provisioning(root)
+
+        with self.assertRaises(UserError) as caught:
+            ui_command.require_runnable_backend(root, "/bin/false")
+
+        message = str(caught.exception)
+        assert "setup_env.py install" in message, message
+        assert "fastapi" in message, message
+
+    def test_a_runnable_interpreter_is_not_refused(self) -> None:
+        """The preflight must not block the command it is protecting."""
+        root = self.new_dir()
+        self.seed_provisioning(root)
+        capable = ui_command.workspace_interpreter(
+            REPOSITORY) if ui_command.backend_is_importable(sys.executable) else None
+
+        if capable is None:
+            self.skipTest("the running interpreter cannot import the backend here")
+        ui_command.require_runnable_backend(root, sys.executable)
 
     def test_missing_venv_falls_back_to_the_running_interpreter(self) -> None:
         root = self.new_dir()
