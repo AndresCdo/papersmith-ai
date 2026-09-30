@@ -50,7 +50,7 @@ COMMAND_NAMES = (
 
 def _workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "paper"
-    init_module.initialize(workspace, run_npm=False)
+    init_module.initialize(workspace, run_npm=False, run_env=False)
     return workspace
 
 
@@ -285,7 +285,7 @@ class WorkspaceToolsResolverTests(unittest.TestCase):
 
     def test_declared_tool_set_is_returned_verbatim(self) -> None:
         workspace = self.new_tmp() / "paper"
-        init_module.initialize(workspace, tools=("claude", "pi"), run_npm=False)
+        init_module.initialize(workspace, tools=("claude", "pi"), run_npm=False, run_env=False)
         assert workspace_tools(workspace) == ("claude", "pi")
 
     def test_absent_config_warns_once_and_falls_back(self) -> None:
@@ -331,7 +331,7 @@ class WorkspaceToolsResolverTests(unittest.TestCase):
         ``render_files`` comparison.
         """
         workspace = self.new_tmp() / "paper"
-        init_module.initialize(workspace, tools=("claude",), run_npm=False)
+        init_module.initialize(workspace, tools=("claude",), run_npm=False, run_env=False)
         kit_root = resolve_and_validate()
         context = context_for_workspace(workspace)
         assert (

@@ -64,6 +64,7 @@ def _make_workspace(base: Path, name: str = "e2e-paper") -> Path:
             "--remote",
             "local",
             "--no-npm",
+            "--no-env",
         ]
     )
     assert rc == 0, f"init failed with exit {rc}"

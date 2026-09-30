@@ -49,6 +49,7 @@ def make_workspace(base: Path, name: str = "series-ws", *, remote: str = "local"
             "--remote",
             remote,
             "--no-npm",
+            "--no-env",
         ]
     )
     assert rc == 0, f"init failed with exit {rc}"

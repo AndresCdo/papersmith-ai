@@ -5,6 +5,8 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +16,186 @@ from papersmith.core import config, init as init_module, manifest
 from papersmith.kit import resolve_and_validate
 from papersmith.errors import UserError
 from papersmith.yamllite import loads
+
+
+class EnvironmentProvisioningTests(unittest.TestCase):
+    """`init` provisions the environment the command center's backend needs.
+
+    The step is what makes `papersmith ui` work after init: the CLI's own
+    interpreter is a pipx venv with no runtime dependencies, and the environment
+    `scripts/setup_env.py` builds is the one thing that carries them. These
+    drive the step against a script that stands in for the real one, so no test
+    performs a network install.
+    """
+
+    def new_tmp(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        return Path(holder.name).resolve()
+
+    def seed_script(self, root: Path, body: str) -> Path:
+        script = root / "scripts" / "setup_env.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(body, encoding="utf-8")
+        return script
+
+    def test_the_step_runs_the_workspaces_own_script(self) -> None:
+        root = self.new_tmp()
+        marker = root / "invocation.txt"
+        self.seed_script(
+            root,
+            "import pathlib, sys\n"
+            f"pathlib.Path({str(marker)!r}).write_text(' '.join(sys.argv[1:]))\n",
+        )
+
+        assert init_module._run_env_install(root) is None
+        assert marker.read_text(encoding="utf-8") == "install"
+
+    def test_a_failing_script_is_reported_with_the_remedy(self) -> None:
+        root = self.new_tmp()
+        self.seed_script(root, "import sys\nsys.stderr.write('no network\\n')\nsys.exit(3)\n")
+
+        warning = init_module._run_env_install(root)
+
+        assert warning is not None
+        assert "setup_env.py install" in warning, warning
+
+    def test_a_missing_script_is_reported_rather_than_ignored(self) -> None:
+        warning = init_module._run_env_install(self.new_tmp())
+
+        assert warning is not None
+        assert "upgrade" in warning, warning
+
+    def test_init_runs_the_step_and_reports_a_failure_as_a_warning(self) -> None:
+        """Wiring, driven through the real entry point with the step itself
+        replaced, so the assertion is about init's contract rather than about
+        provisioning a real environment inside a test."""
+        root = self.new_tmp() / "paper"
+        calls: list[Path] = []
+        original = init_module._run_env_install
+        init_module._run_env_install = lambda workspace: calls.append(workspace) or "stubbed gap"
+        self.addCleanup(setattr, init_module, "_run_env_install", original)
+
+        result = init_module.initialize(root, run_npm=False, run_env=True)
+
+        assert calls == [root.resolve()], calls
+        assert any("stubbed gap" in warning for warning in result["warnings"]), result
+
+    def test_init_skips_the_step_when_it_is_told_to(self) -> None:
+        root = self.new_tmp() / "paper"
+        calls: list[Path] = []
+        original = init_module._run_env_install
+        init_module._run_env_install = lambda workspace: calls.append(workspace) or None
+        self.addCleanup(setattr, init_module, "_run_env_install", original)
+
+        init_module.initialize(root, run_npm=False, run_env=False)
+
+        assert calls == [], "`run_env=False` must be an offline-fast init"
+
+
+class SuiteStaysOfflineTests(unittest.TestCase):
+    """No test may provision a real environment through `init`.
+
+    Measured defect, introduced by the change this lock belongs to: `init` gained
+    an environment step that downloads a micromamba environment, and one
+    JavaScript test kept calling `init` without the skip flag -- 147 leaked
+    directories and 5.9 GB in the temp dir before anybody noticed, and the Node
+    half silently became a network test that took minutes instead of seconds.
+    A lock is cheaper than that discovery.
+
+    The rule is read off the suite's own text: every `init` invocation here must
+    carry the flag that keeps it offline. This file is excluded, because it is
+    the one place that tests the provisioning step on purpose and stands in a
+    script for the real one.
+    """
+
+    REPOSITORY = Path(__file__).resolve().parent.parent
+
+    def test_every_cli_init_in_the_suite_skips_provisioning(self) -> None:
+        offenders = []
+        for path in sorted((self.REPOSITORY / "tests").rglob("*")):
+            if path.suffix not in (".py", ".mjs", ".js") or path.name == Path(__file__).name:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in re.finditer(r'"--no-npm"', text):
+                if "--no-env" not in text[match.end():match.end() + 120]:
+                    offenders.append(f"{path.name}:{text[:match.start()].count(chr(10)) + 1}")
+
+        assert offenders == [], (
+            "these test-suite `init` invocations skip the npm step and not the "
+            "environment step, so each one performs a multi-gigabyte network "
+            "install and leaks it into the temp dir: " + ", ".join(offenders))
+
+    def test_every_api_init_in_the_suite_states_its_environment_intent(self) -> None:
+        offenders = []
+        for path in sorted((self.REPOSITORY / "tests").glob("*.py")):
+            if path.name == Path(__file__).name:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in re.finditer(r"run_npm=False", text):
+                if "run_env" not in text[match.end():match.end() + 40]:
+                    offenders.append(f"{path.name}:{text[:match.start()].count(chr(10)) + 1}")
+
+        assert offenders == [], (
+            "these `initialize(...)` calls state no environment intent, so they "
+            "inherit the provisioning default and install an environment inside "
+            "a test: " + ", ".join(offenders))
+
+
+class ShippedCrossReferenceTests(unittest.TestCase):
+    """A shipped document must not cite a path that exists only in the forge.
+
+    Measured defect: seven paragraphs across two skills sent the reader to
+    `.pi/README.md` for the harnesses with no Task-tool delegation. That file is
+    tracked here and ships nowhere -- it is not a kit entry and nothing generates
+    it -- so an agent in an initialized workspace, which is the only place these
+    documents are read, was handed a cross-reference that cannot resolve. It
+    looked plausible to whoever wrote it precisely because it exists in this
+    repository.
+
+    The rule: a dot-directory path a shipped document cites, and that this
+    repository TRACKS, must also exist in a workspace the framework creates.
+    Scoped that way deliberately -- runtime state a skill creates at run time
+    (`.implementation/position.jsonl`) and gitignored paths (`.venv/bin/python`)
+    are not tracked, so they are excluded rather than reported as defects.
+    """
+
+    CITATION = re.compile(r"`(\.[a-z][\w.-]*/[^`\s]+)`")
+    REPOSITORY = Path(__file__).resolve().parent.parent
+
+    def is_tracked(self, relative: str) -> bool:
+        return subprocess.run(
+            ["git", "ls-files", "--error-unmatch", relative],
+            cwd=str(self.REPOSITORY), capture_output=True,
+        ).returncode == 0
+
+    def test_every_tracked_dot_directory_citation_resolves_in_a_workspace(self) -> None:
+        citations: dict[str, set[str]] = {}
+        for document in sorted((self.REPOSITORY / "skills").rglob("*.md")):
+            text = document.read_text(encoding="utf-8", errors="replace")
+            for match in self.CITATION.finditer(text):
+                path = match.group(1)
+                if "<" in path:                      # a placeholder, not a path
+                    continue
+                citations.setdefault(path, set()).add(
+                    str(document.relative_to(self.REPOSITORY)))
+
+        assert citations, "no dot-directory citation was found, so this lock checks nothing"
+        tracked = {path: sorted(sources) for path, sources in citations.items()
+                   if self.is_tracked(path)}
+        assert tracked, (
+            "no TRACKED citation was found, so the rule below would pass over an "
+            "empty set and prove nothing")
+
+        with tempfile.TemporaryDirectory() as holder:
+            workspace = Path(holder).resolve() / "paper"
+            init_module.initialize(workspace, run_npm=False, run_env=False)
+            unresolved = {path: sources for path, sources in tracked.items()
+                          if not (workspace / path).exists()}
+
+        assert unresolved == {}, (
+            "these shipped documents cite paths that exist in this repository "
+            f"and reach no workspace, so a reader there cannot resolve them: {unresolved}")
 
 
 class InitTests(unittest.TestCase):
@@ -32,7 +214,7 @@ class InitTests(unittest.TestCase):
             topic="mechanistic interpretability",
             tools=("claude", "opencode", "pi", "antigravity"),
             remote="kaggle",
-            run_npm=False,
+            run_npm=False, run_env=False,
         )
 
         assert result["name"] == "sparse-ae"
@@ -120,7 +302,7 @@ class InitTests(unittest.TestCase):
         result = init_module.initialize(
             workspace,
             tools=("claude", "opencode", "pi", "antigravity"),
-            run_npm=False,
+            run_npm=False, run_env=False,
         )
         canonical = (workspace / "skills").resolve()
         for relpath in (".claude/skills", ".opencode/skills", ".pi/skills", ".antigravity/skills"):
@@ -164,7 +346,7 @@ class InitTests(unittest.TestCase):
         ]:
             with self.subTest(remote=remote):
                 workspace = tmp_path / remote
-                init_module.initialize(workspace, remote=remote, run_npm=False)
+                init_module.initialize(workspace, remote=remote, run_npm=False, run_env=False)
                 data = config.load_papersmith_yaml(workspace)
                 assert data["compute_targets"]["default"] == target
                 cfg = config.load_workspace_config(workspace)
@@ -173,7 +355,7 @@ class InitTests(unittest.TestCase):
     def test_initialize_rejects_unknown_tools(self) -> None:
         tmp_path = self.new_tmp()
         with self.assertRaisesRegex(UserError, "unsupported runtime"):
-            init_module.initialize(tmp_path / "paper", tools=("claude", "wat"), run_npm=False)
+            init_module.initialize(tmp_path / "paper", tools=("claude", "wat"), run_npm=False, run_env=False)
 
     def test_initialize_rejects_nonempty_destination(self) -> None:
         tmp_path = self.new_tmp()
@@ -181,7 +363,7 @@ class InitTests(unittest.TestCase):
         workspace.mkdir()
         (workspace / "notes.md").write_text("keep")
         with self.assertRaisesRegex(UserError, "must be empty"):
-            init_module.initialize(workspace, run_npm=False)
+            init_module.initialize(workspace, run_npm=False, run_env=False)
 
     def test_cli_init_routes_flags_and_prints_summary(self) -> None:
         tmp_path = self.new_tmp()
@@ -191,6 +373,7 @@ class InitTests(unittest.TestCase):
             assert main([
                 "init", str(workspace), "--title", "CLI Paper", "--topic", "testing",
                 "--tools", "claude,pi", "--remote", "local", "--no-npm",
+            "--no-env",
             ]) == 0
         output = buffer.getvalue()
         assert "Initialized papersmith workspace" in output
@@ -199,7 +382,7 @@ class InitTests(unittest.TestCase):
     def test_generated_yaml_is_parseable_without_third_party_yaml(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "paper"
-        init_module.initialize(workspace, run_npm=False)
+        init_module.initialize(workspace, run_npm=False, run_env=False)
         parsed = loads((workspace / "papersmith.yaml").read_text(encoding="utf-8"))
         assert parsed["execution_profiles"]["sweep_training"]["sharding"]["values"] == [
             42, 1337, 2026, 9999

@@ -97,7 +97,7 @@ class IngestTests(unittest.TestCase):
     def test_ingest_delegates_pdf_and_refreshes_index(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "paper"
-        init_module.initialize(workspace, run_npm=False)
+        init_module.initialize(workspace, run_npm=False, run_env=False)
         source = tmp_path / "source.pdf"
         source.write_bytes(b"pdf")
         captured: dict[str, object] = {}

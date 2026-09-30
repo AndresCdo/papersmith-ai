@@ -26,7 +26,7 @@ from papersmith.errors import UserError
 
 def _workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "paper"
-    init_module.initialize(workspace, run_npm=False)
+    init_module.initialize(workspace, run_npm=False, run_env=False)
     return workspace
 
 
