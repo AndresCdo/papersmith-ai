@@ -11,6 +11,66 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.7.0
+
+### Added
+
+- **Pi receives the agent roster.** The nineteen agent definitions existed
+  only under `.claude/agents/`, while Pi discovers agents at
+  `<cwd>/.pi/agents/*.md` -- so in that harness a delegated stretch had no agent
+  to land on, and a flow could stall asking the operator about routing that did
+  not exist. The kit renderer now projects each definition onto Pi's shape:
+  front matter travels verbatim except `tools:`, mapped onto Pi's tool names
+  (`WebSearch`/`WebFetch` onto the MCP gateway the agent bodies already
+  prefer), and the body's `.claude/skills/` references become the
+  harness-neutral `skills/` link every workspace already carries. It is a
+  rendered path, so `init`, `upgrade`, `status` and the drift check pick it up
+  from the one path authority -- and nothing is forked: the projection derives
+  from `.claude/agents/` on every run. A malformed definition, an absent or
+  unsafe name, or an unreadable file is skipped with a warning, never raised
+  on.
+- **A fresh workspace ships the `paper_writing` connector roles.** Without
+  them, `paper_cli.py resolve` refused `RESOLVER_ROLE_EMPTY` before any
+  literature work could start -- and that front door is what the scout and the
+  screener both depend on. The seeded block mirrors this repository's own:
+  OpenAlex/Crossref/arXiv for resolution, and full-text only for the two
+  connectors whose own resolved metadata names a fetchable PDF. `contact` is
+  seeded empty on purpose; it is the operator's courtesy address for OpenAlex's
+  polite pool, never a shared credential.
+
+### Fixed
+
+- **`init` no longer aborts a workspace's provisioning on the editable
+  install.** The provisioner ran `pip install -e <root>` unconditionally and
+  with `check=True`, and a workspace is not a Python project -- no
+  `pyproject.toml`, no `setup.py`, only `requirements.txt`. Pip refused with
+  "does not appear to be a Python project", the step aborted before
+  `marker-pdf`, and the workspace reported `OCR Engine Missing` while its conda
+  environment was otherwise fine: `fastapi` imported and `papersmith ui` ran.
+  The editable install now runs only where there is a Python project to
+  install, which is the framework checkout, and says so when it skips.
+- **`resolve` accepts the identifier a user actually pastes.**
+  `arXiv:1512.03385` was sent to the arXiv API with its prefix, and that feed
+  answers entry-less -- measured: 706 bytes with no `<entry>`, against 2814 for
+  the bare id -- so the command died on a traceback instead of returning
+  metadata. One case-insensitive `arXiv:` prefix and surrounding whitespace are
+  stripped before the query, and a feed that names no work now refuses as
+  `IDENTIFIER_UNRESOLVED`, the code the contract already documented.
+- **Both offline smoke wrappers are hermetic again.** They called `init` with
+  `--no-npm` and no `--no-env`, so the wrapper provisioned a real
+  multi-gigabyte environment: the wiring smoke built one inside its own 180s
+  test timeout and failed there, while its header promises "no npm, no
+  network". Neither line had changed since it was written -- `init` gained the
+  provisioning step two days later -- and the guard written to catch exactly
+  this swept `tests/` only, so it stayed green over both callers. The wrappers
+  pass `--no-env` now, and the guard sweeps `scripts/` and `.github/` too.
+
+### Internal
+
+- `.gitignore` covers the `.venv` symlink CI creates. The directory form
+  (`.venv/`) does not match a symlink, so `git status` reported the workflow's
+  own artifact as untracked.
+
 ## 0.6.0
 
 ### Added
