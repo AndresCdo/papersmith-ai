@@ -244,7 +244,14 @@ def _crossref_url(doi: str) -> str:
 
 
 def _arxiv_url(arxiv_id: str) -> str:
-    return "http://export.arxiv.org/api/query?" + urllib.parse.urlencode({"id_list": arxiv_id})
+    # Users paste `arXiv:1512.03385`; the API's `id_list` wants the bare
+    # id. Measured: with the prefix the feed comes back entry-less (706
+    # bytes, no `<entry>`), without it the paper arrives. Strip one
+    # case-insensitive `arxiv:` prefix plus surrounding whitespace.
+    bare = arxiv_id.strip()
+    if bare[:6].lower() == "arxiv:":
+        bare = bare[6:].strip()
+    return "http://export.arxiv.org/api/query?" + urllib.parse.urlencode({"id_list": bare})
 
 
 def _parse_openalex(raw: bytes) -> dict:
@@ -393,11 +400,11 @@ def resolve_identifier(identifier: str, *, resolver: str, role: str, config: dic
     url, parser = _ENDPOINT_BUILDERS[resolver](identifier, config)
     try:
         raw = _get(url, config=config)
+        metadata = parser(raw)
     except _Unreachable as exc:
         raise Refused("RESOLVER_UNREACHABLE", str(exc))
     except _NoSuchWork as exc:
         raise Refused("IDENTIFIER_UNRESOLVED", str(exc))
-    metadata = parser(raw)
     digest = hashlib.sha256(raw).hexdigest()
     return {
         "identifier": identifier,
