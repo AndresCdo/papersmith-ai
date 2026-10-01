@@ -49,7 +49,7 @@ def _failures(graph: object, root: Path) -> list[str]:
         found.append("EDGES_NOT_A_LIST")
         edges = []
     if len(nodes) > MAX_NODES:
-        found.append(f"NODE_BUDGET_EXCEEDED: {len(nodes)} nodes, ceiling is {MAX_NODES}")
+        found.append(f"NODE_BUDGET_EXCEEDED: {len(nodes)} nodes, limit is {MAX_NODES}")
 
     seen: set[str] = set()
     counts: dict[str, int] = {}
