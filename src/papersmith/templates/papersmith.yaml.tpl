@@ -89,3 +89,19 @@ paper_ingestion:
   strip_references: true
   source_base: guidance
   source_roots: []
+
+# The paper-writing skill owns this block: connector roles (never code).
+# Without the `resolution` role, `paper_cli.py resolve` refuses with
+# RESOLVER_ROLE_EMPTY and literature scouting cannot start. Mirrors the
+# framework default shipped in this repository's own papersmith.yaml.
+paper_writing:
+  contact: ""
+  roles:
+    discovery: []
+    resolution:
+      - openalex
+      - crossref
+      - arxiv
+    full-text:
+      - openalex
+      - arxiv

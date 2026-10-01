@@ -415,6 +415,21 @@ class InitTests(unittest.TestCase):
         assert parsed["execution_profiles"]["sweep_training"]["sharding"]["values"] == [
             42, 1337, 2026, 9999
         ]
+    def test_initialize_seeds_paper_writing_roles(self) -> None:
+        # A fresh workspace must carry the connector roles `paper_cli.py
+        # resolve` reads: without them it refuses RESOLVER_ROLE_EMPTY and
+        # literature scouting cannot start. The block is opaque to the
+        # orchestrator's own validation, so this asserts through it.
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        yaml = config.load_papersmith_yaml(workspace)
+        assert yaml["paper_writing"]["roles"]["resolution"] == [
+            "openalex", "crossref", "arxiv",
+        ], yaml.get("paper_writing")
+        assert yaml["paper_writing"]["roles"]["full-text"] == [
+            "openalex", "arxiv",
+        ], yaml.get("paper_writing")
 
 
 class WorkspaceSetupEnvTests(unittest.TestCase):
