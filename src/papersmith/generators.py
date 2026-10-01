@@ -119,6 +119,26 @@ def _agents_block(workspace: Path) -> str:
 
 COMMAND_TOOLS = ("opencode", "claude")
 
+#: Claude tool names to Pi tool names for the `.pi/agents/` projection.
+#: `WebSearch`/`WebFetch` have no direct Pi child-tool counterparts: they
+#: map onto the MCP gateway (`mcp` for one call, `mcpScript` for batched
+#: calls with logic between them), which is what the agent bodies already
+#: prefer ("through your own MCP servers first"). Whether the Pi runtime
+#: actually hands those tools to a subagent is decided there, not here --
+#: this projection only declares the intent. Unknown names pass through
+#: lowercased rather than silently dropped, so a new Claude tool shows up
+#: verbatim instead of vanishing.
+PI_TOOL_MAP = {
+    "read": "read",
+    "glob": "find",
+    "grep": "grep",
+    "write": "write",
+    "edit": "edit",
+    "bash": "bash",
+    "websearch": "mcpScript",
+    "webfetch": "mcp",
+}
+
 
 def derive_command_description(source: str) -> str:
     """Collapse whitespace, then keep the first sentence.
@@ -215,6 +235,107 @@ def collect_commands(workspace: Path, *,
     return commands
 
 
+def _pi_tools_line(value: str) -> str:
+    """Map a Claude `tools: A, B` line onto Pi tool names as a YAML list."""
+    mapped = [PI_TOOL_MAP.get(item.strip().lower(), item.strip().lower())
+              for item in value.split(",") if item.strip()]
+    return "tools:\n" + "\n".join(f"  - {name}" for name in mapped)
+
+
+def _pi_agent_name(metadata: dict[str, str], fallback: str) -> str | None:
+    """The output stem, or None when it would escape `.pi/agents/`."""
+    name = metadata.get("name", fallback).strip()
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        return None
+    return name
+
+
+def _translate_agent_for_pi(source: str) -> tuple[dict[str, str] | None, str | None]:
+    """Project one Claude agent definition onto the Pi agent shape.
+
+    Returns ``({"name": ..., "text": ...}, None)`` or ``(None,
+    skip_reason)`` -- never raises. Front matter travels verbatim except
+    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP`; the
+    body travels verbatim except `.claude/skills/` references, which
+    become harness-neutral `skills/` (a symlink in every workspace).
+    """
+    lines = source.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None, "malformed front matter"
+    metadata: dict[str, str] = {}
+    meta_lines: list[str] = []
+    closed = False
+    rest: list[str] = []
+    for index, line in enumerate(lines[1:]):
+        if line.strip() == "---":
+            closed = True
+            rest = lines[index + 2:]
+            break
+        meta_lines.append(line)
+        if ":" in line:
+            key, value = line.split(":", 1)
+            metadata[key.strip()] = _frontmatter_value(value)
+    if not closed:
+        return None, "malformed front matter"
+    if "name" not in metadata:
+        return None, "missing name"
+    out_lines = []
+    for line in meta_lines:
+        if ":" in line and line.split(":", 1)[0].strip().lower() == "tools":
+            out_lines.append(_pi_tools_line(line.split(":", 1)[1]))
+        else:
+            out_lines.append(line)
+    body = "\n".join(rest).replace(".claude/skills/", "skills/")
+    text = "---\n" + "\n".join(out_lines) + "\n---\n" + body
+    if not text.endswith("\n"):
+        text += "\n"
+    return {"name": metadata["name"], "text": text}, None
+
+
+def collect_pi_agents(workspace: Path, *,
+                      warnings: list[str] | None = None) -> list[dict[str, str]]:
+    """Project every `.claude/agents/*.md` definition onto Pi shape.
+
+    Fail-soft by contract, like :func:`collect_commands`: a definition whose
+    front matter is missing or malformed, whose name is absent or unsafe, or
+    whose file is unreadable is skipped with a warning, never raised on.
+    """
+    agents: list[dict[str, str]] = []
+    agent_dir = workspace / ".claude" / "agents"
+    if not fs.is_dir(agent_dir):
+        return agents
+    try:
+        candidates = sorted(agent_dir.glob("*.md"))
+    except OSError:
+        return agents
+    skipped: list[str] = []
+    for path in candidates:
+        if not fs.is_regular_file(path):
+            skipped.append(f"skipping agent '{path.stem}': not a regular file")
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            skipped.append(f"skipping agent '{path.stem}': unreadable")
+            continue
+        entry, reason = _translate_agent_for_pi(source)
+        if entry is None:
+            skipped.append(f"skipping agent '{path.stem}': {reason}")
+            continue
+        name = _pi_agent_name({"name": entry["name"]}, path.stem)
+        if name is None:
+            skipped.append(f"skipping agent '{path.stem}': unsafe name")
+            continue
+        agents.append({"name": name, "text": entry["text"]})
+    if skipped:
+        if warnings is not None:
+            warnings.extend(skipped)
+        else:
+            _warnings.warn("\n".join(skipped), UserWarning, stacklevel=2)
+    agents.sort(key=lambda item: item["name"])
+    return agents
+
+
 def context_for_workspace(workspace: Path) -> dict[str, Any]:
     config = load_workspace_config(workspace)
     yaml = load_papersmith_yaml(workspace)
@@ -279,6 +400,9 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
     commands: list[dict[str, str]] | None = None
     if any(tool in COMMAND_TOOLS for tool in tools):
         commands = collect_commands(workspace, warnings=warnings)
+    pi_agents: list[dict[str, str]] | None = None
+    if "pi" in tools:
+        pi_agents = collect_pi_agents(workspace, warnings=warnings)
     for tool in tools:
         if tool not in TOOL_OUTPUTS:
             raise UserError(f"unsupported runtime generator: {tool}")
@@ -286,6 +410,9 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
         rendered[output] = render_package_template(template, ctx)
         if tool == "pi":
             rendered[".pi/gentle-ai/persona.json"] = render_package_template("persona.json.tpl", ctx)
+        if tool == "pi" and pi_agents:
+            for agent in pi_agents:
+                rendered[f".pi/agents/{agent['name']}.md"] = agent["text"]
         if tool == "opencode":
             rendered["opencode.json"] = render_package_template("opencode.json.tpl", ctx)
             rendered[".opencode/plugins/refuse-offpath-push.js"] = render_package_template(

@@ -20,6 +20,7 @@ from papersmith.generators import (
     check_generated,
     collect_agents,
     collect_commands,
+    collect_pi_agents,
     context_for_workspace,
     derive_command_description,
     render_files,
@@ -46,6 +47,32 @@ COMMAND_NAMES = (
     "proposal-implementation",
     "remote-execution",
     "skill-audit",
+)
+
+#: The nineteen agent definitions, in the deterministic order
+#: ``collect_pi_agents`` sorts them into. Pinned literally so a new or renamed
+#: agent has to be acknowledged here -- and in the `.pi/agents/` projection
+#: the Pi harness discovers.
+AGENT_NAMES = (
+    "audit-report",
+    "contract-auditor",
+    "deliberation-publish",
+    "diagram-author",
+    "experimental-publish",
+    "experimental-validation",
+    "experiments-build",
+    "experiments-walk",
+    "figure-auditor",
+    "implementation-build",
+    "implementation-walk",
+    "insumos-observer",
+    "novelty-screener",
+    "paper-ingestion",
+    "redactor",
+    "section-grounding-auditor",
+    "sota-grapher",
+    "sota-scout",
+    "style-sampler",
 )
 
 
@@ -97,6 +124,7 @@ class GeneratorsTests(unittest.TestCase):
         }
         expected |= {f".opencode/commands/{name}.md" for name in COMMAND_NAMES}
         expected |= {f".claude/commands/{name}.md" for name in COMMAND_NAMES}
+        expected |= {f".pi/agents/{name}.md" for name in AGENT_NAMES}
         assert set(render_files(workspace, tools=ALL_TOOLS)) == expected
         agents = collect_agents(workspace)
         assert any(agent["name"] == "paper-ingestion" for agent in agents)
@@ -129,6 +157,45 @@ class GeneratorsTests(unittest.TestCase):
         assert yaml_double_quote(
             derive_command_description(_skill_description(workspace, "paper-ingestion"))
         ) in head
+
+    def test_pi_agent_projection_is_scoped_to_pi(self) -> None:
+        workspace = _workspace(self.new_tmp())
+        assert [agent["name"] for agent in collect_pi_agents(workspace, warnings=[])] == list(AGENT_NAMES)
+        pi = render_files(workspace, tools=("pi",))
+        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 19
+        assert ".pi/agents/sota-scout.md" in pi
+        assert not any(
+            path.startswith(".pi/agents/")
+            for path in render_files(workspace, tools=("claude",))
+        )
+        assert not any(
+            path.startswith(".pi/agents/")
+            for path in render_files(workspace, tools=("opencode",))
+        )
+
+    def test_pi_agent_translation_maps_tools_and_skill_paths(self) -> None:
+        workspace = _workspace(self.new_tmp())
+        by_name = {agent["name"]: agent["text"] for agent in collect_pi_agents(workspace, warnings=[])}
+        scout = by_name["sota-scout"]
+        head, _, body = scout.partition("\n---\n")
+        assert head.startswith("---\n")
+        assert "name: sota-scout" in head
+        assert "WebSearch" not in head and "WebFetch" not in head
+        assert "- mcpScript" in head and "- mcp" in head
+        assert "- read" in head and "- bash" in head
+        assert ".claude/" not in scout
+        assert "skills/plausibility/SKILL.md" in body
+        # Domain metadata the skills read travels untouched.
+        assert "description: " in head
+
+    def test_pi_agent_projection_skips_malformed_definitions(self) -> None:
+        workspace = _workspace(self.new_tmp())
+        (workspace / ".claude" / "agents" / "broken.md").write_text("no frontmatter\n", encoding="utf-8")
+        sink: list[str] = []
+        names = [agent["name"] for agent in collect_pi_agents(workspace, warnings=sink)]
+        assert "broken" not in names
+        assert any("broken" in warning for warning in sink), sink
+        assert len(names) == 19
 
     def test_unsupported_runtime_generator_still_raises(self) -> None:
         workspace = _workspace(self.new_tmp())
