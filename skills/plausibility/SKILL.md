@@ -39,7 +39,7 @@ gitignored, like everything under `sota-pool/`.
 ## The planets
 
 Every system carries exactly these slots. Counts are exact where stated,
-and the 20-planet ceiling per system is absolute.
+and the 20-planet limit per system is absolute.
 
 | Slot | Planets | Orbit | What it holds |
 | --- | --- | --- | --- |

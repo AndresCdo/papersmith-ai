@@ -76,7 +76,7 @@ def _failures(atlas: object) -> list[str]:
             known[sid] = set()
             continue
         if len(planets) > MAX_PLANETS:
-            found.append(f"{sid}: PLANET_BUDGET_EXCEEDED: {len(planets)} planets, ceiling is {MAX_PLANETS}")
+            found.append(f"{sid}: PLANET_BUDGET_EXCEEDED: {len(planets)} planets, limit is {MAX_PLANETS}")
         seen: set[str] = set()
         counts: dict[str, int] = {}
         for index, planet in enumerate(planets):
