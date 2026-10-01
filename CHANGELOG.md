@@ -28,6 +28,31 @@ number is `0`, breaking changes can still arrive without a major bump.
   built bundle beside it, and `--export-static` writes a copy anywhere. The
   server is read-only: it observes a paper and never edits one.
 
+### Changed
+
+- **`init` reports a wired harness `skills` link like every other kit file,
+  and `upgrade` repairs one.** Each harness (`claude`, `opencode`, `pi`,
+  `antigravity`) reaches the kit through a relative `skills` symlink. A
+  filesystem that could not create one used to read as a silent success; it now
+  surfaces as a gap. The link never overwrites real, non-symlinked content at the
+  same path, and `upgrade` re-links a stale one. A hermetic smoke script,
+  `scripts/cli-paper-wiring-smoke.sh`, asserts the four links, agent and
+  slash-command parity across the harnesses, and live repair.
+- **`init` provisions the workspace environment, and `papersmith ui` resolves
+  the interpreter that provisioning creates.** `init` runs the workspace's own
+  `scripts/setup_env.py install` (fail-soft, skipped with `--no-env`), so the
+  dashboard works straight after `init` instead of exiting on a raw
+  `ModuleNotFoundError`. `ui` looks for `.micromamba/envs/papersmith` first, then
+  a `.venv`, and refuses with the one command that provisions the environment
+  when neither can import the backend.
+
+### Fixed
+
+- **`scripts/setup_env.py` installs the command center's dependencies.**
+  `fastapi`, `uvicorn`, `watchfiles` and `pydantic` were declared in the kit's
+  `requirements.txt` but never installed, so the environment the gate names could
+  not load the server's tests. They are installed from the same list now.
+
 ## 0.5.1
 
 ### Added
