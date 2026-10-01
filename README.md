@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los once comandos del CLI, las once skills, los dieciocho agentes,
+dentro, los once comandos del CLI, las once skills, los diecinueve agentes,
 cómputo remoto, desarrollo y solución de problemas.
 
 ## Índice
@@ -65,7 +65,7 @@ El camino completo, de un PDF a un paper compilado:
 | # | Invocás | Qué hace | Dónde deja el resultado |
 |---|---------|----------|-------------------------|
 | 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
-| 2 | `/sota-graph` | Mapea cada paper ingerido a un grafo sistema-solar (≤20 nodos: temas, problema, 3–5 familias, novedad, resultados, conclusiones), cada nodo con su cita | `guidance/<carpeta>/<stem>.graph.json` |
+| 2 | `/plausibility` | Explora la idea pre-ingesta en tres tramos: rastrea ~25 referencias por sus abstracts, mapea la constelación en un HTML único y discute la plausibilidad de la hipótesis contra ese SOTA | `sota-pool/` (ignorado, como `guidance/`) |
 | 3 | `/proposal-deliberation` | Discute la matemática con vos y publica cada acuerdo como una revisión gestionada | `proposals/` |
 | 4 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
 | 5 | `/proposal-implementation` | Convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
@@ -76,15 +76,17 @@ El camino completo, de un PDF a un paper compilado:
 | 10 | `/figure-review` | Mira el render: rasteriza cada `Figures/<id>.pdf` y mide lo que un raster puede sostener (tinta fuera del canvas, colisiones) | un informe visual, nunca un cambio |
 | 11 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
 
-**Lo mínimo para empezar.** Si sólo querés probar la forja, alcanza con los pasos 1 y 2:
-poné un PDF en `guidance/reference-papers/`, corré `/paper-ingestion`, y después
-`/proposal-deliberation`. Los pasos 4 a 7 sólo tienen sentido cuando ya hay una propuesta
+**Lo mínimo para empezar.** Si sólo querés probar la forja, arrancá por el paso 2
+con tu idea en dos oraciones: `/plausibility` rastrea el SOTA y te devuelve la
+constelación más el top-5. Recién después, si quieres, poné un PDF en
+`guidance/reference-papers/`, corré `/paper-ingestion`, y deliberá con
+`/proposal-deliberation`. Los pasos 5 y 6 sólo tienen sentido cuando ya hay una propuesta
 publicada y un repositorio destino donde implementarla.
 
 **Tres cosas que conviene saber antes de la primera corrida.**
 
-1. **Nada de lo que produzcas se sube.** `proposals/`, `experiments/`, `paper/` e
-   `implementations/` viajan a GitHub **como carpetas vacías** y nada más; `guidance/`
+1. **Nada de lo que produzcas se sube.** `proposals/`, `experiments/`, `paper/`,
+   `implementations/` y `sota-pool/` viajan a GitHub **como carpetas vacías** y nada más; `guidance/`
    versiona sus carpetas y nunca los PDFs ni el Markdown de adentro. El andamiaje se
    versiona, el contenido no. Un paper a medio escribir es material de investigación, y
    publicarlo por accidente es una fuga.
@@ -296,7 +298,7 @@ mi-paper/
 │   ├── manifest.json            #   hashes de todo lo que generó el framework
 │   ├── runs_ledger.jsonl        #   cada corrida despachada, en orden
 │   └── version                  #   versión del framework que lo creó
-├── .claude/agents/              # los dieciocho subagentes (fuente única de verdad)
+├── .claude/agents/              # los diecinueve subagentes (fuente única de verdad)
 ├── skills/                      # la copia del kit: las once skills + _core
 │   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
 ├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
@@ -417,7 +419,7 @@ repo).
 
 ## Los agentes
 
-Un workspace trae **dieciocho subagentes** en `.claude/agents/`. No son
+Un workspace trae **diecinueve subagentes** en `.claude/agents/`. No son
 reemplazos del CLI: son tiradas cortas de trabajo que tu harness lanza (por
 ejemplo, con la Task tool) cuando vos se lo pedís. La forma es siempre la
 misma — **una tirada entre dos compuertas del operador**: el agente decide
@@ -440,15 +442,16 @@ establecerlo. Las compuertas las abrís y cerrás vos.
 | `diagram-author` | Escribe un diagrama TikZ standalone (`<id>.tex` + `<id>.diagram.json`) y lo compila en su propio loop, hasta el presupuesto de reparaciones. Nunca dibuja un gráfico a partir de números medidos — eso es el verbo `place`. | `paper-writing` |
 | `figure-auditor` | Compara los componentes declarados en el manifest contra la prosa de la sección y los pasos del pipeline; reporta veredicto estructurado. | `paper-writing` |
 | `insumos-observer` | Lee las cuatro fuentes de entrada declaradas del paper —`proposals/`, `experiments/`, el código del repo destino y sus propias salidas de corrida— y reporta, por cada hecho observable, si se cumple y con qué evidencia. Nunca decide un valor ni corre `declare`. | `paper-writing` |
-| `novelty-screener` | La etapa `screened`: contrasta la hipótesis contra el SOTA ingerido (`reference-papers` + `paper-guide`), califica novedad y plausibilidad con cita exacta y propone ingesta externa para los claims huérfanos. No publica, no escribe, no delibera. | `proposal-deliberation` |
-| `sota-grapher` | Mapea un paper ingerido a su grafo sistema-solar —temas, problema, 3 a 5 familias SOTA, novedad, resultados y conclusiones, 20 nodos máximo— como JSON viewer-ready junto al paper, cada nodo con su cita, y corre el checker propio hasta el verde. | `sota-graph` |
+| `novelty-screener` | Discute la hipótesis contra los abstracts del pool, califica novedad y plausibilidad con cita exacta —todo provisional— y rankea el top-5 para la ingesta posterior, cerrando con un párrafo de plausibilidad. Diálogo con reporte al final; no publica, no escribe, no ingiere, no delibera. | `plausibility` |
+| `sota-scout` | Rastrea la idea en la literatura abierta —25 referencias con abstracts, cada una en su familia (3 a 5 en el pool)— como `sota-pool/candidates.json`. Termina en el pool; no ingiere ni califica nada final. | `plausibility` |
+| `sota-grapher` | Mapea el pool a su constelación —un sistema solar por paper agrupado por familia, 20 planetas máximo, aristas entre sistemas hermanos— como `atlas.json` más el `atlas.html` único, corriendo checker y renderer hasta el verde. | `plausibility` |
 | `audit-report` | Audita un sujeto que enumera un conjunto cerrado —operaciones, subcomandos, códigos, assets— buscando la brecha entre lo que su código acepta y lo que su documentación promete. Reporta; nunca repara. | `skill-audit` |
 
 Tres reglas que ordenan todo lo demás:
 
 - **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
   harness (`CLAUDE.md`, `PI.md`, `OPENCODE.md`, `.antigravity/rules.md`) listan
-  a los dieciocho enteros, y se generan: si querés cambiar un agente, se cambia
+  a los diecinueve enteros, y se generan: si querés cambiar un agente, se cambia
   ahí, no en la proyección.
 - **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa
   atadura se verifica: un agente que apunte a una skill que el workspace no
@@ -491,10 +494,10 @@ declaración de la skill que la recibe, no inferida del nombre de la carpeta.
 ```mermaid
 flowchart TD
     PDF["PDFs que dejás en guidance/"] --> PI["1. paper-ingestion"]
+    IDEA["tu idea, en dos oraciones"] --> PL["2. plausibility"]
 
-    PI -- "el .md de cada paper" --> SG["2. sota-graph"]
-    SG -- "el grafo solar de cada paper" --> PD["3. proposal-deliberation"]
-    PI -- "guidance/paper-guide (opcional)" --> PD
+    PI -- "guidance/paper-guide (opcional)" --> PD["3. proposal-deliberation"]
+    PL -- "top-5 + reporte provisional" --> PD
     PI -- "guidance/data-paper (obligatoria)" --> ED["4. experimental-deliberation"]
     PI -- "guidance/paper-guide (opcional)" --> ED
 
@@ -519,7 +522,7 @@ flowchart TD
     PAPER -- "Figures/<id>.pdf ya compilado" --> FR["10. figure-review"]
 
     SA["11. skill-audit"] -. "informa, nunca cambia" .-> PI
-    SA -. " " .-> SG
+    SA -. " " .-> PL
     SA -. " " .-> PD
     SA -. " " .-> IMP
     SA -. " " .-> KA

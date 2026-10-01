@@ -128,3 +128,8 @@ EXCLUSION-*.txt
 # quien es el PDF. Por carpeta, no por archivo, para que el proximo quede
 # cubierto sin tocar esto.
 _descartados/
+
+# SOTA scout pool (pre-ingestion exploration): candidates, atlas, HTML.
+# Research content like guidance/*/* — the folder travels, never its content.
+sota-pool/*
+!sota-pool/.gitkeep
