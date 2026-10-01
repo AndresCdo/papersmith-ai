@@ -81,8 +81,8 @@ not merge effects.
 ## Task list
 
 - [x] T0 -- Tracking and branch. `odd/tasks/merge-command-center.md` plus its
-  Engram mirror `odd/merge-command-center/tasks`; `integration/command-center`
-  created from `feat/command-center`.
+  optional, operator-side Engram mirror `odd/merge-command-center/tasks`;
+  `integration/command-center` created from `feat/command-center`.
   - Evidence: this document's work-unit commit on the branch.
 - [x] T1 -- Merge `fix/harness-skills-wiring` into `integration/command-center`.
   - No conflicts: the `ort` strategy merged cleanly and the merge commit carries
@@ -209,10 +209,28 @@ not merge effects.
     (the engram plan's, and this one's). Prompts carried each row's JSON with its
     location, so no reference was ambiguous, but the IDs are not lineage-unique
     and the next review should number rows per lineage.
-- [ ] T7 -- Delivery and close-out. PR `integration/command-center` -> `main`
-  (base must be `main` so CI runs); record commit identities and raw gate output
-  here; remove worktrees; mirror to Engram. Commit, push, PR and merge stay the
-  operator's decision.
+- [~] T7 -- Delivery and close-out. **Pending CI**: ticked only as far as this
+  repository can record. PR `integration/command-center` -> `main` (base must be
+  `main` so CI runs); commit identities and gate evidence are below. The CI
+  result and PR number live in the PR description, because writing them here
+  would need a commit after the push and re-trigger CI. This marker is therefore
+  permanent in the repository; the operator may resolve it in a later, unrelated
+  docs change. The Engram mirror is optional and operator-side (engram-optional
+  decision 5), not a delivery requirement. Worktree removal is post-merge,
+  operator-side. Commit, push, PR and merge stay the operator's decision.
+  - **Delivery decisions:** strategy `exception-ok` -- one PR carrying an
+    accepted `size:exception` (about 11.6k authored lines against the ~400-line
+    budget), merged with a true merge commit; squash and rebase-merge are both
+    forbidden because they rewrite the SHAs this document records. One slicing
+    pass was considered and rejected: each slice's tree differs from the one the
+    gate and Judgment Day reviewed. Rollback scope: revert the merge commit.
+  - **`origin/main` moved** from `a67d616` to `52583d7` (novelty-screener,
+    sota-grapher, sota-graph) between the verdict and delivery. It was merged in
+    as `8b51aaf`, cleanly. The gate on that tree showed 11 failures, 8 of them
+    inherited from `main`'s own commit (roster not updated for `sota-graph`; the
+    word `ceiling` in the new skill trips the forge vocabulary guard) and 3
+    wiring-smoke timeouts that pass in isolation in 34s. Fixed in `84a3d5c` and
+    `febfc83`; the timeouts are not root-caused.
 
 ## Non-goals
 
@@ -236,8 +254,17 @@ not merge effects.
 
 ## Close-out
 
-(to be completed at T7)
-
-- Gate evidence:
-- Judgment Day verdict:
-- Commit identities:
+- Gate evidence: `npm run test:all` -> exit 0, 5355 passed, 8 skipped, zero
+  failures, 14m59s (T5), and the differential control identical under an empty
+  and a decoy home, 24m57s (T6), both on the pre-merge tree. After merging
+  `main` (`8b51aaf`): full pytest 5400 passed / 11 failed, 8 inherited and fixed
+  (see T7); the 112 tests touching the new content pass. S2 needs no fresh full
+  gate: its delta is covered by `tests/test_version_sources.py` (6 passed),
+  `npm ci --dry-run` (up to date) and the PR's CI.
+- Judgment Day verdict: `JUDGMENT: APPROVED` on the combined tree, bound to
+  `a162749` (T6). The delivery plan for this PR was separately judged
+  `APPROVED` after two fix rounds.
+- Commit identities: `a162749` (verdict binding), `ace28d2` (verdict record),
+  `8b51aaf` (merge of `origin/main`), `84a3d5c` (generators roster), `febfc83`
+  (sota-graph wording), `90f58e4` (0.6.0 changelog and lockfile root version).
+  The close-out commit that records these cannot name its own SHA.

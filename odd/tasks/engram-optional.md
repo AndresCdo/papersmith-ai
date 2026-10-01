@@ -265,8 +265,11 @@ gate time recorded in the step's own comment.
     run reading as agreement. Both were the same under-observation class as the
     two holes found and fixed while building the control, which is four in one
     deliverable and worth remembering about it.
-- [ ] E7 — Close-out. Commit identities, raw gate output, the cross-repo
-  follow-up for `sdd-init`'s default store, and removal of worktrees.
+- [~] E7 — Close-out, **pending CI** (marker is permanent in the repo; see T7 in
+  `odd/tasks/merge-command-center.md`). Commit identities and gate evidence are
+  recorded in that document's Close-out. Cross-repo follow-up, not done here:
+  `sdd-init`'s default artifact store should stop assuming Engram. Worktree
+  removal is post-merge and operator-side.
 
 ## Non-goals
 
@@ -291,10 +294,9 @@ gate time recorded in the step's own comment.
   consequence; the rules only narrow the surface.
 - **Generator overwrite.** E1 edits generator output. E3's Rule A and E5 are the
   protection; the in-file note is not.
-- **The `mirror to Engram` wording in `odd/tasks/merge-command-center.md:84,139`
-  is still tracked** and still reads as a requirement. It belongs to the merge
-  feature, and is corrected when T4–T7 resume. Recorded here so it is not
-  silently left (row `JD-A-004`).
+- **The `mirror to Engram` wording in `odd/tasks/merge-command-center.md`** (T0
+  and T7) now describes the mirror as optional and operator-side; corrected at
+  T7 close-out (row `JD-A-004`).
 
 ## Judgment Day protocol
 
