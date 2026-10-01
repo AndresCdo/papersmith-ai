@@ -11,6 +11,7 @@ nbclient>=0.9         # executing a scaffolded notebook inside a test
 ipykernel>=6.29       # the kernel that execution resolves; without it a notebook test cannot run
 numpy>=1.26           # a scaffolded target computes with it before any conversion
 pytest>=8.0           # the suite a scaffolded target ships, run by tests that build one
+pytest-xdist>=3.5     # `npm run test:py:par`: `-n 8 --dist loadfile`; the other modes race on `implementations/`
 torch>=2.0            # the kit's own `benchmark.py` imports it, so every test that
 # builds a target from the kit and introspects it needs it present. It is the
 # heaviest entry here by a wide margin, and it was measured rather than assumed:

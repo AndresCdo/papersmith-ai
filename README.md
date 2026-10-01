@@ -3062,6 +3062,13 @@ textual que puede perder tests que ejercitan un módulo de forma indirecta:
 **no reemplaza** a `npm run test:all`, que sigue siendo lo que se corre antes de
 integrar.
 
+**Python en paralelo.** `npm run test:py:par` corre la misma suite con
+`pytest -n 8 --dist loadfile` (necesita `pytest-xdist`, que `setup_env.py` ya
+provisiona). Medido el 2026-10-01: **5455 passed** en 5 min 9 s contra 10 min 17 s
+en serie. Solo `loadfile` es seguro: `load` y `loadscope` compiten por el
+directorio compartido `implementations/`. Un único test (esperar a un proceso
+matado, 120 s) fija el piso de tiempo.
+
 Medido el 2026-09-20: **647/647** del lado Node y
 **4172 passed** (7 salteados, 4179 recolectados) del lado Python (con `requirements.txt` provisionado).
 `npm run typecheck` corre `tsc` sobre el motor de deliberación y sale limpio.
