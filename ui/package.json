@@ -1,0 +1,27 @@
+{
+  "name": "papersmith-command-center-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Paper Command Center dashboard: Vite + React + React Flow SPA served by skills/_core/command_center/server.py",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^1.1.4",
+    "@xyflow/react": "^12.3.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7"
+  }
+}

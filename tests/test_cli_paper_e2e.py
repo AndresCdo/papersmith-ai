@@ -64,6 +64,7 @@ def _make_workspace(base: Path, name: str = "e2e-paper") -> Path:
             "--remote",
             "local",
             "--no-npm",
+            "--no-env",
         ]
     )
     assert rc == 0, f"init failed with exit {rc}"
@@ -807,6 +808,29 @@ class TestSmokeWrapper(unittest.TestCase):
         for marker in ("init", "status", "ingest", "dry-run", "audit"):
             assert marker in text, f"smoke wrapper must cover {marker}"
         assert "tests/fixtures/e2e" in text, "smoke must reuse tests/fixtures/e2e/"
+
+
+class TestWiringSmokeWrapper(unittest.TestCase):
+    def new_tmp(self) -> Path:
+        """Resolved: see `tests/test_papersmith_bridges.py`'s own `new_tmp`
+        for the macOS `/var` -> `/private/var` symlink this closes."""
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        return Path(holder.name).resolve()
+
+    def test_wiring_smoke_script_exits_zero_on_fresh_workspace(self) -> None:
+        script = REPO_ROOT / "scripts" / "cli-paper-wiring-smoke.sh"
+        assert script.is_file(), "missing scripts/cli-paper-wiring-smoke.sh"
+        assert os.access(script, os.X_OK), "wiring smoke wrapper must be executable"
+        workspace = self.new_tmp() / "wiring-smoke"
+        completed = subprocess.run(
+            ["bash", str(script), str(workspace)],
+            capture_output=True, text=True, timeout=180,
+        )
+        assert completed.returncode == 0, (
+            f"wiring smoke failed:\nstdout={completed.stdout}\nstderr={completed.stderr}"
+        )
+        assert "wiring smoke: ok" in completed.stdout
 
 
 class TestSuiteBudget(unittest.TestCase):

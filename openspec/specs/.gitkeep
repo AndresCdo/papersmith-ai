@@ -1,2 +1,2 @@
 Source-of-truth specifications live here after sdd-archive merges change deltas.
-Directory created by sdd-init (hybrid) on 2026-09-09; currently no domains archived yet.
+Directory created by sdd-init on 2026-09-09; the artifact store is file-backed (`openspec`); currently no domains archived yet.

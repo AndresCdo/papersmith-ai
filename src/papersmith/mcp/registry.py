@@ -68,6 +68,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "remote",
     "target",
     "audit",
+    "ui",
     "mcp",
 )
 
@@ -1443,6 +1444,12 @@ CLI_DISPOSITIONS: dict[str, str] = {
     "implement": "exposed",
     "run": "exposed",
     "remote": "exposed",
+    # The dashboard host. It starts an HTTP server and opens a browser, so it is
+    # a thing an operator runs and watches, never a tool an agent calls mid-turn
+    # -- the same reason the server host below is declared out rather than
+    # exposed. Its own `/api/*` surface is what an agent would read, and that
+    # surface is not a CLI command.
+    "ui": "out",
     # The server host itself: never a tool it exposes.
     "mcp": "out",
 }

@@ -14,7 +14,7 @@ fixed orbits. The graph never replaces the `.md`; it indexes it.
 ## The slots
 
 Every graph carries exactly these slots. Counts are exact where stated, and
-the 20-node ceiling is absolute — a paper that needs more is two graphs, not
+the 20-node limit is absolute — a paper that needs more is two graphs, not
 a bigger one.
 
 | Slot | Nodes | Orbit | What it holds |

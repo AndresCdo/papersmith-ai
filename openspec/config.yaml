@@ -1,3 +1,11 @@
+# The artifact store every SDD phase writes to. `openspec` is file-backed only:
+# no memory provider is named as a store, because this repository's verification
+# path must work on a machine that has none. gentle-pi's accepted vocabulary is
+# `openspec|engram|hybrid|none` (`lib/sdd-preflight.ts`); `engram` is memory-only
+# and `hybrid` still names a provider as a store. `tests/test_no_personal_context_dependency.py`
+# derives its expectation from this key, so the declaration lives here rather
+# than in that guard.
+store: openspec
 strict_tdd: true
 context: |
   papersmith-ai is a mixed Python (>=3.11) + Node.js (>=20, ESM) repository.

@@ -30,3 +30,14 @@ kagglesdk==0.1.37  # published standalone since 2025-07-11; NOT vendored inside
 # -- pinned at the version this was measured against; a drift is
 # locked by DoctrinePinTests in tests/test_remote_execution.py. Requires
 # Python >=3.11; this repository's own forge venv runs 3.12.
+
+# Paper Command Center (`papersmith ui`) -- the local dashboard server that
+# ships inside every workspace at `skills/_core/command_center/`. It is
+# standalone from the forge CLI: a workspace's own venv (built from the kit's
+# `requirements.txt`) runs `python -m skills._core.command_center.server`
+# without Node/npm. Measured on 2026-05-18: all four resolve on CPython 3.14
+# (watchfiles ships `cp310-abi3` wheels), and CI runs them on 3.11/3.12.
+fastapi>=0.110        # HTTP routing + static mount for the command center API
+uvicorn>=0.27         # ASGI server the `papersmith ui` command launches
+watchfiles>=0.21      # debounced filesystem watching behind the SSE channel
+pydantic>=2.0         # response models for /api/state and /api/health/wiring

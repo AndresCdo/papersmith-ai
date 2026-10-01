@@ -11,6 +11,48 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.6.0
+
+### Added
+
+- **`papersmith ui`: the Paper Command Center.** A local dashboard and
+  health/wiring control plane for an initialized workspace, reachable through
+  one command. It serves the workspace's own state -- paper metadata, the ten
+  section contracts, the four quality gates, the pipeline stages, and the
+  evidence ledgers -- over `/api/state`, reports harness, skill, agent and
+  environment wiring over `/api/health/wiring`, and streams changes over SSE
+  within about a second of a section edit. The backend ships in the kit
+  (`skills/_core/command_center/`), so a workspace can run
+  `python -m skills._core.command_center.server` standalone with no Node/npm
+  dependency in the paper directory; the React/Vite dashboard is committed as a
+  built bundle beside it, and `--export-static` writes a copy anywhere. The
+  server is read-only: it observes a paper and never edits one.
+
+### Changed
+
+- **`init` reports a wired harness `skills` link like every other kit file,
+  and `upgrade` repairs one.** Each harness (`claude`, `opencode`, `pi`,
+  `antigravity`) reaches the kit through a relative `skills` symlink. A
+  filesystem that could not create one used to read as a silent success; it now
+  surfaces as a gap. The link never overwrites real, non-symlinked content at the
+  same path, and `upgrade` re-links a stale one. A hermetic smoke script,
+  `scripts/cli-paper-wiring-smoke.sh`, asserts the four links, agent and
+  slash-command parity across the harnesses, and live repair.
+- **`init` provisions the workspace environment, and `papersmith ui` resolves
+  the interpreter that provisioning creates.** `init` runs the workspace's own
+  `scripts/setup_env.py install` (fail-soft, skipped with `--no-env`), so the
+  dashboard works straight after `init` instead of exiting on a raw
+  `ModuleNotFoundError`. `ui` looks for `.micromamba/envs/papersmith` first, then
+  a `.venv`, and refuses with the one command that provisions the environment
+  when neither can import the backend.
+
+### Fixed
+
+- **`scripts/setup_env.py` installs the command center's dependencies.**
+  `fastapi`, `uvicorn`, `watchfiles` and `pydantic` were declared in the kit's
+  `requirements.txt` but never installed, so the environment the gate names could
+  not load the server's tests. They are installed from the same list now.
+
 ## 0.5.1
 
 ### Added

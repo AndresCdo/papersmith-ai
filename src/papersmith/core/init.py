@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -29,6 +30,12 @@ DEFAULT_AGENT_MODELS = {
     "code-materializer": "sonnet",
     "remote-orchestrator": "haiku",
 }
+
+#: How long the environment step may take. Generous on purpose: provisioning
+#: resolves and downloads a micromamba environment, which is minutes on a warm
+#: cache and considerably longer on a cold one. A tighter bound would report a
+#: slow network as a provisioning defect.
+PROVISION_TIMEOUT = 3600
 
 
 def _write_text(root: Path, relpath: str, content: str) -> None:
@@ -163,9 +170,50 @@ def _run_npm_install(root: Path) -> str | None:
     return None
 
 
+def _run_env_install(root: Path) -> str | None:
+    """Provision the workspace's Python environment through its own script.
+
+    Fail-soft and reported in ``warnings``, exactly like ``_run_npm_install``: a
+    workspace whose provisioning cannot complete is still a workspace.
+
+    **This is the step that makes ``papersmith ui`` work after init.** Without
+    it the dashboard's backend has no interpreter that can import it: the CLI's
+    own interpreter is a ``pipx`` venv with no runtime dependencies, and the
+    environment ``scripts/setup_env.py`` builds is the one thing that carries
+    them. It is deliberately the same script an operator can run by hand, so
+    there is one provisioning path rather than two.
+
+    The cost is real and stated rather than discovered: this downloads a
+    micromamba environment, so ``init`` is no longer offline-fast unless it is
+    given ``--no-env``.
+    """
+    script = root / "scripts" / "setup_env.py"
+    if not script.is_file():
+        return ("scripts/setup_env.py is not present, so the workspace has no "
+                "environment to run the command center; run `papersmith upgrade`")
+    interpreter = shutil.which("python3") or sys.executable
+    try:
+        result = subprocess.run(
+            [interpreter, str(script), "install"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=PROVISION_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"environment provisioning could not complete: {exc}"
+    if result.returncode:
+        detail = (result.stderr or result.stdout or "unknown error").strip().splitlines()
+        return ("environment provisioning failed: "
+                f"{detail[-1] if detail else 'unknown error'}; run "
+                f"`python3 scripts/setup_env.py install` in {root}")
+    return None
+
+
 def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                tools: Sequence[str] = ALL_TOOLS, topic: str = "unspecified",
-               remote: str = "kaggle", run_npm: bool = True) -> dict:
+               remote: str = "kaggle", run_npm: bool = True,
+               run_env: bool = True) -> dict:
     """Create a workspace and return a machine-readable operation summary."""
     tools = validate_tools(list(tools))
     if remote not in REMOTE_CHOICES:
@@ -194,6 +242,11 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     name = root.name
     _create_topology(root)
     copied = _copy_kit(root, kit_root)
+    # Report a wired harness `skills` symlink the same way every other kit
+    # file is reported, so a filesystem that cannot create symlinks (no
+    # privilege, read-only mount, ELOOP) shows up as a gap here instead of
+    # a silent "success" the operator has no signal to go fix with `upgrade`.
+    copied.extend(manifest.link_harness_skills(root, tools=tools))
     _write_workspace_seed(root, name=name, title=title.strip(), topic=topic.strip(),
                           target=target, version=version, tools=tools)
 
@@ -214,6 +267,10 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     warnings: list[str] = []
     if run_npm:
         warning = _run_npm_install(root)
+        if warning:
+            warnings.append(warning)
+    if run_env:
+        warning = _run_env_install(root)
         if warning:
             warnings.append(warning)
 
@@ -249,6 +306,11 @@ def register(subparsers) -> None:
     parser.add_argument("--topic", default="unspecified")
     parser.add_argument("--remote", choices=REMOTE_CHOICES, default="kaggle")
     parser.add_argument("--no-npm", action="store_true", help="skip the best-effort npm install")
+    parser.add_argument(
+        "--no-env", action="store_true",
+        help=("skip provisioning this workspace's Python environment; the "
+              "command center needs it, so `papersmith ui` will refuse until "
+              "`python3 scripts/setup_env.py install` has run"))
     parser.set_defaults(handler=run_cli)
 
 
@@ -261,6 +323,7 @@ def run_cli(args) -> int:
         topic=args.topic,
         remote=args.remote,
         run_npm=not args.no_npm,
+        run_env=not args.no_env,
     )
     print(f"Initialized papersmith workspace: {result['workspace']}")
     print(f"Framework version: {result['version']}; default target: {result['default_target']}")

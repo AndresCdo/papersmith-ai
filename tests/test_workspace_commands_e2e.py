@@ -263,7 +263,8 @@ class RenderedSetLifecycleTests(unittest.TestCase):
     @staticmethod
     def _init_subset(base: Path, tools: str) -> Path:
         workspace = base / "subset"
-        rc = main(["init", str(workspace), "--tools", tools, "--remote", "local", "--no-npm"])
+        rc = main(["init", str(workspace), "--tools", tools, "--remote", "local", "--no-npm",
+              "--no-env"])
         assert rc == SUCCESS, f"init failed with exit {rc}"
         return workspace
 

@@ -2743,6 +2743,7 @@ es el directorio actual por defecto y debe apuntar a un workspace inicializado
 | `remote` | Empaca, envía y sigue trabajos remotos directamente |
 | `target` | Lista, selecciona y chequea targets de cómputo |
 | `audit` | Audita la estructura y detecta drift de lo generado |
+| `ui` | Sirve el Paper Command Center local (DAG, compuertas, secciones, wiring) |
 | `mcp` | Expone el orquestador y los verbos del paper por Model Context Protocol |
 
 ### `papersmith init <dir>`
@@ -2916,6 +2917,40 @@ Audita la estructura y consistencia del workspace. Hoy está atado al sujeto
 > tiene todavía un subcomando `papersmith` — corre como
 > `python3 skills/kaggle-accounts/scripts/accounts_cli.py …` o indirectamente
 > vía `target check`.
+
+### `papersmith ui [<dir>]`
+
+```bash
+papersmith ui --port 8080
+papersmith ui ~/papers/sparse-ae --no-browser
+papersmith ui --export-static ./dashboard-static
+```
+
+| Flag | Efecto |
+|------|--------|
+| `--host HOST` | Dirección de bind (por defecto `127.0.0.1`) |
+| `--port PORT` | Puerto preferido; si está ocupado pasa al siguiente libre |
+| `--no-browser` | No abre el navegador |
+| `--export-static <dir>` | Copia el build del dashboard a `<dir>` y sale |
+
+Sirve el **Paper Command Center**: un dashboard local dentro del workspace con
+el DAG de etapas, las cuatro compuertas de calidad, la matriz de las diez
+secciones y la salud del wiring de harnesses. Se actualiza en vivo por
+Server-Sent Events, con un debounce de 300 ms sobre `sections/`, `openspec/`,
+`experiments/` y `papersmith.yaml`.
+
+El backend vive en `skills/_core/command_center/` (parte del kit, así que viaja
+con cada workspace) y corre standalone sin Node/npm:
+
+```bash
+python -m skills._core.command_center.server --port 8080
+```
+
+Endpoints: `/api/state`, `/api/health/wiring`, `/api/health/run-wiring-smoke`
+(POST) y `/api/events` (SSE); el build del dashboard se sirve en `/`. El
+frontend se construye desde `ui/` con `npm --prefix ui run build`, que emite en
+`skills/_core/command_center/static/`. El smoke end-to-end es
+`bash scripts/command-center-smoke.sh`.
 
 ### `papersmith mcp {serve,inspect,print-config}`
 

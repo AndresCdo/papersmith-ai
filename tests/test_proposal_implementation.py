@@ -3080,17 +3080,18 @@ class HolderUndeclaredMutationTests(unittest.TestCase):
         to `sys.path`."""
         scratch = Path(tempfile.mkdtemp(prefix="holder-mutation-"))
         self.addCleanup(shutil.rmtree, scratch, ignore_errors=True)
-        shutil.copytree(self.CORE, scratch / "core",
+        core = scratch / "skills" / "_core" / "implementation"
+        shutil.copytree(self.CORE, core,
                         ignore=shutil.ignore_patterns("__pycache__"),
                         dirs_exist_ok=True)
-        engine_path = scratch / "core" / "engine" / "implementation_engine.py"
+        engine_path = core / "engine" / "implementation_engine.py"
         original = engine_path.read_text(encoding="utf-8")
         mutated = mutate(original)
         self.assertNotEqual(mutated, original,
                             "the mutation string was not found -- the anchor "
                             "drifted from the shipped source")
         engine_path.write_text(mutated, encoding="utf-8")
-        return scratch / "core" / "engine"
+        return core / "engine"
 
     def _run(self, engine_dir: Path, code: str):
         env = os.environ.copy()
@@ -3388,17 +3389,18 @@ class HolderRepairAmbiguousMutationTests(unittest.TestCase):
     def _scratch_engine(self, mutate) -> Path:
         scratch = Path(tempfile.mkdtemp(prefix="holder-repair-mutation-"))
         self.addCleanup(shutil.rmtree, scratch, ignore_errors=True)
-        shutil.copytree(self.CORE, scratch / "core",
+        core = scratch / "skills" / "_core" / "implementation"
+        shutil.copytree(self.CORE, core,
                         ignore=shutil.ignore_patterns("__pycache__"),
                         dirs_exist_ok=True)
-        engine_path = scratch / "core" / "engine" / "implementation_engine.py"
+        engine_path = core / "engine" / "implementation_engine.py"
         original = engine_path.read_text(encoding="utf-8")
         mutated = mutate(original)
         self.assertNotEqual(mutated, original,
                             "the mutation string was not found -- the anchor "
                             "drifted from the shipped source")
         engine_path.write_text(mutated, encoding="utf-8")
-        return scratch / "core" / "engine"
+        return core / "engine"
 
     def _run(self, engine_dir: Path, code: str):
         env = os.environ.copy()
@@ -25405,17 +25407,18 @@ class CreateOnAbsentMutationTests(unittest.TestCase):
     def _scratch_engine(self, mutate) -> Path:
         scratch = Path(tempfile.mkdtemp(prefix="create-gate-mutation-"))
         self.addCleanup(shutil.rmtree, scratch, ignore_errors=True)
-        shutil.copytree(self.CORE, scratch / "core",
+        core = scratch / "skills" / "_core" / "implementation"
+        shutil.copytree(self.CORE, core,
                         ignore=shutil.ignore_patterns("__pycache__"),
                         dirs_exist_ok=True)
-        engine_path = scratch / "core" / "engine" / "implementation_engine.py"
+        engine_path = core / "engine" / "implementation_engine.py"
         original = engine_path.read_text(encoding="utf-8")
         mutated = mutate(original)
         self.assertNotEqual(mutated, original,
                             "the mutation string was not found -- the anchor "
                             "drifted from the shipped source")
         engine_path.write_text(mutated, encoding="utf-8")
-        return scratch / "core" / "engine"
+        return core / "engine"
 
     def _run(self, engine_dir: Path, code: str):
         env = os.environ.copy()

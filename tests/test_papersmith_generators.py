@@ -31,7 +31,7 @@ from papersmith.kit import resolve_and_validate
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The ten command-bearing skills, in the deterministic order
+#: The eleven command-bearing skills, in the deterministic order
 #: ``collect_commands`` sorts them into. Pinned literally so a new or renamed
 #: top-level skill has to be acknowledged here.
 COMMAND_NAMES = (
@@ -45,12 +45,13 @@ COMMAND_NAMES = (
     "proposal-implementation",
     "remote-execution",
     "skill-audit",
+    "sota-graph",
 )
 
 
 def _workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "paper"
-    init_module.initialize(workspace, run_npm=False)
+    init_module.initialize(workspace, run_npm=False, run_env=False)
     return workspace
 
 
@@ -103,10 +104,10 @@ class GeneratorsTests(unittest.TestCase):
     def test_command_derivation_is_scoped_to_the_command_tools(self) -> None:
         workspace = _workspace(self.new_tmp())
         opencode = render_files(workspace, tools=("opencode",))
-        assert sum(1 for path in opencode if path.startswith(".opencode/commands/")) == 10
+        assert sum(1 for path in opencode if path.startswith(".opencode/commands/")) == 11
         assert ".claude/commands/paper-ingestion.md" not in opencode
         claude = render_files(workspace, tools=("claude",))
-        assert sum(1 for path in claude if path.startswith(".claude/commands/")) == 10
+        assert sum(1 for path in claude if path.startswith(".claude/commands/")) == 11
         assert ".opencode/commands/paper-ingestion.md" not in claude
         assert not any(
             path.startswith(".opencode/commands/")
@@ -285,7 +286,7 @@ class WorkspaceToolsResolverTests(unittest.TestCase):
 
     def test_declared_tool_set_is_returned_verbatim(self) -> None:
         workspace = self.new_tmp() / "paper"
-        init_module.initialize(workspace, tools=("claude", "pi"), run_npm=False)
+        init_module.initialize(workspace, tools=("claude", "pi"), run_npm=False, run_env=False)
         assert workspace_tools(workspace) == ("claude", "pi")
 
     def test_absent_config_warns_once_and_falls_back(self) -> None:
@@ -331,7 +332,7 @@ class WorkspaceToolsResolverTests(unittest.TestCase):
         ``render_files`` comparison.
         """
         workspace = self.new_tmp() / "paper"
-        init_module.initialize(workspace, tools=("claude",), run_npm=False)
+        init_module.initialize(workspace, tools=("claude",), run_npm=False, run_env=False)
         kit_root = resolve_and_validate()
         context = context_for_workspace(workspace)
         assert (

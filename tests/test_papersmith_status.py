@@ -24,7 +24,7 @@ class StatusTests(unittest.TestCase):
     def test_status_json_reports_versions_and_workspace_inventory(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "status-paper"
-        init_module.initialize(workspace, run_npm=False)
+        init_module.initialize(workspace, run_npm=False, run_env=False)
         (workspace / "implementations" / "toy" / "tests").mkdir(parents=True)
         (workspace / "implementations" / "toy" / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
         (workspace / "implementations" / "toy" / "tests" / "test_one.py").write_text("", encoding="utf-8")
@@ -49,7 +49,7 @@ class StatusTests(unittest.TestCase):
     def test_status_cli_json_is_machine_readable(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "status-paper"
-        init_module.initialize(workspace, run_npm=False)
+        init_module.initialize(workspace, run_npm=False, run_env=False)
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             assert main(["status", str(workspace), "--json"]) == 0

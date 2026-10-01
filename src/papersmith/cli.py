@@ -19,6 +19,7 @@ from .core import init as init_command
 from .core import ingest as ingest_command
 from .core import status as status_command
 from .core import target as target_command
+from .core import ui as ui_command
 from .core import upgrade as upgrade_command
 from .errors import PapersmithError
 from .mcp import cli as mcp_command
@@ -48,6 +49,7 @@ _REGISTRY: list = [
     remote_command.register,
     target_command.register,
     audit_command.register,
+    ui_command.register,
     mcp_command.register,
 ]
 
