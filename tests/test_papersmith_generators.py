@@ -41,11 +41,11 @@ COMMAND_NAMES = (
     "kaggle-accounts",
     "paper-ingestion",
     "paper-writing",
+    "plausibility",
     "proposal-deliberation",
     "proposal-implementation",
     "remote-execution",
     "skill-audit",
-    "sota-graph",
 )
 
 
