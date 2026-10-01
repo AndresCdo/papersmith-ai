@@ -3050,6 +3050,18 @@ npm test                                  # motor compartido de deliberación �
 npm run test:all                          # las dos, en orden
 ```
 
+**Bucle rápido, no compuerta.** `npm run test:fast` (`python3 scripts/fast_tests.py`)
+corre los tests que tocan tu trabajo sin commitear (staged, unstaged y
+untracked; los archivos no-código como `.md` o `.json` no seleccionan nada) más
+un conjunto fijo de guardas. Las guardas solas tardan unos 40 segundos y la
+selección se suma a eso. Tres tests lentos medidos se deseleccionan por defecto
+(`--with-slow` los incluye; la compuerta completa siempre los corre).
+`--since REF` suma lo ya commiteado desde REF, `--list` muestra la selección, su
+base y por qué, y `--guards-only` corre solo las guardas. Es una heurística
+textual que puede perder tests que ejercitan un módulo de forma indirecta:
+**no reemplaza** a `npm run test:all`, que sigue siendo lo que se corre antes de
+integrar.
+
 Medido el 2026-09-20: **647/647** del lado Node y
 **4172 passed** (7 salteados, 4179 recolectados) del lado Python (con `requirements.txt` provisionado).
 `npm run typecheck` corre `tsc` sobre el motor de deliberación y sale limpio.

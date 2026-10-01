@@ -9,6 +9,7 @@
     "test:node": "DELIBERATION_DOMAIN_PROFILE=$PWD/skills/proposal-deliberation/profile.ts node --test \"tests/**/*.mjs\"",
     "test:py": ".micromamba/envs/papersmith/bin/pytest",
     "test:all": "npm run test:node && npm run test:py",
+    "test:fast": "python3 scripts/fast_tests.py",
     "setup": "npm install && python3 scripts/setup_env.py install && bash scripts/setup-harnesses.sh",
     "proposal-deliberation": "node skills/proposal-deliberation/cli.mjs",
     "setup:harnesses": "bash scripts/setup-harnesses.sh",

@@ -201,6 +201,8 @@ def _build_init(arguments: dict[str, Any], workspace: Path) -> ChildPlan:
         tokens.extend(["--tools", str(tools)])
     if not arguments.get("allow_npm"):
         tokens.append("--no-npm")
+    if not arguments.get("allow_env"):
+        tokens.append("--no-env")
     return ChildPlan("cli", tuple(tokens), timeout=600.0)
 
 
@@ -646,7 +648,8 @@ _WORKSPACE_TOOLS = (
         title="Initialize workspace",
         description=(
             "Create a standalone paper workspace under the bound root. npm install is skipped "
-            "unless allow_npm is explicitly set."
+            "unless allow_npm is explicitly set, and the micromamba environment download is "
+            "skipped unless allow_env is explicitly set."
         ),
         verb="init",
         surface="cli",
@@ -661,6 +664,10 @@ _WORKSPACE_TOOLS = (
                 Flag("remote", "--remote", kind="enum", choices=("kaggle", "local", "slurm")),
                 Flag("tools", "--tools", description="comma-separated runtimes"),
                 Flag("allow_npm", "allow_npm", kind="bool", description="run the best-effort npm install"),
+                Flag(
+                    "allow_env", "allow_env", kind="bool",
+                    description="provision the workspace's micromamba environment (a multi-gigabyte download)",
+                ),
             )
         ),
         build=_build_init,

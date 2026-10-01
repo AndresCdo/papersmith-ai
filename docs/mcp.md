@@ -88,7 +88,7 @@ and auto-approve sensibly.
 
 | Tool | What it wraps | readOnly | destructive | openWorld |
 |---|---|---|---|---|
-| `papersmith.workspace_init` | create a workspace under the bound root; skips npm unless asked | — | — | ✅ |
+| `papersmith.workspace_init` | create a workspace under the bound root; skips npm and the environment download unless asked | — | — | ✅ |
 | `papersmith.workspace_upgrade` | sync framework files, preserving all research artifacts | — | ✅ | — |
 | `papersmith.target_set` | persist the default compute target | — | — | — |
 | `papersmith.ingest_add` | ingest a PDF or URL; long-running, may download model weights | — | — | ✅ |
