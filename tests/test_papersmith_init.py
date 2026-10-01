@@ -126,6 +126,31 @@ class SuiteStaysOfflineTests(unittest.TestCase):
             "environment step, so each one performs a multi-gigabyte network "
             "install and leaks it into the temp dir: " + ", ".join(offenders))
 
+    def test_the_mcp_init_tool_skips_provisioning_unless_asked(self) -> None:
+        """The MCP tool reaches `init` through a builder, not a literal.
+
+        The text scan above reads `"--no-npm"` out of test sources, so it cannot
+        see an invocation assembled by `_build_init`. That blind spot let
+        `test_init_actually_creates_a_workspace_under_the_bound_root` provision a
+        real 3.6 GB micromamba environment into the temp dir. The tool already
+        keeps npm opt-in (`allow_npm`); an agent calling it must not trigger a
+        multi-gigabyte download unannounced either, so the environment step is
+        opt-in too.
+        """
+        from papersmith.mcp.registry import _build_init
+
+        workspace = Path(tempfile.mkdtemp(prefix="papersmith-mcp-init-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(workspace, ignore_errors=True))
+
+        default = _build_init({"name": "child"}, workspace).tokens
+        assert "--no-env" in default, (
+            "the MCP init tool provisions an environment by default: " + " ".join(default))
+        assert "--no-npm" in default
+
+        opted_in = _build_init({"name": "child", "allow_env": True}, workspace).tokens
+        assert "--no-env" not in opted_in
+        assert "--no-npm" in opted_in, "allow_env must not also enable npm"
+
     def test_every_api_init_in_the_suite_states_its_environment_intent(self) -> None:
         offenders = []
         for path in sorted((self.REPOSITORY / "tests").glob("*.py")):
