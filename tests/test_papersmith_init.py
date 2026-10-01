@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 import contextlib
+import importlib.util
 import io
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -412,3 +415,57 @@ class InitTests(unittest.TestCase):
         assert parsed["execution_profiles"]["sweep_training"]["sharding"]["values"] == [
             42, 1337, 2026, 9999
         ]
+
+
+class WorkspaceSetupEnvTests(unittest.TestCase):
+    """`setup_env.py install` inside a workspace must not `pip install -e` it.
+
+    Measured defect: the kit ships `scripts/setup_env.py` into workspaces, and
+    `cmd_install` unconditionally ran `pip install -e PROJECT_ROOT` with
+    `check=True`. A workspace is not a Python project (no `pyproject.toml` or
+    `setup.py`), so pip failed and aborted provisioning before `marker-pdf`,
+    leaving `OCR Engine Missing`. These load a *copy* of the real script into
+    a bare dir -- exactly the workspace situation -- with the process boundary
+    stubbed, so no test touches the network.
+    """
+
+    REAL_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "setup_env.py"
+
+    def load_copy(self, root: Path):
+        dest = root / "scripts" / "setup_env.py"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.REAL_SCRIPT, dest)
+        spec = importlib.util.spec_from_file_location("_setup_env_under_test", dest)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def install_calls(self, root: Path) -> list[list[str]]:
+        module = self.load_copy(root)
+        calls: list[list[str]] = []
+        module.find_micromamba = lambda: Path("/fake/mm")
+        module.env_exists = lambda name: False
+        module.detect_cuda = lambda: False
+        module.run = lambda mm, args, env: calls.append(list(args))
+        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False, no_ingestion=False)
+        assert module.cmd_install(args) == 0
+        return calls
+
+    def new_bare_root(self) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="papersmith-ws-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        return root
+
+    def test_workspace_without_python_project_skips_editable_install(self) -> None:
+        calls = self.install_calls(self.new_bare_root())
+        assert not any("-e" in call for call in calls), calls
+        assert any("marker-pdf==2.0.0" in call for call in calls), calls
+
+    def test_checkout_with_pyproject_keeps_editable_install(self) -> None:
+        root = self.new_bare_root()
+        (root / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+        calls = self.install_calls(root)
+        editable = [call for call in calls if "-e" in call]
+        assert len(editable) == 1, calls
+        assert str(root) in editable[0], editable

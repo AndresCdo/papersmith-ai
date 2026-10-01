@@ -231,14 +231,19 @@ def cmd_install(args: argparse.Namespace) -> int:
     run(mm, [verb, "-y", "-n", args.name, "-c", "conda-forge", *conda_packages],
         mamba_env())
 
-    # The project itself, editable. `papersmith` is a real package with a
-    # console entry point, and the MCP suites import it directly; without
-    # this step they error on import. Editable rather than a plain install
-    # so the environment keeps tracking the checkout instead of freezing a
-    # copy of it -- provisioning a developer environment that goes stale on
-    # the first edit is worse than not provisioning one.
-    run(mm, ["run", "-n", args.name, "python", "-m", "pip", "install", "-e",
-             str(PROJECT_ROOT)], mamba_env())
+    # The framework checkout itself, editable: `papersmith` is a real package
+    # with a console entry point, and the MCP suites import it directly.
+    # Editable rather than a plain install so the environment keeps tracking
+    # the checkout instead of freezing a copy of it. Only when PROJECT_ROOT
+    # is a Python project: a workspace copy carries no `pyproject.toml` or
+    # `setup.py`, so an unconditional install fails there and aborts the
+    # marker-pdf step below.
+    if (PROJECT_ROOT / "pyproject.toml").is_file() or (PROJECT_ROOT / "setup.py").is_file():
+        run(mm, ["run", "-n", args.name, "python", "-m", "pip", "install", "-e",
+                 str(PROJECT_ROOT)], mamba_env())
+    else:
+        print(f"[setup] skipping editable install: {PROJECT_ROOT} has no "
+              "pyproject.toml or setup.py")
 
     pip_packages = [] if args.no_ingestion else PIP_PACKAGES
     if pip_packages:
