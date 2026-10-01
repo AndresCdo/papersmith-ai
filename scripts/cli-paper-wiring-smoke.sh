@@ -30,7 +30,9 @@ fail() {
   exit 1
 }
 
-"$PY" -m papersmith.cli init "$WS" --tools claude,opencode,pi,antigravity --no-npm --remote local
+# `--no-env` is what keeps this hermetic: `init` provisions a multi-gigabyte
+# micromamba environment by default, and no offline smoke may do that.
+"$PY" -m papersmith.cli init "$WS" --tools claude,opencode,pi,antigravity --no-npm --no-env --remote local
 
 CANONICAL="$WS/skills"
 CANONICAL_RESOLVED="$(readlink -f "$CANONICAL")"

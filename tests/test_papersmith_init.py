@@ -110,9 +110,50 @@ class SuiteStaysOfflineTests(unittest.TestCase):
     carry the flag that keeps it offline. This file is excluded, because it is
     the one place that tests the provisioning step on purpose and stands in a
     script for the real one.
+
+    A caller is a caller wherever it lives. This rule scanned `tests/` alone,
+    and that blind spot is measured: `scripts/cli-paper-wiring-smoke.sh` kept
+    calling `init` without `--no-env` after provisioning landed, so the wrapper
+    built a real multi-gigabyte environment inside its own 180s timeout and
+    died there, while the guard written to catch exactly this stayed green.
+    Shell and workflow callers are swept too, on the same npm-keyed rule --
+    a caller that opted into the offline `--no-npm` path opted into the
+    offline environment with it. The opt-in live smoke is deliberately out of
+    scope and stays that way: it carries neither flag.
     """
 
     REPOSITORY = Path(__file__).resolve().parent.parent
+
+    #: Roots swept beyond `tests/`, with the suffixes that can hold an
+    #: invocation there. `.github/` is included because a workflow `run:` block
+    #: is a caller like any other.
+    INVOKING_ROOTS = ("scripts", ".github")
+    INVOKING_SUFFIXES = (".sh", ".yml", ".yaml")
+
+    def invocations_outside_the_suite(self) -> list[str]:
+        """Non-comment `init --no-npm` lines without `--no-env`, by path:line.
+
+        Shell and workflow files write the flag bare, so the quoted matcher
+        above cannot see them. Prose mentions it too -- in headers, in comments
+        -- so a line opening with `#` is skipped rather than read as an
+        invocation.
+        """
+        offenders: list[str] = []
+        for root in self.INVOKING_ROOTS:
+            for path in sorted((self.REPOSITORY / root).rglob("*")):
+                if path.suffix not in self.INVOKING_SUFFIXES:
+                    continue
+                text = path.read_text(encoding="utf-8", errors="replace")
+                for match in re.finditer(r"--no-npm", text):
+                    line_start = text.rfind("\n", 0, match.start()) + 1
+                    if text[line_start:match.start()].lstrip().startswith("#"):
+                        continue
+                    if "--no-env" in text[match.end():match.end() + 120]:
+                        continue
+                    relpath = path.relative_to(self.REPOSITORY).as_posix()
+                    line = text[:match.start()].count("\n") + 1
+                    offenders.append(f"{relpath}:{line}")
+        return offenders
 
     def test_every_cli_init_in_the_suite_skips_provisioning(self) -> None:
         offenders = []
@@ -123,6 +164,7 @@ class SuiteStaysOfflineTests(unittest.TestCase):
             for match in re.finditer(r'"--no-npm"', text):
                 if "--no-env" not in text[match.end():match.end() + 120]:
                     offenders.append(f"{path.name}:{text[:match.start()].count(chr(10)) + 1}")
+        offenders += self.invocations_outside_the_suite()
 
         assert offenders == [], (
             "these test-suite `init` invocations skip the npm step and not the "
@@ -415,6 +457,7 @@ class InitTests(unittest.TestCase):
         assert parsed["execution_profiles"]["sweep_training"]["sharding"]["values"] == [
             42, 1337, 2026, 9999
         ]
+
     def test_initialize_seeds_paper_writing_roles(self) -> None:
         # A fresh workspace must carry the connector roles `paper_cli.py
         # resolve` reads: without them it refuses RESOLVER_ROLE_EMPTY and
