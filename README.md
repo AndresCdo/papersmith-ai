@@ -413,7 +413,7 @@ documenta y activás vos.
 | Claude Code | wired | wired (`.claude/commands`) | wired (`.claude/agents`) | opt-in (ver [guard-hooks](docs/guard-hooks.md)) |
 | OpenCode | wired | wired (`.opencode/commands`) | wired (`.opencode/agents`) | wired (`.opencode/plugins/refuse-offpath-push.js`) |
 | Pi | wired | wired (`.pi/prompts`) | wired (`.pi/agents`) | wired (`.pi/extensions/refuse-offpath-push.js`) |
-| Google Antigravity | wired | unsupported | wired (`.agents/agents`) | unsupported |
+| Google Antigravity | wired | unsupported — vía skills (workflows deprecados) | wired (`.agents/agents`) | unsupported |
 <!-- harness-capabilities:end -->
 
 Al terminar, `init` y `upgrade` imprimen una línea por harness activo con el
@@ -431,12 +431,42 @@ Lo que la tabla no promete:
   `.claude/settings.json`; el fragmento para activarlo está en
   [`docs/guard-hooks.md`](docs/guard-hooks.md).
 - **Antigravity:** no hay guard hasta que se obtenga el esquema de entrada de sus
-  hooks (`.agents/hooks.json`); tampoco se generan comandos.
+  hooks (`.agents/hooks.json`).
+- **Antigravity, comandos:** no se generan archivos de comandos. Su único
+  mecanismo de slash commands, los workflows, está deprecado a favor de skills
+  (retiro 2026-11-01) y la ruta de workspace de los workflows no está verificada
+  (`.agents/workflows` es una suposición). Las skills ya funcionan como
+  `/<skill-name>` a través de `.agents/skills`, así que todas siguen invocables
+  como comandos.
 - **Antigravity, rutas heredadas:** `.antigravity/rules.md` y
   `.antigravity/skills` no figuran entre las ubicaciones documentadas por
   Antigravity (las documentadas son `.agents/skills`, `AGENTS.md` / `GEMINI.md` y
   `.agents/rules`). Se mantienen por compatibilidad; moverlas es una decisión
   pendiente del usuario.
+
+#### Matriz de soporte verificada
+
+Resumen de [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md),
+leída contra la documentación de cada herramienta el 2026-10-02. Es lo que la
+herramienta documenta, no lo que Papersmith genera (eso es la tabla de arriba).
+`unverified` significa que no se leyó una fuente primaria.
+
+| Harness | Skills | Comandos | Agentes | Plugins / hooks | MCP / config | Fuentes (2026-10-02) |
+|---------|--------|----------|---------|-----------------|--------------|----------------------|
+| OpenCode | supported: `.opencode/skills` | supported: `.opencode/commands` | supported: `.opencode/agents` | supported: `.opencode/plugins/` | supported: `opencode.json` | <https://opencode.ai/docs/skills/>, <https://opencode.ai/docs/commands/>, <https://opencode.ai/docs/agents/>, <https://opencode.ai/docs/plugins/>, <https://opencode.ai/docs/config/> |
+| Pi | supported: `.pi/skills`, `.agents/skills` | supported: `.pi/prompts/*.md` | unsupported en el núcleo; sólo de terceros (`.pi/agents`, `pi-subagents`) | supported: `.pi/extensions/` | supported: `.pi/mcp.json` | <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/prompt-templates.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md>, <https://github.com/nicobailon/pi-subagents/blob/main/docs/agents.md> |
+| Google Antigravity | supported: `.agents/skills` | supported pero deprecado (workflows); ruta `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (esquema de entrada unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
+| Claude Code | supported: `.claude/skills` | supported (formato legado): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith nunca lo escribe) | supported: `.mcp.json` (Papersmith no lo genera) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
+
+- `.antigravity/skills` y `.antigravity/rules.md`: unsupported (no source found);
+  las ubicaciones documentadas son `.agents/skills`, `AGENTS.md` / `GEMINI.md` y
+  `.agents/rules/`.
+- Antigravity deprecó los workflows a favor de skills (2026-11-01, fuente:
+  <https://antigravity.google/docs/ide/workflows>).
+- Pi: los nombres de herramienta `mcp` y `mcpScript` no tienen fuente
+  (unsupported, no source found).
+- Las docs de estas herramientas cambian rápido; volvé a verificar una celda antes
+  de apoyarte en ella después de esa fecha.
 
 Las fuentes de cada celda están en
 [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md).

@@ -230,3 +230,12 @@ class ReadmeCapabilityTableTests(unittest.TestCase):
                         self.assertIn("guard-hooks", cell)
                     else:
                         self.assertTrue(cell.startswith("unsupported"), cell)
+                        if entry.note:
+                            self.assertIn(entry.note, cell)
+
+    def test_antigravity_commands_carry_the_skills_note(self):
+        from papersmith.generators import HARNESS_CAPABILITIES
+
+        entry = HARNESS_CAPABILITIES["antigravity"]["commands"]
+        self.assertFalse(entry.supported)
+        self.assertEqual(entry.note, "vía skills (workflows deprecados)")

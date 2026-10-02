@@ -51,5 +51,7 @@ TDD strict (source: user config + project), runner: focused `.micromamba/envs/pa
 
 - T8 (887d3de) docs only plus one pinning test: README per-harness table (between `harness-capabilities` markers) compared to `HARNESS_CAPABILITIES` by `ReadmeCapabilityTableTests` in tests/test_harness_parity.py (no RED: prose; the test passed against the table). Edited README.md (kept Spanish), PI.md, OPENCODE.md, .pi/README.md, .agents/README.md, .antigravity/rules.md, CHANGELOG Unreleased consolidated. Counts recomputed: 19 agents (each of .claude/.pi/.opencode/.agents), 11 skills, 11 commands, 12 CLI commands; README counts already correct. Stale and left alone: openspec/config.yaml says 52 .mjs / 18 test_*.py (now 83 / 74). Checks: harness_parity+workspace_agents_e2e+sync_repo_harness 22 passed; sync `--check` clean (92); `npm run test:fast` 191 passed. Route: delegated writer.
 
+- README support matrix + Antigravity note (follow-up): README gains a sourced "Matriz de soporte verificada" (URLs + 2026-10-02) and an Antigravity commands note; `Capability.note` added (antigravity commands, supported stays False, no generator output changes); `ReadmeCapabilityTableTests` requires `unsupported` and the note when present. RED: `pytest tests/test_harness_parity.py -q` -> 3 failed (no `note` attribute). GREEN: focused trio 23 passed; `npm run test:fast` 290 passed.
+
 ## Next step
 T8 done. Feature complete locally; push/PR is the user's decision.

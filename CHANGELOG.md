@@ -26,6 +26,11 @@ Harness parity: skills, commands, agents and guards in each harness, wired by
   The health inspector's structural fallback also checks agents and the
   plugin/extension. The README table of what each harness wires is tested
   against that matrix.
+- **README support matrix and Antigravity note.** The README now carries the
+  sourced per-harness support matrix (with source URLs and the 2026-10-02 date)
+  and states why Antigravity gets no command files (workflows are deprecated in
+  favour of skills); its commands cell reads "unsupported — vía skills". Nothing
+  generated changes.
 - **Link-failure warnings.** Skill-link failures (an `OSError`, or a real
   directory at a link path) are reported by `init` and `upgrade` instead of
   being skipped silently.
