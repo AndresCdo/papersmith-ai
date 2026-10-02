@@ -10,7 +10,7 @@ strict_tdd: true
 context: |
   papersmith-ai is a mixed Python (>=3.11) + Node.js (>=20, ESM) repository.
   Python src-layout CLI (`src/papersmith`, `pipx install .`); Node skills via jiti + typebox.
-  Canonical skills in `skills/` projected into `.claude/.opencode/.pi/.antigravity/skills`.
+  Canonical skills in `skills/` projected into `.claude/.opencode/.pi/.antigravity/.agents/skills`.
   Tests: Node built-in `node:test` (52 .mjs) + pytest (18 test_*.py); CI runs both.
   Full suite: `npm run test:all`. Lint config: ruff (pyproject.toml); no type checker/formatter configured.
 rules:

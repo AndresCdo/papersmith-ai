@@ -17,7 +17,6 @@ before invoking it; it is the source of truth for that capability.
 
 ## Invoking skills
 
-Antigravity receives no generated slash commands — only `claude` and `opencode`
-produce command files. Invoke a capability by asking for it by name; the agent
-reads `skills/<name>/SKILL.md` before the work starts, and that file remains the
-source of truth.
+Antigravity invokes each skill as `/<name>` through the `.agents/skills` link to
+`skills/`; no command files are generated. Read the skill's `skills/<name>/SKILL.md`
+before the work starts; that file remains the source of truth.

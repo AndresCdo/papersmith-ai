@@ -129,9 +129,11 @@ class AgentRoutingTests(unittest.TestCase):
         self.assertIn("refuse-offpath-push.js", opencode)
         claude = (workspace / "CLAUDE.md").read_text(encoding="utf-8")
         self.assertIn(".claude/commands/", claude)
-        # PI.md now ships `.pi/prompts`; its wording is updated with the
-        # template in T5, so only Antigravity keeps the "no commands" claim.
-        for doc_name in (".antigravity/rules.md",):
+        pi = (workspace / "PI.md").read_text(encoding="utf-8")
+        self.assertIn(".pi/prompts/", pi)
+        antigravity = (workspace / ".antigravity/rules.md").read_text(encoding="utf-8")
+        self.assertIn(".agents/skills", antigravity)
+        self.assertIn("no command files are generated", antigravity)
+        for doc_name, text in (("PI.md", pi), (".antigravity/rules.md", antigravity)):
             with self.subTest(doc=doc_name):
-                text = (workspace / doc_name).read_text(encoding="utf-8")
-                self.assertIn("no generated slash commands", text)
+                self.assertNotIn("no generated slash commands", text)
