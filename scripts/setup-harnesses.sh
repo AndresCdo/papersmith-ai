@@ -14,7 +14,8 @@
 #   .claude/skills       Claude Code
 #   .pi/skills           Pi
 #   .opencode/skills     OpenCode
-#   .antigravity/skills  Google Antigravity
+#   .antigravity/skills  Google Antigravity (legacy path, kept for now)
+#   .agents/skills       Google Antigravity (skills invoked as /name)
 #
 # Usage:
 #   npm run setup:harnesses
@@ -36,6 +37,7 @@ HARNESSES=(
   ".pi/skills:Pi"
   ".opencode/skills:OpenCode"
   ".antigravity/skills:Google Antigravity"
+  ".agents/skills:Antigravity (.agents)"
 )
 
 for entry in "${HARNESSES[@]}"; do

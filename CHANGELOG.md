@@ -11,6 +11,29 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **Pi prompt templates.** `papersmith init` and `upgrade` now project one
+  prompt template per skill under `.pi/prompts/<name>.md` (the same body as the
+  Claude Code and OpenCode commands, with `$ARGUMENTS`), and `upgrade` removes
+  the ones whose skill disappeared.
+- **Antigravity `.agents/skills` link.** `init`, `upgrade` and
+  `scripts/setup-harnesses.sh` link `.agents/skills` to `skills/`, so skills can
+  be invoked as `/name`. Antigravity still gets no command files.
+
+### Changed
+
+- **The health check is per enabled tool.** It requires each harness link and
+  commands directory only for the tools the workspace enables, instead of
+  reporting drift for every known harness.
+- `.antigravity/skills` is kept for now. Removing it is a follow-up once the
+  `.agents/skills` path is confirmed in real Antigravity.
+- Unverified before release: that real Antigravity lists `.agents/skills/<name>`
+  as `/name`, and whether Pi shows a trust prompt for project `.pi/prompts`. If
+  the Antigravity premise fails, ship the Pi part alone.
+
 ## 0.7.1
 
 ### Fixed

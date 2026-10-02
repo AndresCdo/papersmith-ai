@@ -123,6 +123,68 @@ class WiringInspectorTests(unittest.TestCase):
         script.parent.mkdir(parents=True, exist_ok=True)
         script.write_text("import sys\nprint('usage')\nsys.exit(0)\n", encoding="utf-8")
 
+    def _link_skills(self, root: Path, relpath: str) -> None:
+        link = root / relpath
+        link.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(os.path.relpath(root / "skills", link.parent), link)
+
+    def _wire_all_harnesses(self, root: Path, names: list[str]) -> None:
+        """Claude/OpenCode commands, Pi prompts, Antigravity's two skills links and no commands."""
+        for harness in (".claude/commands", ".opencode/commands", ".pi/prompts"):
+            (root / harness).mkdir(parents=True)
+            for name in names:
+                (root / harness / f"{name}.md").write_text("x", encoding="utf-8")
+        for relpath in (".claude/skills", ".opencode/skills", ".pi/skills",
+                        ".antigravity/skills", ".agents/skills"):
+            self._link_skills(root, relpath)
+
+    def test_structural_drift_reports_a_missing_agents_skills_link_for_antigravity(self) -> None:
+        root = self.new_workspace()
+        _skill(root, "paper-writing")
+        self._link_skills(root, ".antigravity/skills")
+        state, detail = health_inspector._structural_drift(root, "antigravity")
+
+        assert state == "DRIFT_DETECTED"
+        assert ".agents/skills" in detail
+
+        self._link_skills(root, ".agents/skills")
+        state, detail = health_inspector._structural_drift(root, "antigravity")
+        assert state == "IN_SYNC", detail
+
+    def test_structural_drift_expects_pi_prompts_not_commands(self) -> None:
+        root = self.new_workspace()
+        _skill(root, "paper-writing")
+        self._link_skills(root, ".pi/skills")
+        state, detail = health_inspector._structural_drift(root, "pi")
+        assert state == "DRIFT_DETECTED"
+        assert ".pi/prompts" in detail
+
+        (root / ".pi" / "prompts").mkdir()
+        (root / ".pi" / "prompts" / "paper-writing.md").write_text("x", encoding="utf-8")
+        state, detail = health_inspector._structural_drift(root, "pi")
+        assert state == "IN_SYNC", detail
+
+    def test_harness_sync_does_not_penalise_a_tool_the_workspace_never_enabled(self) -> None:
+        root = self.new_workspace()
+        _skill(root, "paper-writing")
+        (root / ".papersmith").mkdir()
+        (root / ".papersmith" / "config.json").write_text(
+            '{"active_tools": ["claude"]}', encoding="utf-8")
+        (root / ".claude" / "commands").mkdir(parents=True)
+        (root / ".claude" / "commands" / "paper-writing.md").write_text("x", encoding="utf-8")
+        self._link_skills(root, ".claude/skills")
+
+        sync = health_inspector.harness_sync(root)
+
+        assert [row["tool"] for row in sync["harnesses"]] == ["claude"]
+        assert sync["harnesses"][0]["state"] == "IN_SYNC", sync
+        assert sync["state"] == "IN_SYNC"
+
+    def test_harness_sync_covers_every_tool_without_a_workspace_config(self) -> None:
+        root = self.new_workspace()
+        sync = health_inspector.harness_sync(root)
+        assert [row["tool"] for row in sync["harnesses"]] == list(health_inspector.HARNESSES)
+
     def test_full_payload_shape_on_a_fully_wired_workspace(self) -> None:
         root = self.new_workspace()
         # The roster is derived from the repository's own inventory, so this
@@ -136,12 +198,7 @@ class WiringInspectorTests(unittest.TestCase):
             self._stub_cli(root, name, relative)
         for required in health_inspector.REQUIRED_AGENTS:
             _agent(root, Path(required).stem, skill="paper-writing")
-        for tool in ("claude", "opencode", "pi", "antigravity"):
-            prefix = root / f".{tool}"
-            (prefix / "commands").mkdir(parents=True)
-            for name in core:
-                (prefix / "commands" / f"{name}.md").write_text("x", encoding="utf-8")
-            os.symlink(os.path.relpath(root / "skills", prefix), prefix / "skills")
+        self._wire_all_harnesses(root, core)
 
         health = health_inspector.get_wiring_health(root)
 

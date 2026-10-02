@@ -136,8 +136,8 @@ que se lo pidas con `--allow-downgrade`.
 entorno micromamba aparte (CPU o CUDA, según lo que detecte), incluido el
 binario `llama-server` que el OCR necesita — **no** es Ollama ni una
 instalación de Homebrew. `npm run setup:harnesses` enlaza el árbol canónico
-`skills/` dentro de `.claude/skills`, `.pi/skills`, `.opencode/skills` y
-`.antigravity/skills`, con enlaces relativos e idempotentes (ver
+`skills/` dentro de `.claude/skills`, `.pi/skills`, `.opencode/skills`,
+`.antigravity/skills` y `.agents/skills`, con enlaces relativos e idempotentes (ver
 [Harnesses y proyección de skills](#harnesses-y-proyección-de-skills)). La
 primera corrida de `papersmith ingest` descarga ~1.5 GB de pesos de Surya si el
 entorno no quedó pre-provisionado.
@@ -396,7 +396,7 @@ npm run setup:harnesses      # = bash scripts/setup-harnesses.sh
 | Claude Code | `.claude/skills/` | `CLAUDE.md` |
 | Pi | `.pi/skills/` | `PI.md` |
 | OpenCode | `.opencode/skills/` | `OPENCODE.md` |
-| Google Antigravity | `.antigravity/skills/` | `.antigravity/rules.md` |
+| Google Antigravity | `.agents/skills/` (y `.antigravity/skills/`) | `.antigravity/rules.md` |
 
 Dentro de un **workspace** generado, la historia es ligeramente distinta y
 conviene saberlo: el workspace embarca el árbol `skills/` completo y el de
@@ -404,12 +404,14 @@ agentes (`.claude/agents/`), y sus routing docs apuntan al árbol canónico
 `skills/*/SKILL.md`. Los documentos de routing son generated projections: la
 fuente real de cada agente es `.claude/agents/*.md` y la de cada skill es su
 `SKILL.md`. No edites las proyecciones a mano; se regeneran (y
-`papersmith audit --check-drift` avisa si una se desvió). Para que tu harness
+`papersmith audit --check-drift` avisa si una se desvió). `init` y `upgrade` generan un comando slash por skill
+en `.claude/commands/`, `.opencode/commands/` y `.pi/prompts/`; Antigravity no
+recibe archivos de comandos y lee las skills por sus enlaces. Para que tu harness
 liste las skills como comandos `/`, corré `npm run setup:harnesses` dentro del
 workspace: enlaza el árbol embarcado en `.claude/skills`, `.pi/skills`,
-`.opencode/skills` y `.antigravity/skills`, igual de relativo e idempotente que
+`.opencode/skills`, `.antigravity/skills` y `.agents/skills`, igual de relativo e idempotente que
 en el checkout. En este checkout, las proyecciones de comandos slash
-(`.claude/commands/`, `.opencode/commands/`) y el plugin de seguridad de OpenCode
+(`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`) y el plugin de seguridad de OpenCode
 se sincronizan con `python scripts/sync-repo-harness.py` (`--check` para CI; no
 tiene script en `package.json` porque el kit lo embarca y el script es sólo del
 repo).
@@ -3039,7 +3041,8 @@ papersmith-ai/
 - **Keyless y local-first**: la ingesta corre completamente offline y local, con
   Marker y `llama.cpp`.
 - **Proyección agnóstica de harness**: el árbol canónico `skills/` se proyecta a
-  `.claude/skills`, `.pi/skills`, `.opencode/skills` y `.antigravity/skills`.
+  `.claude/skills`, `.pi/skills`, `.opencode/skills`, `.antigravity/skills` y
+  `.agents/skills`.
 
 ---
 

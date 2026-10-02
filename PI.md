@@ -17,7 +17,8 @@ before invoking it; it is the source of truth for that capability.
 
 ## Invoking skills
 
-Pi receives no generated slash commands — only `claude` and `opencode` produce
-command files. Invoke a capability by asking for it by name; the agent reads
-`skills/<name>/SKILL.md` before the work starts, and that file remains the source
-of truth.
+Every top-level skill under `skills/` is also generated as a Pi prompt template
+in `.pi/prompts/<name>.md`, so it can be invoked as `/<name>`. Each template
+loads that skill's `SKILL.md` and passes your text through as `$ARGUMENTS`. The
+directory is a framework artifact: regenerate it with `python scripts/sync-repo-harness.py`
+(`--check` reports drift), so do not edit it by hand.

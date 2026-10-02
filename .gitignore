@@ -24,6 +24,7 @@ skills/paper-ingestion/.venv/
 .pi/skills
 .opencode/skills
 .antigravity/skills
+.agents/skills
 
 # --- Contenido específico de cada usuario ---
 # Versionamos solo el scaffold de carpetas (los `.gitkeep`); cada usuario arma

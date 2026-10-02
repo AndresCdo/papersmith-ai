@@ -124,6 +124,7 @@ class GeneratorsTests(unittest.TestCase):
         }
         expected |= {f".opencode/commands/{name}.md" for name in COMMAND_NAMES}
         expected |= {f".claude/commands/{name}.md" for name in COMMAND_NAMES}
+        expected |= {f".pi/prompts/{name}.md" for name in COMMAND_NAMES}
         expected |= {f".pi/agents/{name}.md" for name in AGENT_NAMES}
         assert set(render_files(workspace, tools=ALL_TOOLS)) == expected
         agents = collect_agents(workspace)
@@ -137,14 +138,14 @@ class GeneratorsTests(unittest.TestCase):
         claude = render_files(workspace, tools=("claude",))
         assert sum(1 for path in claude if path.startswith(".claude/commands/")) == 11
         assert ".opencode/commands/paper-ingestion.md" not in claude
-        assert not any(
-            path.startswith(".opencode/commands/")
-            for path in render_files(workspace, tools=("pi",))
-        )
-        assert not any(
-            path.startswith(".opencode/commands/")
-            for path in render_files(workspace, tools=("antigravity",))
-        )
+        pi = render_files(workspace, tools=("pi",))
+        assert sum(1 for path in pi if path.startswith(".pi/prompts/")) == 11
+        assert ".pi/prompts/paper-ingestion.md" in pi
+        assert not any(path.startswith((".opencode/commands/", ".claude/commands/")) for path in pi)
+        # Antigravity reads the skills link and gets no command files of its own.
+        antigravity = render_files(workspace, tools=("antigravity",))
+        assert not any("/commands/" in path or "/prompts/" in path for path in antigravity)
+        assert not any(path.startswith(".pi/prompts/") for path in (*opencode, *claude))
 
     def test_command_body_consumes_arguments_and_derives_description(self) -> None:
         workspace = _workspace(self.new_tmp())

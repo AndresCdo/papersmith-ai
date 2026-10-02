@@ -375,7 +375,10 @@ class InitTests(unittest.TestCase):
             run_npm=False, run_env=False,
         )
         canonical = (workspace / "skills").resolve()
-        for relpath in (".claude/skills", ".opencode/skills", ".pi/skills", ".antigravity/skills"):
+        for relpath in (
+            ".claude/skills", ".opencode/skills", ".pi/skills",
+            ".antigravity/skills", ".agents/skills",
+        ):
             link = workspace / relpath
             assert link.is_symlink(), f"{relpath} is not a symlink"
             assert not link.readlink().is_absolute(), f"{relpath} must be a relative link"
@@ -395,6 +398,23 @@ class InitTests(unittest.TestCase):
         assert (real / "keep.txt").read_text() == "mine"
         assert (tmp_path / ".claude/skills").is_symlink()
         assert not (tmp_path / ".pi/skills").exists()
+
+    def test_link_harness_skills_antigravity_wires_both_documented_and_legacy_paths(self) -> None:
+        tmp_path = self.new_tmp()
+        (tmp_path / "skills").mkdir()
+        linked = manifest.link_harness_skills(tmp_path, tools=("antigravity",))
+        assert sorted(linked) == [".agents/skills", ".antigravity/skills"]
+        for relpath in linked:
+            assert (tmp_path / relpath).resolve() == (tmp_path / "skills").resolve()
+
+    def test_link_harness_skills_filters_on_the_explicit_tool_not_the_path(self) -> None:
+        tmp_path = self.new_tmp()
+        (tmp_path / "skills").mkdir()
+        # `.agents/skills` belongs to antigravity even though no path segment says so.
+        assert manifest.link_harness_skills(tmp_path, tools=("claude",)) == [".claude/skills"]
+        assert not (tmp_path / ".agents/skills").exists()
+        assert not (tmp_path / ".antigravity/skills").exists()
+        assert manifest.link_harness_skills(tmp_path, tools=("pi",)) == [".pi/skills"]
 
     def test_link_harness_skills_repairs_a_stale_symlink(self) -> None:
         tmp_path = self.new_tmp()

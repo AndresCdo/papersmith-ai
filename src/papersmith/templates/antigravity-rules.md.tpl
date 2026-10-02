@@ -5,9 +5,9 @@ Generated from `.claude/` by `papersmith` {{version}}.
 - Treat `papersmith.yaml` as the workspace configuration.
 - Treat `.claude/agents/` as the canonical agent definition tree.
 - Read the relevant `skills/*/SKILL.md` before invoking a capability.
-- Antigravity receives no generated slash commands — only the `claude` and
-  `opencode` projections emit command files. Invoke a capability by name and read
-  its `skills/<name>/SKILL.md` first.
+- Antigravity invokes each skill as `/<name>` through the `.agents/skills` link
+  to `skills/`; no command files are generated. Read the skill's
+  `skills/<name>/SKILL.md` first.
 - Keep research artifacts under their declared workspace directories.
 
 ## Research topic
