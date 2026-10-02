@@ -57,16 +57,14 @@ jobs:
           ln -s .micromamba/envs/papersmith .venv
       - name: Install node dependencies
         run: npm ci
-      - name: Run pytest
-        run: .micromamba/envs/papersmith/bin/python -m pytest
-      - name: Verify the gate does not read the operator's personal context
-        # The declared gate runs twice: once under an empty HOME and once under
-        # one carrying the shapes a developer's machine has (.pi/agent/mcp.json,
-        # .agents/skills, .claude/skills, .engram). A test that reads any of them
-        # makes the two runs disagree, and this step fails naming it. Both homes
-        # are synthetic on purpose: comparing "my real home" against "an empty
-        # one" would be trivially green on a runner, which is why it is not what
-        # this does. Cost: the declared gate runs twice, making this the longest
-        # step in the job -- `--half python` bounds it if that budget ever
-        # matters, and it is a deliberate trade for a control that can fail.
+      - name: Run the gate, and verify it does not read the operator's personal context
+        # This step is the suite. The declared gate runs twice: once under an
+        # empty HOME and once under one carrying the shapes a developer's machine
+        # has (.pi/agent/mcp.json, .agents/skills, .claude/skills, .engram). It
+        # fails when the two runs disagree, naming the test, and it fails when
+        # the empty-HOME run itself fails, so a red suite cannot pass here. A
+        # separate plain `pytest` step used to precede it and repeated the
+        # empty-HOME pass for about 11 minutes. Both homes are synthetic on
+        # purpose: comparing "my real home" against "an empty one" would be
+        # trivially green on a runner.
         run: python3 scripts/clean_context_gate.py
