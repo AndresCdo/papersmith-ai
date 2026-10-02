@@ -201,7 +201,7 @@ class HarnessCommandProjectionTests(unittest.TestCase):
 
     def test_init_projects_eleven_commands_per_command_harness(self) -> None:
         workspace = make_workspace(new_tmp(self))
-        for harness in (".opencode/commands", ".claude/commands"):
+        for harness in (".opencode/commands", ".claude/commands", ".pi/prompts"):
             with self.subTest(harness=harness):
                 names = sorted(path.stem for path in (workspace / harness).glob("*.md"))
                 self.assertEqual(names, sorted(self.COMMAND_NAMES))
@@ -209,10 +209,14 @@ class HarnessCommandProjectionTests(unittest.TestCase):
                 self.assertIn("$ARGUMENTS", body)
                 self.assertIn("skills/paper-ingestion/SKILL.md", body)
 
-    def test_non_command_harnesses_receive_no_command_directory(self) -> None:
+    def test_antigravity_receives_no_command_directory(self) -> None:
+        # Antigravity invokes `/name` from the skills link, so it gets no
+        # command files of its own; Pi reads `.pi/prompts` (asserted above).
         workspace = make_workspace(new_tmp(self))
-        self.assertFalse((workspace / ".pi/commands").exists())
         self.assertFalse((workspace / ".antigravity/commands").exists())
+        self.assertFalse((workspace / ".antigravity/prompts").exists())
+        self.assertFalse((workspace / ".agents/commands").exists())
+        self.assertFalse((workspace / ".pi/commands").exists())
 
     def test_opencode_json_is_valid_and_declares_no_plugin_key(self) -> None:
         workspace = make_workspace(new_tmp(self))
@@ -315,7 +319,7 @@ class RenderedSetLifecycleTests(unittest.TestCase):
         )
         rc, _, _ = capture(["upgrade", str(workspace)])
         self.assertEqual(rc, SUCCESS)
-        for harness in (".opencode/commands", ".claude/commands"):
+        for harness in (".opencode/commands", ".claude/commands", ".pi/prompts"):
             self.assertTrue((workspace / harness / "zz-ghost.md").is_file(), harness)
 
         shutil.rmtree(ghost)
@@ -323,7 +327,7 @@ class RenderedSetLifecycleTests(unittest.TestCase):
         note.write_text("hand written, never baselined\n", encoding="utf-8")
 
         result = upgrade_module.upgrade(workspace)
-        for harness in (".opencode/commands", ".claude/commands"):
+        for harness in (".opencode/commands", ".claude/commands", ".pi/prompts"):
             with self.subTest(harness=harness):
                 orphan = f"{harness}/zz-ghost.md"
                 self.assertIn(orphan, result["removed"])
@@ -446,6 +450,24 @@ class RenderedSetLifecycleTests(unittest.TestCase):
         self.assertEqual(guard.read_bytes(), original, "no in-workspace data loss")
         self.assertNotIn(traversal, result["removed"])
         self.assertNotIn(".opencode/commands/\x00nul.md", result["removed"])
+
+    def test_pi_prompt_manifest_keys_are_refused_not_resolved(self) -> None:
+        """`.pi/prompts/` is a dynamic prefix, so the same lexical gate must cover it."""
+        workspace = make_workspace(new_tmp(self))
+        guard = workspace / "papersmith.yaml"
+        original = guard.read_bytes()
+
+        manifest_path = workspace / ".papersmith" / "manifest.json"
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        traversal = ".pi/prompts/../../papersmith.yaml"
+        payload["files"][traversal] = "0" * 64
+        payload["files"][".pi/prompts/\x00nul.md"] = "0" * 64
+        manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = upgrade_module.upgrade(workspace)
+        self.assertEqual(guard.read_bytes(), original, "no in-workspace data loss")
+        self.assertNotIn(traversal, result["removed"])
+        self.assertNotIn(".pi/prompts/\x00nul.md", result["removed"])
 
     def test_a_fifo_at_a_managed_path_never_blocks_derivation(self) -> None:
         """A non-regular managed path is skipped, not opened.
@@ -948,7 +970,7 @@ class DamagedWorkspaceTotalityTests(unittest.TestCase):
         with self._recorded_warnings():
             upgrade_module.upgrade(workspace)
         shutil.rmtree(ghost)
-        for harness in (".opencode/commands", ".claude/commands"):
+        for harness in (".opencode/commands", ".claude/commands", ".pi/prompts"):
             (workspace / harness / "zz-ghost.md").unlink()
 
         with self._recorded_warnings():

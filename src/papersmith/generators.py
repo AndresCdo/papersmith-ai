@@ -23,8 +23,8 @@ ALL_TOOLS = ("claude", "opencode", "pi", "antigravity")
 #: and, for a runtime a workspace does not declare, to name that runtime's
 #: surplus static files in ``audit``. It is deliberately not a complete
 #: rendered-path list and cannot become one: the dynamic
-#: ``.opencode/commands/<name>.md`` and ``.claude/commands/<name>.md`` files are
-#: one per discovered skill. :func:`render_files` is the single authority for
+#: ``.opencode/commands/<name>.md``, ``.claude/commands/<name>.md`` and
+#: ``.pi/prompts/<name>.md`` files are one per discovered skill. :func:`render_files` is the single authority for
 #: the path set.
 TOOL_OUTPUTS = {
     "claude": ("CLAUDE.md",),
@@ -117,7 +117,15 @@ def _agents_block(workspace: Path) -> str:
     )
 
 
-COMMAND_TOOLS = ("opencode", "claude")
+COMMAND_TOOLS = ("opencode", "claude", "pi")
+
+#: Where each command tool reads project slash commands from. Pi calls them
+#: prompt templates; the body is the same `command.md.tpl` for all three.
+COMMAND_PREFIXES = {
+    "opencode": ".opencode/commands",
+    "claude": ".claude/commands",
+    "pi": ".pi/prompts",
+}
 
 #: Claude tool names to Pi tool names for the `.pi/agents/` projection.
 #: `WebSearch`/`WebFetch` have no direct Pi child-tool counterparts: they
@@ -418,7 +426,7 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
             rendered[".opencode/plugins/refuse-offpath-push.js"] = render_package_template(
                 "opencode-plugin.js.tpl", ctx)
         if tool in COMMAND_TOOLS and commands:
-            prefix = ".opencode/commands" if tool == "opencode" else ".claude/commands"
+            prefix = COMMAND_PREFIXES[tool]
             for command in commands:
                 command_ctx = dict(ctx)
                 command_ctx.update({
