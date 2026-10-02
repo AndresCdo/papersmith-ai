@@ -6,7 +6,8 @@ The generators cannot run at the repository root -- there is no
 ``generators.context_for_workspace``). This script therefore builds a throwaway
 workspace with the real ``papersmith init``, renders the projection there, and
 copies only the context-independent artifacts back into the checkout:
-``.opencode/commands/``, ``.opencode/plugins/``, and ``.claude/commands/``.
+``.opencode/commands/``, ``.opencode/plugins/``, ``.claude/commands/``, and
+``.pi/prompts/``.
 
 ``opencode.json`` and the root routing docs are deliberately NOT copied: they
 are context-dependent (they carry the workspace name/version) and at the root
@@ -41,14 +42,15 @@ PROJECTION = (
     (".opencode/commands", ".opencode/commands"),
     (".opencode/plugins", ".opencode/plugins"),
     (".claude/commands", ".claude/commands"),
+    (".pi/prompts", ".pi/prompts"),
 )
-GENERATED_TOOLS = ("opencode", "claude")
+GENERATED_TOOLS = ("opencode", "claude", "pi")
 
 
 def _render(holder: Path) -> tuple[Path, list[str]]:
     """Build a throwaway workspace and return it plus its skip warnings."""
     workspace = holder / "workspace"
-    init_module.initialize(workspace, remote="local", run_npm=False)
+    init_module.initialize(workspace, remote="local", run_npm=False, run_env=False)
     skipped: list[str] = []
     apply_generated(workspace, context_for_workspace(workspace), GENERATED_TOOLS, warnings=skipped)
     return workspace, skipped

@@ -155,7 +155,13 @@ class UpgradeCommandTests(unittest.TestCase):
 class HarnessProjectionTests(unittest.TestCase):
     """The workspace ships the script its package.json advertises for harness wiring."""
 
-    HARNESS_LINKS = (".claude/skills", ".pi/skills", ".opencode/skills", ".antigravity/skills")
+    HARNESS_LINKS = (
+        ".claude/skills",
+        ".pi/skills",
+        ".opencode/skills",
+        ".antigravity/skills",
+        ".agents/skills",
+    )
 
     def test_projection_script_wires_every_harness(self) -> None:
         workspace = make_workspace(new_tmp(self))
@@ -163,6 +169,11 @@ class HarnessProjectionTests(unittest.TestCase):
         self.assertIn("bash scripts/setup-harnesses.sh", package)
         script = workspace / "scripts" / "setup-harnesses.sh"
         self.assertTrue(script.is_file(), "the workspace must ship the script it advertises")
+
+        # `init` already wires the links; remove them so the script alone is
+        # what is proven to create each one.
+        for relpath in self.HARNESS_LINKS:
+            (workspace / relpath).unlink()
 
         first = subprocess.run(
             ["bash", str(script)], cwd=workspace, capture_output=True, text=True, timeout=60,

@@ -5,14 +5,14 @@
 # This asserts the specific files and links that make that true, which
 # neither cli-paper-smoke.sh nor cli-paper-live-smoke.sh checks:
 #
-#   1. .claude/skills, .opencode/skills, .pi/skills, .antigravity/skills are
-#      relative symlinks that resolve to the workspace's own skills/.
+#   1. .claude/skills, .opencode/skills, .pi/skills, .antigravity/skills and
+#      .agents/skills are relative symlinks that resolve to the workspace's own skills/.
 #   2. Every .claude/agents/*.md's referenced .claude/skills/<name>/SKILL.md
 #      resolves both canonically and through every harness's own symlink.
 #   3. The agent roster in CLAUDE.md/OPENCODE.md/PI.md/.antigravity/rules.md
 #      matches the real .claude/agents/*.md files.
-#   4. .claude/commands/ and .opencode/commands/ list the same filenames as
-#      each other and as skills/'s top-level SKILL.md directories.
+#   4. .claude/commands/, .opencode/commands/ and .pi/prompts/ list the same
+#      filenames as each other and as skills/'s top-level SKILL.md directories.
 #   5. upgrade repairs a broken harness symlink live, and never destroys
 #      real (non-symlinked) content sitting at the same path.
 #
@@ -38,7 +38,7 @@ CANONICAL="$WS/skills"
 CANONICAL_RESOLVED="$(readlink -f "$CANONICAL")"
 
 # Check 1: harness skill symlinks exist, are relative, and resolve to skills/.
-for link in .claude/skills .opencode/skills .pi/skills .antigravity/skills; do
+for link in .claude/skills .opencode/skills .pi/skills .antigravity/skills .agents/skills; do
   path="$WS/$link"
   test -L "$path" || fail 1 "$link is not a symlink"
   target="$(readlink "$path")"
@@ -58,7 +58,7 @@ for agent in "$WS"/.claude/agents/*.md; do
     || fail 2 "could not extract skill name from $(basename "$agent"): $line"
   test -f "$WS/skills/$name/SKILL.md" \
     || fail 2 "skills/$name/SKILL.md missing (referenced by $(basename "$agent"))"
-  for prefix in .opencode .pi .antigravity; do
+  for prefix in .opencode .pi .antigravity .agents; do
     test -f "$WS/$prefix/skills/$name/SKILL.md" \
       || fail 2 "$prefix/skills/$name/SKILL.md missing (referenced by $(basename "$agent"))"
   done
@@ -72,11 +72,14 @@ for doc in CLAUDE.md OPENCODE.md PI.md .antigravity/rules.md; do
     || fail 3 "$doc agent roster does not match .claude/agents/*.md"
 done
 
-# Check 4: slash-command parity between the two harness dirs and skills/.
+# Check 4: slash-command parity between the three harness dirs and skills/.
 claude_cmds="$(cd "$WS/.claude/commands" && ls -- *.md | sort)"
 opencode_cmds="$(cd "$WS/.opencode/commands" && ls -- *.md | sort)"
+pi_cmds="$(cd "$WS/.pi/prompts" && ls -- *.md | sort)"
 [[ "$claude_cmds" == "$opencode_cmds" ]] \
   || fail 4 ".claude/commands and .opencode/commands list different filenames"
+[[ "$claude_cmds" == "$pi_cmds" ]] \
+  || fail 4 ".claude/commands and .pi/prompts list different filenames"
 skill_cmds="$(cd "$WS/skills" && for d in */; do
   d="${d%/}"
   [[ "$d" == "_core" ]] && continue
