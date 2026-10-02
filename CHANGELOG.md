@@ -11,6 +11,27 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.7.1
+
+### Fixed
+
+- **The clean-context gate fails when the gate itself fails.** `scripts/clean_context_gate.py`
+  only compared the empty-HOME run with the decoy-HOME run, so a suite that
+  failed the same way under both exited 0. The empty home is the machine with
+  no personal context, so its own failure now fails the step. Its temporary
+  homes are also removed on SIGTERM (a cancelled CI job) and when a read-only
+  file is left under HOME, and a leftover is reported instead of ignored.
+
+### Changed
+
+- **CI runs the suite once per job, not twice.** The plain `pytest` step is
+  gone: the gate already runs the declared suite under an empty HOME, and
+  with the fix above it fails on that run's own failure. About eleven minutes
+  less per Python job.
+- **The README installs the latest `main`**, never a pinned tag, and its
+  counts (CLI commands, skills, agents, MCP tools), flag tables, badges and CI
+  description now match the code.
+
 ## 0.7.0
 
 ### Added
