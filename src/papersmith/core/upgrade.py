@@ -22,6 +22,7 @@ from . import config, fs, manifest
 #: were previously baselined are ever removed (see :func:`_orphaned`).
 DYNAMIC_PREFIXES = (
     ".opencode/commands/", ".opencode/agents/", ".agents/agents/", ".claude/commands/", ".pi/prompts/",
+    ".pi/agents/",
 )
 
 
