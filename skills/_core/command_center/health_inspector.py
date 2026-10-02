@@ -22,6 +22,7 @@ never silently reported healthy.
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,56 @@ HARNESSES = {
     "pi": ".pi",
     "antigravity": ".antigravity",
 }
+
+#: Directory under a harness prefix that holds its projected slash commands.
+#: Antigravity has none: it invokes `/name` from its skills links.
+COMMAND_DIRS = {
+    "claude": "commands",
+    "opencode": "commands",
+    "pi": "prompts",
+}
+
+#: Fallback for ``papersmith.core.manifest.HARNESS_SKILL_LINKS`` -- explicit
+#: ``(tool, relpath)`` pairs. This module is stdlib-only and ships into
+#: workspaces where the package may not be importable, so the pairs are
+#: duplicated here and the real table wins whenever it can be imported.
+_FALLBACK_SKILL_LINKS: tuple[tuple[str, str], ...] = (
+    ("claude", ".claude/skills"),
+    ("pi", ".pi/skills"),
+    ("opencode", ".opencode/skills"),
+    ("antigravity", ".antigravity/skills"),
+    ("antigravity", ".agents/skills"),
+)
+
+
+def _skill_links() -> tuple[tuple[str, str], ...]:
+    try:
+        from papersmith.core.manifest import HARNESS_SKILL_LINKS  # type: ignore
+    except Exception:
+        return _FALLBACK_SKILL_LINKS
+    return tuple(HARNESS_SKILL_LINKS)
+
+
+def required_skill_links(tool: str) -> list[str]:
+    """Every skills symlink a harness must resolve, from the manifest pairs."""
+    return [relpath for owner, relpath in _skill_links() if owner == tool]
+
+
+def enabled_tools(root: Path) -> list[str]:
+    """Harnesses the workspace enabled, from ``.papersmith/config.json``.
+
+    A workspace with no readable config (a bare checkout, a hand-built tree)
+    declares nothing, so every harness is measured rather than none.
+    """
+    try:
+        payload = json.loads((root / ".papersmith" / "config.json").read_text(encoding="utf-8"))
+        active = payload["active_tools"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return list(HARNESSES)
+    if not isinstance(active, list):
+        return list(HARNESSES)
+    return [tool for tool in HARNESSES if tool in active]
+
 
 #: The canonical generator a harness can be re-checked against, when present.
 GENERATORS = {
@@ -222,13 +273,14 @@ def _structural_drift(root: Path, tool: str) -> tuple[str, str]:
     prefix = root / HARNESSES[tool]
     if not prefix.is_dir():
         return "UNKNOWN", f"{HARNESSES[tool]}/ is absent"
-    skills_link = prefix / "skills"
-    if not skills_link.exists():
-        return "DRIFT_DETECTED", f"{HARNESSES[tool]}/skills does not resolve"
-    if tool in ("claude", "opencode"):
-        commands = prefix / "commands"
+    for link in required_skill_links(tool):
+        if not (root / link).exists():
+            return "DRIFT_DETECTED", f"{link} does not resolve"
+    commands_dir = COMMAND_DIRS.get(tool)
+    if commands_dir is not None:
+        commands = prefix / commands_dir
         if not commands.is_dir():
-            return "DRIFT_DETECTED", f"{HARNESSES[tool]}/commands is absent"
+            return "DRIFT_DETECTED", f"{HARNESSES[tool]}/{commands_dir} is absent"
         on_disk = {p.stem for p in commands.glob("*.md")}
         expected = {
             d.name for d in (root / "skills").iterdir()
@@ -236,7 +288,7 @@ def _structural_drift(root: Path, tool: str) -> tuple[str, str]:
         } if (root / "skills").is_dir() else set()
         if on_disk != expected:
             return "DRIFT_DETECTED", (
-                f"commands != skills: missing {sorted(expected - on_disk)}, "
+                f"{commands_dir} != skills: missing {sorted(expected - on_disk)}, "
                 f"extra {sorted(on_disk - expected)}"
             )
     return "IN_SYNC", f"{HARNESSES[tool]}/ resolves structurally"
@@ -244,7 +296,7 @@ def _structural_drift(root: Path, tool: str) -> tuple[str, str]:
 
 def harness_sync(root: Path) -> dict[str, Any]:
     harnesses: list[dict[str, Any]] = []
-    for tool in HARNESSES:
+    for tool in enabled_tools(root):
         state, detail, source = _measure_harness(root, tool)
         harnesses.append({
             "tool": tool,

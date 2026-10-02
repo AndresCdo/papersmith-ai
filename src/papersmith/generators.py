@@ -24,7 +24,8 @@ ALL_TOOLS = ("claude", "opencode", "pi", "antigravity")
 #: surplus static files in ``audit``. It is deliberately not a complete
 #: rendered-path list and cannot become one: the dynamic
 #: ``.opencode/commands/<name>.md``, ``.claude/commands/<name>.md`` and
-#: ``.pi/prompts/<name>.md`` files are one per discovered skill. :func:`render_files` is the single authority for
+#: ``.pi/prompts/<name>.md`` files are one per
+#: discovered skill. :func:`render_files` is the single authority for
 #: the path set.
 TOOL_OUTPUTS = {
     "claude": ("CLAUDE.md",),
