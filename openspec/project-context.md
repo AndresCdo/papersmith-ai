@@ -27,9 +27,9 @@
 - `src/papersmith/core/` — init, status, ingest, upgrade, executor, ledger
 - `src/papersmith/bridges/` — Node, Python, deliberation, remote-execution bridges
 - `src/papersmith/mcp/` — stdio Model Context Protocol server exposing workspace and paper-writing verbs
-- `skills/` — canonical skill tree (`experimental-deliberation`, `experimental-implementation`, `figure-review`, `kaggle-accounts`, `paper-ingestion`, `paper-writing`, `proposal-deliberation`, `proposal-implementation`, `remote-execution`, `skill-audit`), projected into `.claude/skills`, `.opencode/skills`, `.pi/skills`, `.antigravity/skills` by `npm run setup:harnesses`
+- `skills/` — canonical skill tree (`experimental-deliberation`, `experimental-implementation`, `figure-review`, `kaggle-accounts`, `paper-ingestion`, `paper-writing`, `plausibility`, `proposal-deliberation`, `proposal-implementation`, `remote-execution`, `skill-audit`), projected into `.claude/skills`, `.opencode/skills`, `.pi/skills`, `.antigravity/skills` by `npm run setup:harnesses`
 - `guidance/paper-guide/` — domain guidelines; `scripts/setup_env.py` — isolated runtime provisioning
-- CI (`.github/workflows/test.yml`): Node suite (`npm ci` + `npm test`) and Python suite provisioned by `python3 scripts/setup_env.py install --no-ingestion` and run through `.micromamba/envs/papersmith/bin/python -m pytest` — the interpreter `package.json`'s `test:py` names
+- CI (`.github/workflows/test.yml`): Node suite (`npm ci` + `npm test`) and Python suite provisioned by `python3 scripts/setup_env.py install --no-ingestion`, run by `python3 scripts/clean_context_gate.py`: it runs the declared gate (`npm run test:all`, whose `test:py` names `.micromamba/envs/papersmith/bin/pytest`) twice, under an empty HOME and under a synthetic developer HOME, and fails if the two runs differ or if the empty-HOME run fails
 
 ## SDD config summary
 - `openspec/config.yaml` exists with `strict_tdd: true`

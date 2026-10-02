@@ -2,12 +2,12 @@
 
 > **Una forja de papers**: convierte PDFs de referencia en Markdown de alta fidelidad y legible por un agente (ecuaciones en LaTeX, tablas como tablas, figuras como archivos), y conduce la deliberación formal —matemática y de diseño experimental— hasta el código que se prueba solo y el paper compilado.
 
-[![CI](https://github.com/CarlosAndres12/papersmith-ai/actions/workflows/test.yml/badge.svg)](https://github.com/CarlosAndres12/papersmith-ai/actions/workflows/test.yml)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+[![CI](https://github.com/Daprosero/papersmith-ai/actions/workflows/test.yml/badge.svg)](https://github.com/Daprosero/papersmith-ai/actions/workflows/test.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D21-green.svg)](https://nodejs.org/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los once comandos del CLI, las once skills, los diecinueve agentes,
+dentro, los doce comandos del CLI, las once skills, los diecinueve agentes,
 cómputo remoto, desarrollo y solución de problemas.
 
 ## Índice
@@ -107,12 +107,12 @@ Nada de esto requiere claves ni servicios externos: la forja corre localmente.
 ### 1. Instalá el CLI y prepará el entorno
 
 ```bash
-# 1a. El CLI, desde el checkout del framework (lo que tengas en la carpeta AHORA)
-pipx install .
+# 1a. El CLI, siempre desde la última versión de la rama `main`
+pipx install git+https://github.com/Daprosero/papersmith-ai.git
 
-# 1b. O fijando una versión publicada, que es lo que conviene si no sos quien
-#     la desarrolla: el tag decide qué recibís, no el estado de un clon
-pipx install "git+https://github.com/Daprosero/papersmith-ai@v0.2.0"
+# 1b. O desde un clon de `main` (si vas a desarrollar el framework)
+git clone https://github.com/Daprosero/papersmith-ai.git && cd papersmith-ai
+pipx install .
 
 # 2. Runtime aislado de ingestión (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
 python3 scripts/setup_env.py install
@@ -122,12 +122,11 @@ npm install
 npm run setup:harnesses
 ```
 
-Las dos formas de la línea 1 no son equivalentes. `pipx install .` toma el
-checkout tal como está, incluidos cambios sin commitear, así que dos personas
-que corran ese comando el mismo día pueden terminar con builds distintos. La
-forma con `@vX.Y.Z` recibe exactamente lo que ese tag señala. Las versiones
-publicadas están en [CHANGELOG.md](CHANGELOG.md) y los tags en
-`git tag -l 'v*'`.
+Instalá siempre desde `main`: es la única rama que se mantiene, y no hay
+instrucciones para fijar una versión o un tag. La forma 1a recibe exactamente
+lo que `main` tiene hoy; la 1b toma el clon tal como está, incluidos cambios
+sin commitear, así que para reproducir un build usá 1a. El historial de
+cambios está en [CHANGELOG.md](CHANGELOG.md).
 
 Una versión instalada se lee con `papersmith --version`, y `papersmith upgrade`
 se niega a llevar un workspace a una versión anterior a la que registra salvo
@@ -2765,6 +2764,7 @@ papersmith init ~/papers/sparse-ae \
 | `--tools TEXT` | Runtimes a provisionar, separados por coma |
 | `--remote {kaggle,local,slurm}` | Target de cómputo por defecto (por defecto: `kaggle`) |
 | `--no-npm` | Saltea el `npm install` best-effort (uso offline/hermético) |
+| `--no-env` | Saltea el aprovisionamiento del entorno Python del workspace; `papersmith ui` se niega hasta que corras `python3 scripts/setup_env.py install` |
 
 Crea `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
@@ -2781,6 +2781,7 @@ papersmith upgrade ~/papers/sparse-ae
 |------|--------|
 | `--tools TEXT` | Reemplaza los generators de runtime activos |
 | `--force` | Fuerza la escritura de archivos del framework |
+| `--allow-downgrade` | Permite instalar una versión del framework anterior a la que registra el workspace |
 
 Sólo toca archivos gestionados por el framework — jamás `guidance/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
@@ -2970,7 +2971,7 @@ cliente del Model Context Protocol sobre `stdio` (JSON-RPC 2.0).
 - `inspect` — imprime el catálogo de capacidades en JSON (fuente de verdad).
 - `print-config [--workspace <dir>]` — emite el fragmento de configuración para el host que estés configurando (Claude Code, OpenCode).
 
-El catálogo completo de 22 herramientas (11 de sólo lectura y 11 mutantes), los recursos `papersmith://` y el modelo de seguridad están documentados en detalle en **[docs/mcp.md](docs/mcp.md)**.
+El catálogo completo de 38 herramientas (15 de sólo lectura y 23 mutantes), los recursos `papersmith://` y el modelo de seguridad están documentados en detalle en **[docs/mcp.md](docs/mcp.md)**.
 
 ---
 
@@ -3048,8 +3049,8 @@ Son **dos suites**, no una. Correr una sola y dar un veredicto es un error que
 este repositorio ya cometió, así que las dos van acá con su invocación exacta:
 
 ```bash
-npm test                                  # motor compartido de deliberación — 647 tests
-.venv/bin/python -m pytest                # todo lo demás — 4172 passed, 7 skipped (4179 tests)
+npm test                                  # motor compartido de deliberación
+.venv/bin/python -m pytest                # todo lo demás
 npm run test:all                          # las dos, en orden
 ```
 
@@ -3072,8 +3073,6 @@ en serie. Solo `loadfile` es seguro: `load` y `loadscope` compiten por el
 directorio compartido `implementations/`. Un único test (esperar a un proceso
 matado, 120 s) fija el piso de tiempo.
 
-Medido el 2026-09-20: **647/647** del lado Node y
-**4172 passed** (7 salteados, 4179 recolectados) del lado Python (con `requirements.txt` provisionado).
 `npm run typecheck` corre `tsc` sobre el motor de deliberación y sale limpio.
 
 **Dos trampas que parecen defectos del repositorio y no lo son.**
@@ -3091,7 +3090,7 @@ eso `tests/domain_profile.py` lo siembra y lo restaura por import.
 importable`. La forma que funciona es la de arriba, sin `-t .`.
 
 **Qué prueba cada cosa.** `tests/` cubre **el tooling de la forja**: los dos
-motores compartidos, los nueve `SKILL.md` y sus scripts, la atadura entre cada
+motores compartidos, los once `SKILL.md` y sus scripts, la atadura entre cada
 skill y sus agentes en las dos direcciones, y una serie *from-scratch* que
 genera un workspace con el CLI y recorre cada comando, cada skill embarcada y
 cada subagente dentro de él (`tests/test_workspace_{commands,skills,agents}_e2e.py`).
@@ -3154,8 +3153,9 @@ hoy el exit code no es estricto. Para un gate de CI, mirá el JSON (`--json`) en
 vez del código de salida.
 
 **"La primera ingesta descarga ~1.5 GB."** Son los pesos de Surya si el entorno
-no quedó pre-provisionado. Corré `python3 scripts/setup_env.py install` antes de
-la primera ingesta.
+no quedó pre-provisionado. `papersmith init` ya provisiona el entorno salvo que
+hayas pasado `--no-env`; en ese caso corré `python3 scripts/setup_env.py install`
+antes de la primera ingesta.
 
 ---
 
