@@ -172,11 +172,18 @@ def walk_kit_files(kit_root: Path) -> dict[str, str]:
 #: (see that script; it targets the identical four paths). A generated
 #: workspace needs this wired at ``init`` time, not left for the operator to
 #: reproduce by hand with a separate setup step.
-HARNESS_SKILL_LINKS = (
-    ".claude/skills",
-    ".pi/skills",
-    ".opencode/skills",
-    ".antigravity/skills",
+#:
+#: Each entry is an explicit ``(tool, relpath)`` pair: the owning tool is never
+#: derived from the path, because a harness may read its skills from a
+#: directory that does not carry its name (Antigravity documents
+#: ``.agents/skills``). Antigravity keeps the legacy ``.antigravity/skills``
+#: link next to it so no existing workspace loses a path it already uses.
+HARNESS_SKILL_LINKS: tuple[tuple[str, str], ...] = (
+    ("claude", ".claude/skills"),
+    ("pi", ".pi/skills"),
+    ("opencode", ".opencode/skills"),
+    ("antigravity", ".antigravity/skills"),
+    ("antigravity", ".agents/skills"),
 )
 
 
@@ -199,8 +206,8 @@ def link_harness_skills(root: Path, tools: Sequence[str] | None = None) -> list[
     if not fs.is_dir(canonical):
         return []
     linked: list[str] = []
-    for relpath in HARNESS_SKILL_LINKS:
-        if tools is not None and relpath.split("/", 1)[0].lstrip(".") not in tools:
+    for tool, relpath in HARNESS_SKILL_LINKS:
+        if tools is not None and tool not in tools:
             continue
         target = root / relpath
         want = os.path.relpath(canonical, target.parent)
