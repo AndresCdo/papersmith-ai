@@ -333,6 +333,22 @@ class DifferentialControlTests(unittest.TestCase):
             any("test_x.py::test_y" in line for line in differences),
             f"a test failing under one home and not the other was not named: {differences}")
 
+    def test_a_baseline_that_fails_under_the_empty_home_is_reported(self):
+        control = self.module()
+        failing = self.result("empty", 1, ["FAILED tests/test_x.py::test_y"])
+        self.assertTrue(
+            control.baseline_failures(failing),
+            "a gate that fails identically under both homes was called clean, so "
+            "this step could not stand in for a plain run of the suite")
+        self.assertEqual(
+            control.compare(failing, self.result("decoy", 1, failing["failures"])), [],
+            "agreeing failures are still not a disagreement; the baseline check "
+            "is separate from the comparator")
+
+    def test_a_baseline_that_passes_under_the_empty_home_is_silent(self):
+        control = self.module()
+        self.assertEqual(control.baseline_failures(self.result("empty", 0)), [])
+
     def test_the_comparator_is_silent_when_the_runs_agree(self):
         control = self.module()
         same = ["FAILED tests/test_x.py::test_y", "not ok a suite"]

@@ -44,6 +44,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -219,6 +220,37 @@ def compare(left: dict, right: dict) -> list[str]:
     return differences
 
 
+def baseline_failures(empty: dict) -> list[str]:
+    """Why the empty-home run does not stand as a clean pass of the gate itself.
+
+    `compare` only reports disagreement, so a suite that fails the same way
+    under both homes is "equal" there. That is right for the comparator and
+    wrong for a step that replaces a plain run of the suite: the empty home is
+    the machine with no personal context, which is the one CI must be green on.
+    """
+    if empty["code"] == 0:
+        return []
+    named = "; ".join(empty["failures"]) or "no failing test was named"
+    return [f"the gate fails under the {empty['home']} home (exit {empty['code']}): {named}"]
+
+
+def remove_tree(root: Path) -> None:
+    """Remove the temporary homes, and say so if anything is left behind.
+
+    A gate run can leave a read-only file under HOME, which `rmtree` cannot
+    remove without write permission on its directory; `ignore_errors` hid that.
+    """
+    shutil.rmtree(root, ignore_errors=True)
+    if not root.exists():
+        return
+    for path in [root, *root.rglob("*")]:
+        if not path.is_symlink():
+            path.chmod(0o700 if path.is_dir() else 0o600)
+    shutil.rmtree(root, ignore_errors=True)
+    if root.exists():
+        print(f"[clean-context] warning: could not remove {root}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--half", choices=("all", "node", "python"), default="all")
@@ -227,6 +259,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     stages = half_stages(args.half)
+    # A cancelled CI job sends SIGTERM; without a handler the `finally` below
+    # never runs and the temporary homes stay on the runner.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     root = Path(tempfile.mkdtemp(prefix="clean-context-gate-"))
     try:
         empty = build_empty_home(root)
@@ -261,6 +296,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {line}")
             return 1
 
+        failures = baseline_failures(empty_result)
+        if failures:
+            print("\n[clean-context] FAIL: the gate does not pass on a machine "
+                  "with no personal context:")
+            for line in failures:
+                print(f"  {line}")
+            return 1
+
         print("\n[clean-context] OK: the gate's result is identical under an "
               "empty home and under one carrying personal agent context. The "
               "verification path does not read the operator's context.")
@@ -269,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.keep:
             print(f"[clean-context] kept: {root}")
         else:
-            shutil.rmtree(root, ignore_errors=True)
+            remove_tree(root)
 
 
 if __name__ == "__main__":
