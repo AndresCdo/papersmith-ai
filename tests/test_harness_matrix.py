@@ -4,6 +4,7 @@ summary `init` / `upgrade` print from it."""
 from __future__ import annotations
 
 import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -188,6 +189,25 @@ class HarnessE2ETests(unittest.TestCase):
                     ".opencode/commands", ".pi/prompts", ".opencode/agents", ".pi/agents",
                     ".agents/agents", ".opencode/plugins", ".pi/extensions"):
             self.assertFalse((workspace / rel).exists(), rel)
+
+
+class WorkspaceGitignoreTests(unittest.TestCase):
+    """The generated skills links are rebuilt on demand and must never be committed."""
+
+    def _ignored(self, workspace: Path, relpath: str) -> bool:
+        result = subprocess.run(["git", "check-ignore", "-q", relpath],
+                                cwd=workspace, capture_output=True)
+        return result.returncode == 0
+
+    def test_new_workspace_ignores_exactly_the_skills_links(self) -> None:
+        workspace = make_workspace(new_tmp(self))
+        subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+        for _, relpath in manifest.HARNESS_SKILL_LINKS:
+            self.assertTrue(self._ignored(workspace, relpath), relpath)
+        for relpath in (".agents/agents/x.md", ".agents/AGENTS.md", ".claude/agents/x.md",
+                        ".claude/commands/x.md", ".pi/prompts/x.md",
+                        ".opencode/commands/x.md", "skills/x/SKILL.md"):
+            self.assertFalse(self._ignored(workspace, relpath), relpath)
 
 
 if __name__ == "__main__":
