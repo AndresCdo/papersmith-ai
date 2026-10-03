@@ -9,7 +9,7 @@
 ## Workspace
 - Root: the checkout containing this file (no absolute path here: one recorded in this file told every clone it was somebody else's machine)
 - Git root: recognized by `git rev-parse`
-- Entrypoints: `CLAUDE.md`, `OPENCODE.md`, `PI.md`, `.antigravity/rules.md` (all route to `openspec/project-context.md`, `guidance/paper-guide/`, `skills/*/SKILL.md`)
+- Entrypoints: `CLAUDE.md`, `OPENCODE.md`, `PI.md`, `.agents/AGENTS.md` (all route to `openspec/project-context.md`, `guidance/paper-guide/`, `skills/*/SKILL.md`)
 - No `AGENTS.md`, `GEMINI.md`, or `.cursorrules` present
 
 ## Stack signals

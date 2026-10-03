@@ -15,7 +15,7 @@ can drift from each other while all four look equally authoritative.
 
 This file exists so the directory itself travels with the repository. Without
 it a collaborator cloning the repo sees `.claude/`, `.opencode/` and
-`.antigravity/` and no `.pi/` at all, and reasonably concludes Pi is not a
+`.agents/` and no `.pi/` at all, and reasonably concludes Pi is not a
 supported harness — or opens Pi, which creates its own empty directory pointing
 nowhere. Pi is supported; `PI.md` at the repository root is its entrypoint.
 

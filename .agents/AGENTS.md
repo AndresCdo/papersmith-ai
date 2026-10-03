@@ -29,7 +29,6 @@ source definition, never the generated file.
 
 ## Note on this file's location
 
-`.antigravity/rules.md` and `.antigravity/skills` are not among the locations
-Antigravity documents (`.agents/skills`, `AGENTS.md` / `GEMINI.md`,
-`.agents/rules`). They are kept for compatibility; see
-`docs/harness-support-matrix.md`.
+This file is Antigravity's rules entrypoint (`.agents/AGENTS.md`, documented as a
+directory-scoped rules file). `.antigravity/rules.md` and `.antigravity/skills`
+are no longer generated; see `docs/harness-support-matrix.md`.
