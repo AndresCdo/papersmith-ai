@@ -19,8 +19,8 @@ TDD strict (source: user config + project), runner: focused `.micromamba/envs/pa
 ## Tasks
 - [x] A0 gate: raw-text Antigravity rules docs + pi-subagents loader; choose outcome (a)/(b)/(c); record in the matrix doc (docs commit)
 - [x] A1 atomic code+tests commit (only on outcome a or b) - commit 14711d1
-- [ ] A2 (mostly done inside A1, forced by tests) repo checkout: `git mv .antigravity/rules.md`, drop `.gitignore` line, remove local symlink
-- [ ] A3 docs: README row/prose, `.agents/README.md`, matrix doc, SKILL.md mentions, CHANGELOG, openspec mentions, `.pi/README.md`
+- [x] A2 (done in 14711d1; mostly done inside A1, forced by tests) repo checkout: `git mv .antigravity/rules.md`, drop `.gitignore` line, remove local symlink
+- [x] A3 (commit 0deda32) docs: README row/prose, `.agents/README.md`, matrix doc, SKILL.md mentions, CHANGELOG, openspec mentions, `.pi/README.md`
 
 ## Progress / evidence
 (branch created from feat/harness-parity tip add8402)
@@ -34,5 +34,8 @@ TDD strict (source: user config + project), runner: focused `.micromamba/envs/pa
 - A1 DONE (delegated direct writer, commit 14711d1, ~112 changed lines, one commit). RED: 14 failing tests across harness_parity/init/generators/agents_e2e/commands_e2e/command_center_health after pinning tests to `.agents/AGENTS.md`. GREEN: focused 190 passed; `npm run test:fast` 4417 passed, 5 skipped; `scripts/cli-paper-wiring-smoke.sh` ok; `sync-repo-harness.py --check` clean (92 files). Throwaway init: `.agents/AGENTS.md` + `.agents/skills` present, no `.antigravity`, wiring summary unchanged, `--tools claude` creates no `.agents`, upgrade idempotent, `audit --check-drift` clean.
   - Forced into A1 (test_every_tracked_dot_directory_citation_resolves_in_a_workspace needs a tracked, resolvable path): `git mv .antigravity/rules.md .agents/AGENTS.md` (one-line fix), local `.antigravity/skills` symlink removed, `.gitignore` line dropped, and the `.antigravity/rules.md` mentions in skills/paper-writing and skills/proposal-implementation SKILL.md now name `.agents/AGENTS.md`. Remaining A2: none beyond verification; A3 docs still pending.
 
+- A2 DONE in 14711d1 (git mv, symlink removed, .gitignore line dropped).
+- A3 DONE (delegated direct writer, commit 0deda32, docs only, 42+/42-): README (table row, Antigravity note, matrix bullet, layout and projection prose), CHANGELOG Unreleased `Changed`, `.agents/README.md`, `.agents/AGENTS.md`, `.pi/README.md`, openspec config/project-context (counts recomputed: 83 .mjs and 74 test_*.py under tests/), matrix doc (settled outcome, surplus-in-drift behavior). Checks: harness_parity+workspace_agents_e2e+sync_repo_harness 23 passed; `npm run test:fast` rc=0 (183 pytest passed); `sync-repo-harness.py --check` clean (92 files); wiring smoke ok. `npm run test:py` not run (before PR).
+
 ## Next step
-A3 docs (README row/prose, `.agents/README.md`, matrix doc, CHANGELOG, openspec, `.pi/README.md`).
+Full `npm run test:py` before the PR (user decides push/PR).
