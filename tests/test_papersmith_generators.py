@@ -122,7 +122,7 @@ class GeneratorsTests(unittest.TestCase):
             "OPENCODE.md",
             "PI.md",
             ".pi/gentle-ai/persona.json",
-            ".antigravity/rules.md",
+            ".agents/AGENTS.md",
             "opencode.json",
             ".opencode/plugins/refuse-offpath-push.js",
             ".pi/extensions/refuse-offpath-push.js",
@@ -468,14 +468,14 @@ class GeneratorsTests(unittest.TestCase):
 
     def test_antigravity_check_is_exit_three_on_missing_output(self) -> None:
         workspace = _workspace(self.new_tmp())
-        (workspace / ".antigravity/rules.md").unlink()
+        (workspace / ".agents/AGENTS.md").unlink()
         command = [
             sys.executable, str(ROOT / "scripts/gen-antigravity.py"),
             "--root", str(workspace), "--check",
         ]
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 3
-        assert ".antigravity/rules.md" in result.stdout
+        assert ".agents/AGENTS.md" in result.stdout
 
 
 class CommandDerivationTests(unittest.TestCase):

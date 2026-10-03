@@ -37,7 +37,6 @@ HEALTH_WATCH_TARGETS = (
     ".opencode/plugins",
     ".agents",
     ".pi",
-    ".antigravity",
     "scripts",
     "requirements.txt",
 )
@@ -57,7 +56,7 @@ IGNORED_SUFFIXES = (
 
 #: Paths that change the health payload rather than the paper state.
 HEALTH_PREFIXES = (
-    "skills", ".claude", ".opencode", ".pi", ".antigravity", ".agents", "scripts", "requirements.txt",
+    "skills", ".claude", ".opencode", ".pi", ".agents", "scripts", "requirements.txt",
 )
 
 

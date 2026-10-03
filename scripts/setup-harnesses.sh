@@ -14,7 +14,6 @@
 #   .claude/skills       Claude Code
 #   .pi/skills           Pi
 #   .opencode/skills     OpenCode
-#   .antigravity/skills  Google Antigravity (legacy path, kept for now)
 #   .agents/skills       Google Antigravity (skills invoked as /name)
 #
 # Usage:
@@ -36,8 +35,7 @@ HARNESSES=(
   ".claude/skills:Claude Code"
   ".pi/skills:Pi"
   ".opencode/skills:OpenCode"
-  ".antigravity/skills:Google Antigravity"
-  ".agents/skills:Antigravity (.agents)"
+  ".agents/skills:Antigravity"
 )
 
 for entry in "${HARNESSES[@]}"; do

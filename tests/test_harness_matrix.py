@@ -184,7 +184,7 @@ class HarnessE2ETests(unittest.TestCase):
         rc, _, _ = capture(["init", str(workspace), "--tools", "claude", "--no-npm", "--no-env"])
         self.assertEqual(rc, 0)
         self._assert_wired(workspace, "claude")
-        for rel in (".opencode/skills", ".pi/skills", ".antigravity/skills", ".agents/skills",
+        for rel in (".opencode/skills", ".pi/skills", ".agents/skills",
                     ".opencode/commands", ".pi/prompts", ".opencode/agents", ".pi/agents",
                     ".agents/agents", ".opencode/plugins", ".pi/extensions"):
             self.assertFalse((workspace / rel).exists(), rel)

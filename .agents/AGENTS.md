@@ -12,7 +12,7 @@ to the canonical sources of truth so a single set of docs drives every harness.
 ## Skills
 
 Skills live once at the repository-root `skills/` tree and are projected into
-`.antigravity/skills` by `npm run setup:harnesses`. Read each skill's `SKILL.md`
+`.agents/skills` by `npm run setup:harnesses`. Read each skill's `SKILL.md`
 before invoking it; it is the source of truth for that capability.
 
 ## Invoking skills

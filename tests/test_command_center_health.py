@@ -135,7 +135,7 @@ class WiringInspectorTests(unittest.TestCase):
             for name in names:
                 (root / harness / f"{name}.md").write_text("x", encoding="utf-8")
         for relpath in (".claude/skills", ".opencode/skills", ".pi/skills",
-                        ".antigravity/skills", ".agents/skills"):
+                        ".agents/skills"):
             self._link_skills(root, relpath)
         # Projected agents and the generated plugin/extension, wherever the
         # matrix says a tool has them (source agents are `.claude/agents`).
@@ -150,7 +150,7 @@ class WiringInspectorTests(unittest.TestCase):
     def test_structural_drift_reports_a_missing_agents_skills_link_for_antigravity(self) -> None:
         root = self.new_workspace()
         _skill(root, "paper-writing")
-        self._link_skills(root, ".antigravity/skills")
+        (root / ".agents").mkdir()
         state, detail = health_inspector._structural_drift(root, "antigravity")
 
         assert state == "DRIFT_DETECTED"
@@ -219,7 +219,6 @@ class WiringInspectorTests(unittest.TestCase):
         root = self.new_workspace()
         _skill(root, "paper-writing")
         self._link_skills(root, ".agents/skills")
-        self._link_skills(root, ".antigravity/skills")
         state, detail = health_inspector._structural_drift(root, "antigravity")
         assert state == "IN_SYNC", detail
 

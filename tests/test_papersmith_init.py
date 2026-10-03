@@ -322,7 +322,7 @@ class InitTests(unittest.TestCase):
             "OPENCODE.md",
             "PI.md",
             ".pi/gentle-ai/persona.json",
-            ".antigravity/rules.md",
+            ".agents/AGENTS.md",
             ".gitignore",
         ):
             assert (workspace / relpath).exists(), relpath
@@ -378,7 +378,7 @@ class InitTests(unittest.TestCase):
         canonical = (workspace / "skills").resolve()
         for relpath in (
             ".claude/skills", ".opencode/skills", ".pi/skills",
-            ".antigravity/skills", ".agents/skills",
+            ".agents/skills",
         ):
             link = workspace / relpath
             assert link.is_symlink(), f"{relpath} is not a symlink"
@@ -400,11 +400,11 @@ class InitTests(unittest.TestCase):
         assert (tmp_path / ".claude/skills").is_symlink()
         assert not (tmp_path / ".pi/skills").exists()
 
-    def test_link_harness_skills_antigravity_wires_both_documented_and_legacy_paths(self) -> None:
+    def test_link_harness_skills_antigravity_wires_only_the_documented_path(self) -> None:
         tmp_path = self.new_tmp()
         (tmp_path / "skills").mkdir()
         linked = manifest.link_harness_skills(tmp_path, tools=("antigravity",))
-        assert sorted(linked) == [".agents/skills", ".antigravity/skills"]
+        assert sorted(linked) == [".agents/skills"]
         for relpath in linked:
             assert (tmp_path / relpath).resolve() == (tmp_path / "skills").resolve()
 
