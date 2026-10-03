@@ -46,6 +46,69 @@ source read, or only a third-party source).
 | Hooks / guards | supported | `.agents/hooks.json`; events `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`; `PreToolUse` `decision` may be `deny` (hard block) or `ask`. Exact hook input schema (how a bash command is exposed) was not read: `unverified` | https://antigravity.google/docs/hooks |
 | MCP / config | supported | `.agents/mcp_config.json` (workspace), `~/.gemini/config/mcp_config.json` (global) | https://antigravity.google/docs/mcp |
 
+### A0 raw-text check (2026-10-03)
+
+Method: raw Markdown, not a page summary. `curl -sL https://antigravity.google/docs/rules.md`
+returned `200 text/markdown` (9,939 bytes) on 2026-10-03; the rendered `/docs/rules`
+HTML is a JS app and was not used. pi-subagents source was read with `curl` on
+`raw.githubusercontent.com` at commit `ad56bf92fe01a2a5abd962938c619eb2a22ca47d`
+(2026-10-02). The 2026-10-02 rows above came from WebFetch summaries; each is
+re-judged below.
+
+| Q | Verdict | Verbatim quote (https://antigravity.google/docs/rules.md) |
+| --- | --- | --- |
+| (1) `AGENTS.md` inside `.agents/` is loaded | confirmed | "Whenever Antigravity reads or edits a file, it walks up the directory tree from that file's folder to the workspace root, loading rules at each level:" then "`<dir>/.agents/AGENTS.md` or `<dir>/.agents/GEMINI.md`" |
+| (2) always-on | confirmed | "`AGENTS.md` and `GEMINI.md` do not use frontmatter. Antigravity treats its entire content as plain Markdown and keeps it continuously active (`always_on`) for its directory scope." |
+| (3) precedence vs root `AGENTS.md` / `GEMINI.md` | documented limitation | "Rules are **cumulative** rather than replacement-based: Antigravity combines all discovered rules across global, workspace, and directory scopes into the prompt. When instructions conflict, more specific directory rules take priority." |
+| (T) rules-file frontmatter | confirmed | "Every `.md` file inside `rules/` must start with YAML frontmatter declaring a valid `trigger`." Key `trigger: model_decision # Required: always_on \| model_decision \| glob \| manual`; "**`always_on`** (always active in scope): Antigravity injects the full content into the system prompt on every turn." Missing or invalid trigger: "Antigravity silently discards the rule." Values are snake_case (camelCase `alwaysOn` is rejected). |
+
+Limitations recorded for (3) and for (1):
+
+- The docs define no order between `<dir>/AGENTS.md`, `<dir>/GEMINI.md` and
+  `<dir>/.agents/AGENTS.md` in the same directory: they are all loaded and
+  combined. Only "more specific directory rules take priority" is stated, so
+  two routing files at the same level are not ranked.
+- The per-surface sections (Antigravity 2.0, CLI, IDE) list workspace rules only
+  as "`AGENTS.md`, `GEMINI.md`, or `.agents/rules/*.md`" and omit
+  `.agents/AGENTS.md`. Only the "Directory-scoped rules" section lists
+  `<dir>/.agents/AGENTS.md`. The docs are therefore internally inconsistent on
+  whether `.agents/AGENTS.md` is read on every surface; the directory-scoped
+  section is the explicit statement and the one relied on.
+- `.agents/rules/` is scanned flat ("scans only immediate `.md` children"); a 24,000-byte
+  per-file limit and a 20,000-token aggregate `always_on` budget apply.
+- Not verified: behaviour of an actual Antigravity install (docs only).
+
+(P) pi-subagents: source `src/agents/agents.ts` and `src/agents/frontmatter.ts`
+(commit above). Result: a non-agent `.md` under `.agents/` is NOT mis-parsed; it is
+read and silently skipped.
+
+- `agents.ts:2002` (inside `inspectAgentDefinitionDirectory`, from line 1955) collects every
+  `*.md` (not `*.chain.md`, not under `.agents/skills`) recursively under `.agents/`, so
+  `.agents/AGENTS.md`, `.agents/README.md` and `.agents/rules/*.md` are all candidates.
+  Legacy `.agents` is a read dir (`resolveNearestProjectAgentDirs`, `agents.ts:2409`).
+- `frontmatter.ts:69` returns an empty frontmatter when the file does not start with `---`
+  (no throw).
+- `agents.ts:2156`: `if (!frontmatter.name || !frontmatter.description) { continue; }` runs
+  before any validation and before the `catch` at `agents.ts:2348` that records a diagnostic.
+  A file without BOTH `name` and `description` is skipped with no error and no diagnostic.
+- Consequences: `.agents/AGENTS.md` (no frontmatter) is skipped. A rules file with
+  `trigger`/`globs` but no `name` is skipped. The existing `.agents/README.md` is
+  already scanned and skipped, so it is not affected. Caveat: a rules file that
+  carries BOTH `name` and `description` frontmatter would be registered as an agent;
+  generated rules files must not use a `name:` key.
+
+Re-judged earlier claims: the 2026-10-02 Rules row (`AGENTS.md`/`GEMINI.md` "in a
+directory or in `.agents/`", `.agents/rules/*.md` needs `trigger` with the four values)
+is confirmed by raw text, with the per-surface inconsistency above added. The
+pi-subagents row ("legacy `.agents/**/*.md`") is confirmed by source. No earlier
+claim is contradicted. The sentence "deliberately not created" in the note above is
+superseded by this outcome.
+
+Outcome (a): R (1 and 2 confirmed raw) and P (no mis-parse, for both `.agents/AGENTS.md`
+and `.agents/rules/*.md`) hold. The generated Antigravity rules/routing entrypoint is
+`.agents/AGENTS.md`, plain Markdown with NO frontmatter. Fallback (not chosen):
+`.agents/rules/papersmith.md` with `trigger: always_on` and no `name:` key.
+
 ## Claude Code
 
 | Capability | Verdict | Location / schema | Source (2026-10-02) |
