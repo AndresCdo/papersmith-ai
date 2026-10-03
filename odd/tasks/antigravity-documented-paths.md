@@ -18,8 +18,8 @@ TDD strict (source: user config + project), runner: focused `.micromamba/envs/pa
 
 ## Tasks
 - [x] A0 gate: raw-text Antigravity rules docs + pi-subagents loader; choose outcome (a)/(b)/(c); record in the matrix doc (docs commit)
-- [ ] A1 atomic code+tests commit (only on outcome a or b)
-- [ ] A2 repo checkout: `git mv .antigravity/rules.md`, drop `.gitignore` line, remove local symlink
+- [x] A1 atomic code+tests commit (only on outcome a or b) - commit 14711d1
+- [ ] A2 (mostly done inside A1, forced by tests) repo checkout: `git mv .antigravity/rules.md`, drop `.gitignore` line, remove local symlink
 - [ ] A3 docs: README row/prose, `.agents/README.md`, matrix doc, SKILL.md mentions, CHANGELOG, openspec mentions, `.pi/README.md`
 
 ## Progress / evidence
@@ -31,5 +31,8 @@ TDD strict (source: user config + project), runner: focused `.micromamba/envs/pa
   - Limitations recorded in docs/harness-support-matrix.md: (3) rules are cumulative, "more specific directory rules take priority", no order between same-level AGENTS.md/GEMINI.md/.agents/AGENTS.md; per-surface lists omit `.agents/AGENTS.md` (only the directory-scoped section lists it).
   - No earlier matrix claim contradicted.
 
+- A1 DONE (delegated direct writer, commit 14711d1, ~112 changed lines, one commit). RED: 14 failing tests across harness_parity/init/generators/agents_e2e/commands_e2e/command_center_health after pinning tests to `.agents/AGENTS.md`. GREEN: focused 190 passed; `npm run test:fast` 4417 passed, 5 skipped; `scripts/cli-paper-wiring-smoke.sh` ok; `sync-repo-harness.py --check` clean (92 files). Throwaway init: `.agents/AGENTS.md` + `.agents/skills` present, no `.antigravity`, wiring summary unchanged, `--tools claude` creates no `.agents`, upgrade idempotent, `audit --check-drift` clean.
+  - Forced into A1 (test_every_tracked_dot_directory_citation_resolves_in_a_workspace needs a tracked, resolvable path): `git mv .antigravity/rules.md .agents/AGENTS.md` (one-line fix), local `.antigravity/skills` symlink removed, `.gitignore` line dropped, and the `.antigravity/rules.md` mentions in skills/paper-writing and skills/proposal-implementation SKILL.md now name `.agents/AGENTS.md`. Remaining A2: none beyond verification; A3 docs still pending.
+
 ## Next step
-A1 atomic code+tests commit targeting `.agents/AGENTS.md` (no frontmatter).
+A3 docs (README row/prose, `.agents/README.md`, matrix doc, CHANGELOG, openspec, `.pi/README.md`).
