@@ -51,6 +51,24 @@ session history.
   missing-JSON and STALE states are explained. The atlas is not watched, so it is
   fetched when the tab opens and on a Refresh button, with an inline error and
   Retry. The visual checker covers the tab and waits for the frame fetch.
+- **Read-only decisions timeline route in the command center.**
+  `GET /api/decisions` merges, on request, normalized events
+  `{ts, source, kind, summary, ref}` from the declarations region of
+  `paper/main.tex` (only the current state is stored, so earlier values are not
+  recoverable), the `.proposal-deliberation/` and `.experimental-deliberation/`
+  receipts and lifecycle transitions, and the remote-execution ledgers at
+  `implementations/<repo>/<Name>/.remote-execution/ledger.jsonl` (exactly two
+  levels, no recursion; `kaggle-inbox/` is never read). Receipts have no
+  timestamp, so their events carry `ts: null` and sort after dated events (file
+  mtime is never used); deliberation events are plain-JSON reads without the
+  lifecycle hash checks and carry `verified: false` (to be shown as
+  "unverified"). Newest first with a stable tie-break; each source reports
+  `status` (`ok`, `absent`, `unreadable`, `too_large`) so one broken source never
+  fails the response. Caps: 500 events per source, 1000 total (`truncated`),
+  `main.tex` 2 MiB, 256 KiB per receipt or transition, 500 files per sidecar
+  directory, 20 ledgers of 2 MiB and 2000 lines each. Optional `source=` (422 on
+  an unknown name) and `limit=` (1 to 1000). Nothing is written. The `Host`
+  allow-list (421) covers it only on loopback binds.
 - **Read-only SOTA atlas routes in the command center.** `GET /api/atlas`
   reports the state of `sota-pool/atlas.json` and `atlas.html` (ok, absent,
   too_large, unsafe, unreadable, invalid), staleness (json newer than html),
