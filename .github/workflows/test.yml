@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # No base-branch filter: stacked PRs target their parent branch, not main,
+  # and a `branches: [main]` filter silently skipped the whole gate for them.
   pull_request:
-    branches: [main]
 
 jobs:
   test-node:
