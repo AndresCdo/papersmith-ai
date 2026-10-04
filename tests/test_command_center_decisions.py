@@ -195,6 +195,16 @@ def _receipt(source: str = "r1", target: str = "r2", intent: str = "EDIT", patch
             "resolvedEntryIds": ["e1"], "patchIds": ["p1", "p2"], "patchCount": patches}
 
 
+def _initial_receipt(created_at: object = "2026-03-01T10:00:00.000Z") -> dict:
+    # Shape written by initial-revision-creation.ts (ManagedInitialRevisionReceipt).
+    data = {"operation": "CREATE_INITIAL_REVISION", "targetRevision": "r01",
+            "targetFilename": "research-concept-r01.md", "documentShaAfter": "c" * 64,
+            "derivedStateStatus": "COMMITTED"}
+    if created_at is not None:
+        data["createdAt"] = created_at
+    return data
+
+
 def _transition(seq: int, operation: str, outcome: str, committed_at: str | None) -> dict:
     data = {"schemaVersion": "lifecycle-v1", "transitionId": f"t{seq}", "sequence": seq,
             "operation": operation, "outcome": outcome, "requestId": f"q{seq}"}
@@ -228,6 +238,44 @@ class DeliberationTests(_Workspace):
         assert event["kind"] == "revision_receipt"
         assert event["summary"] == "Revision r1 -> r2 (EDIT), 2 patches"
         assert event["ref"] == f"{SIDE}/receipts/b.md.json"
+
+    def test_initial_revision_receipt_is_dated_by_created_at(self) -> None:
+        root = self.new_workspace()
+        self.write_json(root, f"{SIDE}/receipts/a.md.json", _initial_receipt())
+        event = self.read(root)["events"][0]
+
+        assert event["ts"] == "2026-03-01T10:00:00.000Z"
+        assert event["summary"] == "Created initial revision r01"
+        assert event["kind"] == "revision_receipt" and event["verified"] is False
+
+    def test_initial_revision_receipt_sorts_with_dated_events(self) -> None:
+        root = self.new_workspace()
+        self.write_json(root, f"{SIDE}/receipts/a.md.json", _initial_receipt())
+        self.write_json(root, f"{SIDE}/receipts/b.md.json", _receipt())
+        self.write_json(root, f"{SIDE}/{TRANSITIONS}/1.json",
+                        _transition(1, "REGISTER_BASE", "COMMITTED", "2026-03-02T00:00:00Z"))
+        merged = decisions.merge(self.read(root)["events"])
+
+        assert [e["ts"] for e in merged] == ["2026-03-02T00:00:00Z", "2026-03-01T10:00:00.000Z", None]
+
+    def test_initial_revision_receipt_without_valid_created_at_stays_undated(self) -> None:
+        root = self.new_workspace()
+        self.write_json(root, f"{SIDE}/receipts/a.md.json", _initial_receipt(None))
+        self.write_json(root, f"{SIDE}/receipts/b.md.json", _initial_receipt(42))
+        events = self.read(root)["events"]
+
+        assert [e["ts"] for e in events] == [None, None]
+        assert all(e["summary"] == "Created initial revision r01" for e in events)
+
+    def test_edit_receipt_with_created_at_is_dated(self) -> None:
+        root = self.new_workspace()
+        data = _receipt()
+        data["createdAt"] = "2026-03-03T00:00:00Z"
+        self.write_json(root, f"{SIDE}/receipts/b.md.json", data)
+        event = self.read(root)["events"][0]
+
+        assert event["ts"] == "2026-03-03T00:00:00Z"
+        assert event["summary"] == "Revision r1 -> r2 (EDIT), 2 patches"
 
     def test_receipt_never_uses_file_mtime(self) -> None:
         root = self.new_workspace()

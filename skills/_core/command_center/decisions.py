@@ -8,9 +8,9 @@ nothing is written and nothing is cached. Sources:
   state is stored: earlier values are not recoverable.
 * ``proposal`` / ``experiment``: the ``.proposal-deliberation/`` and
   ``.experimental-deliberation/`` sidecars (``receipts/*.json`` and
-  ``lifecycle/v1/transitions/*.json``). Receipts carry NO timestamp, so their
-  events have ``ts: null`` and sort after dated events (file mtime is never
-  used). Everything read here is plain JSON: the lifecycle store's hash and
+  ``lifecycle/v1/transitions/*.json``). Edit receipts carry NO timestamp, so
+  their events have ``ts: null`` and sort after dated events; the initial-revision
+  receipt carries ``createdAt``, used as ``ts`` (file mtime is never used). Everything read here is plain JSON: the lifecycle store's hash and
   consistency checks are not replicated, so these events are ``verified: false``.
 * ``remote-execution``: ``implementations/<repo>/<Name>/.remote-execution/
   ledger.jsonl`` (``implementation_engine`` builds
@@ -191,13 +191,19 @@ def read_declarations(root: Path | str) -> dict[str, Any]:
 # deliberation sidecars
 # --------------------------------------------------------------------------
 def _receipt_event(source: str, data: dict[str, Any], ref: str) -> dict[str, Any]:
+    # Two shapes are written by the real engine: the initial-revision receipt
+    # (initial-revision-creation.ts, carries ``createdAt``) and the edit receipt
+    # (revision-receipt.ts, carries no timestamp). The file mtime is never used.
+    created_at = data.get("createdAt")
+    if data.get("operation") == "CREATE_INITIAL_REVISION":
+        summary = f"Created initial revision {_clip(data.get('targetRevision')) or '?'}"
+        return _event(created_at, source, "revision_receipt", summary, ref, verified=False)
     patches = data.get("patchCount")
     count = patches if isinstance(patches, int) and not isinstance(patches, bool) else 0
     summary = (f"Revision {_clip(data.get('sourceRevision')) or '?'} -> "
                f"{_clip(data.get('targetRevision')) or '?'} "
                f"({_clip(data.get('intent')) or 'unknown intent'}), {count} {'patch' if count == 1 else 'patches'}")
-    # Receipts have no timestamp field: ts stays null, never the file mtime.
-    return _event(None, source, "revision_receipt", summary, ref, verified=False)
+    return _event(created_at, source, "revision_receipt", summary, ref, verified=False)
 
 
 def _transition_event(source: str, data: dict[str, Any], ref: str) -> dict[str, Any]:
@@ -461,4 +467,4 @@ def build_decisions(root: Path | str, sources: list[str] | None = None,
     return {"events": merged[:limit], "truncated": truncated, "total": len(merged),
             "sources": summary,
             "note": ("Read-only view of persisted records. Deliberation events are unverified "
-                     "and receipts carry no timestamp.")}
+                     "and edit receipts carry no timestamp.")}
