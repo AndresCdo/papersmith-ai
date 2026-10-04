@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGraph, relationKind } from './PipelineGraph';
+import { buildGraph, relationKind } from './graph';
 import type { WorkspaceState } from '../../types';
 
 const state: WorkspaceState = {

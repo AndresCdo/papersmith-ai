@@ -1,7 +1,8 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { diagramState } from './components/dag/fixtures';
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -96,6 +97,62 @@ describe('App', () => {
       render(<App />);
       await userEvent.click(screen.getByRole('button', { name: 'Sections' }));
       expect(window.location.hash).toBe('#sections');
+    });
+  });
+
+  describe('diagram selection', () => {
+    afterEach(() => {
+      window.history.replaceState(null, '', '#');
+    });
+
+    const withDiagram = () =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.includes('/api/health') ? jsonResponse({ overall: 'WIRED' }) : jsonResponse(diagramState),
+        ),
+      );
+
+    it('opens the panel for a deep-linked element', async () => {
+      withDiagram();
+      window.history.replaceState(null, '', '#pipeline?el=gate%3Awriting-readiness');
+      render(<App />);
+      const panel = await screen.findByTestId('element-detail-panel');
+      expect(panel).toHaveTextContent('contract missing');
+    });
+
+    it('selecting writes the hash, closing clears it', async () => {
+      withDiagram();
+      window.history.replaceState(null, '', '#pipeline');
+      const { container } = render(<App />);
+      const wrapper = await waitFor(() => {
+        const found = container.querySelector('.react-flow__node[data-id="stage:drafting"]') as HTMLElement;
+        expect(found).toBeTruthy();
+        return found;
+      });
+      fireEvent.click(wrapper); // see PipelineGraph.test.tsx: user-event mousedown breaks d3-zoom in jsdom
+      await screen.findByTestId('element-detail-panel');
+      expect(window.location.hash).toBe('#pipeline?el=stage%3Adrafting');
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(screen.queryByTestId('element-detail-panel')).not.toBeInTheDocument();
+      expect(window.location.hash).toBe('#pipeline');
+    });
+
+    it('clears the selection and the hash on a pane click', async () => {
+      withDiagram();
+      window.history.replaceState(null, '', '#pipeline?el=stage%3Adrafting');
+      const { container } = render(<App />);
+      await screen.findByTestId('element-detail-panel');
+      fireEvent.click(container.querySelector('.react-flow__pane') as HTMLElement);
+      await waitFor(() => expect(screen.queryByTestId('element-detail-panel')).not.toBeInTheDocument());
+      expect(window.location.hash).toBe('#pipeline');
+    });
+
+    it('shows "No longer present" when the state loses the element', async () => {
+      withDiagram();
+      window.history.replaceState(null, '', '#pipeline?el=section%3AGone');
+      render(<App />);
+      expect(await screen.findByText(/No longer present/)).toBeInTheDocument();
     });
   });
 });

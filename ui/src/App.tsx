@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkspaceEvents } from './hooks/useWorkspaceEvents';
 import PipelineGraph from './components/dag/PipelineGraph';
+import ElementDetailPanel from './components/dag/ElementDetailPanel';
+import { buildGraph } from './components/dag/graph';
 import HarnessStatus from './components/health/HarnessStatus';
 import WiringMatrix from './components/health/WiringMatrix';
 import DiagnosticLog from './components/health/DiagnosticLog';
@@ -85,6 +87,9 @@ export default function App() {
     setRoute({ tab: next, el });
   }, []);
 
+  const graph = useMemo(() => buildGraph(state), [state]);
+  const selectElement = useCallback((id: string | null) => navigate('pipeline', id), [navigate]);
+
   const selectTab = useCallback((next: TabId) => navigate(next), [navigate]);
 
   const workspace = state?.workspace;
@@ -165,7 +170,10 @@ export default function App() {
               <TotalsBar state={state} />
             </section>
 
-            <PipelineGraph state={state} />
+            <PipelineGraph graph={graph} selectedId={route.el} onSelect={selectElement} />
+            {route.el ? (
+              <ElementDetailPanel elementId={route.el} state={state} graph={graph} onSelect={selectElement} />
+            ) : null}
 
             <section className="panel">
               <div className="panel__header">
