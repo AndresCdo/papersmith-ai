@@ -95,28 +95,37 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
   const [smoke, setSmoke] = useState<SmokeRun>(EMPTY_SMOKE);
 
   const smokeRequestRef = useRef(false);
+  const liveStateRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    void (async () => {
-      const [stateResult, healthResult] = await Promise.allSettled([
-        fetchJson<WorkspaceState>(STATE_URL),
-        fetchJson<WiringHealth>(HEALTH_URL),
-      ]);
-      if (cancelled) return;
-      if (stateResult.status === 'fulfilled') {
-        setState(stateResult.value);
-      } else {
-        setError(`could not load ${STATE_URL}: ${String(stateResult.reason)}`);
-      }
-      if (healthResult.status === 'fulfilled') {
-        setHealth(healthResult.value);
-      } else {
-        setError((previous) => previous ?? `could not load ${HEALTH_URL}: ${String(healthResult.reason)}`);
-      }
-      setLoading(false);
-    })();
+    // State and health load independently: neither waits for the other, so a
+    // slow health measurement never keeps the dashboard on "Loading".
+    fetchJson<WorkspaceState>(STATE_URL).then(
+      (value) => {
+        if (cancelled) return;
+        // A state_update that arrived first is newer than this snapshot.
+        if (!liveStateRef.current) setState(value);
+        setLoading(false);
+      },
+      (reason) => {
+        if (cancelled) return;
+        if (!liveStateRef.current) {
+          setError(`could not load ${STATE_URL}: ${String(reason)}`);
+        }
+        setLoading(false);
+      },
+    );
+    fetchJson<WiringHealth>(HEALTH_URL).then(
+      (value) => {
+        if (!cancelled) setHealth((previous) => previous ?? value);
+      },
+      (reason) => {
+        if (cancelled) return;
+        setError((previous) => previous ?? `could not load ${HEALTH_URL}: ${String(reason)}`);
+      },
+    );
 
     const source = new EventSource(EVENTS_URL);
 
@@ -136,7 +145,10 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
     source.addEventListener('state_update', (event) => {
       const payload = parseFrame<StateUpdatePayload>(event as MessageEvent<string>);
       if (!payload) return;
-      if (payload.state) setState(payload.state);
+      if (payload.state) {
+        liveStateRef.current = true;
+        setState(payload.state);
+      }
       if (payload.changed) setLastChanged(payload.changed);
     });
 
