@@ -1,0 +1,108 @@
+# Feature: dashboard-paper-views
+
+Status: plan v1 Judgment Day APPROVED 2026-10-04 (plan sha256 7c59aface88cd1b15f7f536433ea0b7df3967818dac46d4d11b9c2a8ce0d9825; judge A 0 CRITICAL/4 WARNING/4 SUGGESTION, judge B 0 CRITICAL/6 WARNING/2 SUGGESTION; all INFO). Implementation not started when this document was created.
+Delivery: chained PRs, strategy stacked-to-main, ONE LOCAL BRANCH PER SLICE stacked on the previous (user decision). Branch names `feat/dpv-NN-<slice>`; base = `feat/dashboard-interactive` (cabd998). Local commits only; push/PR/remote write NOT authorized.
+TDD: strict (session config, user rule). Runners: pytest `/home/carlos/Documents/projects/papersmith-ai/.micromamba/envs/papersmith/bin/pytest`; UI `cd ui && npx vitest run`; `cd ui && npm run typecheck && npm run build`; `npm run test:node`.
+Route: delegated writer per slice (one writer at a time).
+
+## Amendments from Judgment Day (apply while building; override the plan text below)
+1. Preview reads: add a bounded, containment-checked read (size cap before read, resolve + relative_to workspace, no symlink escape) used by /api/paper/preview; tests for symlinked and huge main.tex/sections (the extractor `_read_text` state_extractor.py:113 is unbounded and follows symlinks).
+2. Files route: public name maps to `paper/Figures/` (capital F); define the id rule explicitly (paper_figure.py:84-88 only rejects empty/slash/NUL/dot ids); no CSP sandbox on PDFs (breaks the viewer), nosniff + frame headers only; test Range/HEAD or serve whole with the cap and document it.
+3. Remote ledger path is `<target>/<Name>/.remote-execution/ledger.jsonl` with target `implementations/<repo>` (implementation_engine.py:9675): discovery must look two levels below implementations/; `experiments/*` unverified, only include if evidence is found. Fixtures must mirror the real layout.
+4. F3: `record()` publishes outside the store lock (server.py:210-214): real pre-existing race. F3 includes the production fix (publish under a lock) after a RED test.
+5. New routes are Host-allow-listed only on loopback binds (server.py:134-147, :276): document it, add 421 tests; add X-Frame-Options/frame-ancestors on new responses.
+6. check_atlas is a script with private `_failures`, exits 2 on non-JSON: load by file path from the workspace skills/plausibility/scripts (precedent state_extractor.py:472-489), treat as code-execution surface in R1; packaging already in the kit. "T-B" in D2 means A1.
+7. Atlas: staleness (json vs html mtime) and "JSON present, HTML missing" states.
+8. Docs ship with each behavior slice; C1 is closure only. P1/D-1 may exceed ~400: record and split at a commit boundary if needed.
+9. Receipts have no timestamp (types.ts:246: only transitions have committedAt): define null/ordering handling; summaries for REJECTED/RECOVERY_REQUIRED outcomes. The sub-percent "0% -> 0%" bug is server-side (history.py:84-97 `_percent`): F4 fixes it there with pytest. One branch per slice; land in order (TABS/hash.ts/bundle conflicts across P2/A2/D-2).
+
+## Checklist
+- [x] F1 dpv-01 Memoise dagre layout (commit 16240fe on feat/dpv-01-layout-memo)
+- [ ] F2 dpv-02 Narrow-width panel (bottom sheet)
+- [ ] F3 dpv-03 History publish ordering test + fix
+- [ ] F4 dpv-04 Polish (server-side _percent, mutating cue outline)
+- [ ] P1 dpv-05 Paper preview backend
+- [ ] P2 dpv-06 Preview tab UI
+- [ ] A1 dpv-07 Atlas backend
+- [ ] A2 dpv-08 Atlas tab UI
+- [ ] D-1 dpv-09 Decisions backend
+- [ ] D-2 dpv-10 Decisions tab UI
+- [ ] C1 dpv-11 Closure and docs
+- [ ] Judgment Day on the implementation
+
+## Evidence
+(appended per slice: RED/GREEN commands and results, commit ids, assessed review tier)
+
+### F1 (feat/dpv-01-layout-memo, commit 16240fe)
+- Route: delegated writer. Memo is a single-entry module cache in ui/src/components/dag/graph.ts keyed by `graphSignature` (node id + kind dims + edge ids/endpoints); selection stays in PipelineGraph's second memo.
+- RED: `cd ui && npx vitest run src/components/dag/graph.test.ts`: 1 failed, 7 passed; "expected vi.fn() to be called 1 times, but got 2 times" (layout re-ran for same-structure frame).
+- GREEN: `cd ui && npx vitest run`: 15 files, 137 tests passed.
+- `cd ui && npm run typecheck`: clean. `cd ui && npm run build`: ok, bundle index-Q1q8mUoX.js committed, static dir clean after commit.
+- `npm run test:node`: 676 pass, 0 fail (bare `node --test` without DELIBERATION_DOMAIN_PROFILE fails 2 files; env-only).
+- Authored change: 92 insertions, 4 deletions in ui/src (excluding bundle). Review tier: not assessed (local commit only, no push).
+
+---
+
+# Plan v1: dashboard follow-ups + paper views (feature `dashboard-paper-views`)
+
+Repo: /home/carlos/Documents/projects/papersmith-ai. Base branch feat/dashboard-interactive (tip cabd998, local only, approved by Judgment Day). New local branch `feat/dashboard-paper-views` from that tip. Delivery: chained PRs, strategy stacked-to-main (user decision 2026-10-04). Authorized now: local branch and local work-unit commits ONLY. NOT authorized: push, PR, any remote write.
+TDD strict. Runners: pytest `/home/carlos/Documents/projects/papersmith-ai/.micromamba/envs/papersmith/bin/pytest`; UI `cd ui && npx vitest run`; `cd ui && npm run typecheck && npm run build`; node `npm run test:node`. Edit skills/_core/command_center and ui/src only (never src/papersmith/_kit). Rebuilt bundle committed with the UI change.
+Commits: Conventional Commits, no AI attribution lines (user global rule), tests and docs with behavior. ~400 authored lines per slice is a planning heuristic.
+
+## User decisions (2026-10-04)
+- U1 Paper preview shows BOTH an HTML section preview and the compiled PDF when it exists.
+- U2 SOTA graph inside the app (mechanism chosen by this plan, see D2).
+- U3 Decision history = read-only timeline merged on request from persisted records; NO new writes, no persistent snapshots.
+- U4 Four follow-ups: memoise dagre layout, narrow-width panel overlap, history_append ordering test, small polish ("0% -> 0%" sub-percent progress, mutating-cue outline vs keyboard focus outline).
+
+## Verified facts (from read-only exploration, file:line)
+- Extractor is strictly read-only (state_extractor.py docstring :1-17; guarded `_read_text` :113). Workspace layout: `sections/*.md` at the workspace root, `paper/main.tex`, `paper/refs.bib`, `paper/Figures/`, `paper/verdict.json` (state_extractor.py:375,628,674-790).
+- main.tex block grammar: `%% paper-writing block <id> begin sha256=<64hex>` ... `%% paper-writing block <id> end` (regex state_extractor.py:80-83; writer skills/paper-writing/scripts/paper_block.py:60-65). `_parse_main_tex` :247 returns {id:{body,words,has_body}}, drops unterminated blocks. Declarations and provenance regions use different prefixes (`%% paper-writing declarations|provenance begin`) with every line `%% `-prefixed JSON (paper_region.py).
+- Section payload has no block bodies (`_section_payload` :340-415); UI types ui/src/types.ts:20-58.
+- No papersmith command produces paper/main.pdf; it is only existence-checked (state_extractor.py:628). `render` compiles standalone diagrams to paper/Figures/<id>.pdf (paper_figure.py:75-100); figure ids are single path segments.
+- Server routes: /api/state, /api/history, /api/health/wiring, POST smoke, /api/events (SSE), static mount (server.py:282-340). HostAllowListMiddleware (:150-186) 421 on bad Host; origin_is_same only on POST (:117). SSE events ready, state_update, history_append, health_update.
+- Watcher WATCH_TARGETS = sections, openspec, experiments, paper, papersmith.yaml (watcher.py:25); sota-pool, proposals, .proposal-deliberation, .experimental-deliberation, .remote-execution are NOT watched.
+- Atlas: sota-pool/atlas.json (+ atlas.html written by skills/plausibility/scripts/render_atlas.py; checker scripts/check_atlas.py is stdlib-only, exit 0/1/2). Schema: systems[{id,title,planets[{id,slot,orbit,label,detail,provenance,evidence{origin,quote,retrieved}}]}], links[{from_system,from,to_system,to,rel}]. atlas.html is one self-contained file (inline SVG + vanilla JS, JSON embedded with `<` escaped), deterministic.
+- Decision sources: (1) paper/main.tex declarations region `{generation, records[{kind,id,value|resolution,fixed,recorded,generation,reason?}]}` replaced in place (not append-only; reopen clears); (2) provenance region (mutable); (3) proposal-deliberation receipts `.proposal-deliberation/receipts/<file>.json` (sourceRevision,targetRevision,intent,documentShaBefore/After,patchCount...) and lifecycle transitions `lifecycle/v1/transitions/*.json` (sequence, operation, outcome, committedAt); (4) experimental-deliberation, same shape under `.experimental-deliberation/`; (5) remote ledger `<target>/<Name>/.remote-execution/ledger.jsonl` (append-only, events kind submitted|returned|errored with ts); (6) dashboard in-memory HistoryStore (not persisted). No author field exists anywhere.
+- Test layers: tests/test_command_center_*.py (route functions called with fakes), ui vitest colocated, tests/test_sota_atlas.py.
+
+## Decisions (defaults chosen by this plan, reversible)
+- D1 Lazy GET routes, NOT an extended /api/state: `/api/paper/preview`, `/api/paper/file`, `/api/atlas`, `/api/atlas/view`, `/api/decisions`. Fetched on tab open and refetched when the SSE `state_update` revision changes while the tab is open (paper/ is already watched). Atlas and decision sources are not watched: refetch on tab open plus a manual Refresh button. WATCH_TARGETS unchanged. All routes are GET and read-only, covered by the existing Host allow-list. A test asserts the workspace tree is byte-identical (names, sizes, mtimes) before and after exercising every new route.
+- D2 SOTA graph = hybrid: JSON summary panel (systems, families, link count, evidence list, validation result) rendered natively, plus the generated atlas.html in `<iframe sandbox="allow-scripts">` (no allow-same-origin) pointing at `/api/atlas/view`. The view route serves atlas.html bytes with `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, and a 2 MiB cap. The dashboard never regenerates the atlas (a write). Empty state when sota-pool/ or atlas files are absent. Validation: import `check_atlas` guarded; if the module cannot be imported in a workspace kit, report `validation: unavailable` rather than failing (T-B verifies packaging first, see Risks).
+- D3 Paper preview rendering: main.tex block bodies are returned as plain text with light structural tokens; the UI renders them as escaped text (React text nodes, never dangerouslySetInnerHTML). `\cite{k}` shown as key chips, `\ref`/`\label` left as text, math left as raw TeX (no KaTeX in v1). Section order follows `sections/*.md` position (the same order the extractor already exposes). Unwritten blocks render a placeholder with the block id. Per-block cap and total cap (e.g. 200 KiB per response, truncation flag).
+- D4 Files route: `GET /api/paper/file?name=<whitelisted>` accepts only `main.pdf` and `figures/<id>.pdf|png` where id matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$` (single segment; same rule as paper_figure.py). Resolve, then `relative_to(paper_root.resolve())`; refuse symlinks that escape (resolve before check) and non-regular files; 404 absent, 413 above 25 MiB, `Content-Type` fixed by extension, `nosniff`, `Content-Disposition: inline`. PDF embedded via `<iframe>`/`<object>` in the UI. Staleness badge when main.tex mtime is newer than main.pdf mtime. Because nothing in papersmith produces main.pdf, the PDF pane shows "No compiled PDF found (papersmith does not compile the whole paper; build it yourself)" and lists figures PDFs instead.
+- D5 Decisions timeline (read-only, on request): `decisions.py` readers each return normalized events `{ts, source, kind, summary, ref}`; sources in v1: declarations region (event ts = record.recorded; note "current value only, earlier values are not stored"), proposal and experiment receipts + lifecycle transitions (ts = committedAt; summary from operation/outcome/intent), remote ledger (ts = ts; summary submitted/returned/errored + entrypoint/reason). Merge sorted by ts descending with a stable tie-break, per-source cap (500) and total cap, `truncated` flag. Each reader returns `{events, status: ok|absent|unreadable, detail}` so one broken source never fails the response. Readers parse plain JSON only; they do NOT replicate the lifecycle store hash/consistency checks (labelled "unverified"). Summary language English. No author field is shown (never recorded). Remote ledger discovery: scan `implementations/*/.remote-execution/ledger.jsonl` and `experiments/*/.remote-execution/ledger.jsonl` one level deep, no recursion, cap files scanned. `kaggle-inbox/` is never read.
+- D6 UI: three new tabs `preview`, `atlas`, `decisions` added to TABS and parseHash; deep link `#decisions?el=` not required. Hash round-trip and fallbacks tested. Existing History tab unchanged (it is the live session history).
+- D7 Follow-ups F1-F4 are plain slices on the same branch, each with RED first where testable.
+
+## Slices (all delegated writers; one writer at a time)
+- F1 Memoise dagre layout on graph structure signature (node ids + edge ids + dims), not on every state frame. RED: Vitest asserting layout is called once across two state frames with the same structure and again when a node appears. (~80 lines)
+- F2 Element panel vs diagram at narrow widths: panel becomes a bottom sheet under 900 px (CSS + test of the class/ARIA contract) and the checker adds a 700x900 viewport screenshot. (~120)
+- F3 History ordering/concurrency test: pytest that N threads call the history append path while the SSE publisher observes strictly increasing seq per boot with no gaps, no duplicates. (~90)
+- F4 Polish: sub-percent progress renders as "<1%" or one decimal instead of "0% -> 0%"; mutating cue gets a distinct dashed outline vs the focus ring; tests for both. (~100)
+- P1 Backend paper module + routes `/api/paper/preview`, `/api/paper/file` with tests (parsing of blocks incl. unterminated/duplicate ids, order, caps, traversal `..`, absolute, symlink escape, non-regular file, oversize, content-type, nosniff, read-only tree invariant). (~380)
+- P2 UI Preview tab: block text pane, citation chips, placeholders, PDF pane + staleness + figures list, refetch on revision change, truncation notice. Bundle rebuilt. Checker updated. (~380)
+- A1 Backend atlas routes `/api/atlas` (summary + validation) and `/api/atlas/view` (headers, caps, absent, malformed JSON, oversize, checker unavailable) + tests. (~300)
+- A2 UI Atlas tab: summary panel + sandboxed iframe + empty/invalid states, Refresh button. Test asserts iframe has `sandbox="allow-scripts"` and no `allow-same-origin`. (~300)
+- D-1 Backend `decisions.py` readers + `/api/decisions` + tests with fixture workspaces (each source present/absent/corrupt, merge order, caps, ledger discovery depth, no recursion, no read of kaggle-inbox). (~380)
+- D-2 UI Decisions tab: timeline list, source filter, per-source status chips, "unverified" label, truncation notice, link to the related section when the ref names one. (~330)
+- C1 Docs (README Spanish section, CHANGELOG, docs for new routes and limits) + CI unchanged + closure checks. (~120)
+Forecast total ~2,180 authored lines. Each slice is under ~400, so each becomes one PR in a stacked-to-main chain AFTER the dashboard-interactive chain; slices are recorded as commit groups in odd/tasks/dashboard-paper-views.md.
+
+## Where the work happens / ODD
+Before the first write: create odd/tasks/dashboard-paper-views.md and its Engram mirror `odd/dashboard-paper-views/tasks`. Per task: RED observed, GREEN, focused tests, visual checker (`node scripts/command-center-visual-check.mjs --full-page --click-check --drag-check`) for UI slices, work-unit commit, document and mirror updated. Final: full pytest (`test:py:par`), root `npm test`, `cd ui && npm run typecheck && npm test && npm run build` with `git status --porcelain skills/_core/command_center/static` clean after build, `scripts/command-center-smoke.sh`, build-kit then a fresh `papersmith init` workspace check. Judgment Day on the implementation.
+
+## Risks and mitigations
+- R1 Serving workspace files and HTML from a localhost app (XSS/exfil/DNS rebinding): Host allow-list already applies; D2/D4 sandbox + CSP + nosniff; escaped text only; fixed content types; no user-controlled content type.
+- R2 Path traversal/symlink escape in /api/paper/file: whitelist + regex + resolve containment, tested.
+- R3 check_atlas packaging: skills/plausibility/scripts may not ship in every workspace kit or may need a different import path; A1 starts by verifying (kit manifest + `papersmith init` workspace) and falls back to `validation: unavailable`.
+- R4 Large files/DoS: caps on bytes, events, files scanned; truncation flags.
+- R5 Declarations history is lossy: labelled explicitly, no claim of completeness.
+- R6 Decision lifecycle JSON unverified: labelled "unverified", never used for any gate.
+- R7 Scope creep from "decisions": v1 limited to the five sources in D5.
+
+## Out of scope
+Compiling the paper, regenerating the atlas, persistent snapshots/new writes, KaTeX, author attribution, push/PR, dark theme toggle, history persistence across restarts.
+
+## Acceptance
+- All new routes read-only (tree-invariant test), caps and traversal tests green; Preview, Atlas, Decisions tabs render populated and empty states in the visual checker at both viewports without disallowed console errors; atlas iframe sandboxed; F1-F4 behaviours verified by tests; all named checks pass; bundle equals a fresh build.
