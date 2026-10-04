@@ -21,7 +21,7 @@ Route: delegated writer per slice (one writer at a time).
 - [x] F2 dpv-02 Narrow-width panel (bottom sheet) (commit 595b646 on feat/dpv-02-panel-narrow)
 - [x] F3 dpv-03 History publish ordering test + fix (commit 81d2243 on feat/dpv-03-history-ordering)
 - [x] F4 dpv-04 Polish (commits caceac3, cb21d4e on feat/dpv-04-polish)
-- [ ] P1 dpv-05 Paper preview backend
+- [x] P1 dpv-05 Paper preview backend (commits 30a1de2, 80c180c, 996181f on feat/dpv-05-paper-preview-api)
 - [ ] P2 dpv-06 Preview tab UI
 - [ ] A1 dpv-07 Atlas backend
 - [ ] A2 dpv-08 Atlas tab UI
@@ -60,6 +60,16 @@ Route: delegated writer per slice (one writer at a time).
 - RED (b): `cd ui && npx vitest run src/styles.test.ts`: 2 failed, 19 passed (solid outline; mutating and focus outline equal).
 - GREEN (b): `cd ui && npx vitest run`: 15 files, 140 tests passed. `npm run typecheck`: clean. `npm run build`: ok, bundle index-DQuEYJUP.js + index-CteY5Hg5.css committed, static dir clean. `npm run test:node`: 677 pass, 0 fail. Commit cb21d4e. No browser run (cue only shows during a live change).
 - Review tier: not assessed (local commit only).
+### P1 (feat/dpv-05-paper-preview-api, stacked on feat/dpv-04-polish)
+- Route: delegated writer. New `skills/_core/command_center/paper_preview.py` (bounded_read: resolve + relative_to workspace, regular file, stat cap before read; `parse_blocks` skips declarations/provenance regions, drops unterminated, first duplicate wins and is flagged; `build_preview`; `resolve_artifact` whitelist `main.pdf` and `figures/<id>.pdf|png` -> `paper/Figures/`, id rule `[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}`). Routes `/api/paper/preview`, `/api/paper/file` in server.py. Caps: main.tex 2 MiB, section 256 KiB, block text 32 KiB, total text 200 KiB, file 25 MiB (413). Headers nosniff, X-Frame-Options SAMEORIGIN, no-store, inline; no CSP sandbox, no Range (documented). Never calls the extractor `_read_text` (test patches it to raise).
+- RED 1: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_paper_preview.py -q`: collection error "ImportError: cannot import name 'paper_preview' from 'skills._core.command_center'".
+- GREEN 1 (reader tests, 22): same command: 22 passed. Commit 30a1de2 (module + reader tests).
+- RED 2 (route tests restored, server.py unchanged): same command: 15 failed, 22 passed (KeyError '/api/paper/preview', AssertionError on 421 cases).
+- GREEN 2: same command: 37 passed. `pytest tests/test_command_center_*.py -q`: 178 passed, 12 subtests passed. Commit 80c180c (routes + route tests).
+- Docs: README (Spanish) section and CHANGELOG Unreleased entry, third commit. `npm run test:node`: 677 pass, 0 fail. Bundle untouched.
+- Authored lines: commit 1 628 insertions (paper_preview.py 333 + tests 295), commit 2 217 insertions/3 deletions (server.py ~45 + tests ~172), docs commit 996181f 36 insertions. Over the ~400 heuristic in total: split at commit boundaries (module+tests / routes+tests / docs) as authorized.
+- Review tier: not assessed (local commit only).
+
 
 ---
 
