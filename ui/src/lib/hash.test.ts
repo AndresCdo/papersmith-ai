@@ -19,6 +19,12 @@ describe('parseHash / formatHash', () => {
     expect(parseHash('#atlases')).toEqual({ tab: 'pipeline', el: null });
   });
 
+  it('knows the decisions tab and round-trips it', () => {
+    expect(parseHash('#decisions')).toEqual({ tab: 'decisions', el: null });
+    expect(parseHash(formatHash('decisions'))).toEqual({ tab: 'decisions', el: null });
+    expect(parseHash('#decisionss')).toEqual({ tab: 'pipeline', el: null });
+  });
+
   it('knows the preview tab and round-trips it', () => {
     expect(parseHash('#preview')).toEqual({ tab: 'preview', el: null });
     expect(parseHash(formatHash('preview'))).toEqual({ tab: 'preview', el: null });

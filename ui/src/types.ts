@@ -299,3 +299,33 @@ export interface AtlasPayload {
   validation: AtlasValidation;
   summary: AtlasSummary | null;
 }
+
+/** `GET /api/decisions`: a read-only timeline merged from persisted records. */
+export interface DecisionEvent {
+  /** ISO date-time, or null when the record carries no timestamp (receipts). */
+  ts: string | null;
+  source: string;
+  kind: string;
+  summary: string;
+  /** Workspace-relative path of the record, as text. */
+  ref: string;
+  /** `false` when read without hash or consistency checks. */
+  verified?: boolean;
+  note?: string;
+}
+
+export interface DecisionSourceInfo {
+  /** `ok`, `absent`, `unreadable` or `too_large`. */
+  status: string;
+  count: number;
+  truncated: boolean;
+  detail?: string;
+}
+
+export interface DecisionsPayload {
+  events: DecisionEvent[];
+  sources: Record<string, DecisionSourceInfo>;
+  truncated: boolean;
+  total: number;
+  note?: string;
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkspaceEvents } from './hooks/useWorkspaceEvents';
 import { usePaperPreview } from './hooks/usePaperPreview';
 import { useAtlas } from './hooks/useAtlas';
+import { useDecisions } from './hooks/useDecisions';
 import PipelineGraph from './components/dag/PipelineGraph';
 import ElementDetailPanel from './components/dag/ElementDetailPanel';
 import { buildGraph } from './components/dag/graph';
@@ -12,6 +13,7 @@ import SectionMatrix from './components/sections/SectionMatrix';
 import HistoryView from './components/history/HistoryView';
 import PreviewView from './components/preview/PreviewView';
 import AtlasView from './components/atlas/AtlasView';
+import DecisionsView from './components/decisions/DecisionsView';
 import ArtifactViewer from './components/artifacts/ArtifactViewer';
 import { StatusBadge } from './components/StatusBadge';
 import { asText, formatCount, formatTime } from './lib/format';
@@ -54,6 +56,8 @@ export default function App() {
   const preview = usePaperPreview(tab === 'preview', revision);
   // Atlas files are not watched: fetched when its tab opens and on its Refresh button only.
   const atlas = useAtlas(tab === 'atlas');
+  // Decision sources are not watched either: tab open and Refresh only.
+  const decisions = useDecisions(tab === 'decisions');
 
   useEffect(() => {
     const onHashChange = () => setRoute(readRoute());
@@ -249,6 +253,16 @@ export default function App() {
 
         {tab === 'atlas' ? (
           <AtlasView data={atlas.data} loading={atlas.loading} error={atlas.error} refresh={atlas.refresh} retry={atlas.retry} />
+        ) : null}
+
+        {tab === 'decisions' ? (
+          <DecisionsView
+            data={decisions.data}
+            loading={decisions.loading}
+            error={decisions.error}
+            refresh={decisions.refresh}
+            retry={decisions.retry}
+          />
         ) : null}
 
         {tab === 'artifacts' ? <ArtifactViewer state={state} /> : null}
