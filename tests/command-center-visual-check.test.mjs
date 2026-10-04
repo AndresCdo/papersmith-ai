@@ -28,6 +28,10 @@ test('parseArgs applies defaults and requires --out', () => {
   assert.throws(() => parseArgs([]), /--out/);
 });
 
+test('the default tab list covers every dashboard tab, History included', () => {
+  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history']);
+});
+
 test('parseArgs reads every option', () => {
   const parsed = parseArgs([
     '--out', '/x', '--url', 'http://localhost:5173', '--timeout', '5',

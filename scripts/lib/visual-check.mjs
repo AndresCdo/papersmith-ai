@@ -1,7 +1,7 @@
 // Pure helpers for scripts/command-center-visual-check.mjs. Nothing here touches
 // the network, the filesystem or a browser, so they run in the Node CI job.
 
-export const DEFAULT_TABS = ['pipeline', 'health', 'sections', 'artifacts'];
+export const DEFAULT_TABS = ['pipeline', 'health', 'sections', 'artifacts', 'history'];
 export const DEFAULT_VIEWPORTS = [
   { width: 1280, height: 800 },
   { width: 1600, height: 1000 },
