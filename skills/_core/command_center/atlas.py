@@ -42,6 +42,11 @@ TEXT_MAX = 300
 CHECKER_REL = ("skills", "plausibility", "scripts", "check_atlas.py")
 
 
+def _mtime_token(mtime: float) -> int:
+    """Integer milliseconds since the epoch: a cache-busting token for the UI."""
+    return int(mtime * 1000)
+
+
 def _clip(value: Any) -> str:
     return value[:TEXT_MAX] if isinstance(value, str) else ""
 
@@ -226,9 +231,13 @@ def build_atlas(root: Path | str) -> dict[str, Any]:
         json_info["status"] = j_status
     if j_size is not None and j_status in ("ok", "invalid", "too_large"):
         json_info["size"] = j_size
+    if j_mtime is not None and j_status in ("ok", "invalid"):
+        json_info["mtime"] = _mtime_token(j_mtime)
     html_info: dict[str, Any] = {"status": h_status}
     if h_size is not None and h_status in ("ok", "too_large"):
         html_info["size"] = h_size
+    if h_mtime is not None and h_status == "ok":
+        html_info["mtime"] = _mtime_token(h_mtime)
 
     stale = None
     if j_mtime is not None and h_mtime is not None:

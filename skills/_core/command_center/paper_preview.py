@@ -209,7 +209,8 @@ def _pdf_info(root: Path, tex_mtime: float | None) -> dict[str, Any]:
     if resolved is not None:
         info = resolved.stat()
         stale = tex_mtime is not None and tex_mtime > info.st_mtime
-        main = {"present": True, "size": info.st_size, "stale": stale}
+        main = {"present": True, "size": info.st_size, "stale": stale,
+                "mtime": info.st_mtime_ns // 1_000_000}
     figures: list[dict[str, Any]] = []
     figures_dir = paper / "Figures"
     try:
@@ -225,7 +226,9 @@ def _pdf_info(root: Path, tex_mtime: float | None) -> dict[str, Any]:
         real = _contained(root.resolve(), entry)
         if real is None:
             continue
-        figures.append({"id": entry.stem, "kind": kind, "size": real.stat().st_size})
+        info = real.stat()
+        figures.append({"id": entry.stem, "kind": kind, "size": info.st_size,
+                        "mtime": info.st_mtime_ns // 1_000_000})
         if len(figures) >= MAX_FIGURES:
             break
     return {"main": main, "figures": figures}

@@ -336,7 +336,8 @@ class PdfInfoTests(_Workspace):
         pdf = self.write(root, "paper/main.pdf", b"%PDF-1.4")
         os.utime(tex, (2000, 2000))
         os.utime(pdf, (1000, 1000))
-        assert self.preview(root)["pdf"]["main"] == {"present": True, "size": 8, "stale": True}
+        assert self.preview(root)["pdf"]["main"] == {
+            "present": True, "size": 8, "stale": True, "mtime": 1000 * 1000}
         os.utime(pdf, (3000, 3000))
         assert self.preview(root)["pdf"]["main"]["stale"] is False
 
@@ -349,8 +350,24 @@ class PdfInfoTests(_Workspace):
         (root / "paper" / "Figures" / "dir.pdf").mkdir()
         figures = self.preview(root)["pdf"]["figures"]
 
-        assert figures == [{"id": "arch", "kind": "pdf", "size": 4},
-                           {"id": "plot", "kind": "png", "size": 4}]
+        assert [{k: v for k, v in f.items() if k != "mtime"} for f in figures] == [
+            {"id": "arch", "kind": "pdf", "size": 4}, {"id": "plot", "kind": "png", "size": 4}]
+        assert all(isinstance(f["mtime"], int) and f["mtime"] > 0 for f in figures)
+
+    def test_mtime_changes_when_a_figure_or_the_pdf_is_rewritten(self) -> None:
+        root = self.new_workspace()
+        fig = self.write(root, "paper/Figures/arch.pdf", b"%PDF")
+        pdf = self.write(root, "paper/main.pdf", b"%PDF-1.4")
+        os.utime(fig, (1000, 1000))
+        os.utime(pdf, (1000, 1000))
+        before = self.preview(root)["pdf"]
+        os.utime(fig, (2000, 2000))
+        os.utime(pdf, (2000, 2000))
+        after = self.preview(root)["pdf"]
+
+        assert before["figures"][0]["mtime"] == 1000 * 1000
+        assert after["figures"][0]["mtime"] == 2000 * 1000
+        assert before["main"]["mtime"] != after["main"]["mtime"]
 
 
 class FileRouteTests(_Workspace):
@@ -503,6 +520,15 @@ class HostAllowListTests(_Workspace):
         assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf"))[0] == 404
         assert asyncio.run(_call(app, "/api/paper/file", b"name=..%2Fmain.pdf"))[0] == 400
         assert asyncio.run(_call(app, "/api/paper/file", b""))[0] == 400
+
+    def test_file_route_ignores_the_cache_busting_query_parameter(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "paper/main.pdf", b"%PDF-1.4")
+        app = server.create_app(root)
+
+        assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf"))[0] == 200
+        assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf&v=1767225600000"))[0] == 200
+        assert asyncio.run(_call(app, "/api/paper/file", b"v=zzz&name=main.pdf&v=2"))[0] == 200
 
 
 class ReadOnlyInvariantTests(_Workspace):

@@ -137,6 +137,8 @@ class SummaryTests(_Workspace):
         data = self.summary(root)
 
         assert data["json"]["status"] == "ok" and data["json"]["size"] > 0
+        assert isinstance(data["json"]["mtime"], int) and data["json"]["mtime"] > 0
+        assert isinstance(data["html"].pop("mtime"), int)
         assert data["html"] == {"status": "ok", "size": len("<html>atlas</html>")}
         assert data["validation"]["status"] == "ok" and data["validation"]["errors"] == []
         s = data["summary"]
@@ -256,6 +258,19 @@ class StalenessTests(_Workspace):
         self.set_mtime(root / "sota-pool/atlas.html", 1_700_000_100)
 
         assert self.summary(root)["stale"] is False
+
+    def test_mtime_tokens_follow_the_files(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        os.utime(root / "sota-pool" / "atlas.json", (1000, 1000))
+        os.utime(root / "sota-pool" / "atlas.html", (1500, 1500))
+        first = self.summary(root)
+        os.utime(root / "sota-pool" / "atlas.json", (2000, 2000))
+        os.utime(root / "sota-pool" / "atlas.html", (2500, 2500))
+        second = self.summary(root)
+
+        assert (first["json"]["mtime"], first["html"]["mtime"]) == (1000 * 1000, 1500 * 1000)
+        assert (second["json"]["mtime"], second["html"]["mtime"]) == (2000 * 1000, 2500 * 1000)
 
     def test_json_present_html_missing(self) -> None:
         root = self.new_workspace()
@@ -559,6 +574,15 @@ class HostAllowListTests(_Workspace):
         assert asyncio.run(_call(app, "/api/atlas/view"))[0] == 404
         self.write(root, "sota-pool/atlas.html", b"x" * (atlas.HTML_MAX_BYTES + 1))
         assert asyncio.run(_call(app, "/api/atlas/view"))[0] == 413
+
+    def test_view_and_summary_ignore_the_cache_busting_query_parameter(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        app = server.create_app(root)
+
+        for path in ("/api/atlas/view", "/api/atlas"):
+            assert asyncio.run(_call(app, path, b"v=1767225600000"))[0] == 200, path
+            assert asyncio.run(_call(app, path, b"v=%00zz&v=2"))[0] == 200, path
 
 
 class ReadOnlyInvariantTests(_Workspace):
