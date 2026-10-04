@@ -43,6 +43,14 @@ session history.
   `<iframe>` (with a stale badge) and a list of `paper/Figures` files. It is
   fetched when the tab opens and refetched when the workspace revision changes,
   with an inline error and Retry. The visual checker covers the tab.
+- **Atlas tab.** `#atlas` shows a native summary of `sota-pool/atlas.json`
+  (systems, planets, families, link and relation counts, a capped evidence list,
+  a validation chip) beside `atlas.html` in an
+  `<iframe sandbox="allow-scripts">` without `allow-same-origin`. Every text is
+  escaped; absent, too-large, unsafe, unreadable, invalid, missing-HTML,
+  missing-JSON and STALE states are explained. The atlas is not watched, so it is
+  fetched when the tab opens and on a Refresh button, with an inline error and
+  Retry. The visual checker covers the tab and waits for the frame fetch.
 - **Read-only SOTA atlas routes in the command center.** `GET /api/atlas`
   reports the state of `sota-pool/atlas.json` and `atlas.html` (ok, absent,
   too_large, unsafe, unreadable, invalid), staleness (json newer than html),

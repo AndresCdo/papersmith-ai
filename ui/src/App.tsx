@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkspaceEvents } from './hooks/useWorkspaceEvents';
 import { usePaperPreview } from './hooks/usePaperPreview';
+import { useAtlas } from './hooks/useAtlas';
 import PipelineGraph from './components/dag/PipelineGraph';
 import ElementDetailPanel from './components/dag/ElementDetailPanel';
 import { buildGraph } from './components/dag/graph';
@@ -10,6 +11,7 @@ import DiagnosticLog from './components/health/DiagnosticLog';
 import SectionMatrix from './components/sections/SectionMatrix';
 import HistoryView from './components/history/HistoryView';
 import PreviewView from './components/preview/PreviewView';
+import AtlasView from './components/atlas/AtlasView';
 import ArtifactViewer from './components/artifacts/ArtifactViewer';
 import { StatusBadge } from './components/StatusBadge';
 import { asText, formatCount, formatTime } from './lib/format';
@@ -50,6 +52,8 @@ export default function App() {
   const tab = route.tab;
   // Lazy: the preview is fetched only while its tab is open, and again when the workspace changes.
   const preview = usePaperPreview(tab === 'preview', revision);
+  // Atlas files are not watched: fetched when its tab opens and on its Refresh button only.
+  const atlas = useAtlas(tab === 'atlas');
 
   useEffect(() => {
     const onHashChange = () => setRoute(readRoute());
@@ -241,6 +245,10 @@ export default function App() {
 
         {tab === 'preview' ? (
           <PreviewView data={preview.data} loading={preview.loading} error={preview.error} retry={preview.retry} />
+        ) : null}
+
+        {tab === 'atlas' ? (
+          <AtlasView data={atlas.data} loading={atlas.loading} error={atlas.error} refresh={atlas.refresh} retry={atlas.retry} />
         ) : null}
 
         {tab === 'artifacts' ? <ArtifactViewer state={state} /> : null}

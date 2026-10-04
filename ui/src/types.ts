@@ -258,3 +258,44 @@ export interface PaperPreview {
   main_tex: { status: string };
   pdf: { main: { present: boolean; size: number; stale: boolean } | null; figures: PreviewFigure[] } | null;
 }
+
+/** `GET /api/atlas`: state of the SOTA atlas files plus a bounded summary. */
+export interface AtlasSystem {
+  id: string;
+  title: string;
+  planets: number;
+  families: string[];
+}
+
+export interface AtlasEvidence {
+  system: string;
+  planet: string;
+  origin: string;
+  retrieved: string;
+}
+
+export interface AtlasSummary {
+  systems: AtlasSystem[];
+  links: number;
+  rels: Record<string, number>;
+  evidence: AtlasEvidence[];
+  evidence_total: number;
+}
+
+export interface AtlasValidation {
+  status: 'ok' | 'failed' | 'unavailable';
+  errors?: string[];
+  error_count?: number;
+  detail?: string;
+}
+
+export interface AtlasPayload {
+  /** `ok`, `absent`, `too_large`, `unsafe`, `unreadable` or `invalid`. */
+  json: { status: string; size?: number };
+  /** `ok`, `absent`, `too_large` or `unsafe`. */
+  html: { status: string; size?: number };
+  /** True when atlas.json is newer than atlas.html; null when either is missing. */
+  stale: boolean | null;
+  validation: AtlasValidation;
+  summary: AtlasSummary | null;
+}

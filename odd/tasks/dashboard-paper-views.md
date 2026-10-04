@@ -24,7 +24,7 @@ Route: delegated writer per slice (one writer at a time).
 - [x] P1 dpv-05 Paper preview backend (commits 30a1de2, 80c180c, 996181f on feat/dpv-05-paper-preview-api)
 - [x] P2 dpv-06 Preview tab UI (commits c4e5412, ab65615, 7c05bdb, 57502a0 on feat/dpv-06-preview-tab)
 - [x] A1 dpv-07 Atlas backend (commits a0fb395, c465ca8, cdaa851 on feat/dpv-07-atlas-api)
-- [ ] A2 dpv-08 Atlas tab UI
+- [x] A2 dpv-08 Atlas tab UI (commits 2eaae16, 026fb06, 7845cc9, 23e9ac1 on feat/dpv-08-atlas-tab)
 - [ ] D-1 dpv-09 Decisions backend
 - [ ] D-2 dpv-10 Decisions tab UI
 - [ ] C1 dpv-11 Closure and docs
@@ -87,6 +87,14 @@ Route: delegated writer per slice (one writer at a time).
 - GREEN 2: same command: 36 passed. `pytest tests/test_command_center_*.py -q`: 213 passed, 1 skipped, 12 subtests passed. Commit c465ca8.
 - Docs: README.md (Spanish `papersmith ui` section) and CHANGELOG Unreleased, commit cdaa851. `npm run test:node`: 678 pass, 0 fail (needs root node_modules). Bundle untouched; `_kit` untouched.
 - Authored lines: commit 1 588 insertions (atlas.py 233 + tests 355), commit 2 190 ins/2 del (server.py ~32 + tests ~160), docs commit 820 total with commit 1-2 (docs ~42). Over the ~400 heuristic in total: split at commit boundaries (module+tests / routes+tests / docs).
+- Review tier: not assessed (local commit only).
+
+### A2 (feat/dpv-08-atlas-tab, stacked on feat/dpv-07-atlas-api)
+- Route: delegated writer in worktree ../papersmith-ai-worktrees/dpv. `useAtlas(active)` (lazy, one in-flight plus one pending flag, keeps last good data on failure, `refresh`/`retry`), `AtlasView` (systems table, link/rel chips, capped evidence with "showing N of total", validation chip for ok/failed/unavailable, state notices, STALE badge, `<iframe title="SOTA constellation" src="/api/atlas/view" sandbox="allow-scripts" referrerPolicy="no-referrer">` only when html is ok), `atlas` in TABS, tokens-only CSS. Escaped text only; no dangerouslySetInnerHTML.
+- RED: `cd ui && npx vitest run`: 4 files failed (missing useAtlas/AtlasView modules, App and hash suites), 3 tests failed (hash atlas, tab bar, atlas tab). Checker RED: `node --test tests/command-center-visual-check.test.mjs`: tabContentSelector('atlas') null, 1 fail.
+- GREEN: `cd ui && npx vitest run`: 19 files, 186 tests passed. `npm run typecheck`: clean. `npm run build`: ok, bundle index-D9hhnsnQ.js + index-DKoaNUx9.css committed, static dir clean. `node --test tests/command-center-visual-check.test.mjs`: 17 pass. `npm run test:node`: 680 pass, 0 fail. `pytest tests/test_command_center_*.py -q`: 213 passed, 1 skipped, 12 subtests.
+- Real browser: own server from the worktree on 127.0.0.1:8161 against <scratchpad>/a2ws (valid atlas.json built from tests/test_sota_atlas.py helpers, atlas.html from the real render_atlas.py, copied skills/plausibility/scripts; one system title `<b>Alpha</b> & <script>x</script>`), stopped afterwards: `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/a2 --full-page --click-check --drag-check --url http://127.0.0.1:8161/` -> exit 0, 21 screenshots, no disallowed console errors. atlas-1280x800 and atlas-1600x1000: summary (title literal, valid chip, rels, 27 of 27 evidence) and the sandboxed constellation rendered (CSP `default-src 'none'` + inline script/style does NOT block the page; the plane renders, planets are tiny dots at the renderer's own scale). atlas-700x900 (--full-page): iframe BLANK. Finding: not a CSP issue; a full-page `captureBeyondViewport` shot does not paint an out-of-process (opaque-origin sandboxed) iframe that lies below the viewport. Evidence: `--tabs atlas --viewports 700x1700` (no scroll) paints the constellation (shots/a2d). Iframes are removed after each shot by the existing generic `querySelectorAll('iframe')` cleanup (57502a0), which covers this frame. Checker also waits for the frame fetch via resource timing (`tabFrameReadyExpression`), harmless but does not fix the beyond-viewport blank.
+- Commits: 2eaae16 (UI + tests + bundle), 026fb06 (checker tab + selector), 7845cc9 (checker frame wait), 23e9ac1 (README Spanish + CHANGELOG). Authored lines (excluding bundle): UI commit 601 insertions/1 deletion (about 265 are tests; over the ~400 heuristic, split at commit boundaries UI / checker / docs), checker 13+24 insertions, docs 26.
 - Review tier: not assessed (local commit only).
 
 ---
