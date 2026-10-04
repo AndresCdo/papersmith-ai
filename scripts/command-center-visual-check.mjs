@@ -5,7 +5,7 @@
 // reports time-to-first-data. A development tool: CI runners have no Chromium.
 //
 //   node scripts/command-center-visual-check.mjs --out DIR [--url URL]
-//        [--timeout SECONDS] [--tabs a,b] [--viewports 1280x800,1600x1000]
+//        [--timeout SECONDS] [--tabs a,b] [--viewports 1280x800,1600x1000,700x900]
 //        [--chromium PATH] [--drag-check] [--full-page] [--click-check]
 
 import { spawn } from 'node:child_process';

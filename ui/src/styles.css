@@ -1316,6 +1316,20 @@ body {
   outline: none;
 }
 
+/* Under 900px the drawer would cover the right of the diagram: dock it to the
+   bottom as a full-width, scrollable sheet instead. Still non-modal. */
+@media (max-width: 899px) {
+  .element-panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-strong);
+    border-left: none;
+  }
+}
+
 .connection-list {
   display: grid;
   gap: 4px;

@@ -3070,7 +3070,7 @@ python -m skills._core.command_center.server --port 8080 --allowed-host localhos
 ```
 
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
-dashboard en Chromium, saca capturas de cada pestaña a 1280x800 y 1600x1000 y
+dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:
 
 ```bash
