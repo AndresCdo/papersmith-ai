@@ -3,8 +3,9 @@ render_atlas.py's single-file HTML.
 
 Every refusal the checker can name is produced here from an atlas built
 for it, never read out of the script's prose. The renderer is held to
-one plane, deterministic bytes, drawn cross-links, and output that opens
-with no network.
+one 3D sky (a deterministic scene in a JSON data island drawn by the
+vendored three.js viewer inlined verbatim), deterministic bytes, drawn
+cross-links, and output that opens with no network.
 
 Stdlib only.
 """
@@ -19,6 +20,14 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent / "skills" / "plausibility" / "scripts"
 CHECKER = SKILL / "check_atlas.py"
 RENDERER = SKILL / "render_atlas.py"
+BUNDLE = SKILL.parent / "assets" / "atlas3d.bundle.js"
+DATA_OPEN = '<script type="application/json" id="atlas-data">'
+
+
+def scene_of(page):
+    """The data island the viewer draws: the scene, parsed back as JSON."""
+    start = page.index(DATA_OPEN) + len(DATA_OPEN)
+    return json.loads(page[start:page.index("</script>", start)])
 
 ORBITS = {"sun": 0, "branch": 1, "topic_app": 1, "topic_ai": 1,
           "problem": 1, "application": 1, "family": 2, "novelty": 1,
@@ -152,7 +161,7 @@ class RenderAtlasTests(unittest.TestCase):
                               capture_output=True, text=True, cwd=self.tmp)
         return proc.returncode, proc.stdout + proc.stderr
 
-    def test_green_atlas_renders_one_self_contained_plane(self):
+    def test_green_atlas_renders_one_self_contained_sky(self):
         links = [{"from_system": "a", "from": "a-family", "to_system": "b",
                   "to": "b-family", "rel": "shares-family-with"}]
         self.atlas_path.write_text(json.dumps(atlas(links=links)), encoding="utf-8")
@@ -160,26 +169,47 @@ class RenderAtlasTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("ATLAS_RENDERED", out)
         page = self.out_path.read_text(encoding="utf-8")
-        self.assertEqual(page.count("<svg"), 1)
-        self.assertIn("Ta</text>", page)
-        self.assertIn("Tb</text>", page)
-        self.assertIn("Tc</text>", page)
-        self.assertIn('class="link inter"', page)
+        self.assertNotIn("<svg", page)
+        self.assertEqual(page.count('id="sky"'), 1)
+        self.assertEqual(page.count(DATA_OPEN), 1)
+        scene = scene_of(page)
+        self.assertEqual(sorted(s["title"] for s in scene["atlas"]["systems"]),
+                         ["Ta", "Tb", "Tc"])
+        inter = [e for e in scene["edges"] if e["inter"]]
+        self.assertEqual([(e["from"], e["to"]) for e in inter],
+                         [("a.a-family", "b.b-family")])
         self.assertIn('rellegend', page)
-        self.assertIn('zoomin', page)
         self.assertIn('id="zoomin"', page)
         self.assertIn('id="zoomout"', page)
         self.assertIn('id="zoomreset"', page)
-        self.assertIn('pointerdown', page)
-        self.assertIn('wheel', page)
         self.assertIn('famchips', page)
         self.assertNotIn('famfilter', page)
         self.assertIn('id="overlay"', page)
         self.assertIn('openModal', page)
-        self.assertIn('homeRect', page)
+        self.assertIn('AtlasViewer.mount', page)
         self.assertNotIn("<script src", page)
         self.assertNotIn("<link ", page)
         self.assertNotIn("@import", page)
+
+    def test_vendored_viewer_is_inlined_verbatim(self):
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path))
+        self.assertEqual(code, 0, out)
+        bundle = BUNDLE.read_text(encoding="utf-8")
+        self.assertNotIn("</script", bundle.lower())
+        self.assertIn("AtlasViewer", bundle)
+        self.assertIn(bundle, self.out_path.read_text(encoding="utf-8"))
+
+    def test_every_planet_has_a_point_in_three_dimensions(self):
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path))
+        self.assertEqual(code, 0, out)
+        scene = scene_of(self.out_path.read_text(encoding="utf-8"))
+        keys = {f"{s['id']}.{p['id']}" for s in atlas()["systems"] for p in s["planets"]}
+        self.assertEqual(set(scene["positions"]), keys)
+        points = list(scene["positions"].values())
+        self.assertTrue(all(len(p) == 3 for p in points))
+        self.assertGreater(len({p[2] for p in points}), 1, "the sky must not be flat")
+        for sid, frame in scene["frames"].items():
+            self.assertEqual(set(frame), {"center", "u", "v"}, sid)
 
     def test_same_atlas_draws_the_same_sky(self):
         first = self.tmp / "first.html"
@@ -201,9 +231,8 @@ class RenderAtlasTests(unittest.TestCase):
         out_path = self.tmp / "ties.html"
         code, out = self.run_renderer(str(target), "--out", str(out_path))
         self.assertEqual(code, 0, out)
-        page = out_path.read_text(encoding="utf-8")
-        self.assertIn('class="link familytie"', page)
-        self.assertIn('data-family="F"', page)
+        ties = scene_of(out_path.read_text(encoding="utf-8"))["ties"]
+        self.assertEqual(ties, [{"family": "F", "from": "a.a-family", "to": "b.b-family"}])
 
     def test_missing_operand_is_usage(self):
         code, _ = self.run_renderer()

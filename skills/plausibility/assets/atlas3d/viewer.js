@@ -46,6 +46,11 @@ const DIM = 0.16;
 const PICK_RADIUS_PX = 14;
 const SUN_RADIUS = 22;
 const PLANET_RADIUS = 10;
+// Halos and labels keep a fixed on-screen size, so a 25-system sky reads as a
+// field of glowing points from afar and resolves into spheres up close.
+const SUN_HALO_PX = 30;
+const PLANET_HALO_PX = 15;
+const LABEL_SCREEN_HEIGHT = 0.026;
 const CURVE_STEPS = 18;
 
 function glowTexture() {
@@ -65,7 +70,7 @@ function glowTexture() {
   return texture;
 }
 
-function labelSprite(text, worldHeight) {
+function labelSprite(text, screenHeight) {
   const font = 44;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -81,8 +86,11 @@ function labelSprite(text, worldHeight) {
   ctx.fillText(text, 12, canvas.height / 2);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
-  const sprite = new Sprite(new SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.scale.set(worldHeight * (canvas.width / canvas.height), worldHeight, 1);
+  const sprite = new Sprite(new SpriteMaterial({
+    map: texture, transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: false, opacity: 0.85,
+  }));
+  sprite.scale.set(screenHeight * (canvas.width / canvas.height), screenHeight, 1);
+  sprite.center.set(0.5, -0.6);
   return sprite;
 }
 
@@ -154,10 +162,11 @@ function mount(container, data, hooks = {}) {
   const index = new Map(keys.map((key, i) => [key, i]));
   const points = keys.map((key) => new Vector3(...data.positions[key]));
 
-  // Frame: the bounding sphere of every planet.
-  const center = new Vector3();
-  points.forEach((p) => center.add(p));
-  center.multiplyScalar(1 / Math.max(points.length, 1));
+  // Frame: the bounding sphere around the bounding-box center of every planet.
+  const low = new Vector3(Infinity, Infinity, Infinity);
+  const high = new Vector3(-Infinity, -Infinity, -Infinity);
+  points.forEach((p) => { low.min(p); high.max(p); });
+  const center = points.length ? low.clone().add(high).multiplyScalar(0.5) : new Vector3();
   const radius = Math.max(400, ...points.map((p) => p.distanceTo(center)));
   scene.fog = new FogExp2(BACKGROUND, 0.35 / radius);
   scene.add(starfield(center, radius));
@@ -192,13 +201,13 @@ function mount(container, data, hooks = {}) {
     geometry.setAttribute('position', new BufferAttribute(position, 3));
     geometry.setAttribute('color', new BufferAttribute(color, 3));
     const cloud = new Points(geometry, new PointsMaterial({
-      size, map: glow, vertexColors: true, transparent: true, depthWrite: false,
-      blending: AdditiveBlending, sizeAttenuation: true,
+      size: size * renderer.getPixelRatio(), map: glow, vertexColors: true, transparent: true,
+      depthWrite: false, blending: AdditiveBlending, sizeAttenuation: false,
     }));
     scene.add(cloud);
     return { cloud, chosen };
   }
-  const halos = [halo((i) => isSun[i], SUN_RADIUS * 7), halo((i) => !isSun[i], PLANET_RADIUS * 6)];
+  const halos = [halo((i) => isSun[i], SUN_HALO_PX), halo((i) => !isSun[i], PLANET_HALO_PX)];
 
   // Orbit rings in each system's own tilted plane.
   const ringMaterial = new LineBasicMaterial({ color: 0x2a3350, transparent: true, opacity: 0.55 });
@@ -217,8 +226,8 @@ function mount(container, data, hooks = {}) {
       }
       scene.add(new LineLoop(new BufferGeometry().setFromPoints(ring), ringMaterial));
     }
-    const label = labelSprite(String(system.title || sid).slice(0, 64), 34);
-    label.position.copy(c).add(new Vector3(0, 0, SUN_RADIUS * 3));
+    const label = labelSprite(String(system.title || sid).slice(0, 64), LABEL_SCREEN_HEIGHT);
+    label.position.copy(c);
     scene.add(label);
   }
 
@@ -245,7 +254,7 @@ function mount(container, data, hooks = {}) {
   edgeGeometry.setAttribute('position', new BufferAttribute(new Float32Array(edgeVerts), 3));
   edgeGeometry.setAttribute('color', new BufferAttribute(new Float32Array(edgeColors), 3));
   scene.add(new LineSegments(edgeGeometry, new LineBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0.75, blending: AdditiveBlending, depthWrite: false,
+    vertexColors: true, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false,
   })));
 
   // Family ties: dashed arcs chaining planets that share a family name.
@@ -263,10 +272,14 @@ function mount(container, data, hooks = {}) {
     scene.add(line);
   }
 
-  const camera = new PerspectiveCamera(50, 1, radius / 500, radius * 40);
+  const FOV = 50;
+  const camera = new PerspectiveCamera(FOV, 1, radius / 500, radius * 40);
   camera.up.set(0, 0, 1);
+  // The sky is flatter than its bounding sphere, so frame a little inside
+  // the sphere-fit distance; the full sphere would leave most of the view empty.
+  const distance = (radius / Math.sin((FOV / 2) * Math.PI / 180)) * 0.8;
   const home = {
-    position: center.clone().add(new Vector3(0, -radius * 1.55, radius * 0.95)),
+    position: center.clone().add(new Vector3(0, -0.85, 0.53).setLength(distance)),
     target: center.clone(),
   };
   camera.position.copy(home.position);
