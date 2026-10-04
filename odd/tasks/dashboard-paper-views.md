@@ -22,7 +22,7 @@ Route: delegated writer per slice (one writer at a time).
 - [x] F3 dpv-03 History publish ordering test + fix (commit 81d2243 on feat/dpv-03-history-ordering)
 - [x] F4 dpv-04 Polish (commits caceac3, cb21d4e on feat/dpv-04-polish)
 - [x] P1 dpv-05 Paper preview backend (commits 30a1de2, 80c180c, 996181f on feat/dpv-05-paper-preview-api)
-- [ ] P2 dpv-06 Preview tab UI
+- [x] P2 dpv-06 Preview tab UI (commits c4e5412, ab65615, 7c05bdb, 57502a0 on feat/dpv-06-preview-tab)
 - [ ] A1 dpv-07 Atlas backend
 - [ ] A2 dpv-08 Atlas tab UI
 - [ ] D-1 dpv-09 Decisions backend
@@ -70,6 +70,14 @@ Route: delegated writer per slice (one writer at a time).
 - Authored lines: commit 1 628 insertions (paper_preview.py 333 + tests 295), commit 2 217 insertions/3 deletions (server.py ~45 + tests ~172), docs commit 996181f 36 insertions. Over the ~400 heuristic in total: split at commit boundaries (module+tests / routes+tests / docs) as authorized.
 - Review tier: not assessed (local commit only).
 
+### P2 (feat/dpv-06-preview-tab, stacked on feat/dpv-05-paper-preview-api)
+- Route: delegated writer. usePaperPreview(active, revision) (lazy, one in-flight request plus one pending flag, keeps last good data on a failed refetch, Retry), PreviewView (escaped text nodes, cite chips, placeholders, notices, PDF iframe with referrerPolicy no-referrer and stale badge, figure links via encodeURIComponent, PNG thumbs), `revision` exposed by useWorkspaceEvents, `preview` in TABS, tokens-only CSS. Checker: `preview` in DEFAULT_TABS, `tabContentSelector` helper waits for the lazy content.
+- RED: `cd ui && npx vitest run`: 4 files failed (missing usePaperPreview/PreviewView), 2 tests failed (hash preview, App tab bar). Checker RED: `node --test tests/command-center-visual-check.test.mjs`: SyntaxError, no export tabContentSelector (0 pass, 1 fail).
+- GREEN: `cd ui && npx vitest run`: 17 files, 164 tests passed. `npm run typecheck`: clean. `npm run build`: ok, bundle index-D66FEWz1.js + index-_tgdFA7v.css committed, static dir clean. `node --test tests/command-center-visual-check.test.mjs`: 15 pass. `npm run test:node`: 678 pass, 0 fail. `pytest tests/test_command_center_*.py -q`: 178 passed, 12 subtests.
+- Real browser: own server on 127.0.0.1:8137 against a throwaway workspace (2 sections, blocks with `<b>`/`<script>` text, an unwritten block, x.png, stale main.pdf), stopped afterwards: `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/p2 --full-page --click-check --drag-check --url http://127.0.0.1:8137/` -> exit 0, 18 screenshots, no disallowed console errors. preview-1280x800 and preview-700x900 inspected (two columns then stacked; literal markup, chips, placeholder, stale badge, figure thumb). Finding: headless Chromium's PDF viewer iframe stalls the next Page.navigate; the checker now removes iframes after each shot. In the 700x900 full-page shot the PDF viewer had not painted yet (dark box); not an app defect.
+- Environment note: mid-run another actor switched the shared checkout to branch test/colab-live-rehearsal (one browser run hung on the swapped bundle). Commits are intact on feat/dpv-06-preview-tab; later work used a git worktree at ../papersmith-ai-worktrees/dpv-06.
+- Commits: c4e5412 (UI), ab65615 (checker), 7c05bdb (docs), 57502a0 (checker iframe fix), plus this evidence commit. Authored lines: UI+tests 655 ins/3 del (over the ~400 heuristic, about 230 are tests; split at commit boundaries UI / checker / docs), checker 41/3, docs 21.
+- Review tier: not assessed (local commit only).
 
 ---
 
