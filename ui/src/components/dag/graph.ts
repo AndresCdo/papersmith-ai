@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { StageNodeData } from './nodes/StageNode';
 import type { GateNodeData } from './nodes/GateNode';
 import type { SectionNodeData } from './nodes/SectionNode';
-import { layoutGraph } from './layout';
+import { NODE_SIZE, layoutGraph, type GraphLayout } from './layout';
 import type { Gate, PipelineStage, Section, WorkspaceState } from '../../types';
 import { formatCount } from '../../lib/format';
 
@@ -81,6 +81,39 @@ export interface GraphModel {
   edges: Edge[];
   width: number;
   height: number;
+}
+
+/**
+ * Everything dagre's result depends on: node ids, their kind (which fixes the
+ * dimensions in NODE_SIZE) and edge endpoints. Node data (progress, status text)
+ * is deliberately absent, so ordinary state frames reuse the previous positions.
+ */
+export function graphSignature(nodes: AnyFlowNode[], edges: Edge[]): string {
+  const dims = (node: AnyFlowNode) => {
+    const size = NODE_SIZE[node.type ?? 'stage'] ?? NODE_SIZE.stage;
+    return `${node.id}@${size.width}x${size.height}`;
+  };
+  return JSON.stringify([nodes.map(dims), edges.map((edge) => `${edge.id}:${edge.source}>${edge.target}`)]);
+}
+
+// One live pipeline is on screen at a time, so a single remembered layout is enough.
+let lastLayout: { signature: string; laid: GraphLayout } | null = null;
+
+function layoutOnStructure(nodes: AnyFlowNode[], edges: Edge[]): GraphLayout {
+  const signature = graphSignature(nodes, edges);
+  if (lastLayout?.signature !== signature) {
+    lastLayout = { signature, laid: layoutGraph(nodes, edges) };
+    return lastLayout.laid;
+  }
+  // Same structure: keep the computed geometry, carry over this frame's fresh node data.
+  const placed = new Map(lastLayout.laid.nodes.map((node) => [node.id, node]));
+  return {
+    ...lastLayout.laid,
+    nodes: nodes.map((node) => {
+      const { position, width, height } = placed.get(node.id)!;
+      return { ...node, position, width, height };
+    }),
+  };
 }
 
 export function buildGraph(state: WorkspaceState | null): GraphModel {
@@ -168,6 +201,6 @@ export function buildGraph(state: WorkspaceState | null): GraphModel {
     if (stageIds.has('auditing')) link(`section:${section.id}`, 'stage:auditing');
   }
 
-  const laid = layoutGraph(nodes, edges);
+  const laid = layoutOnStructure(nodes, edges);
   return { nodes: laid.nodes, edges, width: laid.width, height: laid.height };
 }
