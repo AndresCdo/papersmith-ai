@@ -32,6 +32,16 @@ test('the default tab list covers every dashboard tab, History included', () => 
   assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history']);
 });
 
+test('the default viewports include a narrow 700x900 one for the bottom sheet', () => {
+  assert.deepEqual(DEFAULT_VIEWPORTS, [
+    { width: 1280, height: 800 },
+    { width: 1600, height: 1000 },
+    { width: 700, height: 900 },
+  ]);
+  assert.equal(shotName('pipeline', DEFAULT_VIEWPORTS[2]), 'pipeline-700x900.png');
+  assert.equal(clickShotName('stage', DEFAULT_VIEWPORTS[2]), 'click-stage-700x900.png');
+});
+
 test('parseArgs reads every option', () => {
   const parsed = parseArgs([
     '--out', '/x', '--url', 'http://localhost:5173', '--timeout', '5',

@@ -147,3 +147,23 @@ describe('mutating cue', () => {
     expect(rule?.[1]).toMatch(/outline:\s*\d+px solid var\(--accent\)/);
   });
 });
+
+describe('element panel on narrow viewports', () => {
+  const sheet = /@media \(max-width: 899px\)\s*\{\s*\.element-panel\s*\{([^}]*)\}/.exec(stripped);
+
+  it('becomes a full-width bottom sheet capped at 60vh and scrollable under 900px', () => {
+    expect(sheet).not.toBeNull();
+    const body = sheet?.[1] ?? '';
+    expect(body).toMatch(/top:\s*auto/);
+    expect(body).toMatch(/left:\s*0/);
+    expect(body).toMatch(/width:\s*auto/);
+    expect(body).toMatch(/max-height:\s*60vh/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it('swaps the drawer left border for a top border using tokens only', () => {
+    const body = sheet?.[1] ?? '';
+    expect(body).toMatch(/border-top:\s*1px solid var\(--border-strong\)/);
+    expect(body).toMatch(/border-left:\s*none/);
+  });
+});
