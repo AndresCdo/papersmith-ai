@@ -3093,6 +3093,21 @@ regular. papersmith no genera `main.pdf`: que no exista es lo normal. La
 protección `Host` (421) cubre estas rutas solo en un bind a loopback; con un bind
 no loopback no hay filtrado de `Host`.
 
+**Pestaña *Preview*.** Muestra, en una sola vista, el texto de los bloques
+escritos y el PDF compilado. A la izquierda van las secciones en orden con su
+estado; cada bloque se pinta como texto plano escapado (nunca como HTML: un
+`<b>` o un `<script>` en `main.tex` se ve literal), las claves `\cite{...}`
+salen como chips, los bloques sin escribir muestran un marcador con su id y se
+avisa de cada truncado o id duplicado, de `main.tex` ausente, demasiado grande,
+inseguro o ilegible, y de "Preview truncated" cuando se alcanza el tope de la
+respuesta. A la derecha, si existe `paper/main.pdf`, se incrusta en un `<iframe>`
+con una insignia *stale* cuando `main.tex` es más nuevo que el PDF; si no existe
+se explica que papersmith no compila el paper completo y que debes construirlo
+tú. Debajo se listan las figuras de `paper/Figures/` con enlace *Open* (los PNG
+con miniatura). Se carga al abrir la pestaña (`#preview`) y se vuelve a pedir
+cuando cambia el estado del workspace por SSE, sin solapar peticiones; si falla
+muestra el error con *Retry*.
+
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
 dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:

@@ -37,6 +37,12 @@ session history.
   `nosniff`, `X-Frame-Options: SAMEORIGIN` and `no-store`; there is no CSP
   sandbox and no `Range` support. The `Host` allow-list (421) covers them only on
   loopback binds; non-loopback binds do no `Host` filtering.
+- **Preview tab.** `#preview` shows the written block text (escaped plain text,
+  citation keys as chips, placeholders for unwritten blocks, truncation and
+  `main.tex` status notices) beside the compiled `paper/main.pdf` in an
+  `<iframe>` (with a stale badge) and a list of `paper/Figures` files. It is
+  fetched when the tab opens and refetched when the workspace revision changes,
+  with an inline error and Retry. The visual checker covers the tab.
 - **Light theme.** The dashboard uses one light theme built on colour tokens;
   Vitest guards reject colour literals outside `:root` and check WCAG AA
   contrast for the token pairs. The state and health payloads now load
