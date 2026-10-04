@@ -25,6 +25,18 @@ number is `0`, breaking changes can still arrive without a major bump.
 Interactive Paper Command Center: a light theme, a clickable diagram and a
 session history.
 
+- **Read-only paper preview routes in the command center.**
+  `GET /api/paper/preview` returns sections (extractor order and ids) with
+  plain-text block bodies from `paper/main.tex`, citation keys, `written`,
+  truncation/duplicate flags and PDF/figure info; `GET /api/paper/file?name=`
+  serves only `main.pdf` and `figures/<id>.pdf|png` (real directory
+  `paper/Figures/`; id is one `[A-Za-z0-9._-]` segment, no leading dot, at most
+  100 characters). Reads are size-capped before reading (`main.tex` 2 MiB,
+  sections 256 KiB, 200 KiB of text per response, 25 MiB per file with 413),
+  resolved and contained in the workspace, regular files only. Responses carry
+  `nosniff`, `X-Frame-Options: SAMEORIGIN` and `no-store`; there is no CSP
+  sandbox and no `Range` support. The `Host` allow-list (421) covers them only on
+  loopback binds; non-loopback binds do no `Host` filtering.
 - **Light theme.** The dashboard uses one light theme built on colour tokens;
   Vitest guards reject colour literals outside `:root` and check WCAG AA
   contrast for the token pairs. The state and health payloads now load

@@ -3069,6 +3069,30 @@ acepta el mismo flag):
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
 
+**Vista previa del paper (solo lectura).** Dos rutas GET, sin escrituras:
+`GET /api/paper/preview` devuelve las secciones en el mismo orden e ids que
+`/api/state`, con el texto plano de cada bloque de `paper/main.tex` (marcas
+`%% paper-writing block <id> begin|end`), sus claves `\cite{...}`, palabras,
+`written` y banderas `truncated`/`duplicate`, más el estado del PDF
+(`pdf.main` con `stale` si `main.tex` es más nuevo que `main.pdf`, y la lista de
+figuras). Las regiones de declaraciones y procedencia se ignoran; un bloque sin
+cierre se descarta y, con ids repetidos, gana el primero (marcado `duplicate`).
+`GET /api/paper/file?name=<n>` sirve solo `main.pdf` (`paper/main.pdf`) y
+`figures/<id>.pdf|png` (el directorio real es `paper/Figures/`, con F
+mayúscula). Regla del id: un solo segmento `[A-Za-z0-9._-]`, sin separadores,
+NUL ni punto inicial, hasta 100 caracteres (más estricta que `paper_figure.py`).
+Respuestas: 400 nombre mal formado, 404 ausente o no permitido, 413 sobre 25 MiB;
+encabezados fijos `Content-Type` por extensión, `nosniff`, `inline`,
+`X-Frame-Options: SAMEORIGIN` y `no-store`. No lleva CSP `sandbox` (rompería el
+visor de PDF) y no admite `Range` (se envía el archivo completo). Límites de
+lectura: `main.tex` 2 MiB (si lo supera, estado `too_large` y sin contenido),
+cada contrato de sección 256 KiB, 32 KiB de texto por bloque y 200 KiB de texto
+en total (con `truncated`). Cada lectura resuelve la ruta, exige que quede dentro
+del workspace (un symlink que escapa da `unsafe`/404) y que sea un archivo
+regular. papersmith no genera `main.pdf`: que no exista es lo normal. La
+protección `Host` (421) cubre estas rutas solo en un bind a loopback; con un bind
+no loopback no hay filtrado de `Host`.
+
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
 dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:
