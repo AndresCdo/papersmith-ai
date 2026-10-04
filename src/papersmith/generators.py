@@ -191,14 +191,9 @@ def _build_capabilities() -> dict[str, dict[str, Capability]]:
 HARNESS_CAPABILITIES = _build_capabilities()
 
 #: Claude tool names to Pi tool names for the `.pi/agents/` projection.
-#: `WebSearch`/`WebFetch` have no direct Pi child-tool counterparts: they
-#: map onto the MCP gateway (`mcp` for one call, `mcpScript` for batched
-#: calls with logic between them), which is what the agent bodies already
-#: prefer ("through your own MCP servers first"). Whether the Pi runtime
-#: actually hands those tools to a subagent is decided there, not here --
-#: this projection only declares the intent. Unknown names pass through
-#: lowercased rather than silently dropped, so a new Claude tool shows up
-#: verbatim instead of vanishing.
+#: Unknown names pass through lowercased rather than silently dropped, so a
+#: new Claude tool shows up verbatim instead of vanishing -- except the names
+#: in :data:`PI_SKIPPED_TOOLS`.
 PI_TOOL_MAP = {
     "read": "read",
     "glob": "find",
@@ -206,9 +201,14 @@ PI_TOOL_MAP = {
     "write": "write",
     "edit": "edit",
     "bash": "bash",
-    "websearch": "mcpScript",
-    "webfetch": "mcp",
 }
+
+#: Claude web tools that are dropped from the Pi `tools:` list with a note.
+#: Pi has no sourced counterpart: its documented built-ins are read, bash,
+#: edit, write, grep, find and ls, and MCP access is granted through a
+#: separate `mcp:` frontmatter field, which this projection does not emit.
+#: The names `mcp`/`mcpScript` this map once used have no primary source.
+PI_SKIPPED_TOOLS = frozenset({"websearch", "webfetch"})
 
 #: Claude tool names to the OpenCode permission keys that gate them, for the
 #: `.opencode/agents/` projection. OpenCode has no `tools:` allow-list any more
@@ -349,11 +349,23 @@ def collect_commands(workspace: Path, *,
     return commands
 
 
-def _pi_tools_line(value: str) -> str:
-    """Map a Claude `tools: A, B` line onto Pi tool names as a YAML list."""
-    mapped = [PI_TOOL_MAP.get(item.strip().lower(), item.strip().lower())
-              for item in value.split(",") if item.strip()]
-    return "tools:\n" + "\n".join(f"  - {name}" for name in mapped)
+def _pi_tools_line(value: str) -> tuple[str, list[str]]:
+    """Map a Claude `tools: A, B` line onto Pi tool names as a YAML list.
+
+    Returns ``(yaml, notes)``; tools in :data:`PI_SKIPPED_TOOLS` are left out
+    and named in ``notes``.
+    """
+    mapped: list[str] = []
+    notes: list[str] = []
+    for item in value.split(","):
+        tool = item.strip()
+        if not tool:
+            continue
+        if tool.lower() in PI_SKIPPED_TOOLS:
+            notes.append(f"tool '{tool}' has no Pi tool; not granted")
+            continue
+        mapped.append(PI_TOOL_MAP.get(tool.lower(), tool.lower()))
+    return "tools:\n" + "\n".join(f"  - {name}" for name in mapped), notes
 
 
 def _pi_agent_name(metadata: dict[str, str], fallback: str) -> str | None:
@@ -393,29 +405,35 @@ def _split_agent_source(
     return metadata, meta_lines, rest, None
 
 
-def _translate_agent_for_pi(source: str) -> tuple[dict[str, str] | None, str | None]:
+def _translate_agent_for_pi(
+    source: str,
+) -> tuple[dict[str, str] | None, str | None, list[str]]:
     """Project one Claude agent definition onto the Pi agent shape.
 
-    Returns ``({"name": ..., "text": ...}, None)`` or ``(None,
-    skip_reason)`` -- never raises. Front matter travels verbatim except
-    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP`; the
+    Returns ``({"name": ..., "text": ...}, None, notes)`` or ``(None,
+    skip_reason, [])`` -- never raises. Front matter travels verbatim except
+    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP` (web tools
+    in :data:`PI_SKIPPED_TOOLS` are dropped and named in ``notes``); the
     body travels verbatim except `.claude/skills/` references, which
     become harness-neutral `skills/` (a symlink in every workspace).
     """
     metadata, meta_lines, rest, reason = _split_agent_source(source)
     if reason:
-        return None, reason
+        return None, reason, []
     out_lines = []
+    notes: list[str] = []
     for line in meta_lines:
         if ":" in line and line.split(":", 1)[0].strip().lower() == "tools":
-            out_lines.append(_pi_tools_line(line.split(":", 1)[1]))
+            tools_yaml, tool_notes = _pi_tools_line(line.split(":", 1)[1])
+            out_lines.append(tools_yaml)
+            notes.extend(tool_notes)
         else:
             out_lines.append(line)
     body = "\n".join(rest).replace(".claude/skills/", "skills/")
     text = "---\n" + "\n".join(out_lines) + "\n---\n" + body
     if not text.endswith("\n"):
         text += "\n"
-    return {"name": metadata["name"], "text": text}, None
+    return {"name": metadata["name"], "text": text}, None, notes
 
 
 def _translate_agent_for_opencode(
@@ -509,6 +527,10 @@ def _translate_agent_for_antigravity(
     if granted:
         out.append("tools:")
         out.extend(f"  - {name}" for name in granted)
+    # The docs (antigravity.google/docs/subagents) list the values off/auto/
+    # eager/sandbox (default sandbox) but do not document what each one does,
+    # so "off" for agents without run_command is our reading, not a sourced
+    # guarantee; the `tools` allow-list is the enforced boundary.
     # Quoted: an unquoted `off` is a boolean in YAML 1.1 parsers.
     policy = "sandbox" if "run_command" in granted else "off"
     out.append(f"commandExecutionPolicy: {yaml_double_quote(policy)}")
@@ -569,10 +591,7 @@ def _collect_projected_agents(
 def collect_pi_agents(workspace: Path, *,
                       warnings: list[str] | None = None) -> list[dict[str, str]]:
     """Project every `.claude/agents/*.md` definition onto Pi shape."""
-    def translate(source: str) -> tuple[dict[str, str] | None, str | None, list[str]]:
-        entry, reason = _translate_agent_for_pi(source)
-        return entry, reason, []
-    return _collect_projected_agents(workspace, translate, warnings=warnings)
+    return _collect_projected_agents(workspace, _translate_agent_for_pi, warnings=warnings)
 
 
 def collect_opencode_agents(workspace: Path, *,
