@@ -20,14 +20,16 @@ import json
 import shutil
 import subprocess
 import sys
+import logging
 import threading
 import time
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
+from . import history
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -36,6 +38,10 @@ from .watcher import EventBus, WorkspaceWatcher, is_health_path
 #: endpoint runs subprocesses (CLI ``--help`` probes), so a burst of watcher
 #: events must not multiply them.
 DEFAULT_HEALTH_TTL_SECONDS = 10.0
+
+_log = logging.getLogger(__name__)
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 _PLACEHOLDER_HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Paper Command Center</title></head>
@@ -125,25 +131,103 @@ def origin_is_same(request: Request) -> bool:
     return urlparse(origin).netloc == request.headers.get("host", "")
 
 
+def build_allowed_hosts(host: str, port: int, extra: list[str] | None = None) -> frozenset[str] | None:
+    """The ``Host`` values to accept for a bind address, or ``None`` for any.
+
+    A loopback bind accepts only its own loopback names on ``port`` (plus every
+    ``--allowed-host``), which stops DNS-rebinding pages from reading the API.
+    Other binds are left open. For ``npm run dev`` (Vite proxies with
+    ``changeOrigin: false``, so the backend sees ``localhost:5173``) start the
+    backend with ``--allowed-host localhost:5173``.
+    """
+    if host.strip("[]").lower() not in _LOOPBACK_HOSTS:
+        return None
+    hosts = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+    hosts.update(value.strip().lower() for value in extra or [] if value.strip())
+    return frozenset(hosts)
+
+
+class HostAllowListMiddleware:
+    """Reject requests whose ``Host`` header is not in the allow-list (421).
+
+    Matching is case-insensitive; a missing ``Host`` is rejected. Lifespan
+    events pass through untouched.
+    """
+
+    def __init__(self, app: Any, allowed_hosts: frozenset[str]) -> None:
+        self.app = app
+        self.allowed = frozenset(host.lower() for host in allowed_hosts)
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        host = ""
+        for name, value in scope.get("headers") or []:
+            if name == b"host":
+                host = value.decode("latin-1").strip()
+                break
+        if host.lower() in self.allowed:
+            await self.app(scope, receive, send)
+            return
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        body = (
+            f"Host header {host!r} is not allowed for this dashboard. "
+            "Open it through one of its own addresses, or start the server with "
+            f"`papersmith ui --allowed-host HOST:PORT` (for example --allowed-host {host or 'localhost:5173'}).\n"
+        ).encode()
+        await send({"type": "http.response.start", "status": 421, "headers": [
+            (b"content-type", b"text/plain; charset=utf-8"),
+            (b"content-length", str(len(body)).encode()),
+        ]})
+        await send({"type": "http.response.body", "body": body})
+
+
 # --------------------------------------------------------------------------
 # application
 # --------------------------------------------------------------------------
 def create_app(root: Path | str, *, debounce_ms: int = 300,
-               health_ttl: float = DEFAULT_HEALTH_TTL_SECONDS) -> FastAPI:
+               health_ttl: float = DEFAULT_HEALTH_TTL_SECONDS,
+               history_store: history.HistoryStore | None = None,
+               allowed_hosts: frozenset[str] | None = None) -> FastAPI:
     root_path = Path(root).expanduser().resolve()
     bus = EventBus()
     revision = {"value": 0}
     health_cache: dict[str, Any] = {"at": 0.0, "value": None}
+    health_lock = threading.Lock()
+    store = history_store if history_store is not None else history.HistoryStore()
+    # The first successfully read state is the baseline: it produces no entries.
+    try:
+        baseline: dict[str, Any] | None = get_workspace_state(root_path)
+    except Exception:  # noqa: BLE001 - history must never stop the server starting
+        _log.exception("history: could not read the baseline state")
+        baseline = None
+    state_baseline = {"value": baseline}
+    state_lock = threading.Lock()
+
+    def record(changes: list[history.Change]) -> None:
+        for change in changes:
+            entry = store.add(change.kind, change.element_id, change.summary,
+                              change.before, change.after)
+            bus.publish("history_append", entry.to_dict())
 
     def measure_health(force: bool = False) -> dict[str, Any]:
-        now = time.monotonic()
-        cached = health_cache["value"]
-        if not force and cached is not None and now - health_cache["at"] < health_ttl:
-            return cached
-        value = get_wiring_health(root_path)
-        health_cache["value"] = value
-        health_cache["at"] = now
-        return value
+        with health_lock:
+            now = time.monotonic()
+            cached = health_cache["value"]
+            if not force and cached is not None and now - health_cache["at"] < health_ttl:
+                return cached
+            value = get_wiring_health(root_path)
+            health_cache["value"] = value
+            health_cache["at"] = now
+            if cached is not None:
+                try:
+                    record(history.diff_health(cached, value))
+                except Exception:  # noqa: BLE001
+                    _log.exception("history: recording a health change failed")
+            return value
 
     def on_flush(paths: list[Path]) -> None:
         revision["value"] += 1
@@ -159,6 +243,14 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             "changed": sorted(changed),
             "state": state,
         })
+        try:
+            with state_lock:
+                previous = state_baseline["value"]
+                state_baseline["value"] = state
+            if previous is not None:
+                record(history.diff_states(previous, state))
+        except Exception:  # noqa: BLE001 - history never blocks the live channel
+            _log.exception("history: recording a state change failed")
         if any(is_health_path(path, root_path) for path in paths):
             health = measure_health(force=True)
             bus.publish("health_update", health)
@@ -180,6 +272,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     app.state.bus = bus
     app.state.watcher = watcher
     app.state.measure_health = measure_health
+    app.state.history = store
+    if allowed_hosts is not None:
+        app.add_middleware(HostAllowListMiddleware, allowed_hosts=allowed_hosts)
     # One in-flight wiring-smoke run at a time: repeated or concurrent POSTs
     # must not multiply the subprocess.
     app.state.smoke_lock = smoke_lock
@@ -187,6 +282,15 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     @app.get("/api/state")
     def api_state() -> JSONResponse:
         return JSONResponse(get_workspace_state(root_path))
+
+    @app.get("/api/history")
+    def api_history(boot_id: str | None = None, after_seq: int = 0,
+                    element: str | None = None, kind: str | None = None,
+                    limit: int = history.DEFAULT_LIMIT) -> JSONResponse:
+        try:
+            return JSONResponse(store.page(boot_id, after_seq, element, kind, limit))
+        except history.HistoryQueryError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422)
 
     @app.get("/api/health/wiring")
     def api_health_wiring() -> JSONResponse:
@@ -207,7 +311,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 status_code=409,
             )
         try:
-            return JSONResponse(_run_wiring_smoke(root_path, bus))
+            return JSONResponse(_run_wiring_smoke(root_path, bus, record=record))
         finally:
             smoke_lock.release()
 
@@ -253,14 +357,26 @@ async def _event_stream(request: Request, bus: EventBus, root: Path) -> AsyncIte
         bus.unsubscribe(queue)
 
 
-def _run_wiring_smoke(root: Path, bus: EventBus, timeout: float = 180.0) -> dict[str, Any]:
+def _run_wiring_smoke(root: Path, bus: EventBus, timeout: float = 180.0,
+                      record: Callable[[list[history.Change]], None] | None = None) -> dict[str, Any]:
     """Run the workspace's cross-harness wiring smoke and stream its output."""
+
+    def note(phase: str, summary: str, **extra: Any) -> None:
+        if record is None:
+            return
+        try:
+            record([history.Change("smoke", None, summary, None, {"phase": phase, **extra})])
+        except Exception:  # noqa: BLE001
+            _log.exception("history: recording the wiring smoke failed")
+
     script = root / "scripts" / "cli-paper-wiring-smoke.sh"
     if not script.is_file():
         detail = "scripts/cli-paper-wiring-smoke.sh is not present in this workspace"
         bus.publish("wiring_smoke_done", {"exit_code": None, "detail": detail})
+        note("done", "Wiring smoke unavailable", exit_code=None)
         return {"available": False, "exit_code": None, "detail": detail, "output": ""}
     bus.publish("wiring_smoke_started", {"script": "scripts/cli-paper-wiring-smoke.sh"})
+    note("started", "Wiring smoke started")
     lines: list[str] = []
     try:
         process = subprocess.Popen(
@@ -273,6 +389,7 @@ def _run_wiring_smoke(root: Path, bus: EventBus, timeout: float = 180.0) -> dict
     except OSError as exc:
         detail = f"could not start {script}: {exc}"
         bus.publish("wiring_smoke_done", {"exit_code": None, "detail": detail})
+        note("done", "Wiring smoke could not start", exit_code=None)
         return {"available": True, "exit_code": None, "detail": detail, "output": ""}
 
     def _drain_thread() -> None:
@@ -286,6 +403,7 @@ def _run_wiring_smoke(root: Path, bus: EventBus, timeout: float = 180.0) -> dict
             process.kill()
     code = process.poll()
     bus.publish("wiring_smoke_done", {"exit_code": code})
+    note("done", f"Wiring smoke finished with exit code {code}", exit_code=code)
     return {
         "available": True,
         "exit_code": code,
@@ -328,6 +446,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--health-ttl", type=float, default=DEFAULT_HEALTH_TTL_SECONDS)
     parser.add_argument("--export-static", metavar="<dir>", default=None,
                         help="copy the dashboard build to <dir> and exit")
+    parser.add_argument("--allowed-host", action="append", default=[], metavar="HOST:PORT",
+                        help="extra Host header to accept on a loopback bind (repeatable); "
+                             "for `npm run dev` use --allowed-host localhost:5173")
     parser.add_argument("--log-level", default="info")
     return parser
 
@@ -347,7 +468,10 @@ def main(argv: list[str] | None = None) -> int:
 
     import uvicorn
 
-    app = create_app(root, debounce_ms=args.debounce_ms, health_ttl=args.health_ttl)
+    app = create_app(
+        root, debounce_ms=args.debounce_ms, health_ttl=args.health_ttl,
+        allowed_hosts=build_allowed_hosts(args.host, args.port, args.allowed_host),
+    )
     url = f"http://{args.host}:{args.port}/"
     if not args.no_browser:
         threading.Timer(1.0, open_browser, args=(url,)).start()

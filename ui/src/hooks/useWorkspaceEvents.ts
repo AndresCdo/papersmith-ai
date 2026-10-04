@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { applyAppend, applyPage, emptyHistory, lastSeq, type HistoryState } from '../lib/history';
 import type {
+  HistoryEntry,
+  HistoryPage,
   StateUpdatePayload,
   WiringHealth,
   WiringSmokeLinePayload,
@@ -11,6 +14,7 @@ const STATE_URL = '/api/state';
 const HEALTH_URL = '/api/health/wiring';
 const EVENTS_URL = '/api/events';
 const SMOKE_URL = '/api/health/run-wiring-smoke';
+const HISTORY_URL = '/api/history';
 
 /**
  * Live workspace snapshot for the dashboard.
@@ -38,6 +42,10 @@ export interface WorkspaceEventsHook {
   loading: boolean;
   error: string | null;
   smoke: SmokeRun;
+  /** In-memory history since the dashboard server started (oldest first). */
+  history: HistoryState;
+  /** Inline message when a history request failed (for example a 422). */
+  historyError: string | null;
   runSmoke: () => Promise<void>;
   clearSmoke: () => void;
 }
@@ -94,35 +102,88 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
   const [error, setError] = useState<string | null>(null);
   const [smoke, setSmoke] = useState<SmokeRun>(EMPTY_SMOKE);
 
+  const [history, setHistory] = useState<HistoryState>(emptyHistory);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyRef = useRef<HistoryState>(emptyHistory);
+
   const smokeRequestRef = useRef(false);
+  const liveStateRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    void (async () => {
-      const [stateResult, healthResult] = await Promise.allSettled([
-        fetchJson<WorkspaceState>(STATE_URL),
-        fetchJson<WiringHealth>(HEALTH_URL),
-      ]);
-      if (cancelled) return;
-      if (stateResult.status === 'fulfilled') {
-        setState(stateResult.value);
-      } else {
-        setError(`could not load ${STATE_URL}: ${String(stateResult.reason)}`);
+    const commitHistory = (next: HistoryState) => {
+      historyRef.current = next;
+      setHistory(next);
+    };
+
+    // Page `/api/history` from the held cursor until has_more is false. Runs
+    // on mount, on every EventSource open and when a live entry skips a seq;
+    // overlapping requests collapse into one extra pass.
+    let catchingUp = false;
+    let again = false;
+    const catchUp = async () => {
+      if (catchingUp) {
+        again = true;
+        return;
       }
-      if (healthResult.status === 'fulfilled') {
-        setHealth(healthResult.value);
-      } else {
-        setError((previous) => previous ?? `could not load ${HEALTH_URL}: ${String(healthResult.reason)}`);
+      catchingUp = true;
+      try {
+        do {
+          again = false;
+          for (;;) {
+            const held = historyRef.current;
+            const params = held.bootId ? `boot_id=${encodeURIComponent(held.bootId)}&` : '';
+            const page = await fetchJson<HistoryPage>(
+              `${HISTORY_URL}?${params}after_seq=${encodeURIComponent(String(lastSeq(held)))}`,
+            );
+            if (cancelled) return;
+            commitHistory(applyPage(historyRef.current, page));
+            setHistoryError(null);
+            if (!page.has_more || page.entries.length === 0) break;
+          }
+        } while (again);
+      } catch (reason) {
+        if (!cancelled) setHistoryError(`could not load history: ${String(reason)}`);
+      } finally {
+        catchingUp = false;
       }
-      setLoading(false);
-    })();
+    };
+    void catchUp();
+
+    // State and health load independently: neither waits for the other, so a
+    // slow health measurement never keeps the dashboard on "Loading".
+    fetchJson<WorkspaceState>(STATE_URL).then(
+      (value) => {
+        if (cancelled) return;
+        // A state_update that arrived first is newer than this snapshot.
+        if (!liveStateRef.current) setState(value);
+        setLoading(false);
+      },
+      (reason) => {
+        if (cancelled) return;
+        if (!liveStateRef.current) {
+          setError(`could not load ${STATE_URL}: ${String(reason)}`);
+        }
+        setLoading(false);
+      },
+    );
+    fetchJson<WiringHealth>(HEALTH_URL).then(
+      (value) => {
+        if (!cancelled) setHealth((previous) => previous ?? value);
+      },
+      (reason) => {
+        if (cancelled) return;
+        setError((previous) => previous ?? `could not load ${HEALTH_URL}: ${String(reason)}`);
+      },
+    );
 
     const source = new EventSource(EVENTS_URL);
 
     source.addEventListener('open', () => {
       setConnected(true);
       setError(null);
+      void catchUp();
     });
 
     // EventSource reconnects on its own; the badge only reflects the gap.
@@ -136,13 +197,24 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
     source.addEventListener('state_update', (event) => {
       const payload = parseFrame<StateUpdatePayload>(event as MessageEvent<string>);
       if (!payload) return;
-      if (payload.state) setState(payload.state);
+      if (payload.state) {
+        liveStateRef.current = true;
+        setState(payload.state);
+      }
       if (payload.changed) setLastChanged(payload.changed);
     });
 
     source.addEventListener('health_update', (event) => {
       const payload = parseFrame<WiringHealth>(event as MessageEvent<string>);
       if (payload) setHealth(payload);
+    });
+
+    source.addEventListener('history_append', (event) => {
+      const entry = parseFrame<HistoryEntry>(event as MessageEvent<string>);
+      if (!entry || typeof entry.seq !== 'number') return;
+      const result = applyAppend(historyRef.current, entry);
+      if (result.state !== historyRef.current) commitHistory(result.state);
+      if (result.catchUp) void catchUp();
     });
 
     source.addEventListener('wiring_smoke', (event) => {
@@ -205,5 +277,7 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
 
   const clearSmoke = useCallback(() => setSmoke(EMPTY_SMOKE), []);
 
-  return { state, health, connected, lastChanged, loading, error, smoke, runSmoke, clearSmoke };
+  return {
+    state, health, connected, lastChanged, loading, error, smoke, history, historyError, runSmoke, clearSmoke,
+  };
 }

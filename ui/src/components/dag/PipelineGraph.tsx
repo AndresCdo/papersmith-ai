@@ -1,48 +1,22 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Background,
   BackgroundVariant,
   Controls,
   Panel,
   ReactFlow,
-  type Edge,
-  type Node,
+  type EdgeChange,
+  type NodeChange,
   type NodeTypes,
   type EdgeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import dagre from '@dagrejs/dagre';
-import StageNode, { type StageNodeData } from './nodes/StageNode';
-import GateNode, { type GateNodeData } from './nodes/GateNode';
-import SectionNode, { type SectionNodeData } from './nodes/SectionNode';
+import StageNode from './nodes/StageNode';
+import GateNode from './nodes/GateNode';
+import SectionNode from './nodes/SectionNode';
 import AnimatedEdge from './edges/AnimatedEdge';
-import type { Gate, PipelineStage, Section, WorkspaceState } from '../../types';
-import { formatCount } from '../../lib/format';
-
-/** `ingestion -> deliberation`, guarded by presence on both ends. */
-const STAGE_CHAIN: readonly (readonly [string, string])[] = [
-  ['ingestion', 'deliberation'],
-  ['deliberation', 'drafting'],
-  ['experiments', 'drafting'],
-  ['drafting', 'auditing'],
-  ['auditing', 'publishing'],
-];
-
-/** Which stage each gate inspects, with the `parts` key that explains the link. */
-const GATE_SOURCES: Record<string, { from: string; label: string }> = {
-  'writing-readiness': { from: 'deliberation', label: 'contracts' },
-  'coupling-verification': { from: 'drafting', label: 'facts' },
-  'grounding-style-leak': { from: 'drafting', label: 'citations' },
-  'diagram-raster': { from: 'experiments', label: 'figures' },
-};
-
-const NODE_SIZE: Record<string, { width: number; height: number }> = {
-  stage: { width: 260, height: 168 },
-  gate: { width: 240, height: 148 },
-  section: { width: 236, height: 150 },
-};
-
-type AnyFlowNode = Node<Record<string, unknown>>;
+import type { GraphModel } from './graph';
+import { reduceSelection, type AnyChange } from '../../lib/selection';
 
 const nodeTypes = {
   stage: StageNode,
@@ -54,166 +28,59 @@ const edgeTypes = {
   animated: AnimatedEdge,
 } satisfies EdgeTypes;
 
-/** Top-to-bottom dagre layout; nodes keep a fixed size so dagre stays stable. */
-function layout(nodes: AnyFlowNode[], edges: Edge[]): AnyFlowNode[] {
-  if (nodes.length === 0) return nodes;
-  const graph = new dagre.graphlib.Graph();
-  graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({
-    rankdir: 'TB',
-    nodesep: 34,
-    ranksep: 74,
-    marginx: 24,
-    marginy: 24,
-  });
-  for (const node of nodes) {
-    const size = NODE_SIZE[node.type ?? 'stage'] ?? NODE_SIZE.stage;
-    graph.setNode(node.id, { width: size.width, height: size.height });
-  }
-  for (const edge of edges) {
-    graph.setEdge(edge.source, edge.target);
-  }
-  dagre.layout(graph);
-  return nodes.map((node) => {
-    const size = NODE_SIZE[node.type ?? 'stage'] ?? NODE_SIZE.stage;
-    const point = graph.node(node.id);
-    if (!point) return node;
-    return {
-      ...node,
-      width: size.width,
-      height: size.height,
-      position: { x: point.x - size.width / 2, y: point.y - size.height / 2 },
-    };
-  });
-}
-
-function stageIsMutating(stage: PipelineStage): boolean {
-  if (stage.active !== true) return false;
-  return typeof stage.progress === 'number' ? stage.progress < 1 : true;
-}
-
-function sectionIsMutating(section: Section): boolean {
-  if (section.status === 'DRAFTING') return true;
-  const total = section.blocks_total ?? 0;
-  const written = section.blocks_written ?? 0;
-  return total > 0 && written > 0 && written < total && section.status !== 'SEALED';
-}
-
-function gateIsMutating(gate: Gate): boolean {
-  return gate.state === 'VERIFYING';
-}
-
-/** Render a `gate.parts` entry as a compact `key: value` chip. */
-function summarizeParts(gate: Gate): { key: string; value: string }[] {
-  const parts = gate.parts;
-  if (!parts || typeof parts !== 'object') return [];
-  return Object.entries(parts)
-    .slice(0, 4)
-    .map(([key, value]) => {
-      if (Array.isArray(value)) return { key, value: formatCount(value.length) };
-      if (typeof value === 'number' || typeof value === 'boolean') return { key, value: String(value) };
-      return null;
-    })
-    .filter((entry): entry is { key: string; value: string } => entry !== null);
-}
-
-function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges: Edge[] } {
-  const stages = state?.pipeline_stages ?? [];
-  const gates = state?.gates ?? [];
-  const sections = state?.sections ?? [];
-
-  const nodes: AnyFlowNode[] = [];
-  const edges: Edge[] = [];
-  const mutatingNodes = new Set<string>();
-  const stageIds = new Set(stages.map((stage) => stage.id));
-
-  for (const stage of stages) {
-    const mutating = stageIsMutating(stage);
-    if (mutating) mutatingNodes.add(`stage:${stage.id}`);
-    const data: StageNodeData = {
-      title: stage.title ?? stage.id,
-      active: stage.active === true,
-      progress: typeof stage.progress === 'number' ? stage.progress : 0,
-      detail: stage.detail ?? '',
-      workers: stage.workers ?? [],
-      mutating,
-    };
-    nodes.push({ id: `stage:${stage.id}`, type: 'stage', position: { x: 0, y: 0 }, data, draggable: false });
-  }
-
-  for (const gate of gates) {
-    const mutating = gateIsMutating(gate);
-    if (mutating) mutatingNodes.add(`gate:${gate.id}`);
-    const data: GateNodeData = {
-      name: gate.name ?? gate.id,
-      state: gate.state ?? 'UNKNOWN',
-      reasons: gate.reasons ?? [],
-      parts: summarizeParts(gate),
-      mutating,
-    };
-    nodes.push({ id: `gate:${gate.id}`, type: 'gate', position: { x: 0, y: 0 }, data, draggable: false });
-  }
-
-  for (const section of sections) {
-    const mutating = sectionIsMutating(section);
-    if (mutating) mutatingNodes.add(`section:${section.id}`);
-    const data: SectionNodeData = {
-      label: section.section ?? section.id,
-      status: section.status ?? 'UNKNOWN',
-      wordCount: section.word_count ?? 0,
-      maxWords: section.extent?.max_words ?? null,
-      blocksWritten: section.blocks_written ?? 0,
-      blocksTotal: section.blocks_total ?? 0,
-      placeholders: section.citations?.placeholders ?? 0,
-      mutating,
-    };
-    nodes.push({ id: `section:${section.id}`, type: 'section', position: { x: 0, y: 0 }, data, draggable: false });
-  }
-
-  const link = (source: string, target: string, label?: string) => {
-    const animated = mutatingNodes.has(source) || mutatingNodes.has(target);
-    edges.push({
-      id: `${source}->${target}`,
-      source,
-      target,
-      type: 'animated',
-      animated,
-      label,
-      data: { animated },
-    });
-  };
-
-  for (const [from, to] of STAGE_CHAIN) {
-    if (stageIds.has(from) && stageIds.has(to)) link(`stage:${from}`, `stage:${to}`);
-  }
-
-  // Figure obligations are declared by section contracts; the diagram gate is
-  // reachable only when the figure pipeline has an `experiments` stage to feed it.
-  for (const gate of gates) {
-    const source = GATE_SOURCES[gate.id]?.from ?? 'auditing';
-    const label = GATE_SOURCES[gate.id]?.label;
-    if (stageIds.has(source)) link(`stage:${source}`, `gate:${gate.id}`, label);
-    if (stageIds.has('auditing')) link(`gate:${gate.id}`, 'stage:auditing');
-    else if (stageIds.has('publishing')) link(`gate:${gate.id}`, 'stage:publishing');
-  }
-
-  for (const section of sections) {
-    if (stageIds.has('drafting')) link('stage:drafting', `section:${section.id}`);
-    if (stageIds.has('auditing')) link(`section:${section.id}`, 'stage:auditing');
-  }
-
-  return { nodes: layout(nodes, edges), edges };
-}
-
 /**
  * The pipeline DAG: six stages in a top-to-bottom chain, the four quality gates
  * hanging off the stage they inspect, and every section placed between
  * `drafting` and `auditing`. Edges animate while either endpoint is mutating.
  */
-export default function PipelineGraph({ state }: { state: WorkspaceState | null }) {
-  const { nodes, edges } = useMemo(() => buildGraph(state), [state]);
+export default function PipelineGraph({
+  graph,
+  selectedId,
+  onSelect,
+}: {
+  graph: GraphModel;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const { width, height } = graph;
 
-  if (nodes.length === 0) {
+  // Layout (dagre) is computed once per state upstream; selection only maps
+  // copies, so clicks and live updates never re-run the layout.
+  const nodes = useMemo(
+    () => graph.nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
+    [graph.nodes, selectedId],
+  );
+  const edges = useMemo(
+    () => graph.edges.map((edge) => ({ ...edge, selected: edge.id === selectedId })),
+    [graph.edges, selectedId],
+  );
+
+  // React Flow reports node and edge selection (clicks and its own Enter/Space/
+  // Escape handling on focused wrappers) as `select` changes on two callbacks.
+  // Collect them and resolve the whole interaction once per microtask.
+  const pending = useRef<AnyChange[]>([]);
+  const currentId = useRef(selectedId);
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => {
+    currentId.current = selectedId;
+    onSelectRef.current = onSelect;
+  });
+
+  const collect = useCallback((changes: (NodeChange | EdgeChange)[]) => {
+    const selects = changes.filter((change) => change.type === 'select');
+    if (selects.length === 0) return;
+    const first = pending.current.length === 0;
+    pending.current.push(...(selects as AnyChange[]));
+    if (!first) return;
+    queueMicrotask(() => {
+      const batch = pending.current;
+      pending.current = [];
+      const next = reduceSelection(batch, currentId.current);
+      if (next !== null && next.id !== currentId.current) onSelectRef.current(next.id);
+    });
+  }, []);
+
+  if (graph.nodes.length === 0) {
     return (
       <div className="panel panel--empty">
         <h2>Pipeline</h2>
@@ -223,20 +90,33 @@ export default function PipelineGraph({ state }: { state: WorkspaceState | null 
   }
 
   return (
-    <div className="graph-shell">
+    // The shell takes the graph's own aspect ratio, so fitView fills the width
+    // at a readable zoom and the page (not the canvas) scrolls vertically.
+    <div className="graph-shell" style={{ aspectRatio: `${width} / ${height}`, width: '100%', maxWidth: width, marginInline: 'auto' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        minZoom={0.2}
+        fitViewOptions={{ maxZoom: 1, padding: 0.02 }}
+        minZoom={0.3}
         maxZoom={1.75}
+        zoomOnScroll={false}
+        preventScrolling={false}
         nodesDraggable={false}
         nodesConnectable={false}
-        elementsSelectable={false}
-        edgesFocusable={false}
-        nodesFocusable={false}
+        elementsSelectable
+        edgesFocusable
+        nodesFocusable
+        multiSelectionKeyCode={null}
+        selectionKeyCode={null}
+        deleteKeyCode={null}
+        onNodesChange={collect}
+        onEdgesChange={collect}
+        onNodeClick={(_event, node) => onSelect(node.id)}
+        onEdgeClick={(_event, edge) => onSelect(edge.id)}
+        onPaneClick={() => onSelect(null)}
         defaultEdgeOptions={{ type: 'animated' }}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1} />

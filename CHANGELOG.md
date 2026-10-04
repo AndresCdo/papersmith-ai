@@ -22,6 +22,31 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+Interactive Paper Command Center: a light theme, a clickable diagram and a
+session history.
+
+- **Light theme.** The dashboard uses one light theme built on colour tokens;
+  Vitest guards reject colour literals outside `:root` and check WCAG AA
+  contrast for the token pairs. The state and health payloads now load
+  independently, so a slow health measurement no longer keeps the page on
+  "Loading".
+- **Clickable pipeline diagram with deep links.** Every stage, gate, section
+  and edge can be selected with the mouse or the keyboard and opens a detail
+  panel (fields, connections, history). The selection lives in the URL hash
+  (`#pipeline?el=<id>`), so links open the element directly.
+- **In-memory history.** A History tab and `GET /api/history` (cursor paging
+  with `boot_id`, `after_seq`, `has_more`, `reset` and `gap`) record section,
+  gate, stage, health and smoke changes since the server started, and
+  `history_append` streams new entries over SSE. Nothing is written to disk.
+- **Host allow-list.** On loopback binds the server answers 421 to a `Host`
+  header it does not recognise; `papersmith ui --allowed-host HOST:PORT`
+  (repeatable) adds one, for example `--allowed-host localhost:5173` when
+  running `npm run dev`. Stage history entries now say what changed.
+- **Visual checker and UI tests.** `scripts/command-center-visual-check.mjs`
+  screenshots every tab in Chromium (`--full-page`, `--click-check`,
+  `--drag-check`); the Node CI job now also runs `npm ci --prefix ui` and the
+  Vitest suite (`npm test --prefix ui`).
+
 Harness parity: skills, commands, agents and guards in each harness, wired by
 `init` and `upgrade`, with an honest report of what is not.
 

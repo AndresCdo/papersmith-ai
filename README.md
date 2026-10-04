@@ -3014,6 +3014,7 @@ papersmith ui --export-static ./dashboard-static
 | `--port PORT` | Puerto preferido; si está ocupado pasa al siguiente libre |
 | `--no-browser` | No abre el navegador |
 | `--export-static <dir>` | Copia el build del dashboard a `<dir>` y sale |
+| `--allowed-host HOST:PORT` | Acepta además ese encabezado `Host` (repetible); solo se reenvía al backend si lo das |
 
 Sirve el **Paper Command Center**: un dashboard local dentro del workspace con
 el DAG de etapas, las cuatro compuertas de calidad, la matriz de las diez
@@ -3033,6 +3034,61 @@ Endpoints: `/api/state`, `/api/health/wiring`, `/api/health/run-wiring-smoke`
 frontend se construye desde `ui/` con `npm --prefix ui run build`, que emite en
 `skills/_core/command_center/static/`. El smoke end-to-end es
 `bash scripts/command-center-smoke.sh`.
+
+**Tema claro.** El dashboard usa un único tema claro, definido por tokens de
+color en `ui/src/styles.css`; un test de Vitest rechaza cualquier color
+literal fuera de `:root` y verifica el contraste (WCAG AA) de los pares de
+tokens.
+
+**Diagrama clicable y deep links.** Cada nodo (etapa, compuerta, sección) y cada
+arista del diagrama del pipeline se puede seleccionar con el mouse o con el
+teclado (Enter o Espacio sobre el elemento enfocado, Escape para cerrar) y abre
+un panel de detalle con sus datos, sus conexiones y su historial. La selección
+queda en la URL (`#pipeline?el=gate%3Awriting-readiness`), así que un enlace
+abre directamente ese elemento.
+
+**Historial en memoria.** La pestaña *History* muestra lo que cambió desde que
+arrancó el dashboard: estado y bloques de las secciones, conteo de palabras,
+compuertas, etapas, salud del wiring y el smoke. Vive en memoria (un anillo de
+1.000 entradas por proceso; nada se escribe a disco), así que se pierde al
+reiniciar el servidor. `GET /api/history?boot_id=<id>&after_seq=<n>` entrega
+páginas de entradas más antiguas primero (`element`, `kind` y `limit` son
+opcionales; un `element` o `kind` inválido responde 422); la respuesta trae
+`has_more`, `reset` (otro proceso: hay que recargar) y `gap` (se descartaron
+entradas antiguas). Las entradas nuevas llegan por SSE como `history_append`.
+
+**Lista de hosts permitidos.** En un bind a loopback el servidor solo acepta los
+encabezados `Host` `127.0.0.1:<puerto>`, `localhost:<puerto>` y `[::1]:<puerto>`
+y responde 421 a cualquier otro, lo que frena páginas de DNS-rebinding. Para
+aceptar otro host (por ejemplo al reenviar un puerto) usa el flag repetible
+`papersmith ui --allowed-host HOST:PORT`. Con `npm --prefix ui run dev` el proxy
+de Vite conserva el `Host` `localhost:5173`; arranca el backend así (el módulo
+acepta el mismo flag):
+
+```bash
+python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
+```
+
+**Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
+dashboard en Chromium, saca capturas de cada pestaña a 1280x800 y 1600x1000 y
+falla ante errores de consola:
+
+```bash
+node scripts/command-center-visual-check.mjs --out /tmp/shots --full-page --click-check --drag-check
+```
+
+| Flag | Efecto |
+|------|--------|
+| `--out <dir>` | Carpeta de capturas (obligatoria) |
+| `--url <url>` | Dashboard a revisar (por defecto `http://127.0.0.1:8099/`) |
+| `--tabs a,b` / `--viewports 1280x800,...` | Acota pestañas o tamaños |
+| `--full-page` | Captura la página completa, no solo el viewport |
+| `--drag-check` | Verifica que arrastrar el lienzo no abre el panel |
+| `--click-check` | Hace clic en una etapa, una compuerta, una sección y una arista, y prueba el teclado |
+| `--timeout <s>` / `--chromium <path>` | Tiempo máximo y ejecutable de Chromium |
+
+Es una herramienta de desarrollo (necesita Chromium); no corre en CI. Los tests
+de la UI (`npm --prefix ui test`) sí corren en CI.
 
 ### `papersmith mcp {serve,inspect,print-config}`
 
