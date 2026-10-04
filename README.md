@@ -3153,6 +3153,35 @@ anteriores). Nota: Chromium no pinta un iframe aislado que queda fuera del
 viewport en capturas `--full-page` (a 700x900 sale en blanco); dentro del
 viewport se ve completo.
 
+**Línea de decisiones (solo lectura, backend).** `GET /api/decisions` mezcla, al
+pedirla, eventos normalizados `{ts, source, kind, summary, ref}` de registros que
+el workspace ya guarda; no escribe nada ni guarda instantáneas. Fuentes:
+`declarations` (la región `%% paper-writing declarations` de `paper/main.tex`;
+`ts` es `recorded`, y esa región solo guarda el estado ACTUAL: los valores
+anteriores no se pueden recuperar), `proposal` y `experiment` (`receipts/*.json`
+y `lifecycle/v1/transitions/*.json` de `.proposal-deliberation/` y
+`.experimental-deliberation/`) y `remote-execution` (los `ledger.jsonl` de
+`implementations/<repo>/<Nombre>/.remote-execution/`, descubiertos exactamente a
+dos niveles, sin recursión; `kaggle-inbox/` nunca se lee). Los recibos de
+deliberación no tienen marca de tiempo: sus eventos llevan `ts: null`, van
+después de los fechados (por nombre de archivo) y nunca se usa el mtime. Las
+transiciones usan `committedAt`; cada resultado (`COMMITTED`,
+`ALREADY_COMMITTED`, `REJECTED`, `INCONSISTENT`, `RECOVERY_REQUIRED`) tiene su
+resumen. Todo se lee como JSON plano sin repetir las comprobaciones de hash y
+consistencia del ciclo de vida, así que esos eventos llevan `verified: false`
+(la UI los marcará como *unverified*). Orden: fechados de más nuevo a más
+antiguo, desempate estable por fuente; un `ts` ilegible cuenta como `null`.
+Cada fuente devuelve `status` (`ok`, `absent`, `unreadable`, `too_large`) y
+`count` en `sources`, de modo que una fuente rota no rompe la respuesta. Topes:
+500 eventos por fuente y 1000 en total (`truncated` y `total`), `main.tex` 2 MiB,
+256 KiB por recibo o transición, 500 archivos por directorio del sidecar,
+20 ledgers de hasta 2 MiB y 2000 líneas cada uno (las líneas mal formadas se
+omiten y se cuentan en `detail`). Filtros opcionales: `source=` (lista separada
+por comas; 422 si hay un nombre desconocido) y `limit=` (1 a 1000). Cada lectura
+resuelve la ruta, exige que quede dentro del workspace, un archivo regular y
+comprueba el tamaño antes de leer. No hay campo de autor: nunca se registra. La
+protección `Host` (421) cubre la ruta solo en un bind a loopback.
+
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
 dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:
