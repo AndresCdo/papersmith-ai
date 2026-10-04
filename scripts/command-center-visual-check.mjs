@@ -388,6 +388,9 @@ async function run(options) {
           const file = path.join(options.out, shotName(tab, viewport));
           await writeFile(file, Buffer.from(shot.data, 'base64'));
           report.shots.push(file);
+          // Headless Chromium's PDF viewer frame stalls the next Page.navigate
+          // on the same session; drop embedded frames once the shot is taken.
+          await evaluate(cdp, sessionId, "document.querySelectorAll('iframe').forEach((frame) => frame.remove())");
           report.timings.push({ tab, viewport: `${viewport.width}x${viewport.height}`, ms: timeToFirstData(started, readyAt) });
           if (options.dragCheck && tab === 'pipeline') {
             const result = await dragCheck(cdp, sessionId);
