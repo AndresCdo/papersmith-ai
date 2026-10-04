@@ -20,7 +20,7 @@ Route: delegated writer per slice (one writer at a time).
 - [x] F1 dpv-01 Memoise dagre layout (commit 16240fe on feat/dpv-01-layout-memo)
 - [x] F2 dpv-02 Narrow-width panel (bottom sheet) (commit 595b646 on feat/dpv-02-panel-narrow)
 - [x] F3 dpv-03 History publish ordering test + fix (commit 81d2243 on feat/dpv-03-history-ordering)
-- [ ] F4 dpv-04 Polish (server-side _percent, mutating cue outline)
+- [x] F4 dpv-04 Polish (commits caceac3, cb21d4e on feat/dpv-04-polish)
 - [ ] P1 dpv-05 Paper preview backend
 - [ ] P2 dpv-06 Preview tab UI
 - [ ] A1 dpv-07 Atlas backend
@@ -53,6 +53,13 @@ Route: delegated writer per slice (one writer at a time).
 - RED: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_history_order.py -q`: 1 failed; "history_append frames were published out of order ... assert [1, 4, 2, 3, 6, 5, ...] == [1, 2, 3, 4, 5, 6, ...]".
 - GREEN: same command: 1 passed (3 repeat runs, all passed). `pytest tests/test_command_center_*.py -q`: 139 passed, 12 subtests passed. `npm run test:node`: 677 pass, 0 fail. Bundle untouched, not rebuilt.
 - Authored change: server.py +10/-3, new test 77 lines. Review tier: not assessed (local commit only).
+### F4 (feat/dpv-04-polish, commits caceac3 + cb21d4e, stacked on feat/dpv-03-history-ordering)
+- Route: delegated writer. (a) `_percent(value, digits)` in history.py keeps whole percentages unchanged, shows `<1%` for 0 < v < 1%, and `_percent_change` raises precision (1-3 decimals) only until before/after differ. (b) `.dag-node.is-mutating` outline is now `3px dashed var(--accent)` with offset 4px; focus outline (2px solid, offset 2px) unchanged.
+- RED (a): `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_history.py -q`: 2 failed, 23 passed ("progress 0% -> 0%" vs "0% -> <1%").
+- GREEN (a): same command: 25 passed. `pytest tests/test_command_center_*.py -q`: 141 passed, 12 subtests passed. Commit caceac3.
+- RED (b): `cd ui && npx vitest run src/styles.test.ts`: 2 failed, 19 passed (solid outline; mutating and focus outline equal).
+- GREEN (b): `cd ui && npx vitest run`: 15 files, 140 tests passed. `npm run typecheck`: clean. `npm run build`: ok, bundle index-DQuEYJUP.js + index-CteY5Hg5.css committed, static dir clean. `npm run test:node`: 677 pass, 0 fail. Commit cb21d4e. No browser run (cue only shows during a live change).
+- Review tier: not assessed (local commit only).
 
 ---
 

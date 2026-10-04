@@ -119,6 +119,27 @@ class DiffStatesTests(unittest.TestCase):
         (change,) = history.diff_states(prev, both)
         assert change.summary == "Stage drafting became active; progress 0% -> 50%"
 
+    def test_sub_percent_progress_stays_readable(self) -> None:
+        prev = _state()
+        tiny = copy.deepcopy(prev)
+        tiny["pipeline_stages"][0]["progress"] = 0.004
+        (change,) = history.diff_states(prev, tiny)
+        assert change.summary == "Stage drafting: progress 0% -> <1%"
+
+    def test_distinct_progress_values_never_render_identically(self) -> None:
+        cases = [
+            (0.004, 0.006, "0.4% -> 0.6%"),
+            (0.5, 0.504, "50% -> 50.4%"),
+            (0.999, 1.0, "99.9% -> 100%"),
+        ]
+        for before, after, expected in cases:
+            prev = _state()
+            prev["pipeline_stages"][0]["progress"] = before
+            curr = copy.deepcopy(prev)
+            curr["pipeline_stages"][0]["progress"] = after
+            (change,) = history.diff_states(prev, curr)
+            assert change.summary == f"Stage drafting: progress {expected}"
+
     def test_element_ids_keep_the_raw_id_with_spaces_and_unicode(self) -> None:
         prev = _state()
         curr = copy.deepcopy(prev)

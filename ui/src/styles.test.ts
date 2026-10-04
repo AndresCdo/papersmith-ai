@@ -141,10 +141,22 @@ describe('contrast (WCAG AA)', () => {
 });
 
 describe('mutating cue', () => {
-  it('draws a solid token-based outline so it reads on the light theme', () => {
-    const rule = /\.dag-node\.is-mutating\s*\{([^}]*)\}/.exec(stripped);
+  const rule = /\.dag-node\.is-mutating\s*\{([^}]*)\}/.exec(stripped);
+  const focus = /\.react-flow__node:focus-visible \.dag-node\s*\{([^}]*)\}/.exec(stripped);
+
+  it('draws a dashed token-based outline so it reads on the light theme', () => {
     expect(rule).not.toBeNull();
-    expect(rule?.[1]).toMatch(/outline:\s*\d+px solid var\(--accent\)/);
+    expect(rule?.[1]).toMatch(/outline:\s*\d+px dashed var\(--accent\)/);
+  });
+
+  it('differs from the solid keyboard focus outline', () => {
+    expect(focus).not.toBeNull();
+    expect(focus?.[1]).toMatch(/outline:\s*2px solid var\(--accent\)/);
+    expect(focus?.[1]).toMatch(/outline-offset:\s*2px/);
+    const outline = (body: string) => /outline:\s*([^;]+);/.exec(body)?.[1];
+    const offset = (body: string) => /outline-offset:\s*([^;]+);/.exec(body)?.[1];
+    expect(outline(rule?.[1] ?? '')).not.toBe(outline(focus?.[1] ?? ''));
+    expect(offset(rule?.[1] ?? '')).not.toBe(offset(focus?.[1] ?? ''));
   });
 });
 
