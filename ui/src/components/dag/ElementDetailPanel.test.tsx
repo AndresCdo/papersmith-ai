@@ -112,4 +112,47 @@ describe('ElementDetailPanel', () => {
     const { panel } = open('stage:drafting');
     expect(within(panel).getByRole('region', { name: 'History' })).toHaveTextContent('No changes recorded');
   });
+
+  it('shows a loading message instead of "No longer present" while the state is null', () => {
+    render(
+      <ElementDetailPanel
+        elementId="stage:drafting"
+        state={null}
+        graph={buildGraph(null)}
+        history={{ bootId: null, entries: [], gap: false }}
+        onSelect={() => {}}
+      />,
+    );
+    const panel = screen.getByTestId('element-detail-panel');
+    expect(panel).toHaveTextContent(/not loaded|unavailable/i);
+    expect(panel).not.toHaveTextContent('No longer present');
+  });
+
+  it('moves focus to the heading and announces the new element when the selection changes', () => {
+    const props = { state: diagramState, graph, history: { bootId: 'b', entries: [], gap: false }, onSelect: () => {} };
+    const { rerender } = render(<ElementDetailPanel elementId="stage:drafting" {...props} />);
+    const region = screen.getByRole('status');
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    rerender(<ElementDetailPanel elementId="stage:auditing" {...props} />);
+    const heading = screen.getByRole('heading', { level: 3 });
+    expect(document.activeElement).toBe(heading);
+    expect(screen.getByRole('status')).toHaveTextContent(heading.textContent ?? 'missing');
+  });
+
+  it('renders duplicate gate reasons without key collisions', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const gateState = {
+      ...diagramState,
+      gates: diagramState.gates?.map((gate, index) =>
+        index === 0 ? { ...gate, reasons: ['same reason', 'same reason'] } : gate,
+      ),
+    };
+    const gateId = `gate:${diagramState.gates?.[0].id}`;
+    render(
+      <ElementDetailPanel elementId={gateId} state={gateState} graph={buildGraph(gateState)} history={{ bootId: 'b', entries: [], gap: false }} onSelect={() => {}} />,
+    );
+    expect(screen.getAllByText('same reason')).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
 });

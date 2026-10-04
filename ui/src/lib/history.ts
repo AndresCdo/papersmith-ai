@@ -11,6 +11,9 @@ export interface HistoryState {
   gap: boolean;
 }
 
+/** Entries the client keeps; the oldest are dropped past this (the server ring is the same size). */
+export const MAX_HELD_ENTRIES = 1000;
+
 export const emptyHistory: HistoryState = { bootId: null, entries: [], gap: false };
 
 export function lastSeq(state: HistoryState): number {
@@ -25,7 +28,8 @@ function mergeEntries(held: HistoryEntry[], incoming: HistoryEntry[]): HistoryEn
     seen.add(entry.id);
     merged.push(entry);
   }
-  return merged.sort((a, b) => a.seq - b.seq);
+  merged.sort((a, b) => a.seq - b.seq);
+  return merged.length > MAX_HELD_ENTRIES ? merged.slice(merged.length - MAX_HELD_ENTRIES) : merged;
 }
 
 /** Apply one `/api/history` page: a reset discards what is held first. */
@@ -51,7 +55,11 @@ export function applyAppend(
   const sameBoot = state.bootId === null || state.bootId === entry.boot_id;
   if (!sameBoot || entry.seq !== lastSeq(state) + 1) return { state, catchUp: true };
   return {
-    state: { ...state, bootId: entry.boot_id, entries: [...state.entries, entry] },
+    state: {
+      ...state,
+      bootId: entry.boot_id,
+      entries: [...state.entries, entry].slice(-MAX_HELD_ENTRIES),
+    },
     catchUp: false,
   };
 }

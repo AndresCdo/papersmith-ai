@@ -781,6 +781,8 @@ body {
 .dag-node.is-mutating {
   box-shadow: 0 6px 22px var(--accent-soft);
   border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .dag-node__header {
@@ -1406,4 +1408,16 @@ body {
   margin: 4px 0 0;
   color: var(--text);
   font-size: 13px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

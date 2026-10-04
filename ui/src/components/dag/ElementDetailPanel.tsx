@@ -68,6 +68,8 @@ function Connections({ id, graph, onSelect }: { id: string; graph: GraphModel; o
  */
 export default function ElementDetailPanel({ elementId, state, graph, history, onSelect }: Props) {
   const rootRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const shownRef = useRef(elementId);
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -76,6 +78,14 @@ export default function ElementDetailPanel({ elementId, state, graph, history, o
       if (previous && previous.isConnected) previous.focus();
     };
   }, []);
+
+  // A new selection while the panel stays open: move focus to the heading so
+  // keyboard and screen-reader users land on the new element.
+  useEffect(() => {
+    if (shownRef.current === elementId) return;
+    shownRef.current = elementId;
+    headingRef.current?.focus();
+  }, [elementId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -174,8 +184,8 @@ export default function ElementDetailPanel({ elementId, state, graph, history, o
           <h4>Reasons</h4>
           {gate?.reasons?.length ? (
             <ul className="reason-list">
-              {gate.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
+              {gate.reasons.map((reason, index) => (
+                <li key={`${index}-${reason}`}>{reason}</li>
               ))}
             </ul>
           ) : (
@@ -196,6 +206,8 @@ export default function ElementDetailPanel({ elementId, state, graph, history, o
         <Connections id={elementId} graph={graph} onSelect={onSelect} />
       </>
     );
+  } else if (state === null) {
+    body = <p className="banner">Workspace state is not loaded yet or is unavailable.</p>;
   } else {
     body = <p className="banner banner--warn">No longer present in the latest state.</p>;
   }
@@ -210,13 +222,18 @@ export default function ElementDetailPanel({ elementId, state, graph, history, o
     >
       <header className="drawer__header">
         <div>
-          <h3>{title}</h3>
+          <h3 ref={headingRef} tabIndex={-1}>
+            {title}
+          </h3>
           <p className="mono">{elementId}</p>
         </div>
         <button type="button" className="button button--ghost" onClick={() => onSelect(null)}>
           Close
         </button>
       </header>
+      <p className="sr-only" role="status" aria-live="polite">
+        {`Showing ${title}`}
+      </p>
       {body}
       <section className="drawer__section" aria-labelledby="element-history-heading">
         <h4 id="element-history-heading">History</h4>

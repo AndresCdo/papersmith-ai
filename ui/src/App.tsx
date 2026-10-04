@@ -232,7 +232,7 @@ export default function App() {
         {tab === 'sections' ? <SectionMatrix sections={state?.sections ?? []} /> : null}
 
         {tab === 'history' ? (
-          <HistoryView history={history} error={historyError} presentIds={presentIds} onSelect={selectElement} />
+          <HistoryView history={history} error={historyError} presentIds={state === null ? null : presentIds} onSelect={selectElement} />
         ) : null}
 
         {tab === 'artifacts' ? <ArtifactViewer state={state} /> : null}

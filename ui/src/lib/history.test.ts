@@ -6,6 +6,7 @@ import {
   filterEntries,
   groupForDisplay,
   lastSeq,
+  MAX_HELD_ENTRIES,
 } from './history';
 import type { HistoryEntry, HistoryPage } from '../types';
 
@@ -138,5 +139,27 @@ describe('groupForDisplay', () => {
   it('leaves a single word-count entry ungrouped', () => {
     const rows = groupForDisplay([words(1)]);
     expect(rows[0].grouped).toBe(false);
+  });
+});
+
+describe('history cap', () => {
+  const many = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, index) => entry(from + index));
+
+  it('holds at most 1,000 entries and drops the oldest from a page', () => {
+    expect(MAX_HELD_ENTRIES).toBe(1000);
+    const next = applyPage(emptyHistory, page(many(1, 1200)));
+    expect(next.entries).toHaveLength(1000);
+    expect(next.entries[0].seq).toBe(201);
+    expect(lastSeq(next)).toBe(1200);
+  });
+
+  it('drops the oldest when a live append passes the cap', () => {
+    const full = applyPage(emptyHistory, page(many(1, 1000)));
+    const { state, catchUp } = applyAppend(full, entry(1001));
+    expect(catchUp).toBe(false);
+    expect(state.entries).toHaveLength(1000);
+    expect(state.entries[0].seq).toBe(2);
+    expect(lastSeq(state)).toBe(1001);
   });
 });

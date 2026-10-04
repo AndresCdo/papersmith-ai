@@ -1,25 +1,33 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { filterEntries, groupForDisplay, type HistoryState } from '../../lib/history';
 import HistoryList from './HistoryList';
 
 interface Props {
   history: HistoryState;
   error: string | null;
-  presentIds: ReadonlySet<string>;
+  /** Element ids in the current diagram; null while the workspace state is unknown. */
+  presentIds: ReadonlySet<string> | null;
   /** Open an element in the pipeline tab. */
   onSelect: (elementId: string) => void;
 }
 
 /** History tab: what changed since the dashboard server started. */
 export default function HistoryView({ history, error, presentIds, onSelect }: Props) {
-  const [kind, setKind] = useState<string | null>(null);
-  const [element, setElement] = useState<string | null>(null);
+  const [selectedKind, setKind] = useState<string | null>(null);
+  const [selectedElement, setElement] = useState<string | null>(null);
 
   const kinds = useMemo(() => [...new Set(history.entries.map((entry) => entry.kind))].sort(), [history.entries]);
   const elements = useMemo(
     () => [...new Set(history.entries.map((entry) => entry.element_id).filter((id): id is string => id !== null))].sort(),
     [history.entries],
   );
+  // A filter whose value is no longer among the options falls back to "all".
+  const kind = selectedKind !== null && kinds.includes(selectedKind) ? selectedKind : null;
+  const element = selectedElement !== null && elements.includes(selectedElement) ? selectedElement : null;
+  useEffect(() => {
+    if (kind !== selectedKind) setKind(null);
+    if (element !== selectedElement) setElement(null);
+  }, [kind, selectedKind, element, selectedElement]);
   const rows = useMemo(
     () => groupForDisplay(filterEntries(history.entries, { kind, element })),
     [history.entries, kind, element],
@@ -64,9 +72,25 @@ export default function HistoryView({ history, error, presentIds, onSelect }: Pr
         </label>
       </div>
       {rows.length === 0 ? (
-        <p className="panel__empty">No changes recorded yet.</p>
+        history.entries.length > 0 ? (
+          <div className="panel__empty">
+            <p>No changes match the current filter</p>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => {
+                setKind(null);
+                setElement(null);
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <p className="panel__empty">No changes recorded yet.</p>
+        )
       ) : (
-        <HistoryList rows={rows} showElement presentIds={presentIds} onSelect={onSelect} />
+        <HistoryList rows={rows} showElement presentIds={presentIds ?? undefined} onSelect={onSelect} />
       )}
     </section>
   );

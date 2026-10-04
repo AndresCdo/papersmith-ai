@@ -14,9 +14,12 @@ function entry(seq: number, extra: Partial<HistoryEntry> = {}): HistoryEntry {
 
 const present = new Set(['section:intro', 'gate:g', 'stage:drafting']);
 
-function view(history: HistoryState, extra: { error?: string | null; onSelect?: (id: string) => void } = {}) {
+function view(
+  history: HistoryState,
+  extra: { error?: string | null; onSelect?: (id: string) => void; presentIds?: ReadonlySet<string> | null } = {},
+) {
   const onSelect = extra.onSelect ?? vi.fn();
-  render(<HistoryView history={history} error={extra.error ?? null} presentIds={present} onSelect={onSelect} />);
+  render(<HistoryView history={history} error={extra.error ?? null} presentIds={extra.presentIds === undefined ? present : extra.presentIds} onSelect={onSelect} />);
   return { onSelect };
 }
 
@@ -84,5 +87,44 @@ describe('HistoryView', () => {
     const row = screen.getAllByRole('listitem')[0];
     expect(within(row).getByText('No longer present')).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'section:gone' })).toBeInTheDocument();
+  });
+
+  it('does not mark rows as no longer present while the workspace state is unknown', () => {
+    view(held([entry(1, { element_id: 'section:gone' })]), { presentIds: null });
+    expect(screen.queryByText('No longer present')).toBeNull();
+  });
+
+  it('resets a kind filter to all when its kind is no longer among the options', async () => {
+    const gate = entry(2, { kind: 'gate', element_id: 'gate:g', summary: 'Gate g flipped' });
+    const { rerender } = render(
+      <HistoryView history={held([entry(1), gate])} error={null} presentIds={present} onSelect={() => {}} />,
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Kind'), 'gate');
+    rerender(<HistoryView history={held([entry(3)])} error={null} presentIds={present} onSelect={() => {}} />);
+    expect(screen.getByLabelText('Kind')).toHaveValue('');
+    expect(screen.getByText('Section intro status 3')).toBeInTheDocument();
+  });
+
+  it('resets an element filter to all when the element is no longer among the options', async () => {
+    const gate = entry(2, { kind: 'gate', element_id: 'gate:g', summary: 'Gate g flipped' });
+    const { rerender } = render(
+      <HistoryView history={held([entry(1), gate])} error={null} presentIds={present} onSelect={() => {}} />,
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Element'), 'gate:g');
+    rerender(<HistoryView history={held([entry(3)])} error={null} presentIds={present} onSelect={() => {}} />);
+    expect(screen.getByLabelText('Element')).toHaveValue('');
+    expect(screen.getByText('Section intro status 3')).toBeInTheDocument();
+  });
+
+  it('says the filter hides every row and offers Clear filters', async () => {
+    view(held([entry(1), entry(2, { kind: 'gate', element_id: 'gate:g', summary: 'Gate g flipped' })]));
+    await userEvent.selectOptions(screen.getByLabelText('Kind'), 'gate');
+    await userEvent.selectOptions(screen.getByLabelText('Element'), 'gate:g');
+    // gate:g + a kind that only matches another element hides every row
+    await userEvent.selectOptions(screen.getByLabelText('Kind'), 'section_status');
+    expect(screen.getByText('No changes match the current filter')).toBeInTheDocument();
+    expect(screen.queryByText(/No changes recorded yet/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
 });

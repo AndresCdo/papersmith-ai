@@ -139,3 +139,11 @@ describe('contrast (WCAG AA)', () => {
     expect(ratio('--terminal-text', '--terminal-bg')).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('mutating cue', () => {
+  it('draws a solid token-based outline so it reads on the light theme', () => {
+    const rule = /\.dag-node\.is-mutating\s*\{([^}]*)\}/.exec(stripped);
+    expect(rule).not.toBeNull();
+    expect(rule?.[1]).toMatch(/outline:\s*\d+px solid var\(--accent\)/);
+  });
+});
