@@ -7,7 +7,10 @@ import {
   classifyConsoleEntries,
   isAllowedConsoleMessage,
   isReadyValue,
+  clickShotName,
   parseArgs,
+  pickClickTargets,
+  rectCenter,
   shotName,
   timeToFirstData,
 } from '../scripts/lib/visual-check.mjs';
@@ -19,6 +22,7 @@ test('parseArgs applies defaults and requires --out', () => {
   assert.equal(parsed.timeoutMs, 20000);
   assert.equal(parsed.dragCheck, false);
   assert.equal(parsed.fullPage, false);
+  assert.equal(parsed.clickCheck, false);
   assert.deepEqual(parsed.tabs, DEFAULT_TABS);
   assert.deepEqual(parsed.viewports, DEFAULT_VIEWPORTS);
   assert.throws(() => parseArgs([]), /--out/);
@@ -28,7 +32,7 @@ test('parseArgs reads every option', () => {
   const parsed = parseArgs([
     '--out', '/x', '--url', 'http://localhost:5173', '--timeout', '5',
     '--tabs', 'pipeline,health', '--viewports', '800x600,1024x768',
-    '--chromium', '/opt/chrome', '--drag-check', '--full-page',
+    '--chromium', '/opt/chrome', '--drag-check', '--full-page', '--click-check',
   ]);
   assert.equal(parsed.url, 'http://localhost:5173/');
   assert.equal(parsed.timeoutMs, 5000);
@@ -40,6 +44,7 @@ test('parseArgs reads every option', () => {
   assert.equal(parsed.chromium, '/opt/chrome');
   assert.equal(parsed.dragCheck, true);
   assert.equal(parsed.fullPage, true);
+  assert.equal(parsed.clickCheck, true);
 });
 
 test('parseArgs rejects unknown flags, bad numbers and bad viewports', () => {
@@ -86,4 +91,29 @@ test('timeToFirstData measures from navigation to readiness', () => {
 
 test('shotName is filesystem safe and carries tab and viewport', () => {
   assert.equal(shotName('pipeline', { width: 1280, height: 800 }), 'pipeline-1280x800.png');
+});
+
+test('rectCenter returns the centre of a bounding rectangle', () => {
+  assert.deepEqual(rectCenter({ x: 10, y: 20, width: 100, height: 40 }), { x: 60, y: 40 });
+});
+
+test('pickClickTargets takes the first stage, gate, section and edge id', () => {
+  const picked = pickClickTargets({
+    nodes: ['gate:g1', 'stage:a', 'section:Related Work', 'stage:b', 'section:x'],
+    edges: ['stage:a->stage:b', 'stage:a->gate:g1'],
+  });
+  assert.deepEqual(picked, {
+    stage: 'stage:a',
+    gate: 'gate:g1',
+    section: 'section:Related Work',
+    edge: 'stage:a->stage:b',
+  });
+});
+
+test('pickClickTargets leaves a kind out when the diagram has none of it', () => {
+  assert.deepEqual(pickClickTargets({ nodes: ['stage:a'], edges: [] }), { stage: 'stage:a' });
+});
+
+test('clickShotName names the screenshot by kind and viewport', () => {
+  assert.equal(clickShotName('gate', { width: 1280, height: 800 }), 'click-gate-1280x800.png');
 });

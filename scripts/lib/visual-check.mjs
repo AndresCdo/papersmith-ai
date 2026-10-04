@@ -13,6 +13,7 @@ const DEFAULTS = {
   chromium: '/usr/bin/chromium',
   dragCheck: false,
   fullPage: false,
+  clickCheck: false,
 };
 
 function takeValue(argv, index, flag) {
@@ -75,6 +76,9 @@ export function parseArgs(argv) {
       case '--full-page':
         parsed.fullPage = true;
         break;
+      case '--click-check':
+        parsed.clickCheck = true;
+        break;
       default:
         throw new Error(`unknown option ${flag}`);
     }
@@ -109,4 +113,24 @@ export function timeToFirstData(startMs, readyMs) {
 
 export function shotName(tab, viewport) {
   return `${tab}-${viewport.width}x${viewport.height}.png`;
+}
+
+/** Centre point of a DOMRect-like object. */
+export function rectCenter(rect) {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+/** One element id per kind (first stage, gate, section, edge) for the click check. */
+export function pickClickTargets({ nodes, edges }) {
+  const picked = {};
+  for (const kind of ['stage', 'gate', 'section']) {
+    const id = nodes.find((candidate) => candidate.startsWith(`${kind}:`));
+    if (id) picked[kind] = id;
+  }
+  if (edges.length > 0) picked.edge = edges[0];
+  return picked;
+}
+
+export function clickShotName(kind, viewport) {
+  return `click-${kind}-${viewport.width}x${viewport.height}.png`;
 }

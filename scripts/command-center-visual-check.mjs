@@ -6,7 +6,7 @@
 //
 //   node scripts/command-center-visual-check.mjs --out DIR [--url URL]
 //        [--timeout SECONDS] [--tabs a,b] [--viewports 1280x800,1600x1000]
-//        [--chromium PATH] [--drag-check] [--full-page]
+//        [--chromium PATH] [--drag-check] [--full-page] [--click-check]
 
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -15,8 +15,11 @@ import path from 'node:path';
 
 import {
   classifyConsoleEntries,
+  clickShotName,
   isReadyValue,
   parseArgs,
+  pickClickTargets,
+  rectCenter,
   shotName,
   timeToFirstData,
 } from './lib/visual-check.mjs';
@@ -83,6 +86,9 @@ async function launchChromium(binary, profileDir) {
       '--no-sandbox',
       '--disable-gpu',
       '--hide-scrollbars',
+      // A page kept in the back/forward cache keeps its EventSource open; after
+      // about eight loads the browser's per-host connection limit starves the next page.
+      '--disable-features=BackForwardCache',
       '--remote-debugging-port=0',
       `--user-data-dir=${profileDir}`,
       'about:blank',
@@ -155,12 +161,154 @@ async function dragCheck(cdp, sessionId) {
   return { ok: !opened, detail: opened ? 'a detail panel opened after a drag' : 'no detail panel opened' };
 }
 
+const q = (value) => JSON.stringify(value);
+const PANEL_TITLE = `document.querySelector(${q(DETAIL_PANEL_SELECTOR)})?.querySelector('h3')?.textContent ?? null`;
+
+async function pointer(cdp, sessionId, type, point) {
+  await cdp.send(
+    'Input.dispatchMouseEvent',
+    { type, x: point.x, y: point.y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 },
+    sessionId,
+  );
+}
+
+async function clickAt(cdp, sessionId, point) {
+  await pointer(cdp, sessionId, 'mouseMoved', point);
+  await pointer(cdp, sessionId, 'mousePressed', point);
+  await pointer(cdp, sessionId, 'mouseReleased', point);
+}
+
+async function pressKey(cdp, sessionId, key) {
+  const keys = { Enter: { code: 'Enter', vk: 13, text: '\r' }, Escape: { code: 'Escape', vk: 27 } }[key];
+  const base = { key, code: keys.code, windowsVirtualKeyCode: keys.vk, nativeVirtualKeyCode: keys.vk };
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: keys.text }, sessionId);
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
+}
+
+// Screen point to click for a node (centre of its wrapper) or an edge (midpoint
+// of its path), after scrolling it into view. An edge that another element
+// covers at that point is skipped by the caller choosing the next candidate.
+const pointOf = (kind, id) => `(() => {
+  const id = ${q(id)};
+  if (${q(kind)} === 'edge') {
+    const edge = document.querySelector('.react-flow__edge[data-id=' + CSS.escape(id) + ']');
+    const path = edge && edge.querySelector('path.react-flow__edge-path');
+    if (!path) return null;
+    path.scrollIntoView({ block: 'center', inline: 'center' });
+    const len = path.getTotalLength();
+    const pt = path.getPointAtLength(len / 2);
+    const m = path.getScreenCTM();
+    const x = m.a * pt.x + m.c * pt.y + m.e;
+    const y = m.b * pt.x + m.d * pt.y + m.f;
+    const hit = document.elementFromPoint(x, y);
+    const owner = hit && hit.closest('.react-flow__edge');
+    return owner && owner.dataset.id === id ? { x, y } : { covered: true };
+  }
+  const node = document.querySelector('.react-flow__node[data-id=' + CSS.escape(id) + ']');
+  if (!node) return null;
+  node.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = node.getBoundingClientRect();
+  return { rect: { x: r.x, y: r.y, width: r.width, height: r.height } };
+})()`;
+
+const closePanel = async (cdp, sessionId) => {
+  await pressKey(cdp, sessionId, 'Escape');
+  await sleep(150);
+};
+
+// Real-browser selection check: click one stage, gate, section and edge, then
+// select a node and an edge from the keyboard, asserting the panel each time.
+async function clickCheck(cdp, sessionId, options, viewport) {
+  const failures = [];
+  const log = [];
+  const size = `${viewport.width}x${viewport.height}`;
+  const ids = await evaluate(
+    cdp,
+    sessionId,
+    `({ nodes: [...document.querySelectorAll('.react-flow__node')].map((n) => n.dataset.id),
+        edges: [...document.querySelectorAll('.react-flow__edge')].map((e) => e.dataset.id) })`,
+  );
+  const targets = pickClickTargets(ids);
+  const expectTitle = async (kind, id, mode) => {
+    await waitFor(cdp, sessionId, `${PANEL_TITLE} !== null`, 3000, `${mode} ${id} panel`).catch(() => {});
+    const title = await evaluate(cdp, sessionId, PANEL_TITLE);
+    const wanted =
+      kind === 'edge'
+        ? 'Connection'
+        : await evaluate(
+            cdp,
+            sessionId,
+            `document.querySelector('.react-flow__node[data-id=' + CSS.escape(${q(id)}) + '] .dag-node__title')?.textContent ?? null`,
+          );
+    const hash = await evaluate(cdp, sessionId, 'location.hash');
+    const ok = title !== null && title === (wanted ?? title) && hash.includes(`el=${encodeURIComponent(id)}`);
+    log.push({ viewport: size, mode, kind, id, title, hash, ok });
+    if (!ok) failures.push(`click check ${size} ${mode} ${kind} ${id}: panel title ${q(title)}, expected ${q(wanted)}, hash ${hash}`);
+    return ok;
+  };
+
+  for (const [kind, id] of Object.entries(targets)) {
+    const locate = async (k, i) => {
+      const found = await evaluate(cdp, sessionId, pointOf(k, i));
+      return found?.rect ? rectCenter(found.rect) : found;
+    };
+    let point = await locate(kind, id);
+    if (!point || point.covered) {
+      // Fall back to another edge whose midpoint is not covered.
+      const others = kind === 'edge' ? ids.edges.slice(1) : [];
+      for (const other of others) {
+        point = await locate('edge', other);
+        if (point && !point.covered) {
+          targets.edge = other;
+          break;
+        }
+      }
+    }
+    const target = kind === 'edge' ? targets.edge : id;
+    if (!point || point.covered) {
+      failures.push(`click check ${size}: no clickable point for ${kind} ${id}`);
+      continue;
+    }
+    await clickAt(cdp, sessionId, point);
+    await twoFrames(cdp, sessionId);
+    if (await expectTitle(kind, target, 'click')) {
+      const file = path.join(options.out, clickShotName(kind, viewport));
+      const shot = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
+      await writeFile(file, Buffer.from(shot.data, 'base64'));
+      log.push({ viewport: size, shot: file });
+    }
+    await closePanel(cdp, sessionId);
+    const stillOpen = await evaluate(cdp, sessionId, `document.querySelector(${q(DETAIL_PANEL_SELECTOR)}) !== null || location.hash.includes('el=')`);
+    if (stillOpen) failures.push(`click check ${size}: Escape did not close the panel after ${kind} ${id}`);
+  }
+
+  // Keyboard: focus a node wrapper and an edge wrapper, press Enter.
+  for (const [kind, id] of [['stage', targets.stage], ['edge', targets.edge]]) {
+    if (!id) continue;
+    const selector = kind === 'edge' ? '.react-flow__edge' : '.react-flow__node';
+    const focused = await evaluate(
+      cdp,
+      sessionId,
+      `(() => { const el = document.querySelector(${q(selector)} + '[data-id=' + CSS.escape(${q(id)}) + ']'); if (!el) return false; el.focus({ preventScroll: true }); return document.activeElement === el; })()`,
+    );
+    if (!focused) {
+      failures.push(`click check ${size}: could not focus ${kind} ${id}`);
+      continue;
+    }
+    await pressKey(cdp, sessionId, 'Enter');
+    await twoFrames(cdp, sessionId);
+    await expectTitle(kind, id, 'keyboard');
+    await closePanel(cdp, sessionId);
+  }
+  return { failures, log };
+}
+
 async function run(options) {
   await mkdir(options.out, { recursive: true });
   const profileDir = await mkdtemp(path.join(tmpdir(), 'cc-visual-check-'));
   const { child, wsUrl } = await launchChromium(options.chromium, profileDir);
   const cdp = await Cdp.connect(wsUrl);
-  const report = { url: options.url, shots: [], timings: [], consoleErrors: [], dragChecks: [], failures: [] };
+  const report = { url: options.url, shots: [], timings: [], consoleErrors: [], dragChecks: [], clickChecks: [], failures: [] };
   const consoleByTarget = new Map();
 
   try {
@@ -235,6 +383,11 @@ async function run(options) {
             report.dragChecks.push({ viewport: `${viewport.width}x${viewport.height}`, ...result });
             if (!result.ok) report.failures.push(`drag check ${viewport.width}x${viewport.height}: ${result.detail}`);
           }
+          if (options.clickCheck && tab === 'pipeline') {
+            const result = await clickCheck(cdp, sessionId, options, viewport);
+            report.clickChecks.push(...result.log);
+            report.failures.push(...result.failures);
+          }
         } catch (error) {
           report.failures.push(`${tab} ${viewport.width}x${viewport.height}: ${error.message}`);
         }
@@ -266,6 +419,10 @@ async function main() {
   for (const shot of report.shots) console.log(`screenshot ${shot}`);
   for (const result of report.dragChecks) {
     console.log(`drag-check ${result.viewport}: ${result.ok ? 'ok' : 'FAIL'} (${result.detail})`);
+  }
+  for (const entry of report.clickChecks) {
+    if (entry.shot) console.log(`click-check screenshot ${entry.shot}`);
+    else console.log(`click-check ${entry.viewport} ${entry.mode} ${entry.kind} ${entry.id}: ${entry.ok ? 'ok' : 'FAIL'} (panel "${entry.title}")`);
   }
   if (report.failures.length > 0) {
     for (const failure of report.failures) console.error(`FAIL ${failure}`);

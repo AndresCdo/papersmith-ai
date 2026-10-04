@@ -15,7 +15,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - [x] S4 T1-layout fixes from the checker
 - [x] S5 T2a Routing and graph model
 - [x] S6 T2b-1 SectionDetail extraction
-- [ ] S7 T2b-2 Selection and detail panel
+- [x] S7 T2b-2 Selection and detail panel
 - [ ] S8 T3a History core
 - [ ] S9 T3b History wiring and Host allow-list
 - [ ] S10 T4 History UI
@@ -41,6 +41,15 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 ### S6 T2b-1 SectionDetail extraction
 - Route: delegated writer; one commit `refactor(ui): extract SectionDetail from the section matrix`.
 - Characterization first: `SectionMatrix.test.tsx` (open from Detail, close by Escape and Close) passed before the refactor (2 tests). RED: `npx vitest run src/components/sections` -> `Failed to resolve import "./SectionDetail"`. GREEN after extracting `SectionDetail.tsx` (body only: detail grid, citations, blocks, fact contract; `extentLabel` exported; the drawer keeps its chrome and the Escape listener): `npx vitest run` -> 9 files, 52 tests pass; typecheck and build pass.
+
+### S7 T2b-2 Selection and detail panel
+- Route: delegated writer; commits `feat(ui): make the pipeline diagram selectable with a detail panel` (133ec15, ~926 added / 185 deleted incl. the buildGraph move to graph.ts and the rebuilt bundle, ~740 authored lines of which ~280 are tests; above the ~400 heuristic because tests, the panel and the graph move belong to one behavior; recorded, not shrunk) and `feat(scripts): add a real-browser click check to the visual checker`.
+- RED: `cd ui && npx vitest run` with the new tests and no implementation -> 4 files failed to load (`selection`, `ElementDetailPanel`, `PipelineGraph` graph prop / `./graph` missing) and 4 App tests failed (no `element-detail-panel`). GREEN: 13 files, 85 tests pass; `npm run typecheck` and `npm run build` pass (bundle index-D8e4L5fo.js / index-qFCI2pGz.css).
+- Design: `lib/selection.ts` `reduceSelection` (batched rule, pure, unit tested), `dag/graph.ts` (buildGraph moved out of PipelineGraph), PipelineGraph takes `graph`, `selectedId`, `onSelect` (selection mapped onto copies in a second memo; layout runs once per state in App), ElementDetailPanel is a non-modal drawer (no backdrop so the canvas stays clickable), focus in/restore, one Escape listener.
+- jsdom limits: edges are not rendered, so edge and batching tests call the ReactFlow handler props through a mocked `ReactFlow` (`PipelineGraph.edges.test.tsx`, documented in the file); user-event `mousedown` has a null `view` that d3-zoom cannot take, so tests on React Flow elements use `fireEvent.click` (keyboard tests use userEvent, they work).
+- Checker: helper tests first (RED `does not provide an export named 'clickShotName'`), then `--click-check`: clicks the centre of a stage, gate and section node and the midpoint of an edge path via CDP mouse events, asserts panel title and hash `el=`, Escape closes, then focuses a node and an edge wrapper and presses Enter. Finding fixed: after about eight page loads the checker's pages stalled (Chromium kept previous pages in the back/forward cache with their EventSource open, exhausting the per-host connections; reproduced with 16 plain loads); the checker now launches with `--disable-features=BackForwardCache` and a 16-load run passes.
+- Real browser: `node scripts/command-center-visual-check.mjs --out <shots>/s7 --drag-check --click-check --full-page` -> exit 0; drag-check ok at both viewports; click-check ok at both viewports for click stage (Ingestion), gate (Writing Readiness Gate), section (materials-and-methods), edge (Connection), keyboard Enter on a stage and on an edge.
+- Screenshots: /tmp/claude-1000/-home-carlos-Documents-projects-papersmith-ai/69ffaf9c-7548-46f0-b18b-99d4f953cd48/scratchpad/shots/s7/ (click-stage|gate|section|edge at 1280x800 and 1600x1000, plus the full-page tab shots).
 
 ---
 
