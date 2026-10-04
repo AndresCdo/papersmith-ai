@@ -9,7 +9,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - Branch base: the plan starts from origin/main after the harness-parity stack merge reports ALL DONE. To avoid hours of idle waiting, the branch was created from the local stack tip `feat/workspace-gitignore-skill-links` (164c41b), which contains all stack code. When the stack driver reports ALL DONE, run a local `git merge origin/main` on this branch (no remote write).
 
 ## Checklist (route per task: delegated writer unless noted)
-- [ ] S1 T0a UI test infrastructure
+- [x] S1 T0a UI test infrastructure
 - [ ] S2 T0b Visual checker + data-ready
 - [ ] S3 T1 Light theme, literal replacement, load fix
 - [ ] S4 T1-layout fixes from the checker
@@ -24,6 +24,13 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 
 ## Evidence
 (appended per task: RED/GREEN commands and results, commit ids, screenshots)
+
+### S1 T0a UI test infrastructure
+- Route: delegated writer. Deps installed with `cd ui && npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event @testing-library/dom` (@testing-library/dom is the peer of @testing-library/react 16).
+- RED: `cd ui && npx vitest run` with src/App.test.tsx present and no vitest config -> 1 failed: `ReferenceError: document is not defined` at render().
+- GREEN: after vite.config.ts `test` block, src/test/setup.ts and the `test` script: `npx vitest run` -> 1 file, 1 test passed.
+- `npm run typecheck` passes with the test files present (tsconfig types unchanged, no jest-dom entry); `npm run build` passes and the bundle is byte-identical (index-CUXqyhFi.js / index-BtYy1DHB.css, no static diff).
+- Commit: see git log (subject `test(ui): add the Vitest and Testing Library infrastructure`).
 
 ---
 
