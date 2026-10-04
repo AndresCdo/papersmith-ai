@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
@@ -61,5 +62,40 @@ describe('App', () => {
     for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts']) {
       expect(await screen.findByRole('button', { name: label })).toBeInTheDocument();
     }
+  });
+
+  describe('hash routing', () => {
+    afterEach(() => {
+      window.history.replaceState(null, '', '#');
+    });
+
+    it('normalizes an empty or unknown fragment to the default tab', () => {
+      window.history.replaceState(null, '', '#bogus');
+      render(<App />);
+      expect(window.location.hash).toBe('#pipeline');
+    });
+
+    it('keeps the element id of a deep link on mount', () => {
+      window.history.replaceState(null, '', '#pipeline?el=stage%3Adrafting');
+      render(<App />);
+      expect(window.location.hash).toBe('#pipeline?el=stage%3Adrafting');
+    });
+
+    it('follows hashchange for the tab', async () => {
+      window.history.replaceState(null, '', '#pipeline');
+      render(<App />);
+      act(() => {
+        window.history.replaceState(null, '', '#health');
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      });
+      expect(screen.getByRole('button', { name: 'Health' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('drops the element id when another tab is chosen', async () => {
+      window.history.replaceState(null, '', '#pipeline?el=stage%3Adrafting');
+      render(<App />);
+      await userEvent.click(screen.getByRole('button', { name: 'Sections' }));
+      expect(window.location.hash).toBe('#sections');
+    });
   });
 });

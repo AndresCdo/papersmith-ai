@@ -78,7 +78,35 @@ function summarizeParts(gate: Gate): { key: string; value: string }[] {
     .filter((entry): entry is { key: string; value: string } => entry !== null);
 }
 
-function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges: Edge[]; width: number; height: number } {
+const kindOf = (id: string): string => id.slice(0, id.indexOf(':'));
+
+/** Human label for an edge, derived from the `<kind>:` prefixes of its ends. */
+export function relationKind(source: string, target: string): string {
+  const pair = `${kindOf(source)}->${kindOf(target)}`;
+  switch (pair) {
+    case 'stage->stage':
+      return 'next stage';
+    case 'stage->gate':
+      return 'gate input';
+    case 'gate->stage':
+      return 'gate releases';
+    case 'stage->section':
+      return 'drafts';
+    case 'section->stage':
+      return 'audited by';
+    default:
+      return 'related';
+  }
+}
+
+export interface GraphModel {
+  nodes: AnyFlowNode[];
+  edges: Edge[];
+  width: number;
+  height: number;
+}
+
+export function buildGraph(state: WorkspaceState | null): GraphModel {
   const stages = state?.pipeline_stages ?? [];
   const gates = state?.gates ?? [];
   const sections = state?.sections ?? [];
@@ -140,7 +168,7 @@ function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges
       type: 'animated',
       animated,
       label,
-      data: { animated },
+      data: { animated, relation: relationKind(source, target) },
     });
   };
 

@@ -8,22 +8,11 @@ import SectionMatrix from './components/sections/SectionMatrix';
 import ArtifactViewer from './components/artifacts/ArtifactViewer';
 import { StatusBadge } from './components/StatusBadge';
 import { asText, formatCount, formatTime } from './lib/format';
+import { TABS, formatHash, parseHash, type HashRoute, type TabId } from './lib/hash';
 import type { WorkspaceState } from './types';
 
-const TABS = [
-  { id: 'pipeline', label: 'Pipeline' },
-  { id: 'health', label: 'Health' },
-  { id: 'sections', label: 'Sections' },
-  { id: 'artifacts', label: 'Artifacts' },
-] as const;
-
-type TabId = (typeof TABS)[number]['id'];
-const DEFAULT_TAB: TabId = 'pipeline';
-
-/** Hash routing: no router dependency, one durable URL per tab. */
-function readHash(): TabId {
-  const value = window.location.hash.replace(/^#/, '');
-  return TABS.some((tab) => tab.id === value) ? (value as TabId) : DEFAULT_TAB;
+function readRoute(): HashRoute {
+  return parseHash(window.location.hash);
 }
 
 function TotalsBar({ state }: { state: WorkspaceState | null }) {
@@ -50,14 +39,19 @@ function TotalsBar({ state }: { state: WorkspaceState | null }) {
 export default function App() {
   const { state, health, connected, lastChanged, loading, error, smoke, runSmoke, clearSmoke } =
     useWorkspaceEvents();
-  const [tab, setTab] = useState<TabId>(() => readHash());
+  // App is the single owner of the route: the tab and the selected diagram
+  // element, mirrored into the URL hash.
+  const [route, setRoute] = useState<HashRoute>(() => readRoute());
+  const tab = route.tab;
 
   useEffect(() => {
-    const onHashChange = () => setTab(readHash());
+    const onHashChange = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHashChange);
-    // Normalize `#` and unknown fragments to a real tab on first paint.
-    if (window.location.hash.replace(/^#/, '') !== tab) {
-      window.location.hash = tab;
+    // Normalize `#` and unknown fragments to a real tab on first paint,
+    // keeping a valid deep-linked element id.
+    const canonical = formatHash(route.tab, route.el);
+    if (window.location.hash !== canonical) {
+      window.history.replaceState(null, '', canonical);
     }
     return () => window.removeEventListener('hashchange', onHashChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial normalization only
@@ -77,10 +71,21 @@ export default function App() {
     };
   }, [ready]);
 
-  const selectTab = useCallback((next: TabId) => {
-    window.location.hash = next;
-    setTab(next);
+  /**
+   * Set the tab and the selected element together. State is set directly (so
+   * selecting the same element twice never depends on `hashchange`) and the
+   * hash is written with replaceState; a tab change adds one history entry.
+   */
+  const navigate = useCallback((next: TabId, el: string | null = null) => {
+    const hash = formatHash(next, el);
+    if (window.location.hash !== hash) {
+      if (next !== readRoute().tab) window.history.pushState(null, '', hash);
+      else window.history.replaceState(null, '', hash);
+    }
+    setRoute({ tab: next, el });
   }, []);
+
+  const selectTab = useCallback((next: TabId) => navigate(next), [navigate]);
 
   const workspace = state?.workspace;
   const paper = state?.paper_metadata;

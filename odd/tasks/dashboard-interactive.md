@@ -13,7 +13,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - [x] S2 T0b Visual checker + data-ready
 - [x] S3 T1 Light theme, literal replacement, load fix
 - [x] S4 T1-layout fixes from the checker
-- [ ] S5 T2a Routing and graph model
+- [x] S5 T2a Routing and graph model
 - [ ] S6 T2b-1 SectionDetail extraction
 - [ ] S7 T2b-2 Selection and detail panel
 - [ ] S8 T3a History core
@@ -31,6 +31,12 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - GREEN: after vite.config.ts `test` block, src/test/setup.ts and the `test` script: `npx vitest run` -> 1 file, 1 test passed.
 - `npm run typecheck` passes with the test files present (tsconfig types unchanged, no jest-dom entry); `npm run build` passes and the bundle is byte-identical (index-CUXqyhFi.js / index-BtYy1DHB.css, no static diff).
 - Commit: see git log (subject `test(ui): add the Vitest and Testing Library infrastructure`).
+
+### S5 T2a Routing and graph model
+- Route: delegated writer; one commit `feat(ui): add hash routing with an element id and a testable graph model`.
+- RED: `cd ui && npx vitest run src/lib src/components/dag/graph.test.ts` -> hash.test.ts failed to load (`./hash` missing) and graph.test.ts `TypeError: buildGraph is not a function`; `npx vitest run src/App.test.tsx` with the routing tests -> 1 failed (`expected '#pipeline' to be '#pipeline?el=stage%3Adrafting'`, mount normalisation dropped the element).
+- GREEN: `src/lib/hash.ts` (TABS, parseHash, formatHash with encodeURIComponent, malformed or empty `el` -> null), exported `buildGraph` and `relationKind` (edge `data.relation`), App owns `route {tab, el}` with `navigate(tab, el)` (state set directly, hash via replaceState; a tab change pushes one history entry so Back still works between tabs), mount normalisation keeps `el`. `npx vitest run` -> 7 files, 47 tests pass; `npm run typecheck` and `npm run build` pass (bundle index-sSg9iHRq.js).
+- Deviation: the plan says navigate uses replaceState; a change of tab uses pushState instead (element changes within a tab use replaceState) to keep the browser Back button across tabs.
 
 ---
 
