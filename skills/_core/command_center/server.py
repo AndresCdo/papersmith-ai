@@ -29,7 +29,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, history, paper_preview
+from . import atlas, decisions, history, paper_preview
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -383,6 +383,19 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                                 headers=dict(_PAPER_HEADERS))
         return Response(data, media_type="text/html; charset=utf-8",
                         headers=dict(_ATLAS_VIEW_HEADERS))
+
+    @app.get("/api/decisions")
+    def api_decisions(source: str | None = None,
+                      limit: int = decisions.MAX_TOTAL_EVENTS) -> JSONResponse:
+        # Read-only timeline merged on request from persisted records; every
+        # read is bounded and contained in the workspace (see decisions).
+        names = [part.strip() for part in source.split(",") if part.strip()] if source else None
+        try:
+            return JSONResponse(decisions.build_decisions(root_path, names, limit),
+                                headers=dict(_PAPER_HEADERS))
+        except decisions.DecisionsQueryError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422,
+                                headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/events")
     async def api_events(request: Request) -> StreamingResponse:

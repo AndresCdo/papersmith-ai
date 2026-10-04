@@ -12,6 +12,7 @@ module. Fixture workspaces mirror the real on-disk layouts:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -19,7 +20,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from skills._core.command_center import decisions
+from skills._core.command_center import decisions, server
 
 LEDGER_REL = "implementations/repo/Impl/.remote-execution/ledger.jsonl"
 
@@ -645,6 +646,110 @@ class BuildTests(_Workspace):
 
         assert self.snapshot(root) == before
         assert not list(root.rglob("__pycache__"))
+
+
+def _routes(app) -> dict:
+    return {r.path: r.endpoint for r in app.routes
+            if hasattr(r, "path") and hasattr(r, "endpoint")}
+
+
+def _json(response) -> dict:
+    return json.loads(bytes(response.body).decode("utf-8"))
+
+
+async def _call(app, path: str, query: bytes = b"", host: bytes | None = None) -> tuple[int, bytes]:
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+        "method": "GET", "scheme": "http", "path": path, "raw_path": path.encode(),
+        "query_string": query, "root_path": "",
+        "headers": [(b"host", host)] if host else [],
+        "server": ("127.0.0.1", 8099), "client": ("127.0.0.1", 50000),
+    }
+    messages: list[dict] = []
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict) -> None:
+        messages.append(message)
+
+    await app(scope, receive, send)
+    status = next(m["status"] for m in messages if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
+    return status, body
+
+
+class RouteTests(_Workspace):
+    def populated(self) -> Path:
+        root = self.new_workspace()
+        self.write_main(root, _decl_body(_declaration("d", "v")))
+        self.write_ledger(root, [_returned("2026-05-01T00:00:00Z")])
+        return root
+
+    def test_route_returns_the_timeline_with_safety_headers(self) -> None:
+        root = self.populated()
+        response = _routes(server.create_app(root))["/api/decisions"]()
+        data = _json(response)
+
+        assert set(data) == {"events", "truncated", "total", "sources", "note"}
+        assert [e["source"] for e in data["events"]] == ["remote-execution", "declarations"]
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "SAMEORIGIN"
+        assert response.headers["cache-control"] == "no-store"
+
+    def test_events_have_the_documented_shape_and_no_author(self) -> None:
+        root = self.populated()
+        for event in _json(_routes(server.create_app(root))["/api/decisions"]())["events"]:
+            assert {"ts", "source", "kind", "summary", "ref"} <= set(event)
+            assert "author" not in event
+
+    def test_source_filter_and_limit(self) -> None:
+        root = self.populated()
+        endpoint = _routes(server.create_app(root))["/api/decisions"]
+
+        only = _json(endpoint(source="declarations"))
+        assert [e["source"] for e in only["events"]] == ["declarations"]
+        assert list(only["sources"]) == ["declarations"]
+        both = _json(endpoint(source="declarations,remote-execution"))
+        assert len(both["events"]) == 2
+        assert len(_json(endpoint(limit=1))["events"]) == 1
+        assert len(_json(endpoint(limit=-5))["events"]) == 1
+        assert len(_json(endpoint(limit=10**9))["events"]) == 2
+
+    def test_unknown_source_is_422(self) -> None:
+        root = self.populated()
+        response = _routes(server.create_app(root))["/api/decisions"](source="kaggle-inbox")
+
+        assert response.status_code == 422
+        assert "kaggle-inbox" in _json(response)["detail"]
+
+    def test_unknown_source_over_asgi_is_422_and_bad_limit_is_422(self) -> None:
+        app = server.create_app(self.populated())
+
+        assert asyncio.run(_call(app, "/api/decisions", b"source=nope"))[0] == 422
+        assert asyncio.run(_call(app, "/api/decisions", b"limit=abc"))[0] == 422
+        assert asyncio.run(_call(app, "/api/decisions", b"source=declarations&limit=5"))[0] == 200
+
+    def test_421_on_a_foreign_host_and_200_on_an_allowed_one(self) -> None:
+        app = server.create_app(self.populated(), allowed_hosts=frozenset({"127.0.0.1:8099"}))
+
+        assert asyncio.run(_call(app, "/api/decisions", b"", b"evil.example:8099"))[0] == 421
+        assert asyncio.run(_call(app, "/api/decisions", b"", None))[0] == 421
+        assert asyncio.run(_call(app, "/api/decisions", b"", b"127.0.0.1:8099"))[0] == 200
+
+    def test_route_does_not_change_the_workspace_tree_or_create_bytecode(self) -> None:
+        root = self.populated()
+        self.write(root, "kaggle-inbox/token.json", "SECRET")
+        app = server.create_app(root)
+        before = self.snapshot(root)
+
+        _routes(app)["/api/decisions"]()
+        asyncio.run(_call(app, "/api/decisions"))
+        asyncio.run(_call(app, "/api/decisions", b"source=remote-execution&limit=1"))
+
+        assert self.snapshot(root) == before
+        assert not list(root.rglob("__pycache__"))
+        assert not list(root.rglob("*.pyc"))
 
 
 if __name__ == "__main__":
