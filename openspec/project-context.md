@@ -9,7 +9,7 @@
 ## Workspace
 - Root: the checkout containing this file (no absolute path here: one recorded in this file told every clone it was somebody else's machine)
 - Git root: recognized by `git rev-parse`
-- Entrypoints: `CLAUDE.md`, `OPENCODE.md`, `PI.md`, `.antigravity/rules.md` (all route to `openspec/project-context.md`, `guidance/paper-guide/`, `skills/*/SKILL.md`)
+- Entrypoints: `CLAUDE.md`, `OPENCODE.md`, `PI.md`, `.agents/AGENTS.md` (all route to `openspec/project-context.md`, `guidance/paper-guide/`, `skills/*/SKILL.md`)
 - No `AGENTS.md`, `GEMINI.md`, or `.cursorrules` present
 
 ## Stack signals
@@ -27,7 +27,7 @@
 - `src/papersmith/core/` — init, status, ingest, upgrade, executor, ledger
 - `src/papersmith/bridges/` — Node, Python, deliberation, remote-execution bridges
 - `src/papersmith/mcp/` — stdio Model Context Protocol server exposing workspace and paper-writing verbs
-- `skills/` — canonical skill tree (`experimental-deliberation`, `experimental-implementation`, `figure-review`, `kaggle-accounts`, `paper-ingestion`, `paper-writing`, `plausibility`, `proposal-deliberation`, `proposal-implementation`, `remote-execution`, `skill-audit`), projected into `.claude/skills`, `.opencode/skills`, `.pi/skills`, `.antigravity/skills`, `.agents/skills` by `npm run setup:harnesses`
+- `skills/` — canonical skill tree (`experimental-deliberation`, `experimental-implementation`, `figure-review`, `kaggle-accounts`, `paper-ingestion`, `paper-writing`, `plausibility`, `proposal-deliberation`, `proposal-implementation`, `remote-execution`, `skill-audit`), projected into `.claude/skills`, `.opencode/skills`, `.pi/skills`, `.agents/skills` by `npm run setup:harnesses`
 - `guidance/paper-guide/` — domain guidelines; `scripts/setup_env.py` — isolated runtime provisioning
 - CI (`.github/workflows/test.yml`): Node suite (`npm ci` + `npm test`) and Python suite provisioned by `python3 scripts/setup_env.py install --no-ingestion`, run by `python3 scripts/clean_context_gate.py`: it runs the declared gate (`npm run test:all`, whose `test:py` names `.micromamba/envs/papersmith/bin/pytest`) twice, under an empty HOME and under a synthetic developer HOME, and fails if the two runs differ or if the empty-HOME run fails
 

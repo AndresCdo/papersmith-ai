@@ -5,7 +5,7 @@ operational wiring actually connected?* It checks four dimensions, each
 independently and read-only:
 
 1. **Harness sync** — the generated surfaces (``.claude/``, ``.opencode/``,
-   ``.pi/``, ``.antigravity/``) are structurally current and their ``skills``
+   ``.pi/``, ``.agents/``) are structurally current and their ``skills``
    links resolve. When the canonical generator is reachable, drift is measured
    by running it with ``--check`` instead of guessed at.
 2. **Skill & CLI executability** — every skill ships a readable ``SKILL.md``,
@@ -38,7 +38,7 @@ HARNESSES = {
     "claude": ".claude",
     "opencode": ".opencode",
     "pi": ".pi",
-    "antigravity": ".antigravity",
+    "antigravity": ".agents",
 }
 
 #: Directory under a harness prefix that holds its projected slash commands.
@@ -57,7 +57,6 @@ _FALLBACK_SKILL_LINKS: tuple[tuple[str, str], ...] = (
     ("claude", ".claude/skills"),
     ("pi", ".pi/skills"),
     ("opencode", ".opencode/skills"),
-    ("antigravity", ".antigravity/skills"),
     ("antigravity", ".agents/skills"),
 )
 

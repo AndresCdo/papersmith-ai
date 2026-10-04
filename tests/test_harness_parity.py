@@ -36,8 +36,7 @@ LABEL_TO_TOOL = {
     "Claude Code": "claude",
     "Pi": "pi",
     "OpenCode": "opencode",
-    "Google Antigravity": "antigravity",
-    "Antigravity (.agents)": "antigravity",
+    "Antigravity": "antigravity",
 }
 
 #: `  ".pi/skills:Pi"` -> ("\.pi/skills", "Pi"). Matched against the array the
@@ -158,16 +157,29 @@ class HarnessParityTests(unittest.TestCase):
             "health_inspector._FALLBACK_SKILL_LINKS disagrees with "
             "manifest.HARNESS_SKILL_LINKS")
 
-    def test_antigravity_keeps_its_documented_and_legacy_links(self) -> None:
-        """The two Antigravity links are deliberate (manifest.py): `.agents/skills`
-        is the documented path and `.antigravity/skills` stays so no existing
-        workspace loses a path it already uses."""
-        wanted = {("antigravity", ".agents/skills"), ("antigravity", ".antigravity/skills")}
+    def test_antigravity_uses_only_documented_locations(self) -> None:
+        """Antigravity reads skills from `.agents/skills` and rules from
+        `.agents/AGENTS.md`; `.antigravity/*` has no source in its docs and
+        must appear in no roster and in no generated output."""
         for name, pairs in (("shell", shell_pairs()),
                             ("manifest", set(manifest.HARNESS_SKILL_LINKS)),
                             ("inspector", inspector_pairs())):
             with self.subTest(roster=name):
-                self.assertTrue(wanted <= pairs, f"{name} lost an Antigravity link")
+                self.assertIn(("antigravity", ".agents/skills"), pairs)
+                self.assertFalse([p for _, p in pairs if p.startswith(".antigravity")],
+                                 f"{name} still lists an .antigravity path")
+        from papersmith.generators import TOOL_OUTPUTS, render_files
+        import tempfile
+        self.assertEqual(TOOL_OUTPUTS["antigravity"], (".agents/AGENTS.md",))
+        with tempfile.TemporaryDirectory() as tmp:
+            rendered = render_files(Path(tmp), {"title": "T"}, tools=("antigravity",))
+        self.assertIn(".agents/AGENTS.md", rendered)
+        self.assertFalse([p for p in rendered if ".antigravity" in p])
+        for path, text in rendered.items():
+            self.assertNotIn(".antigravity", text, path)
+        rules = rendered[".agents/AGENTS.md"]
+        self.assertFalse(rules.lstrip().startswith("---"),
+                         "AGENTS.md takes no frontmatter (pi-subagents would register it)")
 
     def test_inspector_fallback_capabilities_match_the_real_matrix(self) -> None:
         """The stdlib-only fallback restates agent dirs and plugin files; it

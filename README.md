@@ -136,8 +136,8 @@ que se lo pidas con `--allow-downgrade`.
 entorno micromamba aparte (CPU o CUDA, según lo que detecte), incluido el
 binario `llama-server` que el OCR necesita — **no** es Ollama ni una
 instalación de Homebrew. `npm run setup:harnesses` enlaza el árbol canónico
-`skills/` dentro de `.claude/skills`, `.pi/skills`, `.opencode/skills`,
-`.antigravity/skills` y `.agents/skills`, con enlaces relativos e idempotentes (ver
+`skills/` dentro de `.claude/skills`, `.pi/skills`, `.opencode/skills`
+y `.agents/skills`, con enlaces relativos e idempotentes (ver
 [Harnesses y proyección de skills](#harnesses-y-proyección-de-skills)). La
 primera corrida de `papersmith ingest` descarga ~1.5 GB de pesos de Surya si el
 entorno no quedó pre-provisionado.
@@ -310,7 +310,7 @@ mi-paper/
 ├── experiments/                 # el protocolo experimental gestionado
 ├── implementations/             # repos destino; cada uno con su propio git
 ├── kaggle-inbox/                # lo que vuelve de los workers remotos
-├── CLAUDE.md / OPENCODE.md / PI.md / .antigravity/rules.md   # routing de harnesses
+├── CLAUDE.md / OPENCODE.md / PI.md / .agents/AGENTS.md   # routing de harnesses
 ├── papersmith.yaml              # configuración del workspace (la tuya, editable)
 ├── package.json                 # dependencias Node del workspace (jiti, typebox), la tuya, editable
 ├── requirements.txt
@@ -396,7 +396,7 @@ npm run setup:harnesses      # = bash scripts/setup-harnesses.sh
 | Claude Code | `.claude/skills/` | `CLAUDE.md` |
 | Pi | `.pi/skills/` | `PI.md` |
 | OpenCode | `.opencode/skills/` | `OPENCODE.md` |
-| Google Antigravity | `.agents/skills/` (y `.antigravity/skills/`) | `.antigravity/rules.md` |
+| Google Antigravity | `.agents/skills/` | `.agents/AGENTS.md` |
 
 ### Qué cablea cada harness
 
@@ -438,11 +438,11 @@ Lo que la tabla no promete:
   (`.agents/workflows` es una suposición). Las skills ya funcionan como
   `/<skill-name>` a través de `.agents/skills`, así que todas siguen invocables
   como comandos.
-- **Antigravity, rutas heredadas:** `.antigravity/rules.md` y
-  `.antigravity/skills` no figuran entre las ubicaciones documentadas por
-  Antigravity (las documentadas son `.agents/skills`, `AGENTS.md` / `GEMINI.md` y
-  `.agents/rules`). Se mantienen por compatibilidad; moverlas es una decisión
-  pendiente del usuario.
+- **Antigravity, sólo ubicaciones documentadas:** `.antigravity/rules.md` y
+  `.antigravity/skills` ya no se generan. Antigravity usa `.agents/skills`,
+  `.agents/agents/` y `.agents/AGENTS.md` (texto plano, sin frontmatter). Los
+  workspaces existentes no se migran: corré `papersmith init` en un workspace
+  nuevo.
 
 #### Matriz de soporte verificada
 
@@ -458,9 +458,9 @@ herramienta documenta, no lo que Papersmith genera (eso es la tabla de arriba).
 | Google Antigravity | supported: `.agents/skills` | supported pero deprecado (workflows); ruta `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (esquema de entrada unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
 | Claude Code | supported: `.claude/skills` | supported (formato legado): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith nunca lo escribe) | supported: `.mcp.json` (Papersmith no lo genera) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
 
-- `.antigravity/skills` y `.antigravity/rules.md`: unsupported (no source found);
-  las ubicaciones documentadas son `.agents/skills`, `AGENTS.md` / `GEMINI.md` y
-  `.agents/rules/`.
+- `.antigravity/skills` y `.antigravity/rules.md`: unsupported (no source found)
+  y ya no se generan; Antigravity usa `.agents/skills`, `.agents/agents/` y
+  `.agents/AGENTS.md`.
 - Antigravity deprecó los workflows a favor de skills (2026-11-01, fuente:
   <https://antigravity.google/docs/ide/workflows>).
 - Pi: los nombres de herramienta `mcp` y `mcpScript` no tienen fuente
@@ -484,7 +484,7 @@ proyectan desde `.claude/agents/` a `.opencode/agents/`, `.pi/agents/` y
 `.agents/agents/`. Para que tu harness
 liste las skills como comandos `/`, corré `npm run setup:harnesses` dentro del
 workspace: enlaza el árbol embarcado en `.claude/skills`, `.pi/skills`,
-`.opencode/skills`, `.antigravity/skills` y `.agents/skills`, igual de relativo e idempotente que
+`.opencode/skills` y `.agents/skills`, igual de relativo e idempotente que
 en el checkout. En este checkout, las proyecciones de comandos slash
 (`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`), las proyecciones de agentes
 (`.opencode/agents/`, `.pi/agents/`, `.agents/agents/`) y los guards de OpenCode y Pi
@@ -527,7 +527,7 @@ establecerlo. Las compuertas las abrís y cerrás vos.
 Tres reglas que ordenan todo lo demás:
 
 - **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
-  harness (`CLAUDE.md`, `PI.md`, `OPENCODE.md`, `.antigravity/rules.md`) listan
+  harness (`CLAUDE.md`, `PI.md`, `OPENCODE.md`, `.agents/AGENTS.md`) listan
   a los diecinueve enteros, y se generan: si querés cambiar un agente, se cambia
   ahí, no en la proyección.
 - **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa
@@ -3117,7 +3117,7 @@ papersmith-ai/
 - **Keyless y local-first**: la ingesta corre completamente offline y local, con
   Marker y `llama.cpp`.
 - **Proyección agnóstica de harness**: el árbol canónico `skills/` se proyecta a
-  `.claude/skills`, `.pi/skills`, `.opencode/skills`, `.antigravity/skills` y
+  `.claude/skills`, `.pi/skills`, `.opencode/skills` y
   `.agents/skills`.
 
 ---

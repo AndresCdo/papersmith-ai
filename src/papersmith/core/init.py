@@ -56,7 +56,6 @@ def _create_topology(root: Path) -> None:
         ".claude/agents",
         ".opencode",
         ".pi/gentle-ai",
-        ".antigravity",
         "guidance/paper-guide",
         "guidance/reference-papers",
         "guidance/data-paper",

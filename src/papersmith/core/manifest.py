@@ -177,13 +177,11 @@ def walk_kit_files(kit_root: Path) -> dict[str, str]:
 #: Each entry is an explicit ``(tool, relpath)`` pair: the owning tool is never
 #: derived from the path, because a harness may read its skills from a
 #: directory that does not carry its name (Antigravity documents
-#: ``.agents/skills``). Antigravity keeps the legacy ``.antigravity/skills``
-#: link next to it so no existing workspace loses a path it already uses.
+#: ``.agents/skills``).
 HARNESS_SKILL_LINKS: tuple[tuple[str, str], ...] = (
     ("claude", ".claude/skills"),
     ("pi", ".pi/skills"),
     ("opencode", ".opencode/skills"),
-    ("antigravity", ".antigravity/skills"),
     ("antigravity", ".agents/skills"),
 )
 

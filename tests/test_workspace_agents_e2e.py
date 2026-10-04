@@ -23,7 +23,7 @@ from papersmith.generators import check_generated
 
 from workspace_series import REPO_ROOT, make_workspace, new_tmp
 
-ROUTING_DOCS = ("CLAUDE.md", "OPENCODE.md", "PI.md", ".antigravity/rules.md")
+ROUTING_DOCS = ("CLAUDE.md", "OPENCODE.md", "PI.md", ".agents/AGENTS.md")
 SKILL_BINDING = re.compile(r"skills/([\w-]+)/SKILL\.md")
 
 
@@ -131,9 +131,9 @@ class AgentRoutingTests(unittest.TestCase):
         self.assertIn(".claude/commands/", claude)
         pi = (workspace / "PI.md").read_text(encoding="utf-8")
         self.assertIn(".pi/prompts/", pi)
-        antigravity = (workspace / ".antigravity/rules.md").read_text(encoding="utf-8")
+        antigravity = (workspace / ".agents/AGENTS.md").read_text(encoding="utf-8")
         self.assertIn(".agents/skills", antigravity)
         self.assertIn("no command files are generated", antigravity)
-        for doc_name, text in (("PI.md", pi), (".antigravity/rules.md", antigravity)):
+        for doc_name, text in (("PI.md", pi), (".agents/AGENTS.md", antigravity)):
             with self.subTest(doc=doc_name):
                 self.assertNotIn("no generated slash commands", text)

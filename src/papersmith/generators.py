@@ -32,7 +32,7 @@ TOOL_OUTPUTS = {
     "claude": ("CLAUDE.md",),
     "opencode": ("OPENCODE.md",),
     "pi": ("PI.md", ".pi/gentle-ai/persona.json"),
-    "antigravity": (".antigravity/rules.md",),
+    "antigravity": (".agents/AGENTS.md",),
 }
 
 #: Baseline marker for a managed path a run could not synchronize or remove.
@@ -646,7 +646,7 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
         "claude": ("CLAUDE.md", "claude.md.tpl"),
         "opencode": ("OPENCODE.md", "opencode.md.tpl"),
         "pi": ("PI.md", "pi.md.tpl"),
-        "antigravity": (".antigravity/rules.md", "antigravity-rules.md.tpl"),
+        "antigravity": (".agents/AGENTS.md", "antigravity-rules.md.tpl"),
     }
     commands: list[dict[str, str]] | None = None
     if any(tool in COMMAND_TOOLS for tool in tools):

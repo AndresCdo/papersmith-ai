@@ -38,13 +38,78 @@ source read, or only a third-party source).
 | Capability | Verdict | Location / schema | Source (2026-10-02) |
 | --- | --- | --- | --- |
 | Skills | supported | Workspace `.agents/skills/<name>/SKILL.md` (frontmatter `name`, `description`); legacy `.agent/skills` kept; global `~/.gemini/config/skills/`. Explicit invocation `/<skill-name>` | https://antigravity.google/docs/skills |
-| Skills at `.antigravity/skills` | unsupported (no source found) | Not mentioned on the skills or rules pages | https://antigravity.google/docs/skills ; https://antigravity.google/docs/rules |
+| Skills at `.antigravity/skills` | unsupported (no source found); no longer generated | Not mentioned on the skills or rules pages | https://antigravity.google/docs/skills ; https://antigravity.google/docs/rules |
 | Rules | supported | `AGENTS.md` or `GEMINI.md` (no frontmatter) in a directory or in `.agents/`; `.agents/rules/*.md` needs frontmatter `trigger` (`model_decision`, `always_on`, `glob`, `manual`); legacy `.agent/rules/` | https://antigravity.google/docs/rules |
-| Rules at `.antigravity/rules.md` | unsupported (no source found) | `.antigravity/` is not a recognized directory in the rules docs | https://antigravity.google/docs/rules |
+| Rules at `.antigravity/rules.md` | unsupported (no source found); no longer generated | `.antigravity/` is not a recognized directory in the rules docs | https://antigravity.google/docs/rules |
 | Workflows / commands | supported but deprecated | Slash-invoked Markdown files, max 12,000 characters, created via the Customizations panel (Global or Workspace). "Workflows are being deprecated in favor of Agent skills by November 1, 2026"; migration via `/migrate-workflows`. A file path for workspace workflows was not found in the pages read: `.agents/workflows` is `unverified` | https://antigravity.google/docs/ide/workflows |
 | Agents / subagents | supported | `.agents/agents/<name>.md` or `.agents/agents/<name>/agent.md`; frontmatter `name`, `description` (required), `tools`, `model`, `commandExecutionPolicy`; tool names such as `view_file`, `grep_search`, `run_command` | https://antigravity.google/docs/subagents |
 | Hooks / guards | supported | `.agents/hooks.json`; events `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`; `PreToolUse` `decision` may be `deny` (hard block) or `ask`. Exact hook input schema (how a bash command is exposed) was not read: `unverified` | https://antigravity.google/docs/hooks |
 | MCP / config | supported | `.agents/mcp_config.json` (workspace), `~/.gemini/config/mcp_config.json` (global) | https://antigravity.google/docs/mcp |
+
+### A0 raw-text check (2026-10-03)
+
+Method: raw Markdown, not a page summary. `curl -sL https://antigravity.google/docs/rules.md`
+returned `200 text/markdown` (9,939 bytes) on 2026-10-03; the rendered `/docs/rules`
+HTML is a JS app and was not used. pi-subagents source was read with `curl` on
+`raw.githubusercontent.com` at commit `ad56bf92fe01a2a5abd962938c619eb2a22ca47d`
+(2026-10-02). The 2026-10-02 rows above came from WebFetch summaries; each is
+re-judged below.
+
+| Q | Verdict | Verbatim quote (https://antigravity.google/docs/rules.md) |
+| --- | --- | --- |
+| (1) `AGENTS.md` inside `.agents/` is loaded | confirmed | "Whenever Antigravity reads or edits a file, it walks up the directory tree from that file's folder to the workspace root, loading rules at each level:" then "`<dir>/.agents/AGENTS.md` or `<dir>/.agents/GEMINI.md`" |
+| (2) always-on | confirmed | "`AGENTS.md` and `GEMINI.md` do not use frontmatter. Antigravity treats its entire content as plain Markdown and keeps it continuously active (`always_on`) for its directory scope." |
+| (3) precedence vs root `AGENTS.md` / `GEMINI.md` | documented limitation | "Rules are **cumulative** rather than replacement-based: Antigravity combines all discovered rules across global, workspace, and directory scopes into the prompt. When instructions conflict, more specific directory rules take priority." |
+| (T) rules-file frontmatter | confirmed | "Every `.md` file inside `rules/` must start with YAML frontmatter declaring a valid `trigger`." Key `trigger: model_decision # Required: always_on \| model_decision \| glob \| manual`; "**`always_on`** (always active in scope): Antigravity injects the full content into the system prompt on every turn." Missing or invalid trigger: "Antigravity silently discards the rule." Values are snake_case (camelCase `alwaysOn` is rejected). |
+
+Limitations recorded for (3) and for (1):
+
+- The docs define no order between `<dir>/AGENTS.md`, `<dir>/GEMINI.md` and
+  `<dir>/.agents/AGENTS.md` in the same directory: they are all loaded and
+  combined. Only "more specific directory rules take priority" is stated, so
+  two routing files at the same level are not ranked.
+- The per-surface sections (Antigravity 2.0, CLI, IDE) list workspace rules only
+  as "`AGENTS.md`, `GEMINI.md`, or `.agents/rules/*.md`" and omit
+  `.agents/AGENTS.md`. Only the "Directory-scoped rules" section lists
+  `<dir>/.agents/AGENTS.md`. The docs are therefore internally inconsistent on
+  whether `.agents/AGENTS.md` is read on every surface; the directory-scoped
+  section is the explicit statement and the one relied on.
+- `.agents/rules/` is scanned flat ("scans only immediate `.md` children"); a 24,000-byte
+  per-file limit and a 20,000-token aggregate `always_on` budget apply.
+- Known behavior: a user-authored `.agents/AGENTS.md` in a new workspace that
+  does not enable antigravity is reported as surplus by `audit --check-drift`.
+- Not verified: behaviour of an actual Antigravity install (docs only).
+
+(P) pi-subagents: source `src/agents/agents.ts` and `src/agents/frontmatter.ts`
+(commit above). Result: a non-agent `.md` under `.agents/` is NOT mis-parsed; it is
+read and silently skipped.
+
+- `agents.ts:2002` (inside `inspectAgentDefinitionDirectory`, from line 1955) collects every
+  `*.md` (not `*.chain.md`, not under `.agents/skills`) recursively under `.agents/`, so
+  `.agents/AGENTS.md`, `.agents/README.md` and `.agents/rules/*.md` are all candidates.
+  Legacy `.agents` is a read dir (`resolveNearestProjectAgentDirs`, `agents.ts:2409`).
+- `frontmatter.ts:69` returns an empty frontmatter when the file does not start with `---`
+  (no throw).
+- `agents.ts:2156`: `if (!frontmatter.name || !frontmatter.description) { continue; }` runs
+  before any validation and before the `catch` at `agents.ts:2348` that records a diagnostic.
+  A file without BOTH `name` and `description` is skipped with no error and no diagnostic.
+- Consequences: `.agents/AGENTS.md` (no frontmatter) is skipped. A rules file with
+  `trigger`/`globs` but no `name` is skipped. The existing `.agents/README.md` is
+  already scanned and skipped, so it is not affected. Caveat: a rules file that
+  carries BOTH `name` and `description` frontmatter would be registered as an agent;
+  generated rules files must not use a `name:` key.
+
+Re-judged earlier claims: the 2026-10-02 Rules row (`AGENTS.md`/`GEMINI.md` "in a
+directory or in `.agents/`", `.agents/rules/*.md` needs `trigger` with the four values)
+is confirmed by raw text, with the per-surface inconsistency above added. The
+pi-subagents row ("legacy `.agents/**/*.md`") is confirmed by source. No earlier
+claim is contradicted. The sentence "deliberately not created" in the note above is
+superseded by this outcome.
+
+Outcome (a): R (1 and 2 confirmed raw) and P (no mis-parse, for both `.agents/AGENTS.md`
+and `.agents/rules/*.md`) hold. The generated Antigravity rules/routing entrypoint is
+`.agents/AGENTS.md`, plain Markdown with NO frontmatter. Fallback (not chosen):
+`.agents/rules/papersmith.md` with `trigger: always_on` and no `name:` key.
 
 ## Claude Code
 
@@ -62,8 +127,8 @@ Compared against files read on 2026-10-02.
 
 | Repo claim | Where | Finding |
 | --- | --- | --- |
-| Antigravity skills are projected into `.antigravity/skills` | `.antigravity/rules.md`, `.agents/README.md` | Not in the Antigravity docs; docs use `.agents/skills` (legacy `.agent/skills`). Unsupported (no source found) |
-| `.antigravity/rules.md` is the Antigravity entrypoint | `.agents/README.md`, `.antigravity/rules.md` | Not in the docs. Documented entrypoints are `AGENTS.md`, `GEMINI.md`, `.agents/AGENTS.md`, `.agents/GEMINI.md`, `.agents/rules/*.md` |
+| Antigravity skills are projected into `.antigravity/skills` | `.antigravity/rules.md`, `.agents/README.md` | Not in the Antigravity docs; docs use `.agents/skills` (legacy `.agent/skills`). Unsupported (no source found). Resolved 2026-10-03: no longer generated |
+| `.antigravity/rules.md` is the Antigravity entrypoint | `.agents/README.md`, `.antigravity/rules.md` | Not in the docs. Documented entrypoints are `AGENTS.md`, `GEMINI.md`, `.agents/AGENTS.md`, `.agents/GEMINI.md`, `.agents/rules/*.md`. Resolved 2026-10-03: the repo now generates `.agents/AGENTS.md` |
 | "no command files are generated"; Antigravity invokes `/<name>` via `.agents/skills` | `.antigravity/rules.md` | Supported: the skills page documents `/<skill-name>` invocation |
 | Antigravity has no agents (feature problem list) | `odd/tasks/harness-parity.md` | Contradicted: `.agents/agents/*.md` is documented |
 | `.agents/workflows` exists and is deprecated 2026-11-01 | task context | Deprecation date confirmed; the `.agents/workflows` path is `unverified` |
@@ -84,9 +149,8 @@ Compared against files read on 2026-10-02.
 - T4 (Antigravity): may generate `.agents/agents/<name>.md` (`name`,
   `description`, `tools` with Antigravity tool names, `model`). Workflows are
   deprecated and their file path is unverified: do not generate workflow files.
-  Skills already work via `/<skill-name>`. Docs wording about
-  `.antigravity/skills` and `.antigravity/rules.md` has no source and must be
-  stated as unsupported or legacy; `AGENTS.md` / `.agents/rules/` are the
+  Skills already work via `/<skill-name>`. `.antigravity/skills` and
+  `.antigravity/rules.md` have no source and are no longer generated; `AGENTS.md` / `.agents/rules/` are the
   documented rules locations.
 - T5 (guards): OpenCode plugin guard is verified. Pi guard is possible through a
   `.pi/extensions/` `tool_call` handler returning `{ block: true }` (extension
@@ -123,9 +187,9 @@ hooks page) and does not define each `commandExecutionPolicy` value. `off` is
 used for agents without `run_command` as the most restrictive reading of
 "auto-execution policy" and is secondary to the `tools` allow-list; agents with
 `run_command` get the documented default `sandbox`. The value is quoted because
-an unquoted `off` is a YAML 1.1 boolean. Decision for the user: `.antigravity/rules.md`
-has no documented support; `AGENTS.md`/`GEMINI.md`/`.agents/rules/` are the
-documented entrypoints and were deliberately not created.
+an unquoted `off` is a YAML 1.1 boolean. Settled outcome (2026-10-03, see the A0
+raw-text check): `.antigravity/*` is no longer generated; Antigravity uses
+`.agents/skills`, `.agents/agents/` and `.agents/AGENTS.md`.
 
 ## T5 outcome (guards, 2026-10-02)
 

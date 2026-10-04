@@ -106,7 +106,7 @@ class GeneratedWorkspaceTests(unittest.TestCase):
             "OPENCODE.md",
             "PI.md",
             ".pi/gentle-ai/persona.json",
-            ".antigravity/rules.md",
+            ".agents/AGENTS.md",
             "README.md",
             "package.json",
             "skills/paper-writing/SKILL.md",
@@ -159,7 +159,6 @@ class HarnessProjectionTests(unittest.TestCase):
         ".claude/skills",
         ".pi/skills",
         ".opencode/skills",
-        ".antigravity/skills",
         ".agents/skills",
     )
 
@@ -224,8 +223,7 @@ class HarnessCommandProjectionTests(unittest.TestCase):
         # Antigravity invokes `/name` from the skills link, so it gets no
         # command files of its own; Pi reads `.pi/prompts` (asserted above).
         workspace = make_workspace(new_tmp(self))
-        self.assertFalse((workspace / ".antigravity/commands").exists())
-        self.assertFalse((workspace / ".antigravity/prompts").exists())
+        self.assertFalse((workspace / ".antigravity").exists())
         self.assertFalse((workspace / ".agents/commands").exists())
         self.assertFalse((workspace / ".pi/commands").exists())
 
@@ -291,7 +289,7 @@ class RenderedSetLifecycleTests(unittest.TestCase):
     """
 
     KIT_COMMAND_NAMES = HarnessCommandProjectionTests.COMMAND_NAMES
-    STATIC_ENTRYPOINTS = ("OPENCODE.md", "PI.md", ".antigravity/rules.md")
+    STATIC_ENTRYPOINTS = ("OPENCODE.md", "PI.md", ".agents/AGENTS.md")
 
     @staticmethod
     def _init_subset(base: Path, tools: str) -> Path:
@@ -317,6 +315,7 @@ class RenderedSetLifecycleTests(unittest.TestCase):
         """Criterion 4: pre-Change-B subset workspaces are reported, never damaged."""
         workspace = self._init_subset(new_tmp(self), "claude")
         for relpath in self.STATIC_ENTRYPOINTS:
+            (workspace / relpath).parent.mkdir(parents=True, exist_ok=True)
             (workspace / relpath).write_text("pre-Change-B entrypoint\n", encoding="utf-8")
 
         rc, _, _ = capture(["upgrade", str(workspace)])

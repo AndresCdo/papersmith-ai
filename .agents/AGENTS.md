@@ -12,7 +12,7 @@ to the canonical sources of truth so a single set of docs drives every harness.
 ## Skills
 
 Skills live once at the repository-root `skills/` tree and are projected into
-`.antigravity/skills` by `npm run setup:harnesses`. Read each skill's `SKILL.md`
+`.agents/skills` by `npm run setup:harnesses`. Read each skill's `SKILL.md`
 before invoking it; it is the source of truth for that capability.
 
 ## Invoking skills
@@ -29,7 +29,6 @@ source definition, never the generated file.
 
 ## Note on this file's location
 
-`.antigravity/rules.md` and `.antigravity/skills` are not among the locations
-Antigravity documents (`.agents/skills`, `AGENTS.md` / `GEMINI.md`,
-`.agents/rules`). They are kept for compatibility; see
-`docs/harness-support-matrix.md`.
+This file is Antigravity's rules entrypoint (`.agents/AGENTS.md`, documented as a
+directory-scoped rules file). `.antigravity/rules.md` and `.antigravity/skills`
+are no longer generated; see `docs/harness-support-matrix.md`.

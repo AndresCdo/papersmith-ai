@@ -15,12 +15,10 @@ That command links `.agents/skills -> ../skills`, the one canonical tree every
 harness reads. Antigravity invokes each skill as `/name`. The link is a relative
 symlink rebuilt on demand rather than another copy of the skills.
 
-`.antigravity/skills` is a second link to the same tree, and
-`.antigravity/rules.md` is the generated routing document. Neither location
-appears in Antigravity's documentation (the documented ones are `.agents/skills`,
-`AGENTS.md` / `GEMINI.md` and `.agents/rules`); they are kept for compatibility
-until the user decides whether to move them. See
-`docs/harness-support-matrix.md`. No guard is generated for Antigravity until its
+`.agents/AGENTS.md` is the generated routing document. `.antigravity/skills`
+and `.antigravity/rules.md` are no longer generated: Antigravity uses only its
+documented locations (`.agents/skills`, `.agents/agents/`, `.agents/AGENTS.md`).
+See `docs/harness-support-matrix.md`. No guard is generated for Antigravity until its
 hook input schema is sourced (`docs/guard-hooks.md`).
 
 This file exists so the directory itself travels with the repository.

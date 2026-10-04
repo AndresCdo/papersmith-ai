@@ -23,7 +23,6 @@ skills/paper-ingestion/.venv/
 .claude/skills
 .pi/skills
 .opencode/skills
-.antigravity/skills
 .agents/skills
 
 # --- Contenido específico de cada usuario ---

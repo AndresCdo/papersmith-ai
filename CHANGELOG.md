@@ -67,9 +67,11 @@ Harness parity: skills, commands, agents and guards in each harness, wired by
 - **The health check is per enabled tool.** It requires each harness link and
   commands directory only for the tools the workspace enables, instead of
   reporting drift for every known harness.
-- `.antigravity/skills` and `.antigravity/rules.md` are kept for compatibility;
-  neither is in Antigravity's documented locations, and moving them is a pending
-  user decision.
+- **Antigravity uses only documented locations.** Skills at `.agents/skills`,
+  agents at `.agents/agents/` and the rules entrypoint at `.agents/AGENTS.md`.
+  `.antigravity/rules.md` and `.antigravity/skills` are no longer generated.
+  Pre-1.0 breaking change: existing workspaces are not migrated; re-run
+  `papersmith init` in a fresh workspace.
 - `upgrade` also removes stale `.pi/agents` files whose source disappeared.
 - Pi agents need the third-party `pi-subagents` package; Pi core has no
   sub-agents.

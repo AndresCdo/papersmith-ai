@@ -5,11 +5,11 @@
 # This asserts the specific files and links that make that true, which
 # neither cli-paper-smoke.sh nor cli-paper-live-smoke.sh checks:
 #
-#   1. .claude/skills, .opencode/skills, .pi/skills, .antigravity/skills and
+#   1. .claude/skills, .opencode/skills, .pi/skills and
 #      .agents/skills are relative symlinks that resolve to the workspace's own skills/.
 #   2. Every .claude/agents/*.md's referenced .claude/skills/<name>/SKILL.md
 #      resolves both canonically and through every harness's own symlink.
-#   3. The agent roster in CLAUDE.md/OPENCODE.md/PI.md/.antigravity/rules.md
+#   3. The agent roster in CLAUDE.md/OPENCODE.md/PI.md/.agents/AGENTS.md
 #      matches the real .claude/agents/*.md files.
 #   4. .claude/commands/, .opencode/commands/ and .pi/prompts/ list the same
 #      filenames as each other and as skills/'s top-level SKILL.md directories.
@@ -38,7 +38,7 @@ CANONICAL="$WS/skills"
 CANONICAL_RESOLVED="$(readlink -f "$CANONICAL")"
 
 # Check 1: harness skill symlinks exist, are relative, and resolve to skills/.
-for link in .claude/skills .opencode/skills .pi/skills .antigravity/skills .agents/skills; do
+for link in .claude/skills .opencode/skills .pi/skills .agents/skills; do
   path="$WS/$link"
   test -L "$path" || fail 1 "$link is not a symlink"
   target="$(readlink "$path")"
@@ -58,7 +58,7 @@ for agent in "$WS"/.claude/agents/*.md; do
     || fail 2 "could not extract skill name from $(basename "$agent"): $line"
   test -f "$WS/skills/$name/SKILL.md" \
     || fail 2 "skills/$name/SKILL.md missing (referenced by $(basename "$agent"))"
-  for prefix in .opencode .pi .antigravity .agents; do
+  for prefix in .opencode .pi .agents; do
     test -f "$WS/$prefix/skills/$name/SKILL.md" \
       || fail 2 "$prefix/skills/$name/SKILL.md missing (referenced by $(basename "$agent"))"
   done
@@ -66,7 +66,7 @@ done
 
 # Check 3: agent roster parity across the four generated harness docs.
 agent_names="$(cd "$WS/.claude/agents" && ls -- *.md | sed 's/\.md$//' | sort)"
-for doc in CLAUDE.md OPENCODE.md PI.md .antigravity/rules.md; do
+for doc in CLAUDE.md OPENCODE.md PI.md .agents/AGENTS.md; do
   doc_names="$(grep -oE '^- `[^`]+`' "$WS/$doc" | sed -E 's/^- `([^`]+)`$/\1/' | sort || true)"
   [[ "$doc_names" == "$agent_names" ]] \
     || fail 3 "$doc agent roster does not match .claude/agents/*.md"
