@@ -18,8 +18,8 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - [x] S7 T2b-2 Selection and detail panel
 - [x] S8 T3a History core
 - [x] S9 T3b History wiring and Host allow-list
-- [ ] S10 T4 History UI
-- [ ] S11 T5 Docs, CI and closure
+- [x] S10 T4 History UI
+- [x] S11 T5 Docs, CI and closure
 - [ ] Judgment Day on the implementation: APPROVED
 
 ## Evidence
@@ -60,6 +60,17 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - Route: delegated writer; one commit `feat(command-center): record history live and enforce a Host allow-list`.
 - RED: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_server_history.py -q` -> 25 failed (`create_app() got an unexpected keyword argument 'allowed_hosts'` / `'history_store'`, `KeyError: '/api/history'`, `no attribute 'build_allowed_hosts'`, `no attribute 'history'`, `--allowed-host` unknown to the parser). GREEN after the server wiring: file 25 passed; `pytest tests/test_command_center_*.py` -> 134 passed, 12 subtests passed.
 - Wiring: `create_app(..., history_store=None, allowed_hosts=None)`; guarded baseline read (None on failure, the first successful state becomes the baseline without entries); `health_lock` around `measure_health`, health diffs recorded inside it on every measured change (TTL and forced); on_flush records history after the `state_update` publish in its own try/except; smoke start/done (exit code) recorded; `GET /api/history` (422 on invalid element/kind); SSE `history_append`; `HostAllowListMiddleware` (421 with an explanatory body, case-insensitive, missing Host rejected, None disables) built from `build_allowed_hosts` in main() for loopback binds plus repeatable `--allowed-host`. `origin_is_same` unchanged; vite.config.ts keeps `changeOrigin: false` and now documents `--allowed-host localhost:5173` for `npm run dev`.
+
+### S10 T4 History UI
+- Route: delegated writer; commits `feat(ui): add a History tab and a per-element history section` (2135a14) and `feat(scripts): cover the History tab in the visual checker` (766ae5e). Authored count of the UI commit: 804 added / 8 deleted (about 400 are tests; bundle excluded); above the ~400 heuristic because the state reducer, hook paging, tab and panel section are one behavior; recorded, not shrunk.
+- RED: `npx vitest run src/lib/history.test.ts` -> failed to load (`./history` missing); `npx vitest run src/hooks` -> 8 failed (no `history`); `npx vitest run src/components` -> HistoryView.test.tsx `Failed to resolve import "./HistoryView"` and 2 panel tests `Unable to find ... role "region" and name "History"`; checker helper test failed against the old tab list. GREEN: `npx vitest run` -> 15 files, 123 tests pass; typecheck and build pass (bundle index-CDlmewCj.js / index-B514WzY_.css); `node --test tests/command-center-visual-check.test.mjs` -> 13 pass.
+- Design: `lib/history.ts` pure reducers (applyPage with reset, sticky gap, dedup by id; applyAppend only when seq = last+1 same boot, else catch-up; filterEntries; groupForDisplay newest first with word-count runs of one section grouped). Hook pages on mount, on every EventSource `open` and on a seq jump (overlapping requests collapse into one extra pass), encodeURIComponent on params, any non-OK answer (422 included) becomes an inline `historyError`. The element filter is client side, so a 422 can only come from a malformed cursor.
+- Real browser (server 8099, live probe via sections/99-tmp-history-probe.md create/edit/delete, `git status` clean): `node scripts/command-center-visual-check.mjs --out <shots>/s10 --full-page --click-check --drag-check` -> exit 0, 10 screenshots, no disallowed console errors, drag and click checks ok at both viewports.
+- Screenshots: /tmp/claude-1000/-home-carlos-Documents-projects-papersmith-ai/69ffaf9c-7548-46f0-b18b-99d4f953cd48/scratchpad/shots/s10/ (history-1280x800.png, click-gate-1280x800.png shows the panel History section).
+
+### S11 T5 Docs, CI and closure
+- Commit `docs(ui): document the interactive dashboard and run the UI tests in CI` (aea6ffb): workflow (`npm ci --prefix ui`, `npm test --prefix ui`, cache-dependency-path for both lockfiles), README `papersmith ui` section (Spanish, matching the file), CHANGELOG Unreleased entry. 85 added lines.
+- Closure results (all observed): (1) `pytest tests/test_command_center_*.py -q` -> 134 passed, 12 subtests; (2) full suite `pytest -n 8 --dist loadfile -q` (the `test:py:par` runner) -> 5590 passed, 8 skipped, 1 failed (`test_antigravity_agent_projection_is_scoped_to_antigravity`, `SourceError: kit manifest names a missing source file ...index-B514WzY_.css`): a race, because `cd ui && npm run build` (emptyOutDir) ran while the suite was copying the kit; the re-run of that test passes (2 passed), so it is neither feature-caused nor pre-existing, and no base-worktree check was needed; (3) root `npm test` -> 676 tests, 676 pass, 0 fail; (4) `cd ui && npm run typecheck && npm test && npm run build` -> 15 files, 123 tests pass, `git status --porcelain skills/_core/command_center/static` empty; (5) `bash scripts/command-center-smoke.sh` -> `command-center smoke: ok`; (6) build-kit (241 files), `papersmith init <scratch>/freshws --no-npm --no-env`, dashboard from the workspace's own kit on port 8111, checker `--url http://127.0.0.1:8111/ --full-page --click-check --drag-check` -> exit 0, 10 screenshots, no console errors; server stopped. Screenshots: .../scratchpad/shots/s11-fresh/ (pipeline, history and the rest, light theme, populated).
 
 ---
 
