@@ -206,12 +206,19 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         baseline = None
     state_baseline = {"value": baseline}
     state_lock = threading.Lock()
+    # record() runs on the watcher thread, request threads (measure_health) and
+    # the smoke path. Holding this lock across add + publish keeps the frames in
+    # seq order. Lock order: health_lock -> history_lock; history_lock is a leaf
+    # (publish only schedules onto the loop) and is never held while taking
+    # health_lock or state_lock.
+    history_lock = threading.Lock()
 
     def record(changes: list[history.Change]) -> None:
         for change in changes:
-            entry = store.add(change.kind, change.element_id, change.summary,
-                              change.before, change.after)
-            bus.publish("history_append", entry.to_dict())
+            with history_lock:
+                entry = store.add(change.kind, change.element_id, change.summary,
+                                  change.before, change.after)
+                bus.publish("history_append", entry.to_dict())
 
     def measure_health(force: bool = False) -> dict[str, Any]:
         with health_lock:

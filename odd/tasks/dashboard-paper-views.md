@@ -19,7 +19,7 @@ Route: delegated writer per slice (one writer at a time).
 ## Checklist
 - [x] F1 dpv-01 Memoise dagre layout (commit 16240fe on feat/dpv-01-layout-memo)
 - [x] F2 dpv-02 Narrow-width panel (bottom sheet) (commit 595b646 on feat/dpv-02-panel-narrow)
-- [ ] F3 dpv-03 History publish ordering test + fix
+- [x] F3 dpv-03 History publish ordering test + fix (commit 81d2243 on feat/dpv-03-history-ordering)
 - [ ] F4 dpv-04 Polish (server-side _percent, mutating cue outline)
 - [ ] P1 dpv-05 Paper preview backend
 - [ ] P2 dpv-06 Preview tab UI
@@ -47,6 +47,12 @@ Route: delegated writer per slice (one writer at a time).
 - GREEN: `cd ui && npx vitest run`: 15 files, 139 tests passed. `cd ui && npm run typecheck`: clean. `cd ui && npm run build`: ok, bundle index-CndjmfRD.js + index-CzDAykxE.css committed, static dir clean. `npm run test:node`: 677 pass, 0 fail.
 - Real browser: own server from this checkout on 127.0.0.1:8123 (stopped afterwards): `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/f2 --full-page --click-check --drag-check --url http://127.0.0.1:8123/` -> exit 0, 15 screenshots, no disallowed console errors, click/keyboard/drag checks ok at 1280x800, 1600x1000 and 700x900. click-stage-700x900.png shows a full-width bottom sheet with the diagram visible above it.
 - Authored change: 47 insertions, 2 deletions (ui/src, scripts, tests, README; excluding bundle). Review tier: not assessed (local commit only).
+
+### F3 (feat/dpv-03-history-ordering, commit 81d2243, stacked on feat/dpv-02-panel-narrow)
+- Route: delegated writer. `record()` is not exposed, so the test drives the real path through `app.state.watcher.on_flush` from 8 threads x 50 flushes (barrier, patched `get_workspace_state` returning a unique word count so each flush yields one entry, `store.add` wrapped with a 0.5 ms sleep to widen the add -> publish window, recording fake `bus.publish`). Fix: one leaf `history_lock` in `create_app` held across `store.add` + `bus.publish` in `record()`; lock order health_lock -> history_lock, documented in a comment; state_update publish untouched.
+- RED: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_history_order.py -q`: 1 failed; "history_append frames were published out of order ... assert [1, 4, 2, 3, 6, 5, ...] == [1, 2, 3, 4, 5, 6, ...]".
+- GREEN: same command: 1 passed (3 repeat runs, all passed). `pytest tests/test_command_center_*.py -q`: 139 passed, 12 subtests passed. `npm run test:node`: 677 pass, 0 fail. Bundle untouched, not rebuilt.
+- Authored change: server.py +10/-3, new test 77 lines. Review tier: not assessed (local commit only).
 
 ---
 
