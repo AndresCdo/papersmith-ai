@@ -29,7 +29,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import history, paper_preview
+from . import atlas, history, paper_preview
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -48,6 +48,18 @@ _PAPER_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
     "Cache-Control": "no-store",
+}
+
+#: Headers on the atlas view: the generated HTML runs scripts, so it is served
+#: sandboxed (opaque origin, no network, no outside resources).
+_ATLAS_VIEW_HEADERS = {
+    "Content-Security-Policy": ("sandbox allow-scripts; default-src 'none'; "
+                                "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                                "img-src data:"),
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "no-referrer",
 }
 
 _PLACEHOLDER_HTML = """<!doctype html>
@@ -353,6 +365,24 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # would stop browser PDF viewers from rendering the document.
         return Response(data, media_type=content_type, headers={
             **_PAPER_HEADERS, "Content-Disposition": "inline"})
+
+    @app.get("/api/atlas")
+    def api_atlas() -> JSONResponse:
+        # Read-only. Validation loads the workspace's own check_atlas.py from one
+        # fixed path (workspace Python runs in this process; see atlas.py).
+        return JSONResponse(atlas.build_atlas(root_path), headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/atlas/view")
+    def api_atlas_view() -> Response:
+        status, data = atlas.read_html(root_path)
+        if status == "too_large":
+            return JSONResponse({"detail": "atlas.html exceeds the 2 MiB limit"},
+                                status_code=413, headers=dict(_PAPER_HEADERS))
+        if status != "ok" or data is None:
+            return JSONResponse({"detail": "atlas.html not found"}, status_code=404,
+                                headers=dict(_PAPER_HEADERS))
+        return Response(data, media_type="text/html; charset=utf-8",
+                        headers=dict(_ATLAS_VIEW_HEADERS))
 
     @app.get("/api/events")
     async def api_events(request: Request) -> StreamingResponse:

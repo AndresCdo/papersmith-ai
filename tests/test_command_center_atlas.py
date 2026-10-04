@@ -8,6 +8,7 @@ so fixture workspaces copy the real script from this repository.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -15,10 +16,31 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from skills._core.command_center import atlas
+from skills._core.command_center import atlas, server
 
 REPO = Path(__file__).resolve().parent.parent
 CHECKER = REPO / "skills" / "plausibility" / "scripts" / "check_atlas.py"
+
+VIEW_HEADERS = {
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": ("sandbox allow-scripts; default-src 'none'; "
+                                "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                                "img-src data:"),
+    "x-content-type-options": "nosniff",
+    "cache-control": "no-store",
+    "x-frame-options": "SAMEORIGIN",
+    "referrer-policy": "no-referrer",
+}
+
+
+def _routes(app) -> dict:
+    return {r.path: r.endpoint for r in app.routes
+            if hasattr(r, "path") and hasattr(r, "endpoint")}
+
+
+def _json(response) -> dict:
+    return json.loads(bytes(response.body).decode("utf-8"))
+
 
 def _planet(pid: str, slot: str, orbit: int, label: str | None = None) -> dict:
     return {"id": pid, "slot": slot, "orbit": orbit, "label": label or pid,
@@ -349,6 +371,142 @@ class ValidationTests(_Workspace):
 
         assert v["status"] == "unavailable"
         assert not marker.exists()
+
+    def test_only_the_fixed_workspace_path_is_ever_executed(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        marker = Path(outside.name) / "ran"
+        evil = Path(outside.name) / "check_atlas.py"
+        evil.write_text(f"from pathlib import Path\nPath({str(marker)!r}).write_text('x')\n"
+                        "def _failures(a):\n    return []\n")
+        app = server.create_app(root)
+        for query in (b"checker=" + str(evil).encode(), b"path=" + str(evil).encode(),
+                      b"root=" + outside.name.encode(), b"name=../../check_atlas.py"):
+            for path in ("/api/atlas", "/api/atlas/view"):
+                asyncio.run(_call(app, path, query))
+
+        assert not marker.exists()
+
+
+class ViewRouteTests(_Workspace):
+    def view(self, root: Path):
+        return _routes(server.create_app(root))["/api/atlas/view"]()
+
+    def test_serves_the_bytes_with_fixed_headers(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root, html="<!doctype html><p>café</p>")
+        response = self.view(root)
+
+        assert response.status_code == 200
+        assert bytes(response.body) == "<!doctype html><p>café</p>".encode("utf-8")
+        got = {k: v for k, v in response.headers.items() if k in VIEW_HEADERS}
+        assert got == VIEW_HEADERS
+
+    def test_absent_is_404(self) -> None:
+        assert self.view(self.new_workspace()).status_code == 404
+
+    def test_unsafe_symlink_is_404(self) -> None:
+        root = self.new_workspace()
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        secret = Path(outside.name) / "atlas.html"
+        secret.write_text("secret")
+        (root / "sota-pool" / "atlas.html").symlink_to(secret)
+        response = self.view(root)
+
+        assert response.status_code == 404 and b"secret" not in bytes(response.body)
+
+    def test_directory_is_404(self) -> None:
+        root = self.new_workspace()
+        (root / "sota-pool" / "atlas.html").mkdir()
+
+        assert self.view(root).status_code == 404
+
+    def test_over_the_cap_is_413(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "sota-pool/atlas.html", b"x" * (atlas.HTML_MAX_BYTES + 1))
+
+        assert self.view(root).status_code == 413
+
+    def test_exactly_at_the_cap_is_served(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "sota-pool/atlas.html", b"x" * atlas.HTML_MAX_BYTES)
+
+        assert self.view(root).status_code == 200
+
+
+class SummaryRouteTests(_Workspace):
+    def test_route_returns_json_with_safety_headers(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        response = _routes(server.create_app(root))["/api/atlas"]()
+        data = _json(response)
+
+        assert set(data) == {"json", "html", "stale", "validation", "summary"}
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "SAMEORIGIN"
+        assert response.headers["cache-control"] == "no-store"
+
+
+async def _call(app, path: str, query: bytes = b"", host: bytes | None = None) -> tuple[int, bytes]:
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+        "method": "GET", "scheme": "http", "path": path, "raw_path": path.encode(),
+        "query_string": query, "root_path": "",
+        "headers": [(b"host", host)] if host else [],
+        "server": ("127.0.0.1", 8099), "client": ("127.0.0.1", 50000),
+    }
+    messages: list[dict] = []
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict) -> None:
+        messages.append(message)
+
+    await app(scope, receive, send)
+    status = next(m["status"] for m in messages if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
+    return status, body
+
+
+class HostAllowListTests(_Workspace):
+    def test_both_routes_get_421_on_a_foreign_host_and_work_on_an_allowed_one(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        app = server.create_app(root, allowed_hosts=frozenset({"127.0.0.1:8099"}))
+        for path in ("/api/atlas", "/api/atlas/view"):
+            assert asyncio.run(_call(app, path, b"", b"evil.example:8099"))[0] == 421, path
+            assert asyncio.run(_call(app, path, b"", None))[0] == 421, path
+            assert asyncio.run(_call(app, path, b"", b"127.0.0.1:8099"))[0] == 200, path
+
+    def test_view_over_asgi_maps_status_codes(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+
+        assert asyncio.run(_call(app, "/api/atlas/view"))[0] == 404
+        self.write(root, "sota-pool/atlas.html", b"x" * (atlas.HTML_MAX_BYTES + 1))
+        assert asyncio.run(_call(app, "/api/atlas/view"))[0] == 413
+
+
+class ReadOnlyInvariantTests(_Workspace):
+    def test_no_route_changes_the_workspace_tree_or_creates_bytecode(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        app = server.create_app(root)
+        routes = _routes(app)
+        before = self.snapshot(root)
+
+        routes["/api/atlas"]()
+        routes["/api/atlas/view"]()
+        asyncio.run(_call(app, "/api/atlas"))
+        asyncio.run(_call(app, "/api/atlas/view"))
+
+        assert self.snapshot(root) == before
+        assert not list(root.rglob("__pycache__"))
+        assert not list(root.rglob("*.pyc"))
 
 
 if __name__ == "__main__":
