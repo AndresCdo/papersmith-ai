@@ -31,7 +31,7 @@ source read, or only a third-party source).
 | Tool-call guard for `bash` | supported (mechanism) | Handler inspects `event.toolName` / input and returns `{ block: true }`. The docs show an approval example, not a bash-specific one | extensions.md (above) |
 | MCP / config | supported | `.pi/mcp.json` (built-in MCP extension `builtin:mcp`), `.pi/settings.json`; project config loads only after trust | https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md ; https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md |
 | Built-in tool names | supported | `read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls` | https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/settings.md |
-| Tool names `mcp`, `mcpScript` | unsupported (no source found) | Docs name MCP tools `mcp__<server>__...` and a `codemode` extension; no tool named `mcp` or `mcpScript` found | pi docs above |
+| Tool names `mcp`, `mcpScript` | unsupported (no source found) | Docs name MCP tools `mcp__<server>__...` and a `codemode` extension; no tool named `mcp` or `mcpScript` found. The `.pi/agents` projection no longer emits them: `WebSearch`/`WebFetch` are skipped with a note, and the separate `mcp:` frontmatter field is not generated | pi docs above |
 
 ## Google Antigravity
 
@@ -135,7 +135,7 @@ Compared against files read on 2026-10-02.
 | Pi `.pi/skills` symlink | `.pi/README.md`, `PI.md` | Supported by the configuration page; the skills page lists only `.agents/skills`, which Pi also reads |
 | Pi prompts in `.pi/prompts/<name>.md` with `$ARGUMENTS` | `.pi/README.md`, `PI.md` | Supported |
 | `.pi/agents` agent projection | `generators.py` `PI_TOOL_MAP`, `.pi/agents` | Core Pi has no sub-agents; only the third-party `pi-subagents` package documents `.pi/agents/**/*.md`. The projection works only when that package is installed |
-| `PI_TOOL_MAP`: `websearch` to `mcpScript`, `webfetch` to `mcp` | `src/papersmith/generators.py` | Unsupported (no source found): Pi docs name no tool `mcp` or `mcpScript`. `read`, `bash`, `edit`, `write`, `grep`, `find` are supported built-ins |
+| `PI_TOOL_MAP`: former `websearch` to `mcpScript`, `webfetch` to `mcp` entries | `src/papersmith/generators.py` | Removed: Pi docs name no tool `mcp` or `mcpScript`. `PI_SKIPPED_TOOLS` now skips the web tools with a note. `read`, `bash`, `edit`, `write`, `grep`, `find` are supported built-ins |
 | OpenCode plugin at `.opencode/plugins/`, thrown error blocks a bash call | `OPENCODE.md`, `refuse-offpath-push.js` | Supported (`tool.execute.before` throw) |
 | OpenCode commands at `.opencode/commands/` with `$ARGUMENTS` | `OPENCODE.md` | Supported |
 | OpenCode skills at `.opencode/skills` | `OPENCODE.md` | Supported |
@@ -160,7 +160,7 @@ Compared against files read on 2026-10-02.
   documented opt-in snippet; this repo does not write `.claude/settings.json`.
 - Pi agents: stay unsupported in core. Keep `.pi/agents` documented as
   requiring the third-party `pi-subagents` package; the `mcp`/`mcpScript` mapping
-  has no source.
+  had no source and was removed (web tools are skipped with a note).
 
 ## Tooling notes
 
@@ -183,7 +183,8 @@ replace tools; Bash to `run_command`; WebSearch to `search_web`; WebFetch to
 `read_url_content`. `model` is omitted (inherits).
 
 Caveats: the subagents page does not enumerate tools (the list comes from the
-hooks page) and does not define each `commandExecutionPolicy` value. `off` is
+hooks page) and does not define each `commandExecutionPolicy` value (the semantics of
+`off`/`auto`/`eager`/`sandbox` are undocumented). `off` is
 used for agents without `run_command` as the most restrictive reading of
 "auto-execution policy" and is secondary to the `tools` allow-list; agents with
 `run_command` get the documented default `sandbox`. The value is quoted because
