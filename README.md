@@ -3182,6 +3182,23 @@ resuelve la ruta, exige que quede dentro del workspace, un archivo regular y
 comprueba el tamaño antes de leer. No hay campo de autor: nunca se registra. La
 protección `Host` (421) cubre la ruta solo en un bind a loopback.
 
+**Pestaña Decisions.** `#decisions` consume `/api/decisions` al abrirse y con el
+botón *Refresh* (las fuentes no se vigilan; sin solapar peticiones; error en
+línea con *Retry*, conserva los datos anteriores). Muestra los eventos tal como
+llegan (fechados de más nuevo a más antiguo; después, bajo el subtítulo
+*Undated*, los recibos sin marca de tiempo). Cada fila lleva la fecha en texto
+UTC (`AAAA-MM-DD HH:MM:SS UTC`), una etiqueta de fuente (declarations, proposal,
+experiment, remote ledger), el tipo, el resumen y la ruta `ref` como texto (no
+es un enlace). Las filas con `verified: false` muestran *unverified* con el
+título "Read from the lifecycle files without hash or consistency checks." y las
+que traen `note` la muestran en gris (las declaraciones solo guardan el valor
+actual). Arriba, un chip de estado por fuente (`ok`, `absent`, `unreadable`,
+`too_large`, con su conteo, `detail` y la marca *truncated*), casillas para
+filtrar por fuente en el cliente y, si la respuesta se truncó, "Showing N of
+total". Todo el texto se escapa. No hay enlace a la pestaña Sections: la
+pestaña no tiene anclas por elemento y el id de una declaración no permite
+derivar la sección sin heurísticas, así que se omite a propósito.
+
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
 dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:
