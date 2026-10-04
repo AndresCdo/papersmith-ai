@@ -11,7 +11,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 ## Checklist (route per task: delegated writer unless noted)
 - [x] S1 T0a UI test infrastructure
 - [x] S2 T0b Visual checker + data-ready
-- [ ] S3 T1 Light theme, literal replacement, load fix
+- [x] S3 T1 Light theme, literal replacement, load fix
 - [ ] S4 T1-layout fixes from the checker
 - [ ] S5 T2a Routing and graph model
 - [ ] S6 T2b-1 SectionDetail extraction
@@ -173,3 +173,12 @@ History persistence across restarts; extractor read-only contract changes; brows
 - Finding fixed in this slice: the first live run failed on `GET /favicon.ico` 404 (a real console error); `ui/index.html` now declares `<link rel="icon" href="data:," />` instead of widening the console allow-list.
 - Screenshots: /tmp/claude-1000/-home-carlos-Documents-projects-papersmith-ai/69ffaf9c-7548-46f0-b18b-99d4f953cd48/scratchpad/shots/s2/ (pipeline|health|sections|artifacts at 1280x800 and 1600x1000).
 - Bundle rebuilt: index-CUXqyhFi.js -> index-oanq_LUB.js (CSS unchanged).
+
+### S3 T1 Light theme, literal replacement, load fix
+- Route: delegated writer; two commits: `fix(ui): load the dashboard state and health independently` (4a1798a) and `feat(ui): switch the dashboard to a light theme` (theme + literals + tests + bundle).
+- Load fix RED: `cd ui && npx vitest run src/hooks` -> 4 failed (state waited for health: `result.current.state` null while health pending; initial stale state overwrote the live state_update: `expected { marker: 'stale-initial' } to deeply equal { marker: 'live' }`). GREEN after independent fetches plus a `liveStateRef` guard: 7 tests pass overall.
+- Theme RED: `npx vitest run src/styles.test.ts` (no-literal guard + D1 contrast pairs, alpha-composited, helpers in src/test/color.ts) -> 6 failed: guard found 37 colour literals outside `:root`, the extra tokens were missing, `--border-strong` vs panel 1.64:1. GREEN after the light palette, 13 new tokens (--graph-bg, --node-bg, --edge, --edge-label-bg, --overlay, --shadow, --shadow-drawer, --terminal-bg, --terminal-text, --tint, --track and *-border status tokens), all literals replaced, React Flow themed through its `--xy-*` variables on `.graph-shell`: `npx vitest run` -> 3 files, 24 tests pass; `npm run typecheck` and `npm run build` pass.
+- Test file reads styles.css with node:fs (`/// <reference types="node" />` local to the test; tsconfig types unchanged).
+- Visual: server restarted from this branch on port 8099 (the old PID 715753 was killed; it served stale backend code). `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/s3 --drag-check` -> exit 0, 8 screenshots, no disallowed console errors. Health tab on this branch lists `.agents/` IN_SYNC; the earlier ".antigravity absent" came from the stale server process, not a health_inspector bug.
+- Screenshots: /tmp/claude-1000/-home-carlos-Documents-projects-papersmith-ai/69ffaf9c-7548-46f0-b18b-99d4f953cd48/scratchpad/shots/s3/
+- Not run: the fresh `papersmith init` workspace check (deferred to T5 closure).
