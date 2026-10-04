@@ -15,8 +15,8 @@ nothing is written and nothing is cached. Sources:
 * ``remote-execution``: ``implementations/<repo>/<Name>/.remote-execution/
   ledger.jsonl`` (``implementation_engine`` builds
   ``target / name / '.remote-execution' / 'ledger.jsonl'``). Discovery is two
-  fixed levels below ``implementations/``, never recursive. ``kaggle-inbox/``
-  (credentials) is never read.
+  fixed levels below ``implementations/``, never recursive. The credentials
+  inbox directory is never read.
 
 Each reader returns ``{events, status, detail?}`` with ``status`` one of ``ok``,
 ``absent``, ``unreadable`` or ``too_large``, so one broken source never fails
