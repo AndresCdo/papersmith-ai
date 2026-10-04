@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
@@ -24,6 +24,7 @@ function jsonResponse(body: unknown): Response {
 describe('App', () => {
   beforeEach(() => {
     FakeEventSource.instances = [];
+    delete document.body.dataset.ready;
     vi.stubGlobal('EventSource', FakeEventSource);
     vi.stubGlobal(
       'fetch',
@@ -35,6 +36,22 @@ describe('App', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('marks the body ready once the state is applied', async () => {
+    render(<App />);
+    await waitFor(() => expect(document.body.dataset.ready).toBe('1'));
+  });
+
+  it('marks the body as errored when the state fetch fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/api/health') ? jsonResponse({ overall: 'WIRED' }) : new Response('boom', { status: 500 }),
+      ),
+    );
+    render(<App />);
+    await waitFor(() => expect(document.body.dataset.ready).toBe('error'));
   });
 
   it('renders the tab bar', async () => {

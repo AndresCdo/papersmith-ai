@@ -63,6 +63,20 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial normalization only
   }, []);
 
+  // Readiness signal for the visual checker: "1" once a state payload is
+  // applied, "error" when the state could not be loaded at all.
+  const ready = state !== null ? '1' : !loading && error ? 'error' : null;
+  useEffect(() => {
+    if (ready === null) {
+      delete document.body.dataset.ready;
+    } else {
+      document.body.dataset.ready = ready;
+    }
+    return () => {
+      delete document.body.dataset.ready;
+    };
+  }, [ready]);
+
   const selectTab = useCallback((next: TabId) => {
     window.location.hash = next;
     setTab(next);

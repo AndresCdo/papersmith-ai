@@ -10,7 +10,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 
 ## Checklist (route per task: delegated writer unless noted)
 - [x] S1 T0a UI test infrastructure
-- [ ] S2 T0b Visual checker + data-ready
+- [x] S2 T0b Visual checker + data-ready
 - [ ] S3 T1 Light theme, literal replacement, load fix
 - [ ] S4 T1-layout fixes from the checker
 - [ ] S5 T2a Routing and graph model
@@ -164,3 +164,12 @@ History persistence across restarts; extractor read-only contract changes; brows
 - L8 ResizeObserver stub invokes its callback with non-zero sizes; fallback of calling ReactFlow handler props directly; edge keyboard selection verified by the T0b checker over CDP (T0a, T2b-2, T0b).
 - L9 jest-dom not added to tsconfig types; T0a verifies typecheck and build with test files present.
 - L10 CI cache-dependency-path covers both lockfiles; visual-check test independent of DELIBERATION_DOMAIN_PROFILE; scripts/lib/ is new (T5).
+
+### S2 T0b Visual checker + data-ready
+- Route: delegated writer.
+- RED 1: `cd ui && npx vitest run` with the two new App tests (`marks the body ready once the state is applied`, `marks the body as errored when the state fetch fails`) -> 2 failed (`expected undefined to be '1'`, `expected undefined to be 'error'`). GREEN after App sets `document.body.dataset.ready` ("1" once state is applied, "error" when no state and the load failed): 3 passed.
+- RED 2: `node --test tests/command-center-visual-check.test.mjs` -> `ERR_MODULE_NOT_FOUND` for scripts/lib/visual-check.mjs. GREEN after the helpers: 8 tests pass (plain `node --test`, no DELIBERATION_DOMAIN_PROFILE).
+- Live run (server already on 8099, same checkout, serves the rebuilt bundle index-oanq_LUB.js): `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/s2 --drag-check` -> exit 0, `OK 8 screenshot(s), no disallowed console errors`; time-to-first-data 139-289 ms (pipeline 275/289 ms, other tabs ~140-150 ms); drag-check ok at both viewports (the detail panel selector `[data-testid="element-detail-panel"]` does not exist yet, so the check is vacuous until S7). Negative run against a closed port: exit 1 with a timeout failure.
+- Finding fixed in this slice: the first live run failed on `GET /favicon.ico` 404 (a real console error); `ui/index.html` now declares `<link rel="icon" href="data:," />` instead of widening the console allow-list.
+- Screenshots: /tmp/claude-1000/-home-carlos-Documents-projects-papersmith-ai/69ffaf9c-7548-46f0-b18b-99d4f953cd48/scratchpad/shots/s2/ (pipeline|health|sections|artifacts at 1280x800 and 1600x1000).
+- Bundle rebuilt: index-CUXqyhFi.js -> index-oanq_LUB.js (CSS unchanged).
