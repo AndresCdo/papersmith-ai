@@ -420,12 +420,38 @@ class GeneratorsTests(unittest.TestCase):
         assert head.startswith("---\n")
         assert "name: sota-scout" in head
         assert "WebSearch" not in head and "WebFetch" not in head
-        assert "- mcpScript" in head and "- mcp" in head
+        # Pi has no sourced counterpart for the web tools: skipped, not renamed.
+        assert "mcp" not in head and "websearch" not in head and "webfetch" not in head
         assert "- read" in head and "- bash" in head
         assert ".claude/" not in scout
         assert "skills/plausibility/SKILL.md" in body
         # Domain metadata the skills read travels untouched.
         assert "description: " in head
+
+    def test_pi_web_tools_are_skipped_with_a_note_per_agent(self) -> None:
+        workspace = _workspace(self.new_tmp())
+        sink: list[str] = []
+        by_name = {a["name"]: a["text"] for a in collect_pi_agents(workspace, warnings=sink)}
+        for name in ("sota-scout", "experimental-validation", "novelty-screener"):
+            head = by_name[name].partition("\n---\n")[0]
+            assert "mcp" not in head and "websearch" not in head and "webfetch" not in head, name
+            notes = [w for w in sink if f"agent '{name}'" in w]
+            assert any("'WebSearch'" in w and "not granted" in w for w in notes), notes
+            assert any("'WebFetch'" in w and "not granted" in w for w in notes), notes
+
+    def test_pi_unknown_non_web_tools_still_pass_through_lowercased(self) -> None:
+        workspace = _workspace(self.new_tmp())
+        path = workspace / ".claude" / "agents" / "custom.md"
+        path.write_text(
+            "---\nname: custom\ndescription: x\ntools: Read, NotebookEdit, WebSearch\n---\nbody\n",
+            encoding="utf-8",
+        )
+        sink: list[str] = []
+        by_name = {a["name"]: a["text"] for a in collect_pi_agents(workspace, warnings=sink)}
+        head = by_name["custom"].partition("\n---\n")[0]
+        assert "  - read\n  - notebookedit" in head
+        assert "websearch" not in head
+        assert not any("NotebookEdit" in w for w in sink), sink
 
     def test_pi_agent_projection_skips_malformed_definitions(self) -> None:
         workspace = _workspace(self.new_tmp())

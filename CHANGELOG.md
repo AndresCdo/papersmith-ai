@@ -15,6 +15,11 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Fixed
 
+- **Pi agents no longer list unsourced `mcp`/`mcpScript` tools.** The
+  `.pi/agents` projection skips `WebSearch`/`WebFetch` with a note instead of
+  mapping them to names Pi does not document. The Antigravity
+  `commandExecutionPolicy` values are documented as having undocumented
+  semantics; its output is unchanged.
 - **Workspace `.gitignore` covers the skills links.** A new workspace now
   ignores `.claude/skills`, `.opencode/skills`, `.pi/skills` and
   `.agents/skills` (the generated symlinks to `skills/`), so `git add .` no

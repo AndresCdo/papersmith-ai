@@ -5,8 +5,6 @@ tools:
   - read
   - find
   - grep
-  - mcpScript
-  - mcp
   - bash
 ---
 
