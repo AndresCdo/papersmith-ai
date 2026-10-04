@@ -1,6 +1,15 @@
 # Feature: dashboard-interactive
 
-Status: in progress. Branch: `feat/dashboard-interactive` (local only; push/PR not authorized).
+Status: implemented and Judgment Day APPROVED (implementation round 1: no CRITICAL; S12 polish delta: scoped re-judgment clean on both judges). Pending: local `git merge origin/main` after the harness-parity stack finishes; push/PR are the user's decision. Branch: `feat/dashboard-interactive` (local only; push/PR not authorized).
+
+## Recorded follow-ups (not done)
+- Re-run of the dagre layout on every state frame (memoise on graph structure).
+- Element panel covers the right part of the diagram at narrow widths.
+- No concurrency/ordering test for `history_append` publication across threads.
+- The 421 body names only `papersmith ui --allowed-host`; also mention the backend module flag.
+- Sub-percent stage progress changes render as "0% -> 0%" in the summary.
+- The mutating cue outline matches the keyboard focus outline; give one a distinct style.
+- History persistence across server restarts (backlog).
 Plan: v4, Judgment Day APPROVED 2026-10-04 (plan sha256 3d1c10a5..., cycles: v1 rejected, v2 rejected, v3 fixed to v4, scoped re-judgment clean on both judges).
 TDD: strict (session config). Runners: Python `/home/carlos/Documents/projects/papersmith-ai/.micromamba/envs/papersmith/bin/pytest`; UI `cd ui && npx vitest run` (from T0a); script helpers `node --test "tests/**/*.mjs"`.
 Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
