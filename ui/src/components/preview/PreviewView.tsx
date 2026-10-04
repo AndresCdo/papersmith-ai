@@ -1,5 +1,6 @@
 import { StatusBadge, toneForSectionStatus } from '../StatusBadge';
 import type { PaperPreview, PreviewBlock } from '../../types';
+import { cacheToken, withVersion } from '../cacheToken';
 
 interface Props {
   data: PaperPreview | null;
@@ -67,9 +68,10 @@ function PdfPane({ pdf }: { pdf: PaperPreview['pdf'] }) {
       </div>
       {main ? (
         <iframe
+          key={cacheToken(main)}
           className="preview-pdf__frame"
           title="Compiled paper PDF"
-          src={`${FILE_URL}main.pdf`}
+          src={withVersion(`${FILE_URL}main.pdf`, main)}
           referrerPolicy="no-referrer"
         />
       ) : (
@@ -93,8 +95,9 @@ function PdfPane({ pdf }: { pdf: PaperPreview['pdf'] }) {
               </a>
               {figure.kind === 'png' ? (
                 <img
+                  key={cacheToken(figure)}
                   className="preview-figures__thumb"
-                  src={figureUrl(figure.id, figure.kind)}
+                  src={withVersion(figureUrl(figure.id, figure.kind), figure)}
                   alt={`Figure ${figure.id}`}
                   loading="lazy"
                 />
@@ -149,8 +152,9 @@ export default function PreviewView({ data, loading, error, retry }: Props) {
                     <StatusBadge label={section.status} tone={toneForSectionStatus(section.status)} />
                   </div>
                   <ol className="preview-blocks">
-                    {section.blocks.map((block) => (
-                      <BlockView key={block.id} block={block} />
+                    {section.blocks.map((block, index) => (
+                      // a contract may declare the same block id twice: the index keeps keys unique
+                      <BlockView key={`${index}:${block.id}`} block={block} />
                     ))}
                   </ol>
                 </section>

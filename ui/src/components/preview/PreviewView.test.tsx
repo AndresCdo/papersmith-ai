@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import PreviewView from './PreviewView';
 import type { PaperPreview, PreviewBlock } from '../../types';
 
@@ -98,15 +98,15 @@ describe('PreviewView', () => {
   });
 
   it('embeds the compiled PDF with a relative src', () => {
-    view(base({ pdf: { main: { present: true, size: 10, stale: false }, figures: [] } }));
+    view(base({ pdf: { main: { present: true, size: 10, stale: false, mtime: 1700000000000 }, figures: [] } }));
     const frame = screen.getByTitle('Compiled paper PDF');
-    expect(frame).toHaveAttribute('src', '/api/paper/file?name=main.pdf');
+    expect(frame).toHaveAttribute('src', '/api/paper/file?name=main.pdf&v=1700000000000-10');
     expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
     expect(screen.queryByText(/stale/i)).toBeNull();
   });
 
   it('badges a stale PDF', () => {
-    view(base({ pdf: { main: { present: true, size: 10, stale: true }, figures: [] } }));
+    view(base({ pdf: { main: { present: true, size: 10, stale: true, mtime: 1700000000000 }, figures: [] } }));
     expect(screen.getByText(/stale: main\.tex is newer than main\.pdf/)).toBeInTheDocument();
   });
 
@@ -117,13 +117,54 @@ describe('PreviewView', () => {
   });
 
   it('lists figures with encoded safe links and a png preview', () => {
-    view(base({ pdf: { main: null, figures: [{ id: 'fig one', kind: 'png', size: 2048 }, { id: 'arch', kind: 'pdf', size: 10 }] } }));
+    view(base({ pdf: { main: null, figures: [{ id: 'fig one', kind: 'png', size: 2048, mtime: 1700000000001 }, { id: 'arch', kind: 'pdf', size: 10 }] } }));
     const links = screen.getAllByRole('link', { name: /Open/ });
     expect(links[0]).toHaveAttribute('href', '/api/paper/file?name=figures/fig%20one.png');
     expect(links[0]).toHaveAttribute('target', '_blank');
     expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer');
     expect(links[1]).toHaveAttribute('href', '/api/paper/file?name=figures/arch.pdf');
-    expect(screen.getByAltText('Figure fig one')).toHaveAttribute('src', '/api/paper/file?name=figures/fig%20one.png');
+    expect(screen.getByAltText('Figure fig one')).toHaveAttribute('src', '/api/paper/file?name=figures/fig%20one.png&v=1700000000001-2048');
     expect(screen.queryByAltText('Figure arch')).toBeNull();
+  });
+
+  it('reloads the PDF and the figure thumbnails when their metadata changes', () => {
+    const pdf = (mtime: number, size: number) => ({
+      main: { present: true, size, stale: false, mtime },
+      figures: [{ id: 'plot', kind: 'png' as const, size: 5, mtime }],
+    });
+    const props = { loading: false, error: null, retry: vi.fn() };
+    const { rerender } = render(<PreviewView data={base({ pdf: pdf(100, 10) })} {...props} />);
+    const frame = screen.getByTitle('Compiled paper PDF');
+    const image = screen.getByAltText('Figure plot');
+    rerender(<PreviewView data={base({ pdf: pdf(100, 10) })} {...props} />);
+    expect(screen.getByTitle('Compiled paper PDF')).toBe(frame);
+    expect(screen.getByAltText('Figure plot')).toBe(image);
+    rerender(<PreviewView data={base({ pdf: pdf(200, 11) })} {...props} />);
+    expect(screen.getByTitle('Compiled paper PDF')).not.toBe(frame);
+    expect(screen.getByTitle('Compiled paper PDF').getAttribute('src')).toBe('/api/paper/file?name=main.pdf&v=200-11');
+    expect(screen.getByAltText('Figure plot')).not.toBe(image);
+    expect(screen.getByAltText('Figure plot').getAttribute('src')).toBe('/api/paper/file?name=figures/plot.png&v=200-5');
+  });
+
+  it('falls back to the size when the payload has no mtime', () => {
+    view(base({ pdf: { main: { present: true, size: 10, stale: false }, figures: [] } }));
+    expect(screen.getByTitle('Compiled paper PDF').getAttribute('src')).toBe('/api/paper/file?name=main.pdf&v=10');
+  });
+
+  describe('duplicate block ids', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('renders both entries without a React duplicate-key warning', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      view(base({
+        sections: [{
+          id: 'intro', title: 'Introduction', position: 1, status: 'DRAFTING',
+          blocks: [block('intro.dup', { text: 'first' }), block('intro.dup', { text: 'second', duplicate: true })],
+        }],
+      }));
+      expect(screen.getAllByTestId('preview-block')).toHaveLength(2);
+      const keyWarnings = spy.mock.calls.filter((call) => String(call[0]).includes('same key'));
+      expect(keyWarnings).toHaveLength(0);
+    });
   });
 });

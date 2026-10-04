@@ -1,5 +1,6 @@
 import { StatusBadge, type BadgeTone } from '../StatusBadge';
 import type { AtlasPayload, AtlasSummary, AtlasValidation } from '../../types';
+import { cacheToken, withVersion } from '../cacheToken';
 
 interface Props {
   data: AtlasPayload | null;
@@ -109,9 +110,10 @@ function Constellation({ data }: { data: AtlasPayload }) {
       </div>
       {data.html.status === 'ok' ? (
         <iframe
+          key={cacheToken(data.html)}
           className="atlas-view__frame"
           title="SOTA constellation"
-          src="/api/atlas/view"
+          src={withVersion('/api/atlas/view', data.html)}
           sandbox="allow-scripts"
           referrerPolicy="no-referrer"
         />
@@ -121,6 +123,23 @@ function Constellation({ data }: { data: AtlasPayload }) {
         <p className="panel__empty" data-testid="atlas-html-missing">
           JSON present, HTML missing: the constellation is rendered from atlas.json by{' '}
           <span className="mono">scripts/render_atlas.py</span>; run it to produce sota-pool/atlas.html.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/** Validation result when there is no summary to host it (invalid JSON, odd shape). */
+function ValidationPanel({ data }: { data: AtlasPayload }) {
+  return (
+    <section className="panel atlas-summary" aria-labelledby="atlas-validation-title">
+      <div className="panel__header">
+        <h2 id="atlas-validation-title">Atlas validation</h2>
+      </div>
+      <ValidationChip validation={data.validation} />
+      {data.json.status === 'ok' ? (
+        <p className="panel__empty" data-testid="atlas-no-summary">
+          atlas.json is valid JSON but has no systems list, so there is no summary to show.
         </p>
       ) : null}
     </section>
@@ -162,7 +181,11 @@ export default function AtlasView({ data, loading, error, refresh, retry }: Prop
             </p>
           ) : null}
           <div className="atlas__layout">
-            {data.summary ? <SummaryPanel summary={data.summary} validation={data.validation} /> : null}
+            {data.summary ? (
+              <SummaryPanel summary={data.summary} validation={data.validation} />
+            ) : jsonStatus === 'ok' || jsonStatus === 'invalid' ? (
+              <ValidationPanel data={data} />
+            ) : null}
             {data.html.status === 'absent' && jsonStatus === 'absent' ? null : <Constellation data={data} />}
           </div>
         </>

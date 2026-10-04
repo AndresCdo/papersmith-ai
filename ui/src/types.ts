@@ -248,6 +248,8 @@ export interface PreviewFigure {
   id: string;
   kind: 'pdf' | 'png';
   size: number;
+  /** Modification time in integer milliseconds; a cache-busting token. */
+  mtime?: number;
 }
 
 export interface PaperPreview {
@@ -256,7 +258,7 @@ export interface PaperPreview {
   caps: Record<string, number>;
   /** `ok`, `absent`, `too_large`, `unsafe` or `unreadable`. */
   main_tex: { status: string };
-  pdf: { main: { present: boolean; size: number; stale: boolean } | null; figures: PreviewFigure[] } | null;
+  pdf: { main: { present: boolean; size: number; stale: boolean; mtime?: number } | null; figures: PreviewFigure[] } | null;
 }
 
 /** `GET /api/atlas`: state of the SOTA atlas files plus a bounded summary. */
@@ -291,9 +293,9 @@ export interface AtlasValidation {
 
 export interface AtlasPayload {
   /** `ok`, `absent`, `too_large`, `unsafe`, `unreadable` or `invalid`. */
-  json: { status: string; size?: number };
+  json: { status: string; size?: number; mtime?: number };
   /** `ok`, `absent`, `too_large` or `unsafe`. */
-  html: { status: string; size?: number };
+  html: { status: string; size?: number; mtime?: number };
   /** True when atlas.json is newer than atlas.html; null when either is missing. */
   stale: boolean | null;
   validation: AtlasValidation;
