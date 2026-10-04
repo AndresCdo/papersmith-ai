@@ -16,7 +16,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - [x] S5 T2a Routing and graph model
 - [x] S6 T2b-1 SectionDetail extraction
 - [x] S7 T2b-2 Selection and detail panel
-- [ ] S8 T3a History core
+- [x] S8 T3a History core
 - [ ] S9 T3b History wiring and Host allow-list
 - [ ] S10 T4 History UI
 - [ ] S11 T5 Docs, CI and closure
@@ -50,6 +50,11 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - Checker: helper tests first (RED `does not provide an export named 'clickShotName'`), then `--click-check`: clicks the centre of a stage, gate and section node and the midpoint of an edge path via CDP mouse events, asserts panel title and hash `el=`, Escape closes, then focuses a node and an edge wrapper and presses Enter. Finding fixed: after about eight page loads the checker's pages stalled (Chromium kept previous pages in the back/forward cache with their EventSource open, exhausting the per-host connections; reproduced with 16 plain loads); the checker now launches with `--disable-features=BackForwardCache` and a 16-load run passes.
 - Real browser: `node scripts/command-center-visual-check.mjs --out <shots>/s7 --drag-check --click-check --full-page` -> exit 0; drag-check ok at both viewports; click-check ok at both viewports for click stage (Ingestion), gate (Writing Readiness Gate), section (materials-and-methods), edge (Connection), keyboard Enter on a stage and on an edge.
 - Screenshots: /tmp/claude-1000/-home-carlos-Documents-projects-papersmith-ai/69ffaf9c-7548-46f0-b18b-99d4f953cd48/scratchpad/shots/s7/ (click-stage|gate|section|edge at 1280x800 and 1600x1000, plus the full-page tab shots).
+
+### S8 T3a History core
+- Route: delegated writer; one commit `feat(command-center): add the in-memory history core`.
+- RED: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_history.py -q` -> collection error `ImportError: cannot import name 'history' from 'skills._core.command_center'`. GREEN after `history.py`: 22 passed, 8 subtests passed.
+- Contract: kinds section_status, section_blocks, section_words, gate (state + reasons), stage (active + progress), health (overall `summary.state` and per-harness state), smoke; sections, gates or stages that appear or vanish are a change from or to None. `page()` on a reset (other boot_id) returns the first retained entries (cursor treated as 0) so the client can reload in one call; invalid element or kind raises `HistoryQueryError` (HTTP 422 in S9). Element ids match `ui/src/components/dag/graph.ts` (`stage:`, `gate:`, `section:` + raw id).
 
 ---
 
