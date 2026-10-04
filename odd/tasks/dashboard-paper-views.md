@@ -23,7 +23,7 @@ Route: delegated writer per slice (one writer at a time).
 - [x] F4 dpv-04 Polish (commits caceac3, cb21d4e on feat/dpv-04-polish)
 - [x] P1 dpv-05 Paper preview backend (commits 30a1de2, 80c180c, 996181f on feat/dpv-05-paper-preview-api)
 - [x] P2 dpv-06 Preview tab UI (commits c4e5412, ab65615, 7c05bdb, 57502a0 on feat/dpv-06-preview-tab)
-- [ ] A1 dpv-07 Atlas backend
+- [x] A1 dpv-07 Atlas backend (commits a0fb395, c465ca8, cdaa851 on feat/dpv-07-atlas-api)
 - [ ] A2 dpv-08 Atlas tab UI
 - [ ] D-1 dpv-09 Decisions backend
 - [ ] D-2 dpv-10 Decisions tab UI
@@ -77,6 +77,16 @@ Route: delegated writer per slice (one writer at a time).
 - Real browser: own server on 127.0.0.1:8137 against a throwaway workspace (2 sections, blocks with `<b>`/`<script>` text, an unwritten block, x.png, stale main.pdf), stopped afterwards: `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/p2 --full-page --click-check --drag-check --url http://127.0.0.1:8137/` -> exit 0, 18 screenshots, no disallowed console errors. preview-1280x800 and preview-700x900 inspected (two columns then stacked; literal markup, chips, placeholder, stale badge, figure thumb). Finding: headless Chromium's PDF viewer iframe stalls the next Page.navigate; the checker now removes iframes after each shot. In the 700x900 full-page shot the PDF viewer had not painted yet (dark box); not an app defect.
 - Environment note: mid-run another actor switched the shared checkout to branch test/colab-live-rehearsal (one browser run hung on the swapped bundle). Commits are intact on feat/dpv-06-preview-tab; later work used a git worktree at ../papersmith-ai-worktrees/dpv-06.
 - Commits: c4e5412 (UI), ab65615 (checker), 7c05bdb (docs), 57502a0 (checker iframe fix), plus this evidence commit. Authored lines: UI+tests 655 ins/3 del (over the ~400 heuristic, about 230 are tests; split at commit boundaries UI / checker / docs), checker 41/3, docs 21.
+- Review tier: not assessed (local commit only).
+
+### A1 (feat/dpv-07-atlas-api, stacked on feat/dpv-06-preview-tab)
+- Route: delegated writer in worktree ../papersmith-ai-worktrees/dpv (untracked `node_modules` and `ui/node_modules` symlinked to the shared checkout's; pytest run from the worktree root, `skills._core.command_center` resolves to the worktree). New `skills/_core/command_center/atlas.py`: `_locate` (resolve + relative_to workspace + regular file + stat cap before read), `read_html`, `validate` (loads the workspace's `skills/plausibility/scripts/check_atlas.py` by file path with importlib under `state_extractor._no_bytecode`, calls `_failures` on the parsed data, any failure/missing/SystemExit -> `unavailable`; fixed path, never request-derived; documented as workspace-Python execution), `summarize`, `build_atlas`. Routes `/api/atlas` and `/api/atlas/view` in server.py (view headers exactly as specified: sandbox CSP, nosniff, no-store, X-Frame-Options SAMEORIGIN, Referrer-Policy no-referrer). Caps: json 2 MiB, html 2 MiB, errors 50, evidence 100, systems 100.
+- RED 1: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_atlas.py -q`: collection error "ImportError: cannot import name 'atlas' from 'skills._core.command_center'".
+- GREEN 1 (module tests, 25): same command: 25 passed. Commit a0fb395.
+- RED 2 (module in place, routes absent): same command: 10 failed, 26 passed (KeyError '/api/atlas' and 421/404/413 cases).
+- GREEN 2: same command: 36 passed. `pytest tests/test_command_center_*.py -q`: 213 passed, 1 skipped, 12 subtests passed. Commit c465ca8.
+- Docs: README.md (Spanish `papersmith ui` section) and CHANGELOG Unreleased, commit cdaa851. `npm run test:node`: 678 pass, 0 fail (needs root node_modules). Bundle untouched; `_kit` untouched.
+- Authored lines: commit 1 588 insertions (atlas.py 233 + tests 355), commit 2 190 ins/2 del (server.py ~32 + tests ~160), docs commit 820 total with commit 1-2 (docs ~42). Over the ~400 heuristic in total: split at commit boundaries (module+tests / routes+tests / docs).
 - Review tier: not assessed (local commit only).
 
 ---

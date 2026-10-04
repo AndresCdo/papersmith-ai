@@ -43,6 +43,22 @@ session history.
   `<iframe>` (with a stale badge) and a list of `paper/Figures` files. It is
   fetched when the tab opens and refetched when the workspace revision changes,
   with an inline error and Retry. The visual checker covers the tab.
+- **Read-only SOTA atlas routes in the command center.** `GET /api/atlas`
+  reports the state of `sota-pool/atlas.json` and `atlas.html` (ok, absent,
+  too_large, unsafe, unreadable, invalid), staleness (json newer than html),
+  the workspace checker's verdict (`ok`, `failed` with up to 50 errors,
+  `unavailable`) and a summary (systems, families, links, relations, evidence).
+  `GET /api/atlas/view` serves `atlas.html` (404 absent/unsafe, 413 over 2 MiB)
+  under `Content-Security-Policy: sandbox allow-scripts; default-src 'none';
+  script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:`,
+  `nosniff`, `no-store`, `X-Frame-Options: SAMEORIGIN` and
+  `Referrer-Policy: no-referrer`. Reads are size-capped (2 MiB), resolved and
+  contained in the workspace, regular files only; nothing is written or
+  regenerated. Validation loads the workspace's own
+  `skills/plausibility/scripts/check_atlas.py` from that one fixed path and runs
+  it inside the server process (workspace Python execution: only serve trusted
+  workspaces); a missing or failing script yields `unavailable`. The `Host`
+  allow-list (421) covers both routes only on loopback binds.
 - **Light theme.** The dashboard uses one light theme built on colour tokens;
   Vitest guards reject colour literals outside `:root` and check WCAG AA
   contrast for the token pairs. The state and health payloads now load
