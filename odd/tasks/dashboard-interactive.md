@@ -1,6 +1,6 @@
 # Feature: dashboard-interactive
 
-Status: implemented and Judgment Day APPROVED (implementation round 1: no CRITICAL; S12 polish delta: scoped re-judgment clean on both judges). Pending: local `git merge origin/main` after the harness-parity stack finishes; push/PR are the user's decision. Branch: `feat/dashboard-interactive` (local only; push/PR not authorized).
+Status: implemented and Judgment Day APPROVED (implementation round 1: no CRITICAL; S12 polish delta: scoped re-judgment clean on both judges). The harness-parity stack merged (origin/main 1f09516) and was merged locally into this branch as 9c7999e; after that merge Vitest 133, command_center pytest 138 and root npm test 676 pass. Push/PR are the user's decision. Branch: `feat/dashboard-interactive` (local only; push/PR not authorized).
 
 ## Recorded follow-ups (not done)
 - Re-run of the dagre layout on every state frame (memoise on graph structure).
