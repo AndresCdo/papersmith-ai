@@ -7,6 +7,7 @@ import HarnessStatus from './components/health/HarnessStatus';
 import WiringMatrix from './components/health/WiringMatrix';
 import DiagnosticLog from './components/health/DiagnosticLog';
 import SectionMatrix from './components/sections/SectionMatrix';
+import HistoryView from './components/history/HistoryView';
 import ArtifactViewer from './components/artifacts/ArtifactViewer';
 import { StatusBadge } from './components/StatusBadge';
 import { asText, formatCount, formatTime } from './lib/format';
@@ -39,7 +40,7 @@ function TotalsBar({ state }: { state: WorkspaceState | null }) {
 }
 
 export default function App() {
-  const { state, health, connected, lastChanged, loading, error, smoke, runSmoke, clearSmoke } =
+  const { state, health, connected, lastChanged, loading, error, smoke, history, historyError, runSmoke, clearSmoke } =
     useWorkspaceEvents();
   // App is the single owner of the route: the tab and the selected diagram
   // element, mirrored into the URL hash.
@@ -88,6 +89,7 @@ export default function App() {
   }, []);
 
   const graph = useMemo(() => buildGraph(state), [state]);
+  const presentIds = useMemo(() => new Set(graph.nodes.map((node) => node.id)), [graph]);
   const selectElement = useCallback((id: string | null) => navigate('pipeline', id), [navigate]);
 
   const selectTab = useCallback((next: TabId) => navigate(next), [navigate]);
@@ -172,7 +174,13 @@ export default function App() {
 
             <PipelineGraph graph={graph} selectedId={route.el} onSelect={selectElement} />
             {route.el ? (
-              <ElementDetailPanel elementId={route.el} state={state} graph={graph} onSelect={selectElement} />
+              <ElementDetailPanel
+                elementId={route.el}
+                state={state}
+                graph={graph}
+                history={history}
+                onSelect={selectElement}
+              />
             ) : null}
 
             <section className="panel">
@@ -222,6 +230,10 @@ export default function App() {
         ) : null}
 
         {tab === 'sections' ? <SectionMatrix sections={state?.sections ?? []} /> : null}
+
+        {tab === 'history' ? (
+          <HistoryView history={history} error={historyError} presentIds={presentIds} onSelect={selectElement} />
+        ) : null}
 
         {tab === 'artifacts' ? <ArtifactViewer state={state} /> : null}
 

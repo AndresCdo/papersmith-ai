@@ -201,3 +201,25 @@ export interface WiringSmokeResult {
   output?: string;
   detail?: string;
 }
+
+/** One immutable `GET /api/history` entry (also the `history_append` payload). */
+export interface HistoryEntry {
+  id: string;
+  boot_id: string;
+  seq: number;
+  ts: number;
+  kind: string;
+  element_id: string | null;
+  summary: string;
+  before: unknown;
+  after: unknown;
+}
+
+/** `GET /api/history` response body. */
+export interface HistoryPage {
+  boot_id: string;
+  entries: HistoryEntry[];
+  has_more: boolean;
+  reset: boolean;
+  gap: boolean;
+}

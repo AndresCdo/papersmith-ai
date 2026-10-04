@@ -4,12 +4,25 @@ import { describe, expect, it, vi } from 'vitest';
 import ElementDetailPanel from './ElementDetailPanel';
 import { buildGraph } from './graph';
 import { diagramState } from './fixtures';
+import type { HistoryEntry } from '../../types';
 
 const graph = buildGraph(diagramState);
 
-function open(elementId: string) {
+function entry(seq: number, element: string | null, summary: string): HistoryEntry {
+  return { id: `b-${seq}`, boot_id: 'b', seq, ts: 1_700_000_000 + seq, kind: 'stage', element_id: element, summary, before: null, after: null };
+}
+
+function open(elementId: string, entries: HistoryEntry[] = []) {
   const onSelect = vi.fn();
-  render(<ElementDetailPanel elementId={elementId} state={diagramState} graph={graph} onSelect={onSelect} />);
+  render(
+    <ElementDetailPanel
+      elementId={elementId}
+      state={diagramState}
+      graph={graph}
+      history={{ bootId: 'b', entries, gap: false }}
+      onSelect={onSelect}
+    />,
+  );
   return { onSelect, panel: screen.getByTestId('element-detail-panel') };
 }
 
@@ -74,11 +87,29 @@ describe('ElementDetailPanel', () => {
     document.body.appendChild(trigger);
     trigger.focus();
     const { unmount } = render(
-      <ElementDetailPanel elementId="stage:drafting" state={diagramState} graph={graph} onSelect={() => {}} />,
+      <ElementDetailPanel elementId="stage:drafting" state={diagramState} graph={graph} history={{ bootId: null, entries: [], gap: false }} onSelect={() => {}} />,
     );
     expect(screen.getByTestId('element-detail-panel').contains(document.activeElement)).toBe(true);
     unmount();
     expect(document.activeElement).toBe(trigger);
     trigger.remove();
+  });
+
+  it('lists only the history entries of the selected element, newest first', () => {
+    const { panel } = open('stage:drafting', [
+      entry(1, 'stage:drafting', 'older drafting change'),
+      entry(2, 'stage:other', 'other stage change'),
+      entry(3, 'stage:drafting', 'newer drafting change'),
+    ]);
+    const section = within(panel).getByRole('region', { name: 'History' });
+    const items = within(section).getAllByRole('listitem');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('newer drafting change');
+    expect(within(section).queryByText('other stage change')).toBeNull();
+  });
+
+  it('says so when the selected element has no history yet', () => {
+    const { panel } = open('stage:drafting');
+    expect(within(panel).getByRole('region', { name: 'History' })).toHaveTextContent('No changes recorded');
   });
 });

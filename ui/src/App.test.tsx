@@ -60,7 +60,7 @@ describe('App', () => {
     render(<App />);
     const nav = screen.getByRole('navigation', { name: 'Dashboard sections' });
     expect(nav).toBeInTheDocument();
-    for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts']) {
+    for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts', 'History']) {
       expect(await screen.findByRole('button', { name: label })).toBeInTheDocument();
     }
   });
@@ -119,6 +119,29 @@ describe('App', () => {
       render(<App />);
       const panel = await screen.findByTestId('element-detail-panel');
       expect(panel).toHaveTextContent('contract missing');
+    });
+
+    it('opens a history row in the pipeline tab and shows that element in the panel', async () => {
+      const entries = [
+        { id: 'b-1', boot_id: 'b', seq: 1, ts: 1_700_000_000, kind: 'gate', element_id: 'gate:writing-readiness',
+          summary: 'Gate writing-readiness: PASSED -> BLOCKED', before: null, after: null },
+      ];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.includes('/api/health')
+            ? jsonResponse({ overall: 'WIRED' })
+            : url.startsWith('/api/history')
+              ? jsonResponse({ boot_id: 'b', entries, has_more: false, reset: false, gap: false })
+              : jsonResponse(diagramState),
+        ),
+      );
+      window.history.replaceState(null, '', '#history');
+      render(<App />);
+      await userEvent.click(await screen.findByRole('button', { name: 'gate:writing-readiness' }));
+      const panel = await screen.findByTestId('element-detail-panel');
+      expect(window.location.hash).toBe('#pipeline?el=gate%3Awriting-readiness');
+      expect(panel).toHaveTextContent('Gate writing-readiness: PASSED -> BLOCKED');
     });
 
     it('selecting writes the hash, closing clears it', async () => {

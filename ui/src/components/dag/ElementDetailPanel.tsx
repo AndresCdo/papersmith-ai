@@ -3,12 +3,15 @@ import { ProgressBar, StatusBadge, toneForGateState } from '../StatusBadge';
 import SectionDetail from '../sections/SectionDetail';
 import { formatPercent } from '../../lib/format';
 import type { GraphModel } from './graph';
+import HistoryList from '../history/HistoryList';
+import { filterEntries, groupForDisplay, type HistoryState } from '../../lib/history';
 import type { WorkspaceState } from '../../types';
 
 interface Props {
   elementId: string;
   state: WorkspaceState | null;
   graph: GraphModel;
+  history: HistoryState;
   /** Select another element, or null to close the panel. */
   onSelect: (id: string | null) => void;
 }
@@ -63,7 +66,7 @@ function Connections({ id, graph, onSelect }: { id: string; graph: GraphModel; o
  * canvas stays clickable), owns the single Escape listener, moves focus into
  * itself on open and returns it to the previously focused element on close.
  */
-export default function ElementDetailPanel({ elementId, state, graph, onSelect }: Props) {
+export default function ElementDetailPanel({ elementId, state, graph, history, onSelect }: Props) {
   const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -86,6 +89,8 @@ export default function ElementDetailPanel({ elementId, state, graph, onSelect }
   const node = edge ? undefined : graph.nodes.find((entry) => entry.id === elementId);
   const kind = node ? elementId.slice(0, elementId.indexOf(':')) : null;
   const rawId = node ? elementId.slice(elementId.indexOf(':') + 1) : '';
+
+  const historyRows = groupForDisplay(filterEntries(history.entries, { kind: null, element: elementId }));
 
   let title = elementId;
   let body: ReactNode;
@@ -213,6 +218,14 @@ export default function ElementDetailPanel({ elementId, state, graph, onSelect }
         </button>
       </header>
       {body}
+      <section className="drawer__section" aria-labelledby="element-history-heading">
+        <h4 id="element-history-heading">History</h4>
+        {historyRows.length === 0 ? (
+          <p className="panel__empty">No changes recorded for this element since the dashboard started.</p>
+        ) : (
+          <HistoryList rows={historyRows} showElement={false} />
+        )}
+      </section>
     </aside>
   );
 }
