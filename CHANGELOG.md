@@ -76,7 +76,8 @@ session history.
   `status` (`ok`, `absent`, `unreadable`, `too_large`) so one broken source never
   fails the response. Caps: 500 events per source, 1000 total (`truncated`),
   `main.tex` 2 MiB, 256 KiB per receipt or transition, 500 files per sidecar
-  directory, 20 ledgers of 2 MiB and 2000 lines each. Optional `source=` (422 on
+  directory, 20 ledgers of 2 MiB and 2000 lines each (the newest 2000 lines are kept; `detail`
+  counts the oldest ones ignored). Optional `source=` (422 on
   an unknown name) and `limit=` (1 to 1000). Nothing is written. The `Host`
   allow-list (421) covers it only on loopback binds.
 - **Read-only SOTA atlas routes in the command center.** `GET /api/atlas`

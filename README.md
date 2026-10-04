@@ -3177,8 +3177,9 @@ Cada fuente devuelve `status` (`ok`, `absent`, `unreadable`, `too_large`) y
 `count` en `sources`, de modo que una fuente rota no rompe la respuesta. Topes:
 500 eventos por fuente y 1000 en total (`truncated` y `total`), `main.tex` 2 MiB,
 256 KiB por recibo o transición, 500 archivos por directorio del sidecar,
-20 ledgers de hasta 2 MiB y 2000 líneas cada uno (las líneas mal formadas se
-omiten y se cuentan en `detail`). Filtros opcionales: `source=` (lista separada
+20 ledgers de hasta 2 MiB y 2000 líneas cada uno (se conservan las 2000 líneas
+más recientes y `detail` cuenta las más antiguas ignoradas; las líneas mal
+formadas se omiten y se cuentan en `detail`). Filtros opcionales: `source=` (lista separada
 por comas; 422 si hay un nombre desconocido) y `limit=` (1 a 1000). Cada lectura
 resuelve la ruta, exige que quede dentro del workspace, un archivo regular y
 comprueba el tamaño antes de leer. No hay campo de autor: nunca se registra. La

@@ -29,8 +29,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from bisect import insort
 from datetime import datetime, timezone
-from itertools import islice
 from pathlib import Path
 from typing import Any, Callable
 
@@ -105,21 +105,30 @@ def _read_bytes(resolved: Path, cap: int) -> bytes | None:
 
 
 def _list_names(directory: Path, want: Callable[[os.DirEntry], bool]) -> tuple[list[str], bool]:
-    """Sorted entry names passing ``want``; the flag is set when the listing was cut short."""
-    names: list[str] = []
+    """Sorted entry names passing ``want``, at most ``MAX_DIR_NAMES`` of them.
+
+    Entries are filtered BEFORE the bound, so non-matching files can never hide
+    matching ones. The kept names are the smallest in sort order (deterministic
+    whatever order the OS lists them in); the flag is set whenever matching
+    entries were dropped.
+    """
+    kept: list[str] = []  # always sorted, never longer than the cap
+    cut = False
     try:
         with os.scandir(directory) as entries:
-            for entry in islice(entries, MAX_DIR_NAMES + 1):
-                if len(names) >= MAX_DIR_NAMES:
-                    return sorted(names), True
+            for entry in entries:
                 try:
-                    if want(entry):
-                        names.append(entry.name)
+                    if not want(entry):
+                        continue
                 except OSError:
                     continue
+                insort(kept, entry.name)
+                if len(kept) > MAX_DIR_NAMES:
+                    kept.pop()
+                    cut = True
     except OSError:
         return [], False
-    return sorted(names), False
+    return kept, cut
 
 
 # --------------------------------------------------------------------------
@@ -349,9 +358,11 @@ def read_ledgers(root: Path | str) -> dict[str, Any]:
             failed += 1
             continue
         lines = data.decode("utf-8", errors="replace").splitlines()
-        skipped_lines += max(0, len(lines) - MAX_LEDGER_LINES)
+        # the ledger is append-only: keep the NEWEST lines, drop the oldest
+        dropped = max(0, len(lines) - MAX_LEDGER_LINES)
+        skipped_lines += dropped
         file_events = bad = 0
-        for number, line in enumerate(lines[:MAX_LEDGER_LINES], 1):
+        for number, line in enumerate(lines[dropped:], dropped + 1):
             if not line.strip():
                 continue
             try:
@@ -371,7 +382,7 @@ def read_ledgers(root: Path | str) -> dict[str, Any]:
     if cut:
         notes.append(f"more than {MAX_LEDGER_FILES} ledgers, scanned the first {MAX_LEDGER_FILES}")
     if skipped_lines:
-        notes.append(f"{skipped_lines} lines beyond the {MAX_LEDGER_LINES}-line cap ignored")
+        notes.append(f"{skipped_lines} oldest lines beyond the {MAX_LEDGER_LINES}-line cap ignored")
     if malformed:
         notes.append(f"{malformed} malformed lines skipped")
     if too_large:

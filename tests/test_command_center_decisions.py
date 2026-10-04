@@ -484,6 +484,18 @@ class LedgerTests(_Workspace):
         assert len(result["events"]) == decisions.MAX_LEDGER_LINES
         assert "2000" in result["detail"]
 
+    def test_line_cap_keeps_the_newest_lines_of_an_append_only_ledger(self) -> None:
+        root = self.new_workspace()
+        total = decisions.MAX_LEDGER_LINES + 10
+        self.write_ledger(root, [_returned("2026-05-01T00:00:00Z", f"s{i}") for i in range(total)])
+        result = self.read(root)
+        refs = [e["ref"] for e in result["events"]]
+
+        assert len(refs) == decisions.MAX_LEDGER_LINES
+        assert refs[0] == f"{LEDGER_REL}#11"  # real 1-based line numbers survive
+        assert refs[-1] == f"{LEDGER_REL}#{total}"  # the newest event is never dropped
+        assert f"{total - decisions.MAX_LEDGER_LINES} oldest lines" in result["detail"]
+
     def test_file_cap(self) -> None:
         root = self.new_workspace()
         for index in range(decisions.MAX_LEDGER_FILES + 3):
@@ -555,6 +567,48 @@ class LedgerTests(_Workspace):
         assert seen, "the spy saw no file access at all"
         assert not [p for p in seen if "kaggle-inbox" in p]
         assert trap.read_text() == "SECRET"
+
+
+class ListNamesTests(_Workspace):
+    def test_filters_before_bounding_so_non_matching_entries_cannot_hide_matches(self) -> None:
+        class _Entry:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        listing = [_Entry(f"skip{i:03d}.txt") for i in range(200)] + [
+            _Entry(f"keep{i}.json") for i in range(3)]
+
+        class _Scan:
+            def __enter__(self):
+                return iter(listing)
+
+            def __exit__(self, *exc):
+                return False
+
+        with mock.patch.object(decisions, "MAX_DIR_NAMES", 5), \
+                mock.patch.object(decisions.os, "scandir", lambda _d: _Scan()):
+            names, cut = decisions._list_names(Path("."), lambda e: e.name.endswith(".json"))
+
+        assert names == ["keep0.json", "keep1.json", "keep2.json"] and cut is False
+
+    def test_truncation_is_flagged_and_deterministic(self) -> None:
+        root = self.new_workspace()
+        for index in range(12):
+            (root / f"f{index:02d}.json").write_text("{}")
+        with mock.patch.object(decisions, "MAX_DIR_NAMES", 5):
+            names, cut = decisions._list_names(root, lambda e: e.name.endswith(".json"))
+
+        assert cut is True
+        assert names == [f"f{i:02d}.json" for i in range(5)]
+
+    def test_exactly_at_the_cap_is_not_a_truncation(self) -> None:
+        root = self.new_workspace()
+        for index in range(5):
+            (root / f"f{index}.json").write_text("{}")
+        with mock.patch.object(decisions, "MAX_DIR_NAMES", 5):
+            names, cut = decisions._list_names(root, lambda e: e.name.endswith(".json"))
+
+        assert len(names) == 5 and cut is False
 
 
 class MergeTests(_Workspace):
