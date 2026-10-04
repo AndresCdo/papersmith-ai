@@ -3163,8 +3163,10 @@ y `lifecycle/v1/transitions/*.json` de `.proposal-deliberation/` y
 `.experimental-deliberation/`) y `remote-execution` (los `ledger.jsonl` de
 `implementations/<repo>/<Nombre>/.remote-execution/`, descubiertos exactamente a
 dos niveles, sin recursión; `kaggle-inbox/` nunca se lee). Los recibos de
-deliberación no tienen marca de tiempo: sus eventos llevan `ts: null`, van
-después de los fechados (por nombre de archivo) y nunca se usa el mtime. Las
+edición no tienen marca de tiempo: sus eventos llevan `ts: null`, van
+después de los fechados (por nombre de archivo) y nunca se usa el mtime; el
+recibo de la revisión inicial (`CREATE_INITIAL_REVISION`) sí trae `createdAt`, que
+se usa como `ts` ("Created initial revision r01"). Las
 transiciones usan `committedAt`; cada resultado (`COMMITTED`,
 `ALREADY_COMMITTED`, `REJECTED`, `INCONSISTENT`, `RECOVERY_REQUIRED`) tiene su
 resumen. Todo se lee como JSON plano sin repetir las comprobaciones de hash y
@@ -3186,7 +3188,7 @@ protección `Host` (421) cubre la ruta solo en un bind a loopback.
 botón *Refresh* (las fuentes no se vigilan; sin solapar peticiones; error en
 línea con *Retry*, conserva los datos anteriores). Muestra los eventos tal como
 llegan (fechados de más nuevo a más antiguo; después, bajo el subtítulo
-*Undated*, los recibos sin marca de tiempo). Cada fila lleva la fecha en texto
+*Undated*, los recibos de edición sin marca de tiempo). Cada fila lleva la fecha en texto
 UTC (`AAAA-MM-DD HH:MM:SS UTC`), una etiqueta de fuente (declarations, proposal,
 experiment, remote ledger), el tipo, el resumen y la ruta `ref` como texto (no
 es un enlace). Las filas con `verified: false` muestran *unverified* con el

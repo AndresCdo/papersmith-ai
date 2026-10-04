@@ -52,7 +52,7 @@ session history.
   fetched when the tab opens and on a Refresh button, with an inline error and
   Retry. The visual checker covers the tab and waits for the frame fetch.
 - **Decisions tab.** `#decisions` renders `/api/decisions` as a read-only
-  timeline: dated events newest first, then an "Undated" group for receipts; each
+  timeline: dated events newest first, then an "Undated" group for edit receipts; each
   row shows a UTC timestamp, a source chip, the kind, the summary and the `ref`
   as plain text, an "unverified" label for lifecycle records read without hash
   checks, and muted notes. Per-source status chips (ok, absent, unreadable,
@@ -67,9 +67,10 @@ session history.
   recoverable), the `.proposal-deliberation/` and `.experimental-deliberation/`
   receipts and lifecycle transitions, and the remote-execution ledgers at
   `implementations/<repo>/<Name>/.remote-execution/ledger.jsonl` (exactly two
-  levels, no recursion; `kaggle-inbox/` is never read). Receipts have no
+  levels, no recursion; `kaggle-inbox/` is never read). Edit receipts have no
   timestamp, so their events carry `ts: null` and sort after dated events (file
-  mtime is never used); deliberation events are plain-JSON reads without the
+  mtime is never used); the initial-revision receipt carries `createdAt`, which is
+  its `ts` ("Created initial revision r01"); deliberation events are plain-JSON reads without the
   lifecycle hash checks and carry `verified: false` (to be shown as
   "unverified"). Newest first with a stable tie-break; each source reports
   `status` (`ok`, `absent`, `unreadable`, `too_large`) so one broken source never
