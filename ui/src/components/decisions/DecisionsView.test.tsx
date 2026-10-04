@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import DecisionsView from './DecisionsView';
 import type { DecisionEvent, DecisionsPayload } from '../../types';
 
@@ -137,5 +137,34 @@ describe('DecisionsView', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'proposal' }));
     expect(screen.getByText('No decisions match the selected sources')).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  describe('timestamps without a timezone', () => {
+    const original = process.env.TZ;
+    afterEach(() => {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    });
+
+    it.each(['America/Bogota', 'Asia/Tokyo', 'UTC'])('are read as UTC in %s', (zone) => {
+      process.env.TZ = zone;
+      view(payload({
+        events: [
+          event({ ts: '2026-03-02T10:15:30', summary: 'naive T' }),
+          event({ ts: '2026-03-02 10:15:30', summary: 'naive space' }),
+          event({ ts: '2026-03-02T10:15:30.250', summary: 'naive fraction' }),
+          event({ ts: '2026-03-02T10:15:30+02:00', summary: 'offset' }),
+          event({ ts: '2026-03-02T10:15:30Z', summary: 'zulu' }),
+          event({ ts: 'not a date', summary: 'garbage' }),
+        ],
+      }));
+      const text = (summary: string) => screen.getByText(summary).closest('li')!.textContent ?? '';
+      expect(text('naive T')).toContain('2026-03-02 10:15:30 UTC');
+      expect(text('naive space')).toContain('2026-03-02 10:15:30 UTC');
+      expect(text('naive fraction')).toContain('2026-03-02 10:15:30 UTC');
+      expect(text('offset')).toContain('2026-03-02 08:15:30 UTC');
+      expect(text('zulu')).toContain('2026-03-02 10:15:30 UTC');
+      expect(text('garbage')).toContain('not a date');
+    });
   });
 });
