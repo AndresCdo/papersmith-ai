@@ -13,6 +13,13 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ## Unreleased
 
+### Fixed
+
+- **Workspace `.gitignore` covers the skills links.** A new workspace now
+  ignores `.claude/skills`, `.opencode/skills`, `.pi/skills` and
+  `.agents/skills` (the generated symlinks to `skills/`), so `git add .` no
+  longer commits them.
+
 ### Added
 
 Harness parity: skills, commands, agents and guards in each harness, wired by
