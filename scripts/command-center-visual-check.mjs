@@ -6,7 +6,7 @@
 //
 //   node scripts/command-center-visual-check.mjs --out DIR [--url URL]
 //        [--timeout SECONDS] [--tabs a,b] [--viewports 1280x800,1600x1000]
-//        [--chromium PATH] [--drag-check]
+//        [--chromium PATH] [--drag-check] [--full-page]
 
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -217,7 +217,15 @@ async function run(options) {
             );
           }
           await twoFrames(cdp, sessionId);
-          const shot = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
+          const capture = { format: 'png' };
+          if (options.fullPage) {
+            // Capture the whole scrollable page, not just the first viewport.
+            const metrics = await cdp.send('Page.getLayoutMetrics', {}, sessionId);
+            const size = metrics.cssContentSize ?? metrics.contentSize;
+            capture.captureBeyondViewport = true;
+            capture.clip = { x: 0, y: 0, width: size.width, height: Math.ceil(size.height), scale: 1 };
+          }
+          const shot = await cdp.send('Page.captureScreenshot', capture, sessionId);
           const file = path.join(options.out, shotName(tab, viewport));
           await writeFile(file, Buffer.from(shot.data, 'base64'));
           report.shots.push(file);

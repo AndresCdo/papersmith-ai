@@ -12,6 +12,7 @@ const DEFAULTS = {
   timeoutMs: 20000,
   chromium: '/usr/bin/chromium',
   dragCheck: false,
+  fullPage: false,
 };
 
 function takeValue(argv, index, flag) {
@@ -70,6 +71,9 @@ export function parseArgs(argv) {
         break;
       case '--drag-check':
         parsed.dragCheck = true;
+        break;
+      case '--full-page':
+        parsed.fullPage = true;
         break;
       default:
         throw new Error(`unknown option ${flag}`);

@@ -18,6 +18,7 @@ test('parseArgs applies defaults and requires --out', () => {
   assert.equal(parsed.url, 'http://127.0.0.1:8099/');
   assert.equal(parsed.timeoutMs, 20000);
   assert.equal(parsed.dragCheck, false);
+  assert.equal(parsed.fullPage, false);
   assert.deepEqual(parsed.tabs, DEFAULT_TABS);
   assert.deepEqual(parsed.viewports, DEFAULT_VIEWPORTS);
   assert.throws(() => parseArgs([]), /--out/);
@@ -27,7 +28,7 @@ test('parseArgs reads every option', () => {
   const parsed = parseArgs([
     '--out', '/x', '--url', 'http://localhost:5173', '--timeout', '5',
     '--tabs', 'pipeline,health', '--viewports', '800x600,1024x768',
-    '--chromium', '/opt/chrome', '--drag-check',
+    '--chromium', '/opt/chrome', '--drag-check', '--full-page',
   ]);
   assert.equal(parsed.url, 'http://localhost:5173/');
   assert.equal(parsed.timeoutMs, 5000);
@@ -38,6 +39,7 @@ test('parseArgs reads every option', () => {
   ]);
   assert.equal(parsed.chromium, '/opt/chrome');
   assert.equal(parsed.dragCheck, true);
+  assert.equal(parsed.fullPage, true);
 });
 
 test('parseArgs rejects unknown flags, bad numbers and bad viewports', () => {
