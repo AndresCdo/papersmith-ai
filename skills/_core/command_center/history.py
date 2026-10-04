@@ -81,8 +81,27 @@ def _by_id(items: Any) -> dict[str, dict[str, Any]]:
     return result
 
 
-def _percent(value: Any) -> str:
-    return f"{round(value * 100)}%" if isinstance(value, (int, float)) else "n/a"
+def _percent(value: Any, digits: int = 0) -> str:
+    """``value`` (a 0..1 fraction) as a percentage with at most ``digits`` decimals.
+
+    Whole-number precision keeps ``"<1%"`` for a positive value below one percent
+    instead of a misleading ``"0%"``; extra decimals drop trailing zeros.
+    """
+    if not isinstance(value, (int, float)):
+        return "n/a"
+    pct = value * 100
+    if digits == 0:
+        return "<1%" if 0 < pct < 1 else f"{round(pct)}%"
+    return f"{pct:.{digits}f}".rstrip("0").rstrip(".") + "%"
+
+
+def _percent_change(before: Any, after: Any) -> str:
+    """``"<before> -> <after>"`` with just enough precision to tell them apart."""
+    for digits in (0, 1, 2, 3):
+        old, new = _percent(before, digits), _percent(after, digits)
+        if old != new:
+            break
+    return f"{old} -> {new}"
 
 
 def _stage_summary(stage_id: str, before: dict | None, after: dict | None) -> str:
@@ -94,7 +113,7 @@ def _stage_summary(stage_id: str, before: dict | None, after: dict | None) -> st
     if before.get("active") != after.get("active"):
         parts.append("became active" if after.get("active") else "became inactive")
     if before.get("progress") != after.get("progress"):
-        parts.append(f"progress {_percent(before.get('progress'))} -> {_percent(after.get('progress'))}")
+        parts.append(f"progress {_percent_change(before.get('progress'), after.get('progress'))}")
     if len(parts) == 1 and parts[0].startswith("progress"):
         return f"Stage {stage_id}: {parts[0]}"
     return f"Stage {stage_id} " + "; ".join(parts)
