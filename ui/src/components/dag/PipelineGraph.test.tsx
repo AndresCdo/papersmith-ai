@@ -79,3 +79,18 @@ describe('PipelineGraph selection', () => {
     expect(container.querySelector('.react-flow__node.draggable')).toBeNull();
   });
 });
+
+describe('PipelineGraph across state frames', () => {
+  it('keeps the selection mapped when a later frame reuses the layout', () => {
+    const onSelect = vi.fn();
+    const { container, rerender } = render(<PipelineGraph graph={graph} selectedId="stage:drafting" onSelect={onSelect} />);
+    const next = buildGraph({
+      ...diagramState,
+      pipeline_stages: diagramState.pipeline_stages?.map((stage) => ({ ...stage, detail: 'updated' })),
+    });
+    expect(next.nodes.map((n) => n.position)).toEqual(graph.nodes.map((n) => n.position));
+    rerender(<PipelineGraph graph={next} selectedId="stage:drafting" onSelect={onSelect} />);
+    expect(node(container, 'stage:drafting')).toHaveClass('selected');
+    expect(node(container, 'stage:auditing')).not.toHaveClass('selected');
+  });
+});

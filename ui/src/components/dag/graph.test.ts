@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { buildGraph, relationKind } from './graph';
+import { describe, expect, it, vi } from 'vitest';
+import { buildGraph, graphSignature, relationKind } from './graph';
+import * as layoutModule from './layout';
 import type { WorkspaceState } from '../../types';
+
+// Wrap the real layout so every test still lays out for real while calls are countable.
+vi.mock('./layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./layout')>();
+  return { ...actual, layoutGraph: vi.fn(actual.layoutGraph) };
+});
 
 const state: WorkspaceState = {
   pipeline_stages: [
@@ -49,5 +56,38 @@ describe('buildGraph', () => {
 
   it('returns an empty graph for a null state', () => {
     expect(buildGraph(null).nodes).toEqual([]);
+  });
+});
+
+describe('buildGraph layout memoisation', () => {
+  const layout = vi.mocked(layoutModule.layoutGraph);
+  const frame = (patch: Partial<WorkspaceState> = {}): WorkspaceState => ({ ...state, ...patch });
+
+  it('lays out once across two frames with the same structure and keeps positions', () => {
+    layout.mockClear();
+    const first = buildGraph(frame({ sections: [{ id: 'Zeta Layout', section: 'Zeta Layout' }] }));
+    const second = buildGraph(
+      frame({ sections: [{ id: 'Zeta Layout', section: 'Zeta Layout', status: 'DRAFTING', word_count: 40 }] }),
+    );
+    expect(layout).toHaveBeenCalledTimes(1);
+    expect(second.nodes.map((node) => node.position)).toEqual(first.nodes.map((node) => node.position));
+    expect(second.width).toBe(first.width);
+    expect(second.nodes.find((node) => node.id === 'section:Zeta Layout')?.data.status).toBe('DRAFTING');
+  });
+
+  it('recomputes when a node appears', () => {
+    buildGraph(frame());
+    layout.mockClear();
+    buildGraph(frame({ sections: [...(state.sections ?? []), { id: 'Method', section: 'Method' }] }));
+    expect(layout).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs a different structure when only an edge changes', () => {
+    const nodes = buildGraph(frame()).nodes;
+    const edge = (id: string, source: string, target: string) => ({ id, source, target });
+    const base = [edge('a->b', 'stage:ingestion', 'stage:drafting')];
+    const rewired = [edge('a->c', 'stage:ingestion', 'stage:auditing')];
+    expect(graphSignature(nodes, base)).toBe(graphSignature(nodes, [...base]));
+    expect(graphSignature(nodes, rewired)).not.toBe(graphSignature(nodes, base));
   });
 });
