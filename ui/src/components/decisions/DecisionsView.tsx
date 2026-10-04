@@ -24,9 +24,13 @@ const UNVERIFIED_TITLE = 'Read from the lifecycle files without hash or consiste
 
 const sourceLabel = (source: string) => SOURCE_LABELS[source] ?? source;
 
-/** `2026-03-02T10:15:30Z` -> `2026-03-02 10:15:30 UTC`; unparseable values are shown as given. */
+/** `2026-03-02T10:15:30Z` -> `2026-03-02 10:15:30 UTC`; a zone-less value is read as UTC;
+ * unparseable values are shown as given. */
 function formatUtc(ts: string): string {
-  const parsed = new Date(ts);
+  // `new Date()` reads a zone-less date-time as LOCAL time; the backend treats
+  // it as UTC, so say so explicitly before parsing.
+  const naive = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(ts.trim());
+  const parsed = new Date(naive ? `${ts.trim().replace(' ', 'T')}Z` : ts);
   if (Number.isNaN(parsed.getTime())) return ts;
   return `${parsed.toISOString().slice(0, 19).replace('T', ' ')} UTC`;
 }

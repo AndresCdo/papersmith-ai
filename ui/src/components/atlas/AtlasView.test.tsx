@@ -6,7 +6,7 @@ import type { AtlasEvidence, AtlasPayload } from '../../types';
 
 const payload = (over: Partial<AtlasPayload> = {}): AtlasPayload => ({
   json: { status: 'ok', size: 100 },
-  html: { status: 'ok', size: 200 },
+  html: { status: 'ok', size: 200, mtime: 1700000000000 },
   stale: false,
   validation: { status: 'ok', errors: [], error_count: 0 },
   summary: {
@@ -129,7 +129,7 @@ describe('AtlasView', () => {
   it('embeds the constellation in an iframe sandboxed to allow-scripts only', () => {
     view(payload());
     const frame = screen.getByTitle('SOTA constellation');
-    expect(frame.getAttribute('src')).toBe('/api/atlas/view');
+    expect(frame.getAttribute('src')).toBe('/api/atlas/view?v=1700000000000-200');
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(frame.getAttributeNames().join(' ')).not.toContain('allow-same-origin');
@@ -140,5 +140,58 @@ describe('AtlasView', () => {
     view(payload({ html: { status: 'too_large' }, stale: null }));
     expect(screen.queryByTitle('SOTA constellation')).toBeNull();
     expect(screen.getByText(/atlas\.html is too large/)).toBeInTheDocument();
+  });
+
+  it('shows the validation errors even when there is no summary', () => {
+    view(payload({
+      json: { status: 'invalid', size: 5 },
+      summary: null,
+      validation: { status: 'failed', errors: ['ATLAS_NOT_JSON: boom', 'second', 'third'], error_count: 5 },
+    }));
+    const group = screen.getByRole('group', { name: 'Validation' });
+    expect(group).toHaveTextContent('failed');
+    expect(group).toHaveTextContent('ATLAS_NOT_JSON: boom');
+    expect(group).toHaveTextContent('2 more');
+  });
+
+  it('shows the validation of a non-object atlas.json that parsed fine', () => {
+    view(payload({
+      summary: null,
+      validation: { status: 'failed', errors: ['ATLAS_NOT_AN_OBJECT'], error_count: 1 },
+    }));
+    expect(screen.getByRole('group', { name: 'Validation' })).toHaveTextContent('ATLAS_NOT_AN_OBJECT');
+  });
+
+  it('explains an ok JSON with no summary', () => {
+    view(payload({ summary: null }));
+    expect(screen.getByTestId('atlas-no-summary')).toHaveTextContent(/no systems list/i);
+  });
+
+  it('does not show the validation panel when atlas.json is absent', () => {
+    view(payload({ json: { status: 'absent' }, stale: null, summary: null }));
+    expect(screen.queryByRole('group', { name: 'Validation' })).toBeNull();
+  });
+
+  it('shows the validation chip once when a summary exists', () => {
+    view(payload());
+    expect(screen.getAllByRole('group', { name: 'Validation' })).toHaveLength(1);
+    expect(screen.queryByTestId('atlas-no-summary')).toBeNull();
+  });
+
+  it('reloads the iframe when the HTML metadata changes', () => {
+    const props = { loading: false, error: null, refresh: vi.fn(), retry: vi.fn() };
+    const { rerender } = render(<AtlasView data={payload()} {...props} />);
+    const first = screen.getByTitle('SOTA constellation');
+    rerender(<AtlasView data={payload()} {...props} />);
+    expect(screen.getByTitle('SOTA constellation')).toBe(first);
+    rerender(<AtlasView data={payload({ html: { status: 'ok', size: 200, mtime: 1700000009999 } })} {...props} />);
+    const second = screen.getByTitle('SOTA constellation');
+    expect(second).not.toBe(first);
+    expect(second.getAttribute('src')).toBe('/api/atlas/view?v=1700000009999-200');
+  });
+
+  it('falls back to the size when the payload has no mtime', () => {
+    view(payload({ html: { status: 'ok', size: 321 } }));
+    expect(screen.getByTitle('SOTA constellation').getAttribute('src')).toBe('/api/atlas/view?v=321');
   });
 });

@@ -3075,7 +3075,11 @@ python -m skills._core.command_center.server --port 8080 --allowed-host localhos
 `%% paper-writing block <id> begin|end`), sus claves `\cite{...}`, palabras,
 `written` y banderas `truncated`/`duplicate`, más el estado del PDF
 (`pdf.main` con `stale` si `main.tex` es más nuevo que `main.pdf`, y la lista de
-figuras). Las regiones de declaraciones y procedencia se ignoran; un bloque sin
+figuras; ambos llevan `mtime` en milisegundos, que la UI añade como `?v=` para
+recargar el PDF y las miniaturas al recompilar) y `sections_dir` (`status`:
+`ok`, `absent`, `unsafe` si `sections/` es un symlink que sale del workspace, y
+`truncated` si hay más de 100 secciones no canónicas; las canónicas siempre se
+resuelven por nombre). Las regiones de declaraciones y procedencia se ignoran; un bloque sin
 cierre se descarta y, con ids repetidos, gana el primero (marcado `duplicate`).
 `GET /api/paper/file?name=<n>` sirve solo `main.pdf` (`paper/main.pdf`) y
 `figures/<id>.pdf|png` (el directorio real es `paper/Figures/`, con F
@@ -3114,6 +3118,7 @@ muestra el error con *Retry*.
 `GET /api/atlas` devuelve `json` y `html` con su estado (`ok`, `absent`,
 `too_large`, `unsafe`, y para el JSON también `unreadable` o `invalid`) y tamaño,
 `stale` (`atlas.json` más nuevo que `atlas.html`; `null` si falta alguno),
+`mtime` en milisegundos (la UI lo añade como `?v=` al iframe para recargarlo),
 `validation` (`ok`, `failed` con `errors`, hasta 50, o `unavailable` con
 `detail`) y `summary` (sistemas con id, título, número de planetas y familias;
 número de enlaces; conteo por `rel`; evidencia con sistema, planeta, origen y
@@ -3177,8 +3182,9 @@ Cada fuente devuelve `status` (`ok`, `absent`, `unreadable`, `too_large`) y
 `count` en `sources`, de modo que una fuente rota no rompe la respuesta. Topes:
 500 eventos por fuente y 1000 en total (`truncated` y `total`), `main.tex` 2 MiB,
 256 KiB por recibo o transición, 500 archivos por directorio del sidecar,
-20 ledgers de hasta 2 MiB y 2000 líneas cada uno (las líneas mal formadas se
-omiten y se cuentan en `detail`). Filtros opcionales: `source=` (lista separada
+20 ledgers de hasta 2 MiB y 2000 líneas cada uno (se conservan las 2000 líneas
+más recientes y `detail` cuenta las más antiguas ignoradas; las líneas mal
+formadas se omiten y se cuentan en `detail`). Filtros opcionales: `source=` (lista separada
 por comas; 422 si hay un nombre desconocido) y `limit=` (1 a 1000). Cada lectura
 resuelve la ruta, exige que quede dentro del workspace, un archivo regular y
 comprueba el tamaño antes de leer. No hay campo de autor: nunca se registra. La

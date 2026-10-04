@@ -28,7 +28,8 @@ Route: delegated writer per slice (one writer at a time).
 - [x] D-1 dpv-09 Decisions backend (commits f72e358, 029a75d, bfccf6b on feat/dpv-09-decisions-api)
 - [x] D-2 dpv-10 Decisions tab UI (commits 8df9a14, 655d98e, 53d817f on feat/dpv-10-decisions-tab)
 - [x] C1 dpv-11 Closure and docs (commits f63d9bf, 7397f6b + this document commit on feat/dpv-11-closure)
-- [ ] Judgment Day on the implementation
+- [x] Judgment Day on the implementation (APPROVED, INFO findings; nine fixed in dpv-12)
+- [x] J1 dpv-12 Judgment Day polish (commits 6e837e8 .. a999b1d on feat/dpv-12-judgment-fixes)
 
 ## Evidence
 (appended per slice: RED/GREEN commands and results, commit ids, assessed review tier)
@@ -132,6 +133,19 @@ Route: delegated writer per slice (one writer at a time).
   7. Docs: README Spanish `papersmith ui` section mentions Preview, Atlas and Decisions tabs and each route once; CHANGELOG Unreleased has one entry per route set and per tab, no duplicates; neither document states a tab count or an old tab list, so nothing else needed updating. Minor leftover: DecisionsView's Undated note says "Revision receipts carry no timestamp" (true for edit receipts; changing it needs a bundle rebuild, left as is).
 - Review tier: not assessed (local commits only).
 
+### Judgment Day (implementation) and dpv-12 (feat/dpv-12-judgment-fixes, stacked on feat/dpv-11-closure)
+- Verdict: APPROVED, INFO findings only. The user chose to fix the deterministic bugs below; route: delegated writer in worktree ../papersmith-ai-worktrees/dpv, strict TDD (RED observed before each fix).
+- 1. atlas `summarize` TypeError on scalar `planets` (GET /api/atlas 500). RED: `pytest tests/test_command_center_atlas.py -q`: 6 failed, 38 passed ("TypeError: 'bool' object is not iterable", atlas.py:164). GREEN: 41 passed. Commit 6e837e8. `summarize` accepts only lists, `build_atlas` also shields the summary; the real checker may itself crash on a scalar, which stays honest `validation: unavailable`.
+- 4+5. ledger kept the OLDEST 2000 lines; `_list_names` sliced before filtering. RED: `pytest tests/test_command_center_decisions.py -q`: 3 failed, 67 passed. GREEN: 70 passed. Commit 0fda8c3 (newest lines kept with real 1-based refs, note "N oldest lines beyond the 2000-line cap ignored"; names filtered first, bounded to the smallest MAX_DIR_NAMES in sort order, flag whenever matches were dropped; README/CHANGELOG wording).
+- 6. symlinked `sections/` and the 100 cap. RED: `pytest tests/test_command_center_paper_preview.py -q`: 5 failed, 37 passed. GREEN: 42 passed. Commit cbbaf6c (`sections_dir {status ok|absent|unsafe|unreadable, truncated}`; only extra sections are capped, canonical ones are resolved by name).
+- 7. `_percent` NaN/inf/bool. RED: `pytest tests/test_command_center_history.py -q`: 6 failed, 21 passed. GREEN: 27 passed. Commit 423e3ef (renders `n/a`).
+- 3 (backend). `mtime` (integer ms) added to `pdf.main`, `pdf.figures[]`, atlas `json`/`html`. RED: atlas+preview tests: 5 failed, 81 passed. GREEN: 86 passed, then `pytest tests/test_command_center_*.py -q`: 300 passed, 32 subtests. New tests assert the file routes and /api/atlas ignore an unknown `v` (single, repeated, NUL). Commit 4ebab9a.
+- 8, 2, 3 (UI), 9. RED: `cd ui && npx vitest run src/components`: 13 failed, 110 passed (iframe/img src without `v`, no validation without summary, duplicate-key warning, zone-less ts shifted in America/Bogota and Asia/Tokyo; TZ set via process.env.TZ). GREEN: 21 files, 216 tests passed; `npm run typecheck`: clean. Commits cd16974 (formatUtc reads zone-less date-times as UTC), cc876c9 (ValidationPanel with chip, first errors and "N more" when summary is null and json is ok/invalid, plus a no-summary message; `?v=<mtime>-<size>` and `key` on the PDF iframe, figure `<img>` and atlas iframe via ui/src/components/cacheToken.ts, falling back to size alone; block key `index:id`), 9483a4b (README Spanish + CHANGELOG), a999b1d (bundle index-y8pmRgaJ.js, `git status --porcelain skills/_core/command_center/static` empty after).
+- Final checks (sequential): `pytest tests/test_command_center_*.py -q`: 300 passed, 32 subtests. `cd ui && npx vitest run`: 21 files, 216 passed. `npm run typecheck`: clean. `npm run test:node`: 681 tests, 671 pass, 0 fail, 10 skipped. Full `pytest -n 8 --dist loadfile -q`: 7 failed, 5750 passed, 8 skipped: the 6 known pre-existing (5x test_forge_gate GateInterpreterTests, test_mcp_tools read_only_tools) plus `tests/test_remote_execution.py::ColabSessionLifecycleTests::test_colab_launch_is_never_retried`, which passes standalone (load flake, unrelated). No browser re-check was run.
+- Left OPEN (user's call later): atlas `check_atlas` timeout and Origin-check hardening, `_no_bytecode` thread-safety, preview-vs-extractor parsing differences. The UI does not surface `sections_dir` yet (payload only). `mtime` is in ms so it stays below JS 2^53.
+- Authored lines vs feat/dpv-11-closure (excluding bundle): +533/-53 including tests.
+- Review tier: not assessed (local commits only).
+
 ## Delivery slices (stack order, base feat/dashboard-interactive; authored lines = diff of the branch vs its parent excluding the bundle `skills/_core/command_center/static` and this document; the last commit of each branch is the evidence doc commit)
 | # | Branch | Commits | Authored lines |
 |---|--------|---------|----------------|
@@ -146,6 +160,7 @@ Route: delegated writer per slice (one writer at a time).
 | 9 | feat/dpv-09-decisions-api | f72e358 029a75d bfccf6b 4434047 | +1281/-1 |
 | 10 | feat/dpv-10-decisions-tab | 8df9a14 655d98e 53d817f 54dcc3d | +651/-4 |
 | 11 | feat/dpv-11-closure | f63d9bf 7397f6b + document commit | +71/-14 |
+| 12 | feat/dpv-12-judgment-fixes | 6e837e8 0fda8c3 cbbaf6c 423e3ef 4ebab9a cd16974 cc876c9 9483a4b a999b1d + document commit | +533/-53 |
 Slices 5-10 exceed the ~400 heuristic (tests are roughly 40-60% of those lines); each is split at commit boundaries (module+tests / routes+tests / docs, or UI / checker / docs), so each PR can be reviewed commit by commit or flagged size:exception.
 
 ---

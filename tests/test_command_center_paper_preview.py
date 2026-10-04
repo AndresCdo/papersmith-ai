@@ -175,6 +175,58 @@ class SectionOrderTests(_Workspace):
         assert section["status"] == "DRAFTING"
 
 
+class SectionsDirectoryTests(_Workspace):
+    def test_sections_directory_symlinked_outside_leaks_nothing(self) -> None:
+        root = self.new_workspace()
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "99-secret-name.md").write_text(_contract("extra", 99, ["extra.leak"]))
+        (root / "sections").rmdir()
+        os.symlink(outside, root / "sections")
+        data = self.preview(root)
+
+        assert data["sections_dir"] == {"status": "unsafe", "truncated": False}
+        assert "99-secret-name" not in json.dumps(data)
+        assert "extra.leak" not in json.dumps(data)
+
+    def test_sections_directory_inside_the_workspace_may_be_a_symlink(self) -> None:
+        root = self.new_workspace()
+        (root / "sections").rmdir()
+        (root / "real-sections").mkdir()
+        os.symlink(root / "real-sections", root / "sections")
+        self.write(root, "real-sections/99-extra.md", _contract("extra", 99, []))
+        data = self.preview(root)
+
+        assert data["sections_dir"]["status"] == "ok"
+        assert "99-extra" in [s["id"] for s in data["sections"]]
+
+    def test_absent_sections_directory_is_reported(self) -> None:
+        root = self.new_workspace()
+        (root / "sections").rmdir()
+
+        assert self.preview(root)["sections_dir"] == {"status": "absent", "truncated": False}
+
+    def test_many_extra_sections_do_not_hide_canonical_ones_and_flag_the_cap(self) -> None:
+        root = self.new_workspace()
+        for index in range(paper_preview.MAX_SECTION_FILES + 5):
+            self.write(root, f"sections/00-extra-{index:03d}.md", _contract(f"x{index}", index, []))
+        self.write(root, "sections/08-abstract.md", _contract("abstract", 8, ["abstract.body"]))
+        data = self.preview(root)
+        by_id = {s["id"]: s for s in data["sections"]}
+
+        assert by_id["08-abstract"]["blocks"][0]["id"] == "abstract.body"
+        assert data["sections_dir"]["truncated"] is True
+        extras = [s for s in data["sections"] if s["id"].startswith("00-extra-")]
+        assert len(extras) == paper_preview.MAX_SECTION_FILES
+
+    def test_at_the_cap_is_not_truncated(self) -> None:
+        root = self.new_workspace()
+        for index in range(paper_preview.MAX_SECTION_FILES):
+            self.write(root, f"sections/00-extra-{index:03d}.md", _contract(f"x{index}", index, []))
+
+        assert self.preview(root)["sections_dir"]["truncated"] is False
+
+
 class CapTests(_Workspace):
     def test_per_block_truncation_flag(self) -> None:
         root = self.new_workspace()
@@ -284,7 +336,8 @@ class PdfInfoTests(_Workspace):
         pdf = self.write(root, "paper/main.pdf", b"%PDF-1.4")
         os.utime(tex, (2000, 2000))
         os.utime(pdf, (1000, 1000))
-        assert self.preview(root)["pdf"]["main"] == {"present": True, "size": 8, "stale": True}
+        assert self.preview(root)["pdf"]["main"] == {
+            "present": True, "size": 8, "stale": True, "mtime": 1000 * 1000}
         os.utime(pdf, (3000, 3000))
         assert self.preview(root)["pdf"]["main"]["stale"] is False
 
@@ -297,8 +350,24 @@ class PdfInfoTests(_Workspace):
         (root / "paper" / "Figures" / "dir.pdf").mkdir()
         figures = self.preview(root)["pdf"]["figures"]
 
-        assert figures == [{"id": "arch", "kind": "pdf", "size": 4},
-                           {"id": "plot", "kind": "png", "size": 4}]
+        assert [{k: v for k, v in f.items() if k != "mtime"} for f in figures] == [
+            {"id": "arch", "kind": "pdf", "size": 4}, {"id": "plot", "kind": "png", "size": 4}]
+        assert all(isinstance(f["mtime"], int) and f["mtime"] > 0 for f in figures)
+
+    def test_mtime_changes_when_a_figure_or_the_pdf_is_rewritten(self) -> None:
+        root = self.new_workspace()
+        fig = self.write(root, "paper/Figures/arch.pdf", b"%PDF")
+        pdf = self.write(root, "paper/main.pdf", b"%PDF-1.4")
+        os.utime(fig, (1000, 1000))
+        os.utime(pdf, (1000, 1000))
+        before = self.preview(root)["pdf"]
+        os.utime(fig, (2000, 2000))
+        os.utime(pdf, (2000, 2000))
+        after = self.preview(root)["pdf"]
+
+        assert before["figures"][0]["mtime"] == 1000 * 1000
+        assert after["figures"][0]["mtime"] == 2000 * 1000
+        assert before["main"]["mtime"] != after["main"]["mtime"]
 
 
 class FileRouteTests(_Workspace):
@@ -451,6 +520,15 @@ class HostAllowListTests(_Workspace):
         assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf"))[0] == 404
         assert asyncio.run(_call(app, "/api/paper/file", b"name=..%2Fmain.pdf"))[0] == 400
         assert asyncio.run(_call(app, "/api/paper/file", b""))[0] == 400
+
+    def test_file_route_ignores_the_cache_busting_query_parameter(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "paper/main.pdf", b"%PDF-1.4")
+        app = server.create_app(root)
+
+        assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf"))[0] == 200
+        assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf&v=1767225600000"))[0] == 200
+        assert asyncio.run(_call(app, "/api/paper/file", b"v=zzz&name=main.pdf&v=2"))[0] == 200
 
 
 class ReadOnlyInvariantTests(_Workspace):

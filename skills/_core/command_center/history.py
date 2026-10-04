@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import collections
 import copy
+import math
 import threading
 import time
 import uuid
@@ -87,7 +88,7 @@ def _percent(value: Any, digits: int = 0) -> str:
     Whole-number precision keeps ``"<1%"`` for a positive value below one percent
     instead of a misleading ``"0%"``; extra decimals drop trailing zeros.
     """
-    if not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         return "n/a"
     pct = value * 100
     if digits == 0:

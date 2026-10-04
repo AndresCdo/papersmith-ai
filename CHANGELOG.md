@@ -28,7 +28,9 @@ session history.
 - **Read-only paper preview routes in the command center.**
   `GET /api/paper/preview` returns sections (extractor order and ids) with
   plain-text block bodies from `paper/main.tex`, citation keys, `written`,
-  truncation/duplicate flags and PDF/figure info; `GET /api/paper/file?name=`
+  truncation/duplicate flags, PDF/figure info (with an `mtime` in ms used as
+  a `?v=` cache-buster) and `sections_dir` (`ok`/`absent`/`unsafe`, `truncated`
+  past 100 non-canonical sections); `GET /api/paper/file?name=`
   serves only `main.pdf` and `figures/<id>.pdf|png` (real directory
   `paper/Figures/`; id is one `[A-Za-z0-9._-]` segment, no leading dot, at most
   100 characters). Reads are size-capped before reading (`main.tex` 2 MiB,
@@ -76,7 +78,8 @@ session history.
   `status` (`ok`, `absent`, `unreadable`, `too_large`) so one broken source never
   fails the response. Caps: 500 events per source, 1000 total (`truncated`),
   `main.tex` 2 MiB, 256 KiB per receipt or transition, 500 files per sidecar
-  directory, 20 ledgers of 2 MiB and 2000 lines each. Optional `source=` (422 on
+  directory, 20 ledgers of 2 MiB and 2000 lines each (the newest 2000 lines are kept; `detail`
+  counts the oldest ones ignored). Optional `source=` (422 on
   an unknown name) and `limit=` (1 to 1000). Nothing is written. The `Host`
   allow-list (421) covers it only on loopback binds.
 - **Read-only SOTA atlas routes in the command center.** `GET /api/atlas`
@@ -84,6 +87,7 @@ session history.
   too_large, unsafe, unreadable, invalid), staleness (json newer than html),
   the workspace checker's verdict (`ok`, `failed` with up to 50 errors,
   `unavailable`) and a summary (systems, families, links, relations, evidence).
+  Each file entry carries an `mtime` (ms) the UI uses as `?v=` on the iframe;
   `GET /api/atlas/view` serves `atlas.html` (404 absent/unsafe, 413 over 2 MiB)
   under `Content-Security-Policy: sandbox allow-scripts; default-src 'none';
   script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:`,

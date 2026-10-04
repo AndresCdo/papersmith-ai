@@ -162,16 +162,44 @@ def _clip(text: str, limit: int) -> tuple[str, bool]:
 # --------------------------------------------------------------------------
 # preview payload
 # --------------------------------------------------------------------------
-def _section_paths(root: Path) -> list[Path]:
+def _section_paths(root: Path) -> tuple[list[Path], dict[str, Any]]:
+    """The section files to preview plus ``{"status", "truncated"}`` for the directory.
+
+    ``sections/`` itself must resolve inside the workspace; a symlink pointing
+    outside is ``unsafe`` and is never listed (so no outside file name becomes a
+    section id). Canonical sections are always resolved by name; only the extra
+    (non-canonical) ones are capped at ``MAX_SECTION_FILES``, and the cap is
+    reported as ``truncated`` instead of making later sections look absent.
+    """
     sections_dir = root / "sections"
-    present: list[Path] = []
-    if sections_dir.is_dir():
-        present = sorted(sections_dir.glob("*.md"))[:MAX_SECTION_FILES]
-    by_name = {path.stem: path for path in present}
     canonical = set(_ex.SECTION_ORDER)
+    by_name: dict[str, Path] = {}
+    extras: list[Path] = []
+    status, truncated = "absent", False
+    try:
+        resolved_dir = sections_dir.resolve(strict=True)
+    except (OSError, RuntimeError):
+        resolved_dir = None
+    if resolved_dir is not None:
+        try:
+            resolved_dir.relative_to(root.resolve())
+        except ValueError:
+            status = "unsafe"
+        else:
+            if not resolved_dir.is_dir():
+                status = "unreadable"
+            else:
+                status = "ok"
+                for path in sorted(sections_dir.glob("*.md")):
+                    if path.stem in canonical:
+                        by_name[path.stem] = path
+                    elif len(extras) < MAX_SECTION_FILES:
+                        extras.append(path)
+                    else:
+                        truncated = True
     paths = [by_name.get(name, sections_dir / f"{name}.md") for name in _ex.SECTION_ORDER]
-    paths.extend(path for path in present if path.stem not in canonical)
-    return paths
+    paths.extend(extras)
+    return paths, {"status": status, "truncated": truncated}
 
 
 def _pdf_info(root: Path, tex_mtime: float | None) -> dict[str, Any]:
@@ -181,7 +209,8 @@ def _pdf_info(root: Path, tex_mtime: float | None) -> dict[str, Any]:
     if resolved is not None:
         info = resolved.stat()
         stale = tex_mtime is not None and tex_mtime > info.st_mtime
-        main = {"present": True, "size": info.st_size, "stale": stale}
+        main = {"present": True, "size": info.st_size, "stale": stale,
+                "mtime": info.st_mtime_ns // 1_000_000}
     figures: list[dict[str, Any]] = []
     figures_dir = paper / "Figures"
     try:
@@ -197,7 +226,9 @@ def _pdf_info(root: Path, tex_mtime: float | None) -> dict[str, Any]:
         real = _contained(root.resolve(), entry)
         if real is None:
             continue
-        figures.append({"id": entry.stem, "kind": kind, "size": real.stat().st_size})
+        info = real.stat()
+        figures.append({"id": entry.stem, "kind": kind, "size": info.st_size,
+                        "mtime": info.st_mtime_ns // 1_000_000})
         if len(figures) >= MAX_FIGURES:
             break
     return {"main": main, "figures": figures}
@@ -221,7 +252,8 @@ def build_preview(root: Path | str) -> dict[str, Any]:
     truncated = False
     budget = TOTAL_TEXT_MAX_BYTES
     sections: list[dict[str, Any]] = []
-    for path in _section_paths(root):
+    section_paths, sections_dir = _section_paths(root)
+    for path in section_paths:
         _, text = bounded_read(root, path, SECTION_MAX_BYTES)
         meta, _body = _ex._split_frontmatter(text or "")
         contract_blocks = _ex._blocks_of(meta)
@@ -274,6 +306,7 @@ def build_preview(root: Path | str) -> dict[str, Any]:
         "sections": sections,
         "truncated": truncated,
         "caps": dict(CAPS),
+        "sections_dir": sections_dir,
         "main_tex": {"status": tex_status},
         "pdf": _pdf_info(root, tex_mtime),
     }

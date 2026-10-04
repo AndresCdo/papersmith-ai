@@ -42,6 +42,11 @@ TEXT_MAX = 300
 CHECKER_REL = ("skills", "plausibility", "scripts", "check_atlas.py")
 
 
+def _mtime_token(mtime: float) -> int:
+    """Integer milliseconds since the epoch: a cache-busting token for the UI."""
+    return int(mtime * 1000)
+
+
 def _clip(value: Any) -> str:
     return value[:TEXT_MAX] if isinstance(value, str) else ""
 
@@ -161,7 +166,8 @@ def summarize(data: Any) -> dict[str, Any] | None:
     for system in data["systems"]:
         if not isinstance(system, dict):
             continue
-        planets = [p for p in system.get("planets") or [] if isinstance(p, dict)]
+        raw_planets = system.get("planets")
+        planets = [p for p in raw_planets if isinstance(p, dict)] if isinstance(raw_planets, list) else []
         families: list[str] = []
         sid = _clip(system.get("id"))
         for planet in planets:
@@ -217,14 +223,21 @@ def build_atlas(root: Path | str) -> dict[str, Any]:
                 validation = {"status": "failed", "errors": [_clip(f"ATLAS_NOT_JSON: {exc}")],
                               "error_count": 1}
             else:
-                summary = summarize(parsed)
+                try:
+                    summary = summarize(parsed)
+                except Exception:  # noqa: BLE001 - odd content never breaks the payload
+                    summary = None
                 validation = validate(root, parsed)
         json_info["status"] = j_status
     if j_size is not None and j_status in ("ok", "invalid", "too_large"):
         json_info["size"] = j_size
+    if j_mtime is not None and j_status in ("ok", "invalid"):
+        json_info["mtime"] = _mtime_token(j_mtime)
     html_info: dict[str, Any] = {"status": h_status}
     if h_size is not None and h_status in ("ok", "too_large"):
         html_info["size"] = h_size
+    if h_mtime is not None and h_status == "ok":
+        html_info["mtime"] = _mtime_token(h_mtime)
 
     stale = None
     if j_mtime is not None and h_mtime is not None:
