@@ -3135,6 +3135,24 @@ el script falta, no se puede cargar o falla, `validation.status` es
 `unavailable` con el motivo. La protección `Host` (421) cubre estas rutas solo en
 un bind a loopback; con un bind no loopback no hay filtrado de `Host`.
 
+**Pestaña Atlas.** `#atlas` consume las rutas anteriores. A la izquierda, un
+resumen nativo (texto siempre escapado): tabla de sistemas con planetas y
+familias, número de enlaces y desglose por `rel`, una lista de evidencia acotada
+("showing N of evidence_total"), y un chip de validación (`valid`; `failed` con
+los primeros errores y "N more"; `unavailable` con el motivo). A la derecha, la
+constelación: `atlas.html` dentro de un `<iframe src="/api/atlas/view"
+sandbox="allow-scripts" referrerpolicy="no-referrer">`, sin `allow-same-origin`
+(el HTML corre en un origen opaco y no puede leer el dashboard). Los estados se
+explican en pantalla: sin atlas ("No atlas yet. Run the plausibility skill..."),
+`atlas.json` demasiado grande, inseguro, ilegible o inválido, "JSON present, HTML
+missing" (hace falta `scripts/render_atlas.py`), HTML sin JSON, y una insignia
+STALE cuando `atlas.json` es más nuevo que `atlas.html`. Los archivos del atlas
+no se vigilan: se piden al abrir la pestaña y con el botón *Refresh* (sin
+solapar peticiones; si falla muestra el error con *Retry* y conserva los datos
+anteriores). Nota: Chromium no pinta un iframe aislado que queda fuera del
+viewport en capturas `--full-page` (a 700x900 sale en blanco); dentro del
+viewport se ve completo.
+
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
 dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:
