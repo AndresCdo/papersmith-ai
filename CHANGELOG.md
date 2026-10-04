@@ -13,6 +13,18 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ## Unreleased
 
+### Changed
+
+- **The SOTA atlas is a 3D sky.** `/plausibility`'s `sota-pool/atlas.html`
+  now draws the constellation with three.js instead of an inline SVG plane:
+  family neighborhoods at their own heights, one tilted orbital plane per
+  system, arcs between systems, orbit/zoom/fly-to controls. It is still one
+  self-contained file that opens offline and renders byte-identically from the
+  same atlas: `render_atlas.py` (stdlib-only) precomputes the scene and inlines
+  the vendored viewer `skills/plausibility/assets/atlas3d.bundle.js`, rebuilt
+  with `npm run build:atlas-viewer` (pinned `three` and `esbuild`
+  devDependencies). The planet popup now builds its text with `textContent`.
+
 ### Fixed
 
 - **Workspace `.gitignore` covers the skills links.** A new workspace now

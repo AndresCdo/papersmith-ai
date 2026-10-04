@@ -82,8 +82,8 @@ yet — nothing is ingested):
   `evidence: {origin, quote, retrieved}` — origin names the abstract's
   source URL or identifier, quote is copied verbatim, retrieved is the
   date. A paraphrase is not a quote and fails the check.
-- `sota-pool/atlas.html`: the single navigable file, all systems on one
-  shared 2D plane, rendered deterministically from `atlas.json` by
+- `sota-pool/atlas.html`: the single navigable file, all systems in one
+  shared 3D sky, rendered deterministically from `atlas.json` by
   `scripts/render_atlas.py` — same atlas, same sky, every run. Never
   hand-edited — a hand touch is regenerated away on the next run.
 
@@ -99,11 +99,17 @@ nothing was judged. The checker reads the atlas; it never reads the web,
 so a green run certifies shape, not truth.
 
 `scripts/render_atlas.py` (stdlib-only) turns a green atlas into the HTML:
-every system on one shared plane, intra-system links as segments,
-inter-system links as curves running planet to planet, all inline SVG plus
-vanilla JavaScript, no CDN, no network at view time.
-Clicking a planet shows its detail and abstract quote; a family filter dims
-what does not belong; inter-system links highlight across systems. Family
+every system in one shared 3D sky — family neighborhoods at their own
+heights, each system on its own tilted orbital plane — intra-system links as
+segments, inter-system links as arcs running planet to planet. The renderer
+computes the whole scene and writes it as a JSON data island; the vendored
+three.js viewer `assets/atlas3d.bundle.js` is inlined verbatim and only
+draws it, so there is no CDN and no network at view time. Rebuild that
+bundle with `npm run build:atlas-viewer` only when `assets/atlas3d/viewer.js`
+changes (see `assets/atlas3d/README.md`); rendering never needs Node.
+Drag orbits the sky and the wheel zooms. Clicking a planet shows its detail
+and abstract quote; a family filter dims what does not belong; hovering a
+planet highlights its links across systems; double-clicking flies to it. Family
 ties — the dashed curves joining same-named family planets — are
 presentation computed from shared identity, never findings: families are
 the only planets two systems may share by name, so the curve draws what
