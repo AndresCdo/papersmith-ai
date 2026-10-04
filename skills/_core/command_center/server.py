@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import history
+from . import history, paper_preview
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -42,6 +42,13 @@ DEFAULT_HEALTH_TTL_SECONDS = 10.0
 _log = logging.getLogger(__name__)
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+#: Headers on every paper preview response.
+_PAPER_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Cache-Control": "no-store",
+}
 
 _PLACEHOLDER_HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Paper Command Center</title></head>
@@ -321,6 +328,31 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return JSONResponse(_run_wiring_smoke(root_path, bus, record=record))
         finally:
             smoke_lock.release()
+
+    @app.get("/api/paper/preview")
+    def api_paper_preview() -> JSONResponse:
+        # Read-only: bounded, containment-checked reads (see paper_preview).
+        return JSONResponse(paper_preview.build_preview(root_path),
+                            headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/paper/file")
+    def api_paper_file(name: str = "") -> Response:
+        status, path, content_type = paper_preview.resolve_artifact(root_path, name)
+        if status == "bad":
+            return JSONResponse({"detail": "malformed artifact name"}, status_code=400)
+        if status == "too_large":
+            return JSONResponse({"detail": "artifact exceeds the 25 MiB limit"},
+                                status_code=413)
+        data = paper_preview.read_artifact(path) if path is not None else None
+        if status != "ok" or data is None:
+            if status == "ok":
+                return JSONResponse({"detail": "artifact exceeds the 25 MiB limit"},
+                                    status_code=413)
+            return JSONResponse({"detail": "artifact not found"}, status_code=404)
+        # Whole-file responses; Range is not supported. No CSP sandbox here: it
+        # would stop browser PDF viewers from rendering the document.
+        return Response(data, media_type=content_type, headers={
+            **_PAPER_HEADERS, "Content-Disposition": "inline"})
 
     @app.get("/api/events")
     async def api_events(request: Request) -> StreamingResponse:

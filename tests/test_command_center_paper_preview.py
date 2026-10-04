@@ -7,15 +7,25 @@ the Host allow-list is exercised through the raw-ASGI harness used by
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from skills._core.command_center import paper_preview
+from skills._core.command_center import paper_preview, server
 
 DIGEST = "a" * 64
+
+
+def _routes(app) -> dict:
+    return {r.path: r.endpoint for r in app.routes
+            if hasattr(r, "path") and hasattr(r, "endpoint")}
+
+
+def _json(response) -> dict:
+    return json.loads(bytes(response.body).decode("utf-8"))
 
 
 def _block(block_id: str, body: str) -> str:
@@ -289,6 +299,178 @@ class PdfInfoTests(_Workspace):
 
         assert figures == [{"id": "arch", "kind": "pdf", "size": 4},
                            {"id": "plot", "kind": "png", "size": 4}]
+
+
+class FileRouteTests(_Workspace):
+    def setUp(self) -> None:
+        self.root = self.new_workspace()
+        self.write(self.root, "paper/main.pdf", b"%PDF-1.4 main")
+        self.write(self.root, "paper/Figures/arch.pdf", b"%PDF-1.4 fig")
+        self.write(self.root, "paper/Figures/plot.png", b"\x89PNG fig")
+        self.write(self.root, "paper/main.tex", "secret tex")
+        self.app = server.create_app(self.root)
+        self.route = _routes(self.app)["/api/paper/file"]
+
+    def get(self, name: str):
+        return self.route(name=name)
+
+    def test_serves_main_pdf_with_fixed_headers(self) -> None:
+        response = self.get("main.pdf")
+
+        assert response.status_code == 200
+        assert bytes(response.body) == b"%PDF-1.4 main"
+        h = response.headers
+        assert h["content-type"] == "application/pdf"
+        assert h["x-content-type-options"] == "nosniff"
+        assert h["content-disposition"] == "inline"
+        assert h["x-frame-options"] == "SAMEORIGIN"
+        assert h["cache-control"] == "no-store"
+        assert "content-security-policy" not in h
+
+    def test_figures_map_to_the_capital_f_directory(self) -> None:
+        pdf = self.get("figures/arch.pdf")
+        png = self.get("figures/plot.png")
+
+        assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
+        assert png.status_code == 200 and png.headers["content-type"] == "image/png"
+        assert bytes(png.body) == b"\x89PNG fig"
+
+    def test_case_of_the_public_prefix_is_exact(self) -> None:
+        assert self.get("Figures/arch.pdf").status_code == 404
+        assert self.get("figures/ARCH.pdf").status_code == 404  # file system is case sensitive
+
+    def test_absent_and_unlisted_names_are_404(self) -> None:
+        for name in ("figures/nope.pdf", "main.tex", "refs.bib", "figures/arch.tex",
+                     "figures/.hidden.pdf", "figures/" + "a" * 101 + ".pdf", "main.PDF"):
+            assert self.get(name).status_code == 404, name
+
+    def test_malformed_names_are_400(self) -> None:
+        for name in ("", "../main.pdf", "figures/../main.pdf", "/etc/passwd", "/paper/main.pdf",
+                     "figures\\arch.pdf", "figures/arch.pdf\x00", "%2e%2e/main.pdf",
+                     "figures/%2e%2e%2fmain.pdf", "figures//arch.pdf", "figures/a/b.pdf",
+                     "./main.pdf", "figures/./arch.pdf", "a" * 300):
+            assert self.get(name).status_code == 400, repr(name)
+
+    def test_symlink_escape_is_404(self) -> None:
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "x.pdf").write_bytes(b"%PDF outside")
+        os.symlink(outside / "x.pdf", self.root / "paper" / "Figures" / "leak.pdf")
+
+        assert self.get("figures/leak.pdf").status_code == 404
+
+    def test_symlinked_main_pdf_escape_is_404(self) -> None:
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "x.pdf").write_bytes(b"%PDF outside")
+        (self.root / "paper" / "main.pdf").unlink()
+        os.symlink(outside / "x.pdf", self.root / "paper" / "main.pdf")
+
+        assert self.get("main.pdf").status_code == 404
+
+    def test_in_paper_symlink_is_served(self) -> None:
+        os.symlink(self.root / "paper" / "Figures" / "arch.pdf",
+                   self.root / "paper" / "Figures" / "alias.pdf")
+
+        assert self.get("figures/alias.pdf").status_code == 200
+
+    def test_non_regular_file_is_404(self) -> None:
+        (self.root / "paper" / "Figures" / "dir.pdf").mkdir()
+        os.mkfifo(self.root / "paper" / "Figures" / "pipe.pdf")
+
+        assert self.get("figures/dir.pdf").status_code == 404
+        assert self.get("figures/pipe.pdf").status_code == 404
+
+    def test_over_25_mib_is_413(self) -> None:
+        with open(self.root / "paper" / "main.pdf", "wb") as handle:
+            handle.truncate(paper_preview.FILE_MAX_BYTES + 1)
+
+        assert self.get("main.pdf").status_code == 413
+
+    def test_paper_dir_symlinked_outside_the_workspace_is_404(self) -> None:
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "main.pdf").write_bytes(b"%PDF outside")
+        import shutil
+        shutil.rmtree(self.root / "paper")
+        os.symlink(outside, self.root / "paper")
+
+        assert self.get("main.pdf").status_code == 404
+
+
+class PreviewRouteTests(_Workspace):
+    def test_preview_route_returns_json_with_safety_headers(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+        response = _routes(app)["/api/paper/preview"]()
+        data = _json(response)
+
+        assert set(data) >= {"sections", "truncated", "caps", "pdf", "main_tex"}
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "SAMEORIGIN"
+        assert response.headers["cache-control"] == "no-store"
+
+
+async def _call(app, path: str, query: bytes = b"", host: bytes | None = None) -> tuple[int, bytes]:
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+        "method": "GET", "scheme": "http", "path": path, "raw_path": path.encode(),
+        "query_string": query, "root_path": "",
+        "headers": [(b"host", host)] if host else [],
+        "server": ("127.0.0.1", 8099), "client": ("127.0.0.1", 50000),
+    }
+    messages: list[dict] = []
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict) -> None:
+        messages.append(message)
+
+    await app(scope, receive, send)
+    status = next(m["status"] for m in messages if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
+    return status, body
+
+
+class HostAllowListTests(_Workspace):
+    def test_new_routes_get_421_on_a_foreign_host_and_work_on_an_allowed_one(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "paper/main.pdf", b"%PDF")
+        app = server.create_app(root, allowed_hosts=frozenset({"127.0.0.1:8099"}))
+        cases = [("/api/paper/preview", b""), ("/api/paper/file", b"name=main.pdf")]
+        for path, query in cases:
+            assert asyncio.run(_call(app, path, query, b"evil.example:8099"))[0] == 421, path
+            assert asyncio.run(_call(app, path, query, None))[0] == 421, path
+            assert asyncio.run(_call(app, path, query, b"127.0.0.1:8099"))[0] == 200, path
+
+    def test_file_route_over_asgi_maps_status_codes(self) -> None:
+        root = self.new_workspace()
+        app = server.create_app(root)
+
+        assert asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf"))[0] == 404
+        assert asyncio.run(_call(app, "/api/paper/file", b"name=..%2Fmain.pdf"))[0] == 400
+        assert asyncio.run(_call(app, "/api/paper/file", b""))[0] == 400
+
+
+class ReadOnlyInvariantTests(_Workspace):
+    def test_no_new_route_changes_the_workspace_tree(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "sections/06-introduction.md", _contract("introduction", 6, ["introduction.hook"]))
+        self.write(root, "paper/main.tex", _block("introduction.hook", r"Text \cite{k}."))
+        self.write(root, "paper/main.pdf", b"%PDF")
+        self.write(root, "paper/Figures/a.pdf", b"%PDF")
+        app = server.create_app(root)
+        routes = _routes(app)
+        before = self.snapshot(root)
+
+        routes["/api/paper/preview"]()
+        for name in ("main.pdf", "figures/a.pdf", "figures/zz.pdf", "../x", "main.tex"):
+            routes["/api/paper/file"](name=name)
+        asyncio.run(_call(app, "/api/paper/preview"))
+        asyncio.run(_call(app, "/api/paper/file", b"name=main.pdf"))
+
+        assert self.snapshot(root) == before
 
 
 if __name__ == "__main__":
