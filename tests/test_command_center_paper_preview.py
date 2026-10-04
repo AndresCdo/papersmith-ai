@@ -175,6 +175,58 @@ class SectionOrderTests(_Workspace):
         assert section["status"] == "DRAFTING"
 
 
+class SectionsDirectoryTests(_Workspace):
+    def test_sections_directory_symlinked_outside_leaks_nothing(self) -> None:
+        root = self.new_workspace()
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "99-secret-name.md").write_text(_contract("extra", 99, ["extra.leak"]))
+        (root / "sections").rmdir()
+        os.symlink(outside, root / "sections")
+        data = self.preview(root)
+
+        assert data["sections_dir"] == {"status": "unsafe", "truncated": False}
+        assert "99-secret-name" not in json.dumps(data)
+        assert "extra.leak" not in json.dumps(data)
+
+    def test_sections_directory_inside_the_workspace_may_be_a_symlink(self) -> None:
+        root = self.new_workspace()
+        (root / "sections").rmdir()
+        (root / "real-sections").mkdir()
+        os.symlink(root / "real-sections", root / "sections")
+        self.write(root, "real-sections/99-extra.md", _contract("extra", 99, []))
+        data = self.preview(root)
+
+        assert data["sections_dir"]["status"] == "ok"
+        assert "99-extra" in [s["id"] for s in data["sections"]]
+
+    def test_absent_sections_directory_is_reported(self) -> None:
+        root = self.new_workspace()
+        (root / "sections").rmdir()
+
+        assert self.preview(root)["sections_dir"] == {"status": "absent", "truncated": False}
+
+    def test_many_extra_sections_do_not_hide_canonical_ones_and_flag_the_cap(self) -> None:
+        root = self.new_workspace()
+        for index in range(paper_preview.MAX_SECTION_FILES + 5):
+            self.write(root, f"sections/00-extra-{index:03d}.md", _contract(f"x{index}", index, []))
+        self.write(root, "sections/08-abstract.md", _contract("abstract", 8, ["abstract.body"]))
+        data = self.preview(root)
+        by_id = {s["id"]: s for s in data["sections"]}
+
+        assert by_id["08-abstract"]["blocks"][0]["id"] == "abstract.body"
+        assert data["sections_dir"]["truncated"] is True
+        extras = [s for s in data["sections"] if s["id"].startswith("00-extra-")]
+        assert len(extras) == paper_preview.MAX_SECTION_FILES
+
+    def test_at_the_cap_is_not_truncated(self) -> None:
+        root = self.new_workspace()
+        for index in range(paper_preview.MAX_SECTION_FILES):
+            self.write(root, f"sections/00-extra-{index:03d}.md", _contract(f"x{index}", index, []))
+
+        assert self.preview(root)["sections_dir"]["truncated"] is False
+
+
 class CapTests(_Workspace):
     def test_per_block_truncation_flag(self) -> None:
         root = self.new_workspace()
