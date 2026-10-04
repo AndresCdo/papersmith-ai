@@ -17,7 +17,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - [x] S6 T2b-1 SectionDetail extraction
 - [x] S7 T2b-2 Selection and detail panel
 - [x] S8 T3a History core
-- [ ] S9 T3b History wiring and Host allow-list
+- [x] S9 T3b History wiring and Host allow-list
 - [ ] S10 T4 History UI
 - [ ] S11 T5 Docs, CI and closure
 - [ ] Judgment Day on the implementation: APPROVED
@@ -55,6 +55,11 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - Route: delegated writer; one commit `feat(command-center): add the in-memory history core`.
 - RED: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_history.py -q` -> collection error `ImportError: cannot import name 'history' from 'skills._core.command_center'`. GREEN after `history.py`: 22 passed, 8 subtests passed.
 - Contract: kinds section_status, section_blocks, section_words, gate (state + reasons), stage (active + progress), health (overall `summary.state` and per-harness state), smoke; sections, gates or stages that appear or vanish are a change from or to None. `page()` on a reset (other boot_id) returns the first retained entries (cursor treated as 0) so the client can reload in one call; invalid element or kind raises `HistoryQueryError` (HTTP 422 in S9). Element ids match `ui/src/components/dag/graph.ts` (`stage:`, `gate:`, `section:` + raw id).
+
+### S9 T3b History wiring and Host allow-list
+- Route: delegated writer; one commit `feat(command-center): record history live and enforce a Host allow-list`.
+- RED: `.micromamba/envs/papersmith/bin/pytest tests/test_command_center_server_history.py -q` -> 25 failed (`create_app() got an unexpected keyword argument 'allowed_hosts'` / `'history_store'`, `KeyError: '/api/history'`, `no attribute 'build_allowed_hosts'`, `no attribute 'history'`, `--allowed-host` unknown to the parser). GREEN after the server wiring: file 25 passed; `pytest tests/test_command_center_*.py` -> 134 passed, 12 subtests passed.
+- Wiring: `create_app(..., history_store=None, allowed_hosts=None)`; guarded baseline read (None on failure, the first successful state becomes the baseline without entries); `health_lock` around `measure_health`, health diffs recorded inside it on every measured change (TTL and forced); on_flush records history after the `state_update` publish in its own try/except; smoke start/done (exit code) recorded; `GET /api/history` (422 on invalid element/kind); SSE `history_append`; `HostAllowListMiddleware` (421 with an explanatory body, case-insensitive, missing Host rejected, None disables) built from `build_allowed_hosts` in main() for loopback binds plus repeatable `--allowed-host`. `origin_is_same` unchanged; vite.config.ts keeps `changeOrigin: false` and now documents `--allowed-host localhost:5173` for `npm run dev`.
 
 ---
 
