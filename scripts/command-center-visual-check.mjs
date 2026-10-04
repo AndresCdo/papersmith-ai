@@ -21,6 +21,7 @@ import {
   pickClickTargets,
   rectCenter,
   shotName,
+  tabContentSelector,
   timeToFirstData,
 } from './lib/visual-check.mjs';
 
@@ -362,6 +363,16 @@ async function run(options) {
               `document.querySelector('.react-flow__node, .panel--empty') !== null`,
               options.timeoutMs,
               'a .react-flow__node or the empty state',
+            );
+          }
+          const contentSelector = tabContentSelector(tab);
+          if (contentSelector) {
+            await waitFor(
+              cdp,
+              sessionId,
+              `document.querySelector(${JSON.stringify(contentSelector)}) !== null`,
+              options.timeoutMs,
+              `the ${tab} tab content`,
             );
           }
           await twoFrames(cdp, sessionId);

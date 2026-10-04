@@ -1,7 +1,7 @@
 // Pure helpers for scripts/command-center-visual-check.mjs. Nothing here touches
 // the network, the filesystem or a browser, so they run in the Node CI job.
 
-export const DEFAULT_TABS = ['pipeline', 'health', 'sections', 'artifacts', 'history'];
+export const DEFAULT_TABS = ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview'];
 export const DEFAULT_VIEWPORTS = [
   { width: 1280, height: 800 },
   { width: 1600, height: 1000 },
@@ -134,4 +134,12 @@ export function pickClickTargets({ nodes, edges }) {
 
 export function clickShotName(kind, viewport) {
   return `click-${kind}-${viewport.width}x${viewport.height}.png`;
+}
+
+/**
+ * Selector that proves a lazily fetched tab has rendered its content (or its
+ * inline error); null for tabs that paint from the already-ready state.
+ */
+export function tabContentSelector(tab) {
+  return tab === 'preview' ? '.preview__layout, .preview [role="alert"]' : null;
 }
