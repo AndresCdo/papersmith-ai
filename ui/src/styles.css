@@ -1583,3 +1583,107 @@ body {
   background: var(--bg-input);
   overflow: auto;
 }
+
+/* ------------------------------------------------------------ decisions -- */
+.decisions-sources {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.decisions-sources__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.decisions-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.decisions-filter__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.decision-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.decision {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  overflow-wrap: anywhere;
+}
+
+.decision__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.decision__source,
+.decision__unverified {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.decision__source[data-source='declarations'] {
+  color: var(--ok);
+  border-color: var(--ok-border);
+  background: var(--ok-soft);
+}
+
+.decision__source[data-source='proposal'] {
+  color: var(--sealed);
+  border-color: var(--sealed-border);
+  background: var(--sealed-soft);
+}
+
+.decision__source[data-source='experiment'] {
+  color: var(--warn);
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+
+.decision__source[data-source='remote-execution'] {
+  color: var(--text-muted);
+}
+
+.decision__unverified {
+  color: var(--warn);
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+  cursor: help;
+}
+
+.decision__summary {
+  margin: 4px 0 0;
+}
+
+.decision__ref {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}

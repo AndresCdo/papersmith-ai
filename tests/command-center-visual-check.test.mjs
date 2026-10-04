@@ -30,8 +30,8 @@ test('parseArgs applies defaults and requires --out', () => {
   assert.throws(() => parseArgs([]), /--out/);
 });
 
-test('the default tab list covers every dashboard tab, History, Preview and Atlas included', () => {
-  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview', 'atlas']);
+test('the default tab list covers every dashboard tab, History, Preview, Atlas and Decisions included', () => {
+  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview', 'atlas', 'decisions']);
 });
 
 test('the default viewports include a narrow 700x900 one for the bottom sheet', () => {
@@ -144,6 +144,12 @@ test('tabContentSelector names the lazily loaded content of the preview tab', ()
 test('tabContentSelector waits for the loaded atlas layout or its error', () => {
   const selector = tabContentSelector('atlas');
   assert.match(selector, /\.atlas__layout/);
+  assert.match(selector, /role="alert"/);
+});
+
+test('tabContentSelector waits for the loaded decisions panel or its error', () => {
+  const selector = tabContentSelector('decisions');
+  assert.match(selector, /\.decisions \.panel/);
   assert.match(selector, /role="alert"/);
 });
 

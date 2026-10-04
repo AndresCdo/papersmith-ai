@@ -51,6 +51,15 @@ session history.
   missing-JSON and STALE states are explained. The atlas is not watched, so it is
   fetched when the tab opens and on a Refresh button, with an inline error and
   Retry. The visual checker covers the tab and waits for the frame fetch.
+- **Decisions tab.** `#decisions` renders `/api/decisions` as a read-only
+  timeline: dated events newest first, then an "Undated" group for receipts; each
+  row shows a UTC timestamp, a source chip, the kind, the summary and the `ref`
+  as plain text, an "unverified" label for lifecycle records read without hash
+  checks, and muted notes. Per-source status chips (ok, absent, unreadable,
+  too_large, counts, detail, truncated), a client-side source filter and a
+  "Showing N of total" notice. Fetched when the tab opens and on Refresh, with an
+  inline error and Retry; all text is escaped. No Sections link (not cleanly
+  derivable). The visual checker covers the tab.
 - **Read-only decisions timeline route in the command center.**
   `GET /api/decisions` merges, on request, normalized events
   `{ts, source, kind, summary, ref}` from the declarations region of

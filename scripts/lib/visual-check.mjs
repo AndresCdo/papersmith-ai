@@ -1,7 +1,7 @@
 // Pure helpers for scripts/command-center-visual-check.mjs. Nothing here touches
 // the network, the filesystem or a browser, so they run in the Node CI job.
 
-export const DEFAULT_TABS = ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview', 'atlas'];
+export const DEFAULT_TABS = ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview', 'atlas', 'decisions'];
 export const DEFAULT_VIEWPORTS = [
   { width: 1280, height: 800 },
   { width: 1600, height: 1000 },
@@ -143,6 +143,7 @@ export function clickShotName(kind, viewport) {
 export function tabContentSelector(tab) {
   if (tab === 'preview') return '.preview__layout, .preview [role="alert"]';
   if (tab === 'atlas') return '.atlas__layout, .atlas [role="alert"]';
+  if (tab === 'decisions') return '.decisions .panel, .decisions [role="alert"]';
   return null;
 }
 
