@@ -21,6 +21,7 @@ import {
   pickClickTargets,
   rectCenter,
   shotName,
+  tabContentSelector,
   timeToFirstData,
 } from './lib/visual-check.mjs';
 
@@ -364,6 +365,16 @@ async function run(options) {
               'a .react-flow__node or the empty state',
             );
           }
+          const contentSelector = tabContentSelector(tab);
+          if (contentSelector) {
+            await waitFor(
+              cdp,
+              sessionId,
+              `document.querySelector(${JSON.stringify(contentSelector)}) !== null`,
+              options.timeoutMs,
+              `the ${tab} tab content`,
+            );
+          }
           await twoFrames(cdp, sessionId);
           const capture = { format: 'png' };
           if (options.fullPage) {
@@ -377,6 +388,9 @@ async function run(options) {
           const file = path.join(options.out, shotName(tab, viewport));
           await writeFile(file, Buffer.from(shot.data, 'base64'));
           report.shots.push(file);
+          // Headless Chromium's PDF viewer frame stalls the next Page.navigate
+          // on the same session; drop embedded frames once the shot is taken.
+          await evaluate(cdp, sessionId, "document.querySelectorAll('iframe').forEach((frame) => frame.remove())");
           report.timings.push({ tab, viewport: `${viewport.width}x${viewport.height}`, ms: timeToFirstData(started, readyAt) });
           if (options.dragCheck && tab === 'pipeline') {
             const result = await dragCheck(cdp, sessionId);

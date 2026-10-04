@@ -12,6 +12,7 @@ import {
   pickClickTargets,
   rectCenter,
   shotName,
+  tabContentSelector,
   timeToFirstData,
 } from '../scripts/lib/visual-check.mjs';
 
@@ -28,8 +29,8 @@ test('parseArgs applies defaults and requires --out', () => {
   assert.throws(() => parseArgs([]), /--out/);
 });
 
-test('the default tab list covers every dashboard tab, History included', () => {
-  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history']);
+test('the default tab list covers every dashboard tab, History and Preview included', () => {
+  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview']);
 });
 
 test('the default viewports include a narrow 700x900 one for the bottom sheet', () => {
@@ -130,4 +131,11 @@ test('pickClickTargets leaves a kind out when the diagram has none of it', () =>
 
 test('clickShotName names the screenshot by kind and viewport', () => {
   assert.equal(clickShotName('gate', { width: 1280, height: 800 }), 'click-gate-1280x800.png');
+});
+
+test('tabContentSelector names the lazily loaded content of the preview tab only', () => {
+  assert.match(tabContentSelector('preview'), /\.preview__layout/);
+  assert.match(tabContentSelector('preview'), /role="alert"/);
+  assert.equal(tabContentSelector('history'), null);
+  assert.equal(tabContentSelector('pipeline'), null);
 });

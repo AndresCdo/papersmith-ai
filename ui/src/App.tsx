@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkspaceEvents } from './hooks/useWorkspaceEvents';
+import { usePaperPreview } from './hooks/usePaperPreview';
 import PipelineGraph from './components/dag/PipelineGraph';
 import ElementDetailPanel from './components/dag/ElementDetailPanel';
 import { buildGraph } from './components/dag/graph';
@@ -8,6 +9,7 @@ import WiringMatrix from './components/health/WiringMatrix';
 import DiagnosticLog from './components/health/DiagnosticLog';
 import SectionMatrix from './components/sections/SectionMatrix';
 import HistoryView from './components/history/HistoryView';
+import PreviewView from './components/preview/PreviewView';
 import ArtifactViewer from './components/artifacts/ArtifactViewer';
 import { StatusBadge } from './components/StatusBadge';
 import { asText, formatCount, formatTime } from './lib/format';
@@ -40,12 +42,14 @@ function TotalsBar({ state }: { state: WorkspaceState | null }) {
 }
 
 export default function App() {
-  const { state, health, connected, lastChanged, loading, error, smoke, history, historyError, runSmoke, clearSmoke } =
+  const { state, health, connected, lastChanged, revision, loading, error, smoke, history, historyError, runSmoke, clearSmoke } =
     useWorkspaceEvents();
   // App is the single owner of the route: the tab and the selected diagram
   // element, mirrored into the URL hash.
   const [route, setRoute] = useState<HashRoute>(() => readRoute());
   const tab = route.tab;
+  // Lazy: the preview is fetched only while its tab is open, and again when the workspace changes.
+  const preview = usePaperPreview(tab === 'preview', revision);
 
   useEffect(() => {
     const onHashChange = () => setRoute(readRoute());
@@ -233,6 +237,10 @@ export default function App() {
 
         {tab === 'history' ? (
           <HistoryView history={history} error={historyError} presentIds={state === null ? null : presentIds} onSelect={selectElement} />
+        ) : null}
+
+        {tab === 'preview' ? (
+          <PreviewView data={preview.data} loading={preview.loading} error={preview.error} retry={preview.retry} />
         ) : null}
 
         {tab === 'artifacts' ? <ArtifactViewer state={state} /> : null}
