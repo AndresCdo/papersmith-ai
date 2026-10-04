@@ -126,6 +126,20 @@ class DiffStatesTests(unittest.TestCase):
         (change,) = history.diff_states(prev, tiny)
         assert change.summary == "Stage drafting: progress 0% -> <1%"
 
+    def test_non_finite_or_boolean_progress_renders_n_a_and_keeps_the_diff(self) -> None:
+        for odd in (float("nan"), float("inf"), float("-inf"), True):
+            with self.subTest(progress=odd):
+                prev = _state()
+                curr = copy.deepcopy(prev)
+                curr["pipeline_stages"][0]["progress"] = odd
+                (change,) = history.diff_states(prev, curr)
+                assert change.summary == "Stage drafting: progress 0% -> n/a"
+
+    def test_percent_helper_never_raises(self) -> None:
+        for odd in (float("nan"), float("inf"), None, "x", True, [1]):
+            for digits in (0, 1, 3):
+                assert history._percent(odd, digits) == "n/a"
+
     def test_distinct_progress_values_never_render_identically(self) -> None:
         cases = [
             (0.004, 0.006, "0.4% -> 0.6%"),
