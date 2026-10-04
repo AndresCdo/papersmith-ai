@@ -54,28 +54,34 @@ export default function HarnessStatus({ health }: { health: WiringHealth | null 
             {formatCount(healthy)} of {formatCount(total)} wired components healthy in this workspace.
           </p>
           <div className="readiness__rows">
-            <span>
-              harness sync
+            <div className="readiness__row">
+              <span className="readiness__label">harness sync</span>
               <StatusBadge
                 label={health.harness_sync?.state ?? 'UNKNOWN'}
                 tone={toneForHarnessSync(health.harness_sync?.state)}
               />
-            </span>
-            <span>
-              skills wired
-              {formatCount((health.skills ?? []).filter((row) => row.state === 'WIRED').length)}/
-              {formatCount((health.skills ?? []).length)}
-            </span>
-            <span>
-              agents wired
-              {formatCount((health.agents ?? []).filter((row) => row.state === 'WIRED').length)}/
-              {formatCount((health.agents ?? []).length)}
-            </span>
-            <span>
-              CLI front doors
-              {formatCount((health.cli_entrypoints ?? []).filter((row) => row.state === 'WIRED').length)}/
-              {formatCount((health.cli_entrypoints ?? []).length)}
-            </span>
+            </div>
+            <div className="readiness__row">
+              <span className="readiness__label">skills wired</span>
+              <strong className="readiness__value">
+                {formatCount((health.skills ?? []).filter((row) => row.state === 'WIRED').length)}/
+                {formatCount((health.skills ?? []).length)}
+              </strong>
+            </div>
+            <div className="readiness__row">
+              <span className="readiness__label">agents wired</span>
+              <strong className="readiness__value">
+                {formatCount((health.agents ?? []).filter((row) => row.state === 'WIRED').length)}/
+                {formatCount((health.agents ?? []).length)}
+              </strong>
+            </div>
+            <div className="readiness__row">
+              <span className="readiness__label">CLI front doors</span>
+              <strong className="readiness__value">
+                {formatCount((health.cli_entrypoints ?? []).filter((row) => row.state === 'WIRED').length)}/
+                {formatCount((health.cli_entrypoints ?? []).length)}
+              </strong>
+            </div>
           </div>
         </div>
       </div>

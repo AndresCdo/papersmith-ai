@@ -11,11 +11,11 @@ import {
   type EdgeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import dagre from '@dagrejs/dagre';
 import StageNode, { type StageNodeData } from './nodes/StageNode';
 import GateNode, { type GateNodeData } from './nodes/GateNode';
 import SectionNode, { type SectionNodeData } from './nodes/SectionNode';
 import AnimatedEdge from './edges/AnimatedEdge';
+import { layoutGraph } from './layout';
 import type { Gate, PipelineStage, Section, WorkspaceState } from '../../types';
 import { formatCount } from '../../lib/format';
 
@@ -36,12 +36,6 @@ const GATE_SOURCES: Record<string, { from: string; label: string }> = {
   'diagram-raster': { from: 'experiments', label: 'figures' },
 };
 
-const NODE_SIZE: Record<string, { width: number; height: number }> = {
-  stage: { width: 260, height: 168 },
-  gate: { width: 240, height: 148 },
-  section: { width: 236, height: 150 },
-};
-
 type AnyFlowNode = Node<Record<string, unknown>>;
 
 const nodeTypes = {
@@ -53,39 +47,6 @@ const nodeTypes = {
 const edgeTypes = {
   animated: AnimatedEdge,
 } satisfies EdgeTypes;
-
-/** Top-to-bottom dagre layout; nodes keep a fixed size so dagre stays stable. */
-function layout(nodes: AnyFlowNode[], edges: Edge[]): AnyFlowNode[] {
-  if (nodes.length === 0) return nodes;
-  const graph = new dagre.graphlib.Graph();
-  graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({
-    rankdir: 'TB',
-    nodesep: 34,
-    ranksep: 74,
-    marginx: 24,
-    marginy: 24,
-  });
-  for (const node of nodes) {
-    const size = NODE_SIZE[node.type ?? 'stage'] ?? NODE_SIZE.stage;
-    graph.setNode(node.id, { width: size.width, height: size.height });
-  }
-  for (const edge of edges) {
-    graph.setEdge(edge.source, edge.target);
-  }
-  dagre.layout(graph);
-  return nodes.map((node) => {
-    const size = NODE_SIZE[node.type ?? 'stage'] ?? NODE_SIZE.stage;
-    const point = graph.node(node.id);
-    if (!point) return node;
-    return {
-      ...node,
-      width: size.width,
-      height: size.height,
-      position: { x: point.x - size.width / 2, y: point.y - size.height / 2 },
-    };
-  });
-}
 
 function stageIsMutating(stage: PipelineStage): boolean {
   if (stage.active !== true) return false;
@@ -117,7 +78,7 @@ function summarizeParts(gate: Gate): { key: string; value: string }[] {
     .filter((entry): entry is { key: string; value: string } => entry !== null);
 }
 
-function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges: Edge[] } {
+function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges: Edge[]; width: number; height: number } {
   const stages = state?.pipeline_stages ?? [];
   const gates = state?.gates ?? [];
   const sections = state?.sections ?? [];
@@ -202,7 +163,8 @@ function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges
     if (stageIds.has('auditing')) link(`section:${section.id}`, 'stage:auditing');
   }
 
-  return { nodes: layout(nodes, edges), edges };
+  const laid = layoutGraph(nodes, edges);
+  return { nodes: laid.nodes, edges, width: laid.width, height: laid.height };
 }
 
 /**
@@ -211,7 +173,7 @@ function buildGraph(state: WorkspaceState | null): { nodes: AnyFlowNode[]; edges
  * `drafting` and `auditing`. Edges animate while either endpoint is mutating.
  */
 export default function PipelineGraph({ state }: { state: WorkspaceState | null }) {
-  const { nodes, edges } = useMemo(() => buildGraph(state), [state]);
+  const { nodes, edges, width, height } = useMemo(() => buildGraph(state), [state]);
 
   if (nodes.length === 0) {
     return (
@@ -223,15 +185,20 @@ export default function PipelineGraph({ state }: { state: WorkspaceState | null 
   }
 
   return (
-    <div className="graph-shell">
+    // The shell takes the graph's own aspect ratio, so fitView fills the width
+    // at a readable zoom and the page (not the canvas) scrolls vertically.
+    <div className="graph-shell" style={{ aspectRatio: `${width} / ${height}`, width: '100%', maxWidth: width, marginInline: 'auto' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        minZoom={0.2}
+        fitViewOptions={{ maxZoom: 1, padding: 0.02 }}
+        minZoom={0.3}
         maxZoom={1.75}
+        zoomOnScroll={false}
+        preventScrolling={false}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
