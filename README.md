@@ -3075,7 +3075,11 @@ python -m skills._core.command_center.server --port 8080 --allowed-host localhos
 `%% paper-writing block <id> begin|end`), sus claves `\cite{...}`, palabras,
 `written` y banderas `truncated`/`duplicate`, más el estado del PDF
 (`pdf.main` con `stale` si `main.tex` es más nuevo que `main.pdf`, y la lista de
-figuras). Las regiones de declaraciones y procedencia se ignoran; un bloque sin
+figuras; ambos llevan `mtime` en milisegundos, que la UI añade como `?v=` para
+recargar el PDF y las miniaturas al recompilar) y `sections_dir` (`status`:
+`ok`, `absent`, `unsafe` si `sections/` es un symlink que sale del workspace, y
+`truncated` si hay más de 100 secciones no canónicas; las canónicas siempre se
+resuelven por nombre). Las regiones de declaraciones y procedencia se ignoran; un bloque sin
 cierre se descarta y, con ids repetidos, gana el primero (marcado `duplicate`).
 `GET /api/paper/file?name=<n>` sirve solo `main.pdf` (`paper/main.pdf`) y
 `figures/<id>.pdf|png` (el directorio real es `paper/Figures/`, con F
@@ -3114,6 +3118,7 @@ muestra el error con *Retry*.
 `GET /api/atlas` devuelve `json` y `html` con su estado (`ok`, `absent`,
 `too_large`, `unsafe`, y para el JSON también `unreadable` o `invalid`) y tamaño,
 `stale` (`atlas.json` más nuevo que `atlas.html`; `null` si falta alguno),
+`mtime` en milisegundos (la UI lo añade como `?v=` al iframe para recargarlo),
 `validation` (`ok`, `failed` con `errors`, hasta 50, o `unavailable` con
 `detail`) y `summary` (sistemas con id, título, número de planetas y familias;
 número de enlaces; conteo por `rel`; evidencia con sistema, planeta, origen y
