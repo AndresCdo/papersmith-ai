@@ -3108,6 +3108,33 @@ con miniatura). Se carga al abrir la pestaña (`#preview`) y se vuelve a pedir
 cuando cambia el estado del workspace por SSE, sin solapar peticiones; si falla
 muestra el error con *Retry*.
 
+**Atlas SOTA (solo lectura, backend).** Dos rutas GET sobre
+`sota-pool/atlas.json` y `sota-pool/atlas.html` (los escribe la skill
+`plausibility`; el dashboard nunca los escribe ni los regenera).
+`GET /api/atlas` devuelve `json` y `html` con su estado (`ok`, `absent`,
+`too_large`, `unsafe`, y para el JSON también `unreadable` o `invalid`) y tamaño,
+`stale` (`atlas.json` más nuevo que `atlas.html`; `null` si falta alguno),
+`validation` (`ok`, `failed` con `errors`, hasta 50, o `unavailable` con
+`detail`) y `summary` (sistemas con id, título, número de planetas y familias;
+número de enlaces; conteo por `rel`; evidencia con sistema, planeta, origen y
+fecha, hasta 100) o `null`. Un JSON inválido da `json.status: invalid` y
+`validation.status: failed`, nunca un 500. `GET /api/atlas/view` sirve los bytes
+de `atlas.html` (404 si falta, es inseguro o no es un archivo regular; 413 sobre
+2 MiB) con `Content-Type: text/html; charset=utf-8`, `Content-Security-Policy:
+sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src
+'unsafe-inline'; img-src data:`, `nosniff`, `no-store`,
+`X-Frame-Options: SAMEORIGIN` y `Referrer-Policy: no-referrer`. Cada lectura
+resuelve la ruta, exige que quede dentro del workspace (un symlink que escapa es
+`unsafe`) y que sea un archivo regular, y comprueba el tamaño (2 MiB para cada
+archivo) antes de leer. **Ejecución de Python del workspace:** para validar, el
+servidor carga `skills/plausibility/scripts/check_atlas.py` del propio workspace
+(ruta fija, nunca derivada de la petición) y llama a su validador dentro del
+proceso del servidor, sin escribir bytecode; es una superficie de ejecución de
+código, así que no apuntes el dashboard a un workspace en el que no confíes. Si
+el script falta, no se puede cargar o falla, `validation.status` es
+`unavailable` con el motivo. La protección `Host` (421) cubre estas rutas solo en
+un bind a loopback; con un bind no loopback no hay filtrado de `Host`.
+
 **Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
 dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
 falla ante errores de consola:
