@@ -170,6 +170,76 @@ class SummaryTests(_Workspace):
         assert data["validation"]["errors"] == ["ATLAS_NOT_AN_OBJECT"]
 
 
+class MalformedShapeTests(_Workspace):
+    """Whatever atlas.json contains, building the payload never raises."""
+
+    SHAPES = {
+        "planets_int": {"systems": [{"id": "s1", "title": "T", "planets": 5}], "links": []},
+        "planets_true": {"systems": [{"id": "s1", "title": "T", "planets": True}], "links": []},
+        "planets_dict": {"systems": [{"id": "s1", "title": "T", "planets": {"a": 1}}], "links": []},
+        "planets_str": {"systems": [{"id": "s1", "title": "T", "planets": "abc"}], "links": []},
+        "links_dict": {"systems": [{"id": "s1", "title": "T", "planets": []}], "links": {"a": 1}},
+        "links_int": {"systems": [{"id": "s1", "title": "T", "planets": []}], "links": 7},
+        "fields_not_str": {"systems": [{"id": 3, "title": ["x"], "planets": [
+            {"id": 9, "slot": "family", "label": 4, "evidence": {"origin": 1, "retrieved": None}},
+            {"id": "p", "slot": ["family"], "label": "L", "evidence": "nope"}]}], "links": [
+            {"rel": 5}, "x", None]},
+        "systems_nested": {"systems": [[1], None, 5, {"planets": None}], "links": None},
+    }
+
+    def test_every_shape_yields_a_payload_not_an_exception(self) -> None:
+        for name, shape in self.SHAPES.items():
+            with self.subTest(shape=name):
+                root = self.new_workspace()
+                self.write(root, "sota-pool/atlas.json", json.dumps(shape))
+                data = self.summary(root)
+
+                assert data["json"]["status"] == "ok"
+                assert data["validation"]["status"] in ("failed", "unavailable")
+                if data["validation"]["status"] == "failed":
+                    assert data["validation"]["error_count"] >= 1
+                assert data["summary"] is None or isinstance(data["summary"]["systems"], list)
+
+    def test_summarize_itself_is_defensive_for_each_shape(self) -> None:
+        for name, shape in self.SHAPES.items():
+            with self.subTest(shape=name):
+                result = atlas.summarize(shape)
+                assert result is None or isinstance(result, dict)
+
+    def test_scalar_planets_count_as_zero_and_the_checker_verdict_survives(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "sota-pool/atlas.json", json.dumps(self.SHAPES["planets_int"]))
+        data = self.summary(root)
+
+        assert data["summary"]["systems"][0]["planets"] == 0
+        # the real checker may itself crash on a scalar: that is "unavailable"
+        # (honest), never an exception out of the route
+        validation = data["validation"]
+        assert validation["status"] in ("failed", "unavailable")
+        assert validation["errors"] if validation["status"] == "failed" else validation["detail"]
+
+    def test_checker_errors_surface_when_the_checker_runs(self) -> None:
+        root = self.new_workspace()
+        self.write(root, "sota-pool/atlas.json", json.dumps({"systems": [], "links": []}))
+        data = self.summary(root)
+
+        assert data["validation"]["status"] == "failed"
+        assert data["validation"]["errors"] == ["SYSTEMS_NOT_A_NONEMPTY_LIST"]
+
+    def test_a_summary_failure_never_breaks_the_payload(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root)
+        original = atlas.summarize
+        atlas.summarize = lambda _data: (_ for _ in ()).throw(ValueError("boom"))
+        try:
+            data = self.summary(root)
+        finally:
+            atlas.summarize = original
+
+        assert data["summary"] is None
+        assert data["validation"]["status"] == "ok"
+
+
 class StalenessTests(_Workspace):
     def test_json_newer_than_html_is_stale(self) -> None:
         root = self.new_workspace()

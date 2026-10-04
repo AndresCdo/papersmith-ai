@@ -161,7 +161,8 @@ def summarize(data: Any) -> dict[str, Any] | None:
     for system in data["systems"]:
         if not isinstance(system, dict):
             continue
-        planets = [p for p in system.get("planets") or [] if isinstance(p, dict)]
+        raw_planets = system.get("planets")
+        planets = [p for p in raw_planets if isinstance(p, dict)] if isinstance(raw_planets, list) else []
         families: list[str] = []
         sid = _clip(system.get("id"))
         for planet in planets:
@@ -217,7 +218,10 @@ def build_atlas(root: Path | str) -> dict[str, Any]:
                 validation = {"status": "failed", "errors": [_clip(f"ATLAS_NOT_JSON: {exc}")],
                               "error_count": 1}
             else:
-                summary = summarize(parsed)
+                try:
+                    summary = summarize(parsed)
+                except Exception:  # noqa: BLE001 - odd content never breaks the payload
+                    summary = None
                 validation = validate(root, parsed)
         json_info["status"] = j_status
     if j_size is not None and j_status in ("ok", "invalid", "too_large"):
