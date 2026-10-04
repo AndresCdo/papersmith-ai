@@ -14,7 +14,7 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - [x] S3 T1 Light theme, literal replacement, load fix
 - [x] S4 T1-layout fixes from the checker
 - [x] S5 T2a Routing and graph model
-- [ ] S6 T2b-1 SectionDetail extraction
+- [x] S6 T2b-1 SectionDetail extraction
 - [ ] S7 T2b-2 Selection and detail panel
 - [ ] S8 T3a History core
 - [ ] S9 T3b History wiring and Host allow-list
@@ -37,6 +37,10 @@ Delivery strategy: ask-on-risk; chain strategy asked when the user returns.
 - RED: `cd ui && npx vitest run src/lib src/components/dag/graph.test.ts` -> hash.test.ts failed to load (`./hash` missing) and graph.test.ts `TypeError: buildGraph is not a function`; `npx vitest run src/App.test.tsx` with the routing tests -> 1 failed (`expected '#pipeline' to be '#pipeline?el=stage%3Adrafting'`, mount normalisation dropped the element).
 - GREEN: `src/lib/hash.ts` (TABS, parseHash, formatHash with encodeURIComponent, malformed or empty `el` -> null), exported `buildGraph` and `relationKind` (edge `data.relation`), App owns `route {tab, el}` with `navigate(tab, el)` (state set directly, hash via replaceState; a tab change pushes one history entry so Back still works between tabs), mount normalisation keeps `el`. `npx vitest run` -> 7 files, 47 tests pass; `npm run typecheck` and `npm run build` pass (bundle index-sSg9iHRq.js).
 - Deviation: the plan says navigate uses replaceState; a change of tab uses pushState instead (element changes within a tab use replaceState) to keep the browser Back button across tabs.
+
+### S6 T2b-1 SectionDetail extraction
+- Route: delegated writer; one commit `refactor(ui): extract SectionDetail from the section matrix`.
+- Characterization first: `SectionMatrix.test.tsx` (open from Detail, close by Escape and Close) passed before the refactor (2 tests). RED: `npx vitest run src/components/sections` -> `Failed to resolve import "./SectionDetail"`. GREEN after extracting `SectionDetail.tsx` (body only: detail grid, citations, blocks, fact contract; `extentLabel` exported; the drawer keeps its chrome and the Escape listener): `npx vitest run` -> 9 files, 52 tests pass; typecheck and build pass.
 
 ---
 
