@@ -18,7 +18,7 @@ Route: delegated writer per slice (one writer at a time).
 
 ## Checklist
 - [x] F1 dpv-01 Memoise dagre layout (commit 16240fe on feat/dpv-01-layout-memo)
-- [ ] F2 dpv-02 Narrow-width panel (bottom sheet)
+- [x] F2 dpv-02 Narrow-width panel (bottom sheet) (commit 595b646 on feat/dpv-02-panel-narrow)
 - [ ] F3 dpv-03 History publish ordering test + fix
 - [ ] F4 dpv-04 Polish (server-side _percent, mutating cue outline)
 - [ ] P1 dpv-05 Paper preview backend
@@ -40,6 +40,13 @@ Route: delegated writer per slice (one writer at a time).
 - `cd ui && npm run typecheck`: clean. `cd ui && npm run build`: ok, bundle index-Q1q8mUoX.js committed, static dir clean after commit.
 - `npm run test:node`: 676 pass, 0 fail (bare `node --test` without DELIBERATION_DOMAIN_PROFILE fails 2 files; env-only).
 - Authored change: 92 insertions, 4 deletions in ui/src (excluding bundle). Review tier: not assessed (local commit only, no push).
+
+### F2 (feat/dpv-02-panel-narrow, commit 595b646, stacked on feat/dpv-01-layout-memo)
+- Route: delegated writer. CSS-only: a `@media (max-width: 899px)` block on `.element-panel` (top auto, left 0, width auto, max-height 60vh, overflow-y auto, border-top instead of border-left, tokens only). Markup, focus handling, Escape and role/aria untouched; wide drawer unchanged. Checker default viewports now include 700x900; README note updated.
+- RED: `cd ui && npx vitest run src/styles.test.ts`: 2 failed, 18 passed (no max-width: 899px element-panel rule). `node --test tests/command-center-visual-check.test.mjs`: 13 pass, 1 fail (default viewports lack 700x900).
+- GREEN: `cd ui && npx vitest run`: 15 files, 139 tests passed. `cd ui && npm run typecheck`: clean. `cd ui && npm run build`: ok, bundle index-CndjmfRD.js + index-CzDAykxE.css committed, static dir clean. `npm run test:node`: 677 pass, 0 fail.
+- Real browser: own server from this checkout on 127.0.0.1:8123 (stopped afterwards): `node scripts/command-center-visual-check.mjs --out <scratchpad>/shots/f2 --full-page --click-check --drag-check --url http://127.0.0.1:8123/` -> exit 0, 15 screenshots, no disallowed console errors, click/keyboard/drag checks ok at 1280x800, 1600x1000 and 700x900. click-stage-700x900.png shows a full-width bottom sheet with the diagram visible above it.
+- Authored change: 47 insertions, 2 deletions (ui/src, scripts, tests, README; excluding bundle). Review tier: not assessed (local commit only).
 
 ---
 
