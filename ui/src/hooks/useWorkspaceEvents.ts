@@ -39,6 +39,8 @@ export interface WorkspaceEventsHook {
   connected: boolean;
   /** Workspace-relative paths reported by the last `state_update` frame. */
   lastChanged: string[];
+  /** Count of `state_update` frames (or the server revision): changes when the workspace changes. */
+  revision: number;
   loading: boolean;
   error: string | null;
   smoke: SmokeRun;
@@ -98,6 +100,7 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
   const [health, setHealth] = useState<WiringHealth | null>(null);
   const [connected, setConnected] = useState(false);
   const [lastChanged, setLastChanged] = useState<string[]>([]);
+  const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [smoke, setSmoke] = useState<SmokeRun>(EMPTY_SMOKE);
@@ -202,6 +205,7 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
         setState(payload.state);
       }
       if (payload.changed) setLastChanged(payload.changed);
+      setRevision((previous) => (typeof payload.revision === 'number' ? payload.revision : previous + 1));
     });
 
     source.addEventListener('health_update', (event) => {
@@ -278,6 +282,6 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
   const clearSmoke = useCallback(() => setSmoke(EMPTY_SMOKE), []);
 
   return {
-    state, health, connected, lastChanged, loading, error, smoke, history, historyError, runSmoke, clearSmoke,
+    state, health, connected, lastChanged, revision, loading, error, smoke, history, historyError, runSmoke, clearSmoke,
   };
 }

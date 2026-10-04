@@ -223,3 +223,38 @@ export interface HistoryPage {
   reset: boolean;
   gap: boolean;
 }
+
+/** `GET /api/paper/preview`: bounded, read-only block text of the paper. */
+export interface PreviewBlock {
+  id: string;
+  written: boolean;
+  /** Plain text of the block body; null when unwritten or cut by the total cap. */
+  text: string | null;
+  words: number;
+  citations: string[];
+  truncated: boolean;
+  duplicate: boolean;
+}
+
+export interface PreviewSection {
+  id: string;
+  title: string | null;
+  position: number | null;
+  status: string;
+  blocks: PreviewBlock[];
+}
+
+export interface PreviewFigure {
+  id: string;
+  kind: 'pdf' | 'png';
+  size: number;
+}
+
+export interface PaperPreview {
+  sections: PreviewSection[];
+  truncated: boolean;
+  caps: Record<string, number>;
+  /** `ok`, `absent`, `too_large`, `unsafe` or `unreadable`. */
+  main_tex: { status: string };
+  pdf: { main: { present: boolean; size: number; stale: boolean } | null; figures: PreviewFigure[] } | null;
+}

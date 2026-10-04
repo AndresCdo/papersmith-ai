@@ -60,9 +60,50 @@ describe('App', () => {
     render(<App />);
     const nav = screen.getByRole('navigation', { name: 'Dashboard sections' });
     expect(nav).toBeInTheDocument();
-    for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts', 'History']) {
+    for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts', 'History', 'Preview']) {
       expect(await screen.findByRole('button', { name: label })).toBeInTheDocument();
     }
+  });
+
+  describe('preview tab', () => {
+    afterEach(() => {
+      window.history.replaceState(null, '', '#');
+    });
+
+    const previewBody = { sections: [], truncated: false, caps: {}, main_tex: { status: 'absent' }, pdf: null };
+    const previewCalls = () =>
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/paper/preview');
+
+    beforeEach(() => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.includes('/api/health')
+            ? jsonResponse({ overall: 'WIRED' })
+            : url === '/api/paper/preview' ? jsonResponse(previewBody) : jsonResponse({ stages: [], gates: [], sections: [] }),
+        ),
+      );
+    });
+
+    it('does not fetch the preview until its tab opens', async () => {
+      window.history.replaceState(null, '', '#pipeline');
+      render(<App />);
+      await waitFor(() => expect(document.body.dataset.ready).toBe('1'));
+      expect(previewCalls()).toHaveLength(0);
+      await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+      expect(await screen.findByText('No sections yet')).toBeInTheDocument();
+      expect(previewCalls()).toHaveLength(1);
+    });
+
+    it('refetches when a state_update changes the revision while open', async () => {
+      window.history.replaceState(null, '', '#preview');
+      render(<App />);
+      await screen.findByText('No sections yet');
+      const source = FakeEventSource.instances[0];
+      const frame = { data: JSON.stringify({ type: 'state_update', payload: { revision: 7, state: {} } }) } as MessageEvent<string>;
+      act(() => source.listeners.get('state_update')?.forEach((handler) => handler(frame)));
+      await waitFor(() => expect(previewCalls()).toHaveLength(2));
+    });
   });
 
   describe('hash routing', () => {
