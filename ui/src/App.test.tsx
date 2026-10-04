@@ -60,9 +60,39 @@ describe('App', () => {
     render(<App />);
     const nav = screen.getByRole('navigation', { name: 'Dashboard sections' });
     expect(nav).toBeInTheDocument();
-    for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts', 'History', 'Preview']) {
+    for (const label of ['Pipeline', 'Health', 'Sections', 'Artifacts', 'History', 'Preview', 'Atlas']) {
       expect(await screen.findByRole('button', { name: label })).toBeInTheDocument();
     }
+  });
+
+  describe('atlas tab', () => {
+    afterEach(() => {
+      window.history.replaceState(null, '', '#');
+    });
+
+    const atlasBody = { json: { status: 'absent' }, html: { status: 'absent' }, stale: null, validation: { status: 'unavailable' }, summary: null };
+    const atlasCalls = () =>
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/atlas');
+
+    it('fetches lazily on tab open and again on Refresh', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.includes('/api/health')
+            ? jsonResponse({ overall: 'WIRED' })
+            : url === '/api/atlas' ? jsonResponse(atlasBody) : jsonResponse({ stages: [], gates: [], sections: [] }),
+        ),
+      );
+      window.history.replaceState(null, '', '#pipeline');
+      render(<App />);
+      await waitFor(() => expect(document.body.dataset.ready).toBe('1'));
+      expect(atlasCalls()).toHaveLength(0);
+      await userEvent.click(screen.getByRole('button', { name: 'Atlas' }));
+      expect(await screen.findByText(/No atlas yet/)).toBeInTheDocument();
+      expect(atlasCalls()).toHaveLength(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      await waitFor(() => expect(atlasCalls()).toHaveLength(2));
+    });
   });
 
   describe('preview tab', () => {
