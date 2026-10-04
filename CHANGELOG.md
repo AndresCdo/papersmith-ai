@@ -39,8 +39,9 @@ session history.
   gate, stage, health and smoke changes since the server started, and
   `history_append` streams new entries over SSE. Nothing is written to disk.
 - **Host allow-list.** On loopback binds the server answers 421 to a `Host`
-  header it does not recognise; `--allowed-host HOST:PORT` (repeatable) adds
-  one, for example `--allowed-host localhost:5173` when running `npm run dev`.
+  header it does not recognise; `papersmith ui --allowed-host HOST:PORT`
+  (repeatable) adds one, for example `--allowed-host localhost:5173` when
+  running `npm run dev`. Stage history entries now say what changed.
 - **Visual checker and UI tests.** `scripts/command-center-visual-check.mjs`
   screenshots every tab in Chromium (`--full-page`, `--click-check`,
   `--drag-check`); the Node CI job now also runs `npm ci --prefix ui` and the

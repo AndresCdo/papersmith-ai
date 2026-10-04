@@ -260,6 +260,7 @@ class HostAllowListTests(_Workspace):
 
         assert status == 421
         assert b"--allowed-host" in body and b"evil.example:8099" in body
+        assert b"papersmith ui --allowed-host" in body
 
     def test_a_missing_host_is_rejected_when_active(self) -> None:
         status, _ = asyncio.run(_call(self.app(frozenset({"127.0.0.1:8099"}))))

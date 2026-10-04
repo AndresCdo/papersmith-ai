@@ -3014,6 +3014,7 @@ papersmith ui --export-static ./dashboard-static
 | `--port PORT` | Puerto preferido; si está ocupado pasa al siguiente libre |
 | `--no-browser` | No abre el navegador |
 | `--export-static <dir>` | Copia el build del dashboard a `<dir>` y sale |
+| `--allowed-host HOST:PORT` | Acepta además ese encabezado `Host` (repetible); solo se reenvía al backend si lo das |
 
 Sirve el **Paper Command Center**: un dashboard local dentro del workspace con
 el DAG de etapas, las cuatro compuertas de calidad, la matriz de las diez
@@ -3059,9 +3060,10 @@ entradas antiguas). Las entradas nuevas llegan por SSE como `history_append`.
 **Lista de hosts permitidos.** En un bind a loopback el servidor solo acepta los
 encabezados `Host` `127.0.0.1:<puerto>`, `localhost:<puerto>` y `[::1]:<puerto>`
 y responde 421 a cualquier otro, lo que frena páginas de DNS-rebinding. Para
-aceptar otro host (por ejemplo al reenviar un puerto) agrega el flag repetible
-`--allowed-host HOST:PORT` al módulo del backend. Con `npm --prefix ui run dev`
-el proxy de Vite conserva el `Host` `localhost:5173`; arranca el backend así:
+aceptar otro host (por ejemplo al reenviar un puerto) usa el flag repetible
+`papersmith ui --allowed-host HOST:PORT`. Con `npm --prefix ui run dev` el proxy
+de Vite conserva el `Host` `localhost:5173`; arranca el backend así (el módulo
+acepta el mismo flag):
 
 ```bash
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173

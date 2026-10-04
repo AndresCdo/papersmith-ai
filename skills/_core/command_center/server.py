@@ -176,7 +176,7 @@ class HostAllowListMiddleware:
         body = (
             f"Host header {host!r} is not allowed for this dashboard. "
             "Open it through one of its own addresses, or start the server with "
-            f"--allowed-host HOST:PORT (for example --allowed-host {host or 'localhost:5173'}).\n"
+            f"`papersmith ui --allowed-host HOST:PORT` (for example --allowed-host {host or 'localhost:5173'}).\n"
         ).encode()
         await send({"type": "http.response.start", "status": 421, "headers": [
             (b"content-type", b"text/plain; charset=utf-8"),

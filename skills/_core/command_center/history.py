@@ -81,6 +81,25 @@ def _by_id(items: Any) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _percent(value: Any) -> str:
+    return f"{round(value * 100)}%" if isinstance(value, (int, float)) else "n/a"
+
+
+def _stage_summary(stage_id: str, before: dict | None, after: dict | None) -> str:
+    if before is None:
+        return f"Stage {stage_id} appeared"
+    if after is None:
+        return f"Stage {stage_id} was removed"
+    parts: list[str] = []
+    if before.get("active") != after.get("active"):
+        parts.append("became active" if after.get("active") else "became inactive")
+    if before.get("progress") != after.get("progress"):
+        parts.append(f"progress {_percent(before.get('progress'))} -> {_percent(after.get('progress'))}")
+    if len(parts) == 1 and parts[0].startswith("progress"):
+        return f"Stage {stage_id}: {parts[0]}"
+    return f"Stage {stage_id} " + "; ".join(parts)
+
+
 def diff_states(prev: dict[str, Any], curr: dict[str, Any]) -> list[Change]:
     """Meaningful differences between two workspace states.
 
@@ -128,7 +147,8 @@ def diff_states(prev: dict[str, Any], curr: dict[str, Any]) -> list[Change]:
         after = None if new is None else {"active": new.get("active"), "progress": new.get("progress")}
         if before != after:
             changes.append(Change(
-                "stage", f"stage:{stage_id}", f"Stage {stage_id} changed", before, after))
+                "stage", f"stage:{stage_id}", _stage_summary(stage_id, before, after),
+                before, after))
     return changes
 
 

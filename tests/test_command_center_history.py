@@ -97,6 +97,28 @@ class DiffStatesTests(unittest.TestCase):
         assert change.before == {"active": False, "progress": 0.0}
         assert change.after == {"active": True, "progress": 0.5}
 
+    def test_stage_summaries_say_what_changed(self) -> None:
+        prev = _state()
+        progress = copy.deepcopy(prev)
+        progress["pipeline_stages"][0]["progress"] = 1.0
+        (change,) = history.diff_states(prev, progress)
+        assert change.summary == "Stage drafting: progress 0% -> 100%"
+
+        active = copy.deepcopy(prev)
+        active["pipeline_stages"][0]["active"] = True
+        (change,) = history.diff_states(prev, active)
+        assert change.summary == "Stage drafting became active"
+
+        idle = copy.deepcopy(active)
+        idle["pipeline_stages"][0]["active"] = False
+        (change,) = history.diff_states(active, idle)
+        assert change.summary == "Stage drafting became inactive"
+
+        both = copy.deepcopy(prev)
+        both["pipeline_stages"][0].update(active=True, progress=0.5)
+        (change,) = history.diff_states(prev, both)
+        assert change.summary == "Stage drafting became active; progress 0% -> 50%"
+
     def test_element_ids_keep_the_raw_id_with_spaces_and_unicode(self) -> None:
         prev = _state()
         curr = copy.deepcopy(prev)

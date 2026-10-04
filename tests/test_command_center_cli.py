@@ -251,6 +251,28 @@ class ServerArgvTests(unittest.TestCase):
         assert "--export-static" in argv and "/tmp/out" in argv
 
 
+class AllowedHostArgvTests(unittest.TestCase):
+    def test_argv_forwards_each_allowed_host(self) -> None:
+        argv = ui_command.build_server_argv(
+            Path("/tmp/paper"), "127.0.0.1", 8123, no_browser=True,
+            allowed_hosts=["localhost:5173", "example.test:80"])
+        pairs = [argv[i + 1] for i, a in enumerate(argv) if a == "--allowed-host"]
+        assert pairs == ["localhost:5173", "example.test:80"]
+
+    def test_argv_omits_the_flag_when_none_is_given(self) -> None:
+        for given in (None, []):
+            argv = ui_command.build_server_argv(
+                Path("/tmp/paper"), "127.0.0.1", 8123, no_browser=True, allowed_hosts=given)
+            assert "--allowed-host" not in argv
+
+    def test_parser_accepts_a_repeatable_allowed_host(self) -> None:
+        import argparse
+        parser = argparse.ArgumentParser()
+        ui_command.register(parser.add_subparsers())
+        args = parser.parse_args(["ui", "--allowed-host", "a:1", "--allowed-host", "b:2"])
+        assert args.allowed_host == ["a:1", "b:2"]
+
+
 class WorkspaceInterpreterTests(unittest.TestCase):
     def new_dir(self) -> Path:
         holder = tempfile.TemporaryDirectory()
