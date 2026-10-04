@@ -29,8 +29,8 @@ test('parseArgs applies defaults and requires --out', () => {
   assert.throws(() => parseArgs([]), /--out/);
 });
 
-test('the default tab list covers every dashboard tab, History and Preview included', () => {
-  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview']);
+test('the default tab list covers every dashboard tab, History, Preview and Atlas included', () => {
+  assert.deepEqual(DEFAULT_TABS, ['pipeline', 'health', 'sections', 'artifacts', 'history', 'preview', 'atlas']);
 });
 
 test('the default viewports include a narrow 700x900 one for the bottom sheet', () => {
@@ -133,9 +133,15 @@ test('clickShotName names the screenshot by kind and viewport', () => {
   assert.equal(clickShotName('gate', { width: 1280, height: 800 }), 'click-gate-1280x800.png');
 });
 
-test('tabContentSelector names the lazily loaded content of the preview tab only', () => {
+test('tabContentSelector names the lazily loaded content of the preview tab', () => {
   assert.match(tabContentSelector('preview'), /\.preview__layout/);
   assert.match(tabContentSelector('preview'), /role="alert"/);
   assert.equal(tabContentSelector('history'), null);
   assert.equal(tabContentSelector('pipeline'), null);
+});
+
+test('tabContentSelector waits for the loaded atlas layout or its error', () => {
+  const selector = tabContentSelector('atlas');
+  assert.match(selector, /\.atlas__layout/);
+  assert.match(selector, /role="alert"/);
 });
