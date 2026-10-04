@@ -22,6 +22,7 @@ import {
   rectCenter,
   shotName,
   tabContentSelector,
+  tabFrameReadyExpression,
   timeToFirstData,
 } from './lib/visual-check.mjs';
 
@@ -375,6 +376,8 @@ async function run(options) {
               `the ${tab} tab content`,
             );
           }
+          const frameReady = tabFrameReadyExpression(tab);
+          if (frameReady) await waitFor(cdp, sessionId, frameReady, options.timeoutMs, `the ${tab} tab frame`);
           await twoFrames(cdp, sessionId);
           const capture = { format: 'png' };
           if (options.fullPage) {

@@ -13,6 +13,7 @@ import {
   rectCenter,
   shotName,
   tabContentSelector,
+  tabFrameReadyExpression,
   timeToFirstData,
 } from '../scripts/lib/visual-check.mjs';
 
@@ -144,4 +145,13 @@ test('tabContentSelector waits for the loaded atlas layout or its error', () => 
   const selector = tabContentSelector('atlas');
   assert.match(selector, /\.atlas__layout/);
   assert.match(selector, /role="alert"/);
+});
+
+test('tabFrameReadyExpression waits for the sandboxed atlas frame to be fetched, or for its absence', () => {
+  const expression = tabFrameReadyExpression('atlas');
+  assert.match(expression, /\/api\/atlas\/view/);
+  assert.match(expression, /responseEnd/);
+  assert.match(expression, /\.atlas-view__frame/);
+  assert.equal(tabFrameReadyExpression('preview'), null);
+  assert.equal(tabFrameReadyExpression('pipeline'), null);
 });

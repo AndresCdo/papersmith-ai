@@ -145,3 +145,14 @@ export function tabContentSelector(tab) {
   if (tab === 'atlas') return '.atlas__layout, .atlas [role="alert"]';
   return null;
 }
+
+/**
+ * Expression that is true once an embedded frame of a tab has been fetched (or
+ * the tab shows no frame), so a screenshot never races the iframe's first paint.
+ * The sandboxed atlas frame is cross-origin to the page, so its load is read
+ * from resource timing instead of its document.
+ */
+export function tabFrameReadyExpression(tab) {
+  if (tab !== 'atlas') return null;
+  return `document.querySelector('.atlas-view__frame') === null || performance.getEntriesByType('resource').some((entry) => entry.name.endsWith('/api/atlas/view') && entry.responseEnd > 0)`;
+}
