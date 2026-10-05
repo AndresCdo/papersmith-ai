@@ -11,6 +11,34 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.10.0
+
+### Changed
+
+- **The dashboard's flow is the architecture diagram's flow.** The Paper Command
+  Center's *Pipeline* tab drew six stages invented inside the extractor --
+  `ingestion`, `deliberation`, `experiments`, `drafting`, `auditing`,
+  `publishing` -- while `docs/diagrams/papersmith-pi-flow.html` drew the same
+  project as twelve numbered tramos plus a transversal audit lane, and nothing
+  compared the two. The board now draws those twelve tramos in the diagram's
+  order, with the diagram's main chain as the edges, and each tramo lights up
+  from its own artifact on disk: `sota-pool/`, `guidance/`, `proposals/`,
+  `implementations/`, `.experimental-deliberation/`, `experiments/`, the
+  accounts store, the inbox, `paper/Figures/`, `sections/`. A tramo with no
+  artifact reports what is missing instead of an invented progress. The chain
+  travels in the payload (`pipeline_chain`, `gate_links`), so the drawing cannot
+  disagree with the stage list it is drawn from -- which is how it disagreed
+  before.
+
+### Added
+
+- **The writing flow, section by section.** A new *Writing* tab draws the
+  paper's ten sections in rendering order, each with its live status, its word
+  count and its blocks, as a flow of its own.
+- **`npm run build:ui` and `npm run dev:ui`.** Rebuilding or serving the
+  dashboard meant knowing to run `npm install` and `vite build` inside `ui/`,
+  and the repository offered no script for either half.
+
 ## 0.9.0
 
 ### Added
