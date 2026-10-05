@@ -27,6 +27,16 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Fixed
 
+- **Skill descriptions fit the ceiling the harness enforces.** Pi caps a
+  skill's `description` at 1024 UTF-16 code units
+  (`MAX_DESCRIPTION_LENGTH`), and `paper-writing` sat at 1680 while
+  `remote-execution` sat at 1814; Pi warned and loaded both anyway, so nothing
+  ever failed. They now measure 1015 and 923, and
+  `tests/test_skill_descriptions.py` holds the budget — in UTF-16 code units,
+  because that is the unit JS `length` counts and therefore the unit the
+  ceiling is written in. No claim was dropped on the way: `remote-execution`'s
+  provenance date for the pinned `kagglesdk` (`since 2025-07-11`) moved into
+  the body beside the pin, where it had never been written down.
 - **Pi agents no longer list unsourced `mcp`/`mcpScript` tools.** The
   `.pi/agents` projection skips `WebSearch`/`WebFetch` with a note instead of
   mapping them to names Pi does not document. The Antigravity
