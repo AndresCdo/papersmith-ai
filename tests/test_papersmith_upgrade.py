@@ -132,7 +132,68 @@ class UpgradeTests(unittest.TestCase):
         assert result["active_tools"] == ["claude", "pi"]
         assert config.load_workspace_config(workspace)["active_tools"] == ["claude", "pi"]
         assert (workspace / "CLAUDE.md").is_file()
-        assert (workspace / "PI.md").is_file()
+        assert (workspace / ".pi/APPEND_SYSTEM.md").is_file()
+
+    def _baseline(self, workspace: Path, relpath: str) -> None:
+        """Record ``relpath`` in the stored manifest as this tool's own output.
+
+        That is what "baselined" means, and it is the whole difference between
+        a retired entrypoint this tool may delete and a file the operator
+        wrote. The digest is the file's own, so the baseline is not fiction.
+        """
+        stored = manifest.load_manifest(workspace)
+        assert stored is not None
+        stored["files"][relpath] = (
+            manifest.sha256_if_readable(workspace / relpath) or "unreadable")
+        (workspace / ".papersmith/manifest.json").write_text(
+            json.dumps(stored, indent=2) + "\n", encoding="utf-8")
+
+    def test_upgrade_retires_the_static_entrypoint_a_later_release_renamed(self) -> None:
+        """`PI.md` is not under a dynamic prefix, so the orphan rule never
+        touches it. Without a named table the stale file would outlive every
+        upgrade, sitting beside the file that replaced it and still claiming --
+        in the workspace's own tree -- to be Pi's entrypoint."""
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        stale = workspace / "PI.md"
+        stale.write_text("# Pi entrypoint, before the rename\n", encoding="utf-8")
+        self._baseline(workspace, "PI.md")
+
+        result = upgrade_module.upgrade(workspace)
+
+        assert not stale.exists(), "a baselined retired entrypoint must be removed"
+        assert "PI.md" in result["removed"]
+        assert (workspace / ".pi/APPEND_SYSTEM.md").is_file()
+
+    def test_upgrade_keeps_a_retired_entrypoint_it_never_baselined(self) -> None:
+        """The removal is gated on the baseline, not on the name. A `PI.md`
+        the operator wrote is user data, and `audit` names it instead of
+        `upgrade` deleting it."""
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        mine = workspace / "PI.md"
+        mine.write_text("my own notes\n", encoding="utf-8")
+
+        result = upgrade_module.upgrade(workspace)
+
+        assert mine.read_text(encoding="utf-8") == "my own notes\n"
+        assert "PI.md" not in result["removed"]
+
+    def test_upgrade_keeps_a_retired_entrypoint_of_an_undeclared_runtime(self) -> None:
+        """A workspace that drops `pi` keeps its pi files, baselined or not:
+        they become surplus like every other undeclared runtime's, which is the
+        treatment `_orphaned` already gives a file the current declaration no
+        longer claims."""
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        stale = workspace / "PI.md"
+        stale.write_text("# left over from a wider tool set\n", encoding="utf-8")
+        self._baseline(workspace, "PI.md")
+
+        result = upgrade_module.upgrade(workspace, tools=("claude",))
+
+        assert stale.is_file(), "an undeclared runtime's files are never removed"
+        assert "PI.md" not in result["removed"]
 
     def test_upgrade_refuses_missing_manifest(self) -> None:
         tmp_path = self.new_tmp()

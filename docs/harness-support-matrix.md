@@ -132,8 +132,8 @@ Compared against files read on 2026-10-02.
 | "no command files are generated"; Antigravity invokes `/<name>` via `.agents/skills` | `.antigravity/rules.md` | Supported: the skills page documents `/<skill-name>` invocation |
 | Antigravity has no agents (feature problem list) | `odd/tasks/harness-parity.md` | Contradicted: `.agents/agents/*.md` is documented |
 | `.agents/workflows` exists and is deprecated 2026-11-01 | task context | Deprecation date confirmed; the `.agents/workflows` path is `unverified` |
-| Pi `.pi/skills` symlink | `.pi/README.md`, `PI.md` | Supported by the configuration page; the skills page lists only `.agents/skills`, which Pi also reads |
-| Pi prompts in `.pi/prompts/<name>.md` with `$ARGUMENTS` | `.pi/README.md`, `PI.md` | Supported |
+| Pi `.pi/skills` symlink | `.pi/README.md`, `.pi/APPEND_SYSTEM.md` | Supported by the configuration page; the skills page lists only `.agents/skills`, which Pi also reads |
+| Pi prompts in `.pi/prompts/<name>.md` with `$ARGUMENTS` | `.pi/README.md`, `.pi/APPEND_SYSTEM.md` | Supported |
 | `.pi/agents` agent projection | `generators.py` `PI_TOOL_MAP`, `.pi/agents` | Core Pi has no sub-agents; only the third-party `pi-subagents` package documents `.pi/agents/**/*.md`. The projection works only when that package is installed |
 | `PI_TOOL_MAP`: former `websearch` to `mcpScript`, `webfetch` to `mcp` entries | `src/papersmith/generators.py` | Removed: Pi docs name no tool `mcp` or `mcpScript`. `PI_SKIPPED_TOOLS` now skips the web tools with a note. `read`, `bash`, `edit`, `write`, `grep`, `find` are supported built-ins |
 | OpenCode plugin at `.opencode/plugins/`, thrown error blocks a bash call | `OPENCODE.md`, `refuse-offpath-push.js` | Supported (`tool.execute.before` throw) |

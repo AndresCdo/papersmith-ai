@@ -1,7 +1,9 @@
-# Papersmith AI — Pi Entrypoint
+# Papersmith AI — Pi runtime append
 
-Minimal harness entrypoint. This file does not duplicate guidance; it only routes
-to the canonical sources of truth so a single set of docs drives every harness.
+Pi appends this file to the project system prompt, and a trusted project copy
+takes precedence over the operator's own `~/.pi/agent/APPEND_SYSTEM.md` — the two
+are never combined. It does not duplicate guidance; it only routes to the
+canonical sources of truth so a single set of docs drives every harness.
 
 ## Canonical context
 

@@ -120,7 +120,7 @@ class GeneratorsTests(unittest.TestCase):
             ".gitignore",
             "CLAUDE.md",
             "OPENCODE.md",
-            "PI.md",
+            ".pi/APPEND_SYSTEM.md",
             ".pi/gentle-ai/persona.json",
             ".agents/AGENTS.md",
             "opencode.json",
@@ -484,13 +484,13 @@ class GeneratorsTests(unittest.TestCase):
 
     def test_pi_generator_repairs_both_outputs(self) -> None:
         workspace = _workspace(self.new_tmp())
-        (workspace / "PI.md").write_text("drift", encoding="utf-8")
+        (workspace / ".pi/APPEND_SYSTEM.md").write_text("drift", encoding="utf-8")
         (workspace / ".pi/gentle-ai/persona.json").write_text("{}", encoding="utf-8")
         command = [sys.executable, str(ROOT / "scripts/gen-pi.py"), "--root", str(workspace)]
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert '"mode": "gentleman"' in (workspace / ".pi/gentle-ai/persona.json").read_text()
-        assert "drift" not in (workspace / "PI.md").read_text()
+        assert "drift" not in (workspace / ".pi/APPEND_SYSTEM.md").read_text()
 
     def test_antigravity_check_is_exit_three_on_missing_output(self) -> None:
         workspace = _workspace(self.new_tmp())

@@ -10,6 +10,7 @@ from ..errors import UserError
 from ..core import fs
 from ..generators import (
     ALL_TOOLS,
+    RETIRED_STATIC,
     TOOL_OUTPUTS,
     check_generated,
     context_for_workspace,
@@ -27,16 +28,28 @@ _EXTRA_STATIC = {
 
 
 def _surplus_static_files(root: Path, active: tuple[str, ...]) -> list[str]:
-    """Static entrypoints owned by runtimes this workspace does not declare.
+    """Static entrypoints on disk that this workspace's surface does not own.
 
-    A workspace created with a wider tool set keeps those files: they are
-    ``reported`` here and never deleted. Dynamic outputs such as
-    ``.claude/commands/``, ``.pi/prompts/`` and ``.opencode/agents/`` are deliberately excluded — a never-baselined command
+    Two families qualify, and they are reported for the same reason: nothing
+    regenerates them, so nothing else would ever mention them again.
+
+    One is a runtime the workspace does not declare. A workspace created with a
+    wider tool set keeps those files: they are ``reported`` here and never
+    deleted. The other is a path a later release *retired*, which is reported
+    for every runtime rather than only for the undeclared ones -- a workspace
+    that still declares ``pi`` is exactly the one most likely to be carrying
+    the retired ``PI.md``, and silence there would defeat the table.
+
+    Dynamic outputs such as ``.claude/commands/``, ``.pi/prompts/`` and
+    ``.opencode/agents/`` are deliberately excluded — a never-baselined command
     file is user data, and a baselined one is handled by ``upgrade``'s orphan
     rule.
     """
     found: list[str] = []
     for tool in ALL_TOOLS:
+        for relpath in RETIRED_STATIC.get(tool, ()):
+            if fs.is_regular_file(root / relpath):
+                found.append(relpath)
         if tool in active:
             continue
         for relpath in (*TOOL_OUTPUTS.get(tool, ()), *_EXTRA_STATIC.get(tool, ())):

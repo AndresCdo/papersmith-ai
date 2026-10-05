@@ -310,7 +310,8 @@ mi-paper/
 ├── experiments/                 # el protocolo experimental gestionado
 ├── implementations/             # repos destino; cada uno con su propio git
 ├── kaggle-inbox/                # lo que vuelve de los workers remotos
-├── CLAUDE.md / OPENCODE.md / PI.md / .agents/AGENTS.md   # routing de harnesses
+├── CLAUDE.md / OPENCODE.md / .agents/AGENTS.md   # routing de harnesses
+├── .pi/APPEND_SYSTEM.md         # routing de harnesses (Pi lo appendea al prompt de sistema)
 ├── papersmith.yaml              # configuración del workspace (la tuya, editable)
 ├── package.json                 # dependencias Node del workspace (jiti, typebox), la tuya, editable
 ├── requirements.txt
@@ -394,7 +395,7 @@ npm run setup:harnesses      # = bash scripts/setup-harnesses.sh
 | Harness | Dónde lee las skills | Documento de routing (workspace) |
 |---------|----------------------|-----------------------------------|
 | Claude Code | `.claude/skills/` | `CLAUDE.md` |
-| Pi | `.pi/skills/` | `PI.md` |
+| Pi | `.pi/skills/` | `.pi/APPEND_SYSTEM.md` |
 | OpenCode | `.opencode/skills/` | `OPENCODE.md` |
 | Google Antigravity | `.agents/skills/` | `.agents/AGENTS.md` |
 
@@ -527,7 +528,8 @@ establecerlo. Las compuertas las abrís y cerrás vos.
 Tres reglas que ordenan todo lo demás:
 
 - **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
-  harness (`CLAUDE.md`, `PI.md`, `OPENCODE.md`, `.agents/AGENTS.md`) listan
+  harness (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
+  `.agents/AGENTS.md`) listan
   a los diecinueve enteros, y se generan: si querés cambiar un agente, se cambia
   ahí, no en la proyección.
 - **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa

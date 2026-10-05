@@ -104,7 +104,7 @@ class GeneratedWorkspaceTests(unittest.TestCase):
             "papersmith.yaml",
             "CLAUDE.md",
             "OPENCODE.md",
-            "PI.md",
+            ".pi/APPEND_SYSTEM.md",
             ".pi/gentle-ai/persona.json",
             ".agents/AGENTS.md",
             "README.md",
@@ -289,7 +289,11 @@ class RenderedSetLifecycleTests(unittest.TestCase):
     """
 
     KIT_COMMAND_NAMES = HarnessCommandProjectionTests.COMMAND_NAMES
-    STATIC_ENTRYPOINTS = ("OPENCODE.md", "PI.md", ".agents/AGENTS.md")
+    #: Static entrypoints of runtimes this workspace does not declare, plus the
+    #: path `pi` retired. Planted, they must survive `upgrade` (never baselined,
+    #: so never this tool's to delete) and be named by `audit` (nothing
+    #: regenerates them, so nothing else would ever mention them again).
+    STATIC_ENTRYPOINTS = ("OPENCODE.md", ".pi/APPEND_SYSTEM.md", "PI.md", ".agents/AGENTS.md")
 
     @staticmethod
     def _init_subset(base: Path, tools: str) -> Path:

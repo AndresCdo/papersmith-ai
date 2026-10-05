@@ -7,6 +7,7 @@ from typing import Sequence
 
 from ..errors import SourceError, UserError
 from ..generators import (
+    RETIRED_STATIC,
     UNSYNCHRONIZED,
     apply_generated,
     context_for_workspace,
@@ -48,7 +49,9 @@ def _orphaned(root: Path, previous_managed: set[str], current_render: set[str]) 
 
     A file under those prefixes that was never baselined is deliberately
     preserved: it is not this tool's output, so deleting it would lose user data.
-    Static entrypoints never match a prefix and are never removable here.
+    Static entrypoints never match a prefix and are never removable *here*: a
+    retired one is removed by :func:`_retired`, which recognises it by name in
+    :data:`generators.RETIRED_STATIC` rather than by shape.
 
     A stored-manifest key is data, not a trusted path. It is validated lexically
     first and only then resolved, so a crafted key is refused rather than
@@ -69,6 +72,34 @@ def _orphaned(root: Path, previous_managed: set[str], current_render: set[str]) 
         if inside:
             eligible.append(path)
     return sorted(eligible)
+
+
+def _retired(root: Path, previous_managed: set[str], active: Sequence[str]) -> list[str]:
+    """Baselined static paths a later release retired for a declared runtime.
+
+    The gate is narrower than :func:`_orphaned` in one direction and wider in
+    another. It is narrower because a retired path is not recognised by shape —
+    it is not under a dynamic prefix — but by the named
+    :data:`generators.RETIRED_STATIC` table, so the set of paths ``upgrade`` may
+    ever delete stays enumerable and reviewable instead of growing with any
+    baselined file that stops being rendered. It is wider because a retired
+    static path *is* removable, which the prefix rule refuses to every static
+    entrypoint.
+
+    Both conditions are required, and each rules out a different loss. The path
+    must be in ``previous_managed``: a ``PI.md`` this tool never wrote is a
+    user's file, and it survives — the boundary ``test_migration_keeps_static_
+    entrypoints_and_names_them_as_surplus`` holds. The runtime that used to
+    write it must still be declared: a workspace that dropped ``pi`` keeps its
+    pi files and gets them reported as surplus, exactly like every other
+    undeclared runtime's.
+    """
+    eligible: list[str] = []
+    for tool in active:
+        for relpath in RETIRED_STATIC.get(tool, ()):
+            if relpath in previous_managed and _contained(relpath):
+                eligible.append(relpath)
+    return sorted(set(eligible))
 
 
 def _copy_if_needed(workspace: Path, kit_root: Path, relpath: str, *, force: bool,
@@ -227,7 +258,11 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     deliverable = manifest.synchronized_paths(root, kit_root, context, active_tools)
     removed: list[str] = []
     stranded: list[str] = []
-    for relpath in _orphaned(root, set(stored["files"]), current_render):
+    removable = _orphaned(root, set(stored["files"]), current_render)
+    for relpath in _retired(root, set(stored["files"]), active_tools):
+        if relpath not in removable:
+            removable.append(relpath)
+    for relpath in removable:
         target = root / relpath
         if not fs.exists(target):
             # Already gone. Nothing to delete and nothing to retry: recording it

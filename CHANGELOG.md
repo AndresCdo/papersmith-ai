@@ -15,6 +15,16 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Changed
 
+- **The Pi entrypoint is the file Pi reads.** The `pi` runtime's generated
+  entrypoint moves from `PI.md` at the workspace root to
+  `.pi/APPEND_SYSTEM.md`. Pi never read `PI.md`: its project context candidates
+  are `AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md` and
+  `CLAUDE.MD`, while a trusted project `.pi/APPEND_SYSTEM.md` is appended to the
+  system prompt and takes precedence over the operator's own agent-level append
+  instead of combining with it. `upgrade` retires a baselined `PI.md` — nothing
+  else could, since a static entrypoint is deliberately outside the orphan rule
+  — and `audit` names a leftover one, in any workspace, as surplus. A `PI.md`
+  this tool never wrote is the operator's file and is never removed.
 - **The SOTA atlas is a 3D sky.** `/plausibility`'s `sota-pool/atlas.html`
   now draws the constellation with three.js instead of an inline SVG plane:
   family neighborhoods at their own heights, one tilted orbital plane per
@@ -27,6 +37,16 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Fixed
 
+- **Skill descriptions fit the ceiling the harness enforces.** Pi caps a
+  skill's `description` at 1024 UTF-16 code units
+  (`MAX_DESCRIPTION_LENGTH`), and `paper-writing` sat at 1680 while
+  `remote-execution` sat at 1814; Pi warned and loaded both anyway, so nothing
+  ever failed. They now measure 1015 and 923, and
+  `tests/test_skill_descriptions.py` holds the budget — in UTF-16 code units,
+  because that is the unit JS `length` counts and therefore the unit the
+  ceiling is written in. No claim was dropped on the way: `remote-execution`'s
+  provenance date for the pinned `kagglesdk` (`since 2025-07-11`) moved into
+  the body beside the pin, where it had never been written down.
 - **Pi agents no longer list unsourced `mcp`/`mcpScript` tools.** The
   `.pi/agents` projection skips `WebSearch`/`WebFetch` with a note instead of
   mapping them to names Pi does not document. The Antigravity
