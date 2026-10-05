@@ -114,6 +114,7 @@ class Outcome:
     applies_from: str | None
     actions: tuple[str, ...] = ()
     failures: tuple[str, ...] = ()
+    summary: str = ""
 
     @property
     def ok(self) -> bool:
@@ -262,7 +263,8 @@ def plan(workspace: Path, *, recorded: str, kit_version: str,
         if not actions:
             satisfied.append(migration.id)
             continue
-        pending.append(Outcome(migration.id, migration.applies_from, tuple(actions)))
+        pending.append(Outcome(migration.id, migration.applies_from, tuple(actions),
+                               summary=migration.summary))
     return PlanReport(pending=pending, satisfied=satisfied, undetermined=undetermined)
 
 
@@ -295,7 +297,8 @@ def run(workspace: Path, *, recorded: str, kit_version: str,
                 additions.append(_entry(migration, kit_version, ()))
             continue
         actions, problems = migration.apply(workspace)
-        outcome = Outcome(migration.id, migration.applies_from, tuple(actions), tuple(problems))
+        outcome = Outcome(migration.id, migration.applies_from, tuple(actions), tuple(problems),
+                          summary=migration.summary)
         applied.append(outcome)
         failures.extend(f"{migration.id}: {problem}" for problem in problems)
         if outcome.recordable:

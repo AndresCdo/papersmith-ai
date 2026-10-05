@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -17,6 +18,7 @@ from ..generators import (
 from ..kit import resolve_and_validate
 from ..schema import validate_tools
 from . import config, fs, manifest, migrations, wiring
+from .exit_codes import EXECUTION_ERROR
 
 #: Dynamic rendered outputs — one file per discovered skill, so their membership
 #: cannot be enumerated by a static list. Only paths under these prefixes that
@@ -180,8 +182,23 @@ def _refuse_a_downgrade(root: Path, kit_version: str, *, allowed: bool) -> None:
             f"(`--allow-downgrade`) if the rollback is deliberate")
 
 
+def _as_pending(outcome: migrations.Outcome) -> dict:
+    """One pending migration, in the single shape every caller reports."""
+    return {
+        "id": outcome.migration_id,
+        "summary": outcome.summary,
+        "actions": list(outcome.actions),
+    }
+
+
+def _empty_migration_report() -> dict:
+    return {"ran": False, "applied": [], "satisfied": [], "undetermined": [],
+            "pending": [], "failures": []}
+
+
 def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
-            force: bool = False, allow_downgrade: bool = False) -> dict:
+            force: bool = False, allow_downgrade: bool = False,
+            migrate: bool = True, plan_migrations: bool = False) -> dict:
     root = Path(workspace).expanduser().resolve()
     stored = manifest.load_manifest(root)
     if stored is None:
@@ -190,9 +207,34 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     kit_root = resolve_and_validate()
     kit_files = manifest.kit_files(kit_root)
     version = manifest.kit_version(kit_root)
+    # Read once, before this run can rewrite it: every later decision about
+    # migrations asks where the workspace STARTED, not where it ended up.
+    recorded = read_workspace_version(root, "").strip()
+
+    if plan_migrations:
+        # A preview that synchronized files on the way would be a preview of
+        # something that already happened. Nothing below this branch runs, the
+        # downgrade guard included: it refuses writes, and there are none.
+        preview = migrations.plan(root, recorded=recorded, kit_version=version)
+        return {
+            "workspace": str(root),
+            "version": version,
+            "planned": True,
+            "migrations": {
+                **_empty_migration_report(),
+                "satisfied": preview.satisfied,
+                "undetermined": preview.undetermined,
+                "pending": [_as_pending(entry) for entry in preview.pending],
+            },
+        }
+
     # Before a single byte is written, and never after: by the time the kit
     # files are copied the rollback is already the workspace's state.
     _refuse_a_downgrade(root, version, allowed=allow_downgrade)
+    # Same reason, same place: a damaged migration ledger cannot be told from
+    # an empty one, and discovering that after the files are synchronized
+    # leaves the operator with a half-moved workspace and no record of why.
+    migrations.read_applied(root)
     workspace_config = config.load_workspace_config(root)
     active_tools = validate_tools(list(tools) if tools is not None else workspace_config["active_tools"])
     changed: list[str] = []
@@ -264,10 +306,49 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
             continue
         removed.append(relpath)
 
+    # Artifact migrations run here and nowhere else: after the kit is
+    # synchronized, because a migration may need the new release's own scripts
+    # and assets (the atlas renderer is a kit file), and before the version
+    # marker below, because that marker is a claim about artifacts.
+    if migrate:
+        report = migrations.run(root, recorded=recorded, kit_version=version)
+        migration_report = {
+            "ran": True,
+            "applied": [{"id": outcome.migration_id, "actions": list(outcome.actions),
+                         "failures": list(outcome.failures)} for outcome in report.applied],
+            "satisfied": report.satisfied,
+            "undetermined": report.undetermined,
+            "pending": [],
+            "failures": report.failures,
+        }
+        # Undetermined is deliberately not a blocker: nothing was attempted, so
+        # nothing is half-done. A failure is, because something is.
+        artifacts_reached_this_version = report.ok
+    else:
+        preview = migrations.plan(root, recorded=recorded, kit_version=version)
+        migration_report = {
+            **_empty_migration_report(),
+            "satisfied": preview.satisfied,
+            "undetermined": preview.undetermined,
+            "pending": [_as_pending(entry) for entry in preview.pending],
+        }
+        artifacts_reached_this_version = not preview.pending
+
+    # One rule, no exception: the marker moves when the migrations for this
+    # version are done. `--no-migrate` is not an exemption from it — advancing
+    # the marker over artifacts the operator asked this run to leave alone
+    # would turn the flag into a way to record a release they never reached,
+    # and `status`'s `version_match` would report the lie as agreement.
+    #
+    # The manifest above is the opposite case and is written unconditionally:
+    # it is a claim about FILES, and the files did move. Holding it back would
+    # make `status` report every synchronized file as drift and bury the one
+    # fact that matters.
+    #
     # The marker is a managed path like any other, so it takes the same gate on
     # both sides: reading a FIFO would block, and writing one would block too —
     # in the command whose whole job is to repair a damaged workspace.
-    if read_workspace_version(root, "") != version:
+    if artifacts_reached_this_version and read_workspace_version(root, "") != version:
         if fs.write_text(root / ".papersmith" / "version", version + "\n"):
             changed.append(".papersmith/version")
         else:
@@ -295,6 +376,9 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     return {
         "workspace": str(root),
         "version": version,
+        "planned": False,
+        "migrations": migration_report,
+        "recorded_version": read_workspace_version(root, "").strip(),
         "active_tools": active_tools,
         "changed_files": changed,
         "preserved_files": preserved,
@@ -313,7 +397,28 @@ def register(subparsers) -> None:
     parser.add_argument("--force", action="store_true", help="force framework-file writes")
     parser.add_argument("--allow-downgrade", action="store_true",
                         help="permit installing an older framework version")
+    parser.add_argument("--no-migrate", dest="migrate", action="store_false",
+                        help="synchronize framework files without migrating workspace "
+                             "artifacts; the recorded version stays where it is")
+    # Deliberately not `--dry-run`: a flag by that name on `upgrade` would
+    # imply the kit copy, the projections and the orphan sweep were previewed
+    # too, and they are not. One flag must not overstate its reach.
+    parser.add_argument("--plan-migrations", action="store_true",
+                        help="report the pending artifact migrations and exit, writing nothing")
     parser.set_defaults(handler=run_cli)
+
+
+def _print_migrations(report: dict) -> None:
+    for entry in report["pending"]:
+        print(f"  pending {entry['id']}: {entry['summary']}")
+        for action in entry["actions"]:
+            print(f"    - {action}")
+    for entry in report["applied"]:
+        for action in entry["actions"]:
+            print(f"  {entry['id']}: {action}")
+    for identifier in report["undetermined"]:
+        print(f"  undetermined {identifier}: this workspace records no orderable "
+              "version, so nothing places it against the migration's gate")
 
 
 def run_cli(args) -> int:
@@ -321,7 +426,19 @@ def run_cli(args) -> int:
     if args.tools is not None:
         tools = [item.strip() for item in args.tools.split(",") if item.strip()]
     result = upgrade(args.directory, tools=tools, force=args.force,
-                     allow_downgrade=args.allow_downgrade)
+                     allow_downgrade=args.allow_downgrade, migrate=args.migrate,
+                     plan_migrations=args.plan_migrations)
+
+    if result["planned"]:
+        report = result["migrations"]
+        print(f"Pending artifact migrations for {result['workspace']} "
+              f"at framework version {result['version']}:")
+        if not (report["pending"] or report["undetermined"]):
+            print("  none; this workspace's artifacts already match the installed release")
+        _print_migrations(report)
+        print("Nothing was written.")
+        return 0
+
     print(f"Upgraded papersmith workspace: {result['workspace']}")
     print(f"Framework version: {result['version']}; changed files: {len(result['changed_files'])}")
     for relpath in result["unsynchronized"]:
@@ -331,4 +448,20 @@ def run_cli(args) -> int:
         print(f"  {line}")
     for warning in result["link_warnings"]:
         print(f"Warning: {warning}")
+
+    report = result["migrations"]
+    if report["pending"] or report["applied"] or report["undetermined"]:
+        print("Artifact migrations:")
+        _print_migrations(report)
+    # Say which version the workspace actually records, every time the two
+    # disagree. A held-back marker that nothing reports is the same silence as
+    # a marker that moved without its artifacts.
+    if result["recorded_version"] != result["version"]:
+        print(f"Recorded version stays at {result['recorded_version'] or '(none)'}: "
+              f"the artifact migrations for {result['version']} are not done. "
+              "Re-run `papersmith upgrade` once their cause is fixed.")
+    if report["failures"]:
+        for failure in report["failures"]:
+            print(f"Migration failed: {failure}", file=sys.stderr)
+        return EXECUTION_ERROR
     return 0
