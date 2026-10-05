@@ -31,7 +31,7 @@ def scene_of(page):
 
 ORBITS = {"sun": 0, "branch": 1, "topic_app": 1, "topic_ai": 1,
           "problem": 1, "application": 1, "family": 2, "novelty": 1,
-          "result": 3, "conclusion": 3}
+          "contribution": 1, "result": 3, "conclusion": 3}
 BASE_SLOTS = ["sun", "topic_app", "topic_ai", "problem", "application",
               "novelty", "result", "conclusion"]
 
@@ -147,6 +147,29 @@ class CheckAtlasTests(unittest.TestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("ATLAS_NOT_JSON", out)
 
+    def test_optional_contributions_are_admitted_up_to_five(self):
+        """A proposal carries three to five concepts that hint at its novelty
+        and the issues it could resolve. A paper carries none, which is why the
+        row's floor is zero: the slot is optional for every system, so the SOTA
+        side of the same atlas keeps the shape it always had."""
+        nodes = system("a", "F1")["planets"] + [
+            planet(f"a-contrib-{i}", "contribution") for i in range(5)]
+        payload = atlas(systems=[{**system("a", "F1"), "planets": nodes},
+                                 system("b", "F2"), system("c", "F3")])
+        code, out = self.run_checker(payload)
+        self.assertEqual(code, 0, out)
+
+    def test_a_sixth_contribution_is_refused(self):
+        """Five is the widest the proposal contract names; a sixth concept is
+        a different claim and belongs in a revision of its own."""
+        nodes = system("a", "F1")["planets"] + [
+            planet(f"a-contrib-{i}", "contribution") for i in range(6)]
+        payload = atlas(systems=[{**system("a", "F1"), "planets": nodes},
+                                 system("b", "F2"), system("c", "F3")])
+        code, out = self.run_checker(payload)
+        self.assertEqual(code, 1, out)
+        self.assertIn("SLOT_COUNT_OUTSIDE_ROW", out)
+
 
 class RenderAtlasTests(unittest.TestCase):
     def setUp(self):
@@ -190,6 +213,37 @@ class RenderAtlasTests(unittest.TestCase):
         self.assertNotIn("<script src", page)
         self.assertNotIn("<link ", page)
         self.assertNotIn("@import", page)
+
+    def test_default_title_is_the_sota_constellations_own_words(self):
+        """A second caller must not change the first one's artifact: the
+        default is the sentence this page always carried."""
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path))
+        self.assertEqual(code, 0, out)
+        page = self.out_path.read_text(encoding="utf-8")
+        self.assertIn("<title>SOTA constellation</title>", page)
+        self.assertIn("<h1>SOTA constellation — one sky</h1>", page)
+
+    def test_a_named_sky_says_its_own_name_in_both_places(self):
+        """A caller rendering another domain's sky names it. The tab title and
+        the heading both follow, so the page cannot contradict its own tab."""
+        named = "Propuesta r01 — sobre el cielo SOTA"
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path),
+                                      "--title", named)
+        self.assertEqual(code, 0, out)
+        page = self.out_path.read_text(encoding="utf-8")
+        self.assertIn(f"<title>{named}</title>", page)
+        self.assertIn(f"<h1>{named}</h1>", page)
+        self.assertNotIn("SOTA constellation — one sky", page)
+
+    def test_a_name_carrying_markup_is_escaped(self):
+        """The name is text, not markup: a proposal title with an angle bracket
+        must not become a tag in the artifact."""
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path),
+                                      "--title", "<img src=x onerror=alert(1)>")
+        self.assertEqual(code, 0, out)
+        page = self.out_path.read_text(encoding="utf-8")
+        self.assertNotIn("<img src=x", page)
+        self.assertIn("&lt;img src=x", page)
 
     def test_vendored_viewer_is_inlined_verbatim(self):
         code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path))

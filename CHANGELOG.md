@@ -62,6 +62,21 @@ number is `0`, breaking changes can still arrive without a major bump.
 Interactive Paper Command Center: a light theme, a clickable diagram and a
 session history.
 
+- **The proposal travels with its own sky.** Stage 3 ships a 3D graph beside the
+  published revision — the SOTA constellation with the proposal inside it, drawn
+  by the same vendored viewer. `merge_proposal_sky.py` merges the pool
+  (`sota-pool/atlas.json`) with the proposal's overlay
+  (`proposals/<revision>.sky.json`) into one atlas, and the existing
+  `render_atlas.py` draws it, so the proposal's main idea, the topics it takes
+  from the SOTA papers, its one novelty claim, the issue it could resolve and
+  its three to five contribution concepts are nodes with real edges into the
+  papers they touch — the relationship is drawn rather than asserted. The atlas
+  gains one optional slot, `contribution` (orbit 1, zero to five planets), which
+  a paper leaves empty; the three-to-five range belongs to the merger, because
+  it is the overlay's contract and not the constellation's, and the pool's own
+  checker stays the single authority on families, orbits and evidence.
+  `render_atlas.py` also gains `--title`, so one viewer can name another
+  domain's sky instead of borrowing a title that would be false for it.
 - **Read-only paper preview routes in the command center.**
   `GET /api/paper/preview` returns sections (extractor order and ids) with
   plain-text block bodies from `paper/main.tex`, citation keys, `written`,

@@ -68,6 +68,55 @@ its own proposal.
 What moves is execution, never doctrine: every rule stays here, and the agent's
 first instruction is to load this file.
 
+## The graph: the proposal inside the SOTA sky
+
+This skill's artifact travels with a picture, and the picture is the SOTA
+constellation with this proposal in it — not a second drawing that can drift
+from the first one. Three steps, in this order:
+
+```bash
+python skills/proposal-deliberation/scripts/merge_proposal_sky.py \
+  sota-pool/atlas.json proposals/research-concept-r01.sky.json \
+  --out sota-pool/atlas.with-proposal.json
+python skills/plausibility/scripts/check_atlas.py sota-pool/atlas.with-proposal.json
+python skills/plausibility/scripts/render_atlas.py \
+  sota-pool/atlas.with-proposal.json \
+  --out proposals/research-concept-r01.graph.html \
+  --title "Propuesta r01 — sobre el cielo SOTA"
+```
+
+The overlay (`proposals/<revision>.sky.json`) is authored during the
+deliberation and carries one system — the proposal — plus its links into the
+constellation:
+
+- the **main idea**, as `application` (where it lands), `topic_app` and
+  `topic_ai` (the topics it takes from the SOTA papers) and `sun` (the title);
+- exactly one `novelty`: what it adds over the families it touches;
+- exactly one `problem`: the issue it could resolve;
+- one to three `result` and one to two `conclusion` planets. They are not the
+  proposal's own vocabulary; the checker asks them of every system in the pool,
+  this one included, and a merged file without them is refused with
+  `SLOT_COUNT_OUTSIDE_ROW`;
+- **three to five `contribution` planets**: the concepts that carry the novelty
+  and name the issues the SOTA papers leave open. The merger refuses fewer than
+  three and more than five; the checker admits the slot for every system, so a
+  paper that carries none is untouched;
+- exactly one `family`, taken from the pool's own labels when the pool already
+  holds five — a sixth neighborhood is a different paper;
+- `links`, one per relation worth drawing, each
+  `{from, to_system, to, rel}` with `rel` from the closed set (`extends`,
+  `addresses`, `about`, `contradicts`, `supports`, `yields`,
+  `shares-family-with` — the last one only between the two systems' own
+  `family` planets). `from_system` is deliberately absent: every overlay link
+  starts at the proposal, and the merger writes it.
+
+The checker runs on the merged file because it is the only authority on the
+constellation's shape; the merger refuses only what makes the merge incoherent
+(a system id already taken, a link with no planet to land on) and what this
+overlay's own contract forbids. Link the HTML from the published revision; the
+engine's publish transaction never sees either file, so the mathematics stays
+byte-exact.
+
 ## You are the tutor
 
 For the rest of this deliberation:

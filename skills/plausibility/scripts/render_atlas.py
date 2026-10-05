@@ -23,6 +23,7 @@ Stdlib only.
 
 from __future__ import annotations
 
+import html
 import json
 import math
 import sys
@@ -37,6 +38,7 @@ SLOT_COLORS = {
     "application": "#5ad1e6",
     "family": "#9b7ede",
     "novelty": "#e67e22",
+    "contribution": "#e879f9",
     "result": "#2ecc71",
     "conclusion": "#95a5a6",
 }
@@ -213,7 +215,7 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOTA constellation</title>
+<title>@@TITLE@@</title>
 <style>
 html,body{height:100%}
 body{font-family:system-ui,sans-serif;background:#0a0a10;color:#e4e4ed;margin:0;padding:12px 16px;box-sizing:border-box;display:flex;flex-direction:column}
@@ -235,7 +237,7 @@ h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
 </style>
 </head>
 <body>
-<h1>SOTA constellation — one sky</h1>
+<h1>@@HEADING@@</h1>
 <div id="panel">Drag to orbit, right-drag to pan, wheel to zoom. Hover a planet to trace its cross-system links; click to read it; double-click to fly to it.</div>
 <div id="overlay"><div id="modal"><button id="modalclose">close</button><div id="modalbody"></div></div></div>
 <div id="famlegend"><em>Families:</em> <span id="famchips"></span></div>
@@ -341,12 +343,26 @@ def _viewer_bundle() -> str:
     return VIEWER.read_text(encoding="utf-8")
 
 
-def render(atlas: dict, viewer: str | None = None) -> str:
+def render(atlas: dict, viewer: str | None = None, *,
+           title: str | None = None, heading: str | None = None) -> str:
+    """The whole page. ``title`` and ``heading`` default to the SOTA
+    constellation's own words, so a caller that says nothing gets the byte it
+    always got; a caller rendering another domain's sky — a proposal overlaid
+    on this one — names it instead of borrowing a title that would be false.
+    """
     bundle = _viewer_bundle() if viewer is None else viewer
     if "</script" in bundle.lower():
         raise ValueError("the viewer bundle contains </script and cannot be inlined")
+    if title is None:
+        title, heading = "SOTA constellation", "SOTA constellation — one sky"
+    elif heading is None:
+        # One name is enough: a caller who names the page means both places it
+        # is read, and a heading left behind would contradict the tab title.
+        heading = title
+    named = PAGE.replace("@@TITLE@@", html.escape(title))
+    named = named.replace("@@HEADING@@", html.escape(heading))
     data = json.dumps(_scene(atlas)).replace("<", "\\u003c")
-    head, rest = PAGE.split("@@DATA@@")
+    head, rest = named.split("@@DATA@@")
     middle, tail = rest.split("@@VIEWER@@")
     return head + data + middle + bundle + tail
 
@@ -354,17 +370,22 @@ def render(atlas: dict, viewer: str | None = None) -> str:
 def main(argv: list[str]) -> int:
     inputs: list[str] = []
     out_path: Path | None = None
+    title: str | None = None
     tokens = argv[1:]
     index = 0
     while index < len(tokens):
         if tokens[index] == "--out" and index + 1 < len(tokens):
             out_path = Path(tokens[index + 1])
             index += 2
+        elif tokens[index] == "--title" and index + 1 < len(tokens):
+            title = tokens[index + 1]
+            index += 2
         else:
             inputs.append(tokens[index])
             index += 1
     if len(inputs) != 1 or out_path is None:
-        print("usage: render_atlas.py sota-pool/atlas.json --out sota-pool/atlas.html",
+        print("usage: render_atlas.py sota-pool/atlas.json --out sota-pool/atlas.html "
+              "[--title <text>]",
               file=sys.stderr)
         return 2
     try:
@@ -382,7 +403,7 @@ def main(argv: list[str]) -> int:
         print(f"{shape_error}: run the checker first", file=sys.stderr)
         return 1
     try:
-        page = render(atlas)
+        page = render(atlas, title=title)
     except OSError as error:
         print(f"ATLAS_VIEWER_MISSING: {error} (run npm run build:atlas-viewer)",
               file=sys.stderr)
