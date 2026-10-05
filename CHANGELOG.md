@@ -11,6 +11,42 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.11.0
+
+### Changed
+
+- **The proposal tramo reports its two artifacts separately.** It was lit only
+  by `proposals/*.md`, so a published revision and a published revision with
+  its graph read the same to the board. It now counts the revisions and the sky
+  graphs (`proposals/*.graph.html`), names both in its detail, and reports
+  their ratio as its progress -- a revision without its graph is exactly the
+  half-done state worth showing.
+- **The Pi flow diagram names both artifacts** on `proposals/` and draws a
+  dashed `atlas.json` edge from `sota-grapher` to `deliberation-publish`. A
+  sixth node in that carril did not survive the diagram's own gates. With a cell
+  narrow enough to leave the figure readable, validation reports
+  `layout/constraint`: `/experimental-implementation` is ~185px of label in a
+  176px cell, and connections shortened with it fall under their 24px floor.
+  With cells and gaps wide enough for both, the six-column viewBox reaches
+  1370px, where `composition/desktop-readability` projects 8px source text at
+  5.43px against its 6px floor. The graph therefore travels as the second
+  artifact of the tramo's existing node, which is how the extractor counts it.
+
+### Added
+
+- **The proposal's sky graph is a step of the flow.** Stage 3's graph -- the
+  SOTA constellation with the proposal inside it -- was documented, tested and
+  run by nobody: the architecture diagram had no node for it, the *Pipeline*
+  tab could not see it, and no agent produced it. Three surfaces now carry it.
+  `deliberation-publish` now requires the overlay — reporting it as `owed`
+  rather than inventing a relation to have something to draw — runs the skill's
+  three commands in order (merge, check, render), and reports the rendered path,
+  `proposals/<revision>.graph.html`, with the checker's verdict and whether the
+  published revision names it. The deliberation's own skill now pins *when* the
+  overlay is authored -- before the change is accepted, because the successor's
+  text is what names the picture -- and the publish stretch has no `Write`, so
+  an overlay it cannot find is reported rather than manufactured.
+
 ## 0.10.0
 
 ### Changed

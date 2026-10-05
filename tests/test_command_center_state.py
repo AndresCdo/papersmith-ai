@@ -7,7 +7,9 @@ generator.
 
 from __future__ import annotations
 
+import fnmatch
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -516,6 +518,14 @@ class PipelineFlowTests(unittest.TestCase):
             ("proposal",
              lambda root: self.write(root / "proposals" / "research-concept-r01.md", "# r\n"),
              {"proposal"}),
+            # The proposal tramo's second artifact kind: the sky graph drawn
+            # beside the revision. Either one lights the tramo on its own, and
+            # a workspace holding only the graph is a real state -- the chain
+            # runs after the publish.
+            ("proposal",
+             lambda root: self.write(root / "proposals" / "research-concept-r01.graph.html",
+                                     "<html></html>\n"),
+             {"proposal"}),
             ("implementation",
              lambda root: self.write(root / "implementations" / "repo" / "main.py", "x = 1\n"),
              {"implementation"}),
@@ -549,3 +559,64 @@ class PipelineFlowTests(unittest.TestCase):
 
         assert covered == set(self.TRAMOS), (
             f"a tramo has no artifact case: {sorted(set(self.TRAMOS) - covered)}")
+
+    def test_the_proposal_tramo_counts_its_revision_and_its_sky_separately(self) -> None:
+        """A revision and the graph beside it are two artifacts, and the board
+        says so.
+
+        A proposal can be published without its graph -- that is the half-done
+        state this signal exists to show -- so one file must not read as the
+        same thing as two, and neither may be inferred from the other.
+        """
+        def revision(root: Path) -> None:
+            self.write(root / "proposals" / "research-concept-r01.md", "# r\n")
+
+        def sky(root: Path) -> None:
+            self.write(root / "proposals" / "research-concept-r01.graph.html",
+                       "<html></html>\n")
+
+        def both(root: Path) -> None:
+            revision(root)
+            sky(root)
+
+        def proposal_stage(setup) -> dict:
+            root = self.new_workspace()
+            setup(root)
+            stages = state_extractor.get_workspace_state(root)["pipeline_stages"]
+            return next(stage for stage in stages if stage["id"] == "proposal")
+
+        alone = proposal_stage(revision)
+        assert alone["active"] is True
+        assert "1 proposal(s)" in alone["detail"], alone["detail"]
+        assert "0 sky graph(s)" in alone["detail"], alone["detail"]
+        assert alone["progress"] == 0.5, alone
+
+        drawn = proposal_stage(sky)
+        assert drawn["active"] is True
+        assert "0 proposal(s)" in drawn["detail"], drawn["detail"]
+        assert "1 sky graph(s)" in drawn["detail"], drawn["detail"]
+        assert drawn["progress"] == 0.5, drawn
+
+        complete = proposal_stage(both)
+        assert complete["progress"] == 1.0, complete
+
+        assert proposal_stage(lambda root: None)["detail"] == "no proposal revision"
+
+    def test_the_glob_matches_the_artifact_the_skill_names(self) -> None:
+        """The tramo's signal and the skill's own output name are one convention
+        held in two files, and nothing else in the repository compares them.
+
+        The path is written in the deliberation's instructions and the pattern
+        is in the extractor, so a rename on either side would leave the graph
+        sitting on disk while the tramo stays dark -- exactly the failure this
+        signal exists to prevent.
+        """
+        skill = (Path(__file__).resolve().parent.parent
+                 / "skills" / "proposal-deliberation" / "SKILL.md")
+        named = re.findall(r"--out\s+proposals/(\S+)", skill.read_text(encoding="utf-8"))
+
+        assert len(named) == 1, f"expected one artifact name under proposals/, got {named}"
+        assert fnmatch.fnmatch(named[0], state_extractor.PROPOSAL_GRAPH_GLOB), (
+            f"the skill writes proposals/{named[0]} and the extractor counts "
+            f"{state_extractor.PROPOSAL_GRAPH_GLOB}, so the graph would be on "
+            "disk and the tramo still dark")

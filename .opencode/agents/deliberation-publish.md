@@ -38,6 +38,32 @@ agent with nothing to carry. Forcing the arrival into an earlier stretch
 would turn a correct description into a false one. This one is `terminal`,
 so the description above carries `proposal-deliberation`'s arrival verbatim.
 
+## The graph travels with the revision
+
+The artifact is not the Markdown alone. It travels with a picture — the SOTA
+constellation with this proposal inside it — and producing that picture belongs
+to your stretch, because it is the part that was being lost: the skill
+documented the chain and no agent ran it.
+
+The skill's own section on the graph owns the overlay's contract. Read it; this
+section says what is yours and what refuses.
+
+- **The overlay is deliberated content, and you may not write it.** You have no
+  `Write` and no `Edit`, and this is not an exception to drive around: every
+  planet and every link in `proposals/<revision>.sky.json` is a claim about
+  which SOTA papers this proposal takes from and why, and a relation nobody
+  agreed to is worse than a missing picture. If the overlay is absent, report
+  it as `owed` — after the publish, never instead of it.
+- **The chain runs in the skill's order**: merge, then check, then render. The
+  checker is the only authority on the constellation's shape, which is why it
+  runs on the merged file; a refusal from it is a refusal of the overlay, and
+  its own message names what to fix.
+- **Report the path you rendered — `proposals/<revision>.graph.html` — and the
+  verdict you got**, and whether the published revision names that path. The
+  link belongs in the successor's own text, and the engine wrote that text: a
+  revision that publishes without its link is `owed`, and a closed transaction
+  is not yours to reopen.
+
 ## Agreement is not arrival
 
 A finding that gets discussed, agreed, and never published is how this pair of
