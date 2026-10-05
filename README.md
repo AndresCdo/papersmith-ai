@@ -2878,6 +2878,17 @@ papersmith init ~/papers/sparse-ae \
 | `--remote {kaggle,local,slurm}` | Target de cómputo por defecto (por defecto: `kaggle`) |
 | `--no-npm` | Saltea el `npm install` best-effort (uso offline/hermético) |
 | `--no-env` | Saltea el aprovisionamiento del entorno Python del workspace; `papersmith ui` se niega hasta que corras `python3 scripts/setup_env.py install` |
+| `--progress` | Fuerza un log de progreso en texto plano, con estimación del tiempo restante; útil en CI, donde la barra es ruido pero el log es lo importante |
+| `--no-progress` | No dibuja progreso aunque la salida sea un terminal |
+
+El paso que domina el tiempo es el aprovisionamiento del entorno, y hasta la
+0.9.0 corría con la salida capturada: varios minutos sin ninguna señal. Ahora
+`init` dibuja una barra con estimación del tiempo restante en un terminal, e
+imprime el log de los dos procesos hijos que ejecuta. La estimación arranca de
+unos valores declarados y se recalibra con el ritmo que la propia corrida mide;
+si un paso se pasa de su parte, el número sube en vez de contradecirse. Cuando
+la salida no es un terminal — una tubería, el servidor MCP, la suite — no se
+imprime nada, para no ensuciar una salida que otro programa está leyendo.
 
 Crea `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,

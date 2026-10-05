@@ -11,6 +11,20 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.9.0
+
+### Added
+
+- **`papersmith init` reports its own progress.** A bar with an estimate of the
+  time left, plus the streamed log of the two child processes it runs —
+  `npm install` and the workspace's environment provisioning — which until now
+  ran with their output captured: minutes of silence, and on a cold cache up to
+  the whole provisioning timeout. The estimate starts from declared priors and
+  is recalibrated with the pace the run measures, so a step that overruns its
+  share moves the number instead of contradicting it. `--progress` forces a
+  plain log for CI, `--no-progress` silences the bar, and a pipe stays silent by
+  default — which is what keeps the MCP server's child invocation readable.
+
 ## 0.8.0
 
 ### Changed

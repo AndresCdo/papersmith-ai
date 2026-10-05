@@ -77,7 +77,8 @@ class EnvironmentProvisioningTests(unittest.TestCase):
         root = self.new_tmp() / "paper"
         calls: list[Path] = []
         original = init_module._run_env_install
-        init_module._run_env_install = lambda workspace: calls.append(workspace) or "stubbed gap"
+        init_module._run_env_install = (
+            lambda workspace, report=None: calls.append(workspace) or "stubbed gap")
         self.addCleanup(setattr, init_module, "_run_env_install", original)
 
         result = init_module.initialize(root, run_npm=False, run_env=True)
@@ -89,7 +90,8 @@ class EnvironmentProvisioningTests(unittest.TestCase):
         root = self.new_tmp() / "paper"
         calls: list[Path] = []
         original = init_module._run_env_install
-        init_module._run_env_install = lambda workspace: calls.append(workspace) or None
+        init_module._run_env_install = (
+            lambda workspace, report=None: calls.append(workspace) or None)
         self.addCleanup(setattr, init_module, "_run_env_install", original)
 
         init_module.initialize(root, run_npm=False, run_env=False)
