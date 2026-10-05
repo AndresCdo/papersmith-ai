@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -21,7 +20,7 @@ from ..kit import resolve_and_validate
 from ..render import render_package_template
 from ..schema import REMOTE_CHOICES, REMOTE_TARGETS, validate_tools
 from . import config, fs
-from . import manifest, wiring
+from . import manifest, progress, wiring
 
 DEFAULT_AGENT_MODELS = {
     "paper-ingestion": "sonnet",
@@ -36,6 +35,11 @@ DEFAULT_AGENT_MODELS = {
 #: cache and considerably longer on a cold one. A tighter bound would report a
 #: slow network as a provisioning defect.
 PROVISION_TIMEOUT = 3600
+
+#: How long ``npm install`` may take. It installs two devDependencies from a
+#: warm cache in seconds; the bound exists for a registry that never answers,
+#: so that the step is named and the run continues rather than hanging.
+NPM_TIMEOUT = 180
 
 
 def _write_text(root: Path, relpath: str, content: str) -> None:
@@ -149,27 +153,24 @@ def _write_workspace_seed(root: Path, *, name: str, title: str, topic: str,
     _write_text(root, "package.json", render_package_template("package.json.tpl", context))
 
 
-def _run_npm_install(root: Path) -> str | None:
+def _run_npm_install(root: Path, report: progress.Reporter | None = None) -> str | None:
+    report = report or progress.Reporter()
     npm = shutil.which("npm")
     if npm is None:
         return "npm was not found; deliberate requires npm install for jiti/typebox"
     try:
-        result = subprocess.run(
+        code, tail = progress.run_streaming(
             [npm, "install", "--no-audit", "--no-fund", "--prefix", str(root)],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+            cwd=root, report=report, timeout=NPM_TIMEOUT)
+    except (OSError, progress.ChildTimedOut) as exc:
         return f"npm install could not complete: {exc}"
-    if result.returncode:
-        detail = (result.stderr or result.stdout or "unknown npm error").strip().splitlines()
+    if code:
+        detail = tail.strip().splitlines()
         return f"npm install failed: {detail[-1] if detail else 'unknown error'}"
     return None
 
 
-def _run_env_install(root: Path) -> str | None:
+def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str | None:
     """Provision the workspace's Python environment through its own script.
 
     Fail-soft and reported in ``warnings``, exactly like ``_run_npm_install``: a
@@ -187,22 +188,19 @@ def _run_env_install(root: Path) -> str | None:
     given ``--no-env``.
     """
     script = root / "scripts" / "setup_env.py"
+    report = report or progress.Reporter()
     if not script.is_file():
         return ("scripts/setup_env.py is not present, so the workspace has no "
                 "environment to run the command center; run `papersmith upgrade`")
     interpreter = shutil.which("python3") or sys.executable
     try:
-        result = subprocess.run(
+        code, tail = progress.run_streaming(
             [interpreter, str(script), "install"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=PROVISION_TIMEOUT,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+            cwd=root, report=report, timeout=PROVISION_TIMEOUT)
+    except (OSError, progress.ChildTimedOut) as exc:
         return f"environment provisioning could not complete: {exc}"
-    if result.returncode:
-        detail = (result.stderr or result.stdout or "unknown error").strip().splitlines()
+    if code:
+        detail = tail.strip().splitlines()
         return ("environment provisioning failed: "
                 f"{detail[-1] if detail else 'unknown error'}; run "
                 f"`python3 scripts/setup_env.py install` in {root}")
@@ -212,8 +210,16 @@ def _run_env_install(root: Path) -> str | None:
 def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                tools: Sequence[str] = ALL_TOOLS, topic: str = "unspecified",
                remote: str = "kaggle", run_npm: bool = True,
-               run_env: bool = True) -> dict:
-    """Create a workspace and return a machine-readable operation summary."""
+               run_env: bool = True,
+               report: progress.Reporter | None = None) -> dict:
+    """Create a workspace and return a machine-readable operation summary.
+
+    ``report`` is where the bar, the child's log and the estimate go. It
+    defaults to a reporter that writes nothing, because the callers that are
+    not a terminal -- the MCP server, which spawns this CLI and reads its
+    stdout, and the test suite -- have to keep the bytes they always got.
+    """
+    report = report or progress.Reporter()
     tools = validate_tools(list(tools))
     if remote not in REMOTE_CHOICES:
         raise UserError(f"remote must be one of {', '.join(REMOTE_CHOICES)}")
@@ -235,57 +241,82 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     else:
         root.mkdir(parents=True, exist_ok=True)
 
-    kit_root = resolve_and_validate()
-    version = manifest.kit_version(kit_root) or __version__
-    target = REMOTE_TARGETS[remote]
-    name = root.name
-    _create_topology(root)
-    copied = _copy_kit(root, kit_root)
+    # The plan excludes the steps this run was told to skip, so the bar counts
+    # the work that will actually happen. Two of these are a package install and
+    # an environment download, so the priors are a first guess that the run
+    # replaces with the pace it measures.
+    plan = [
+        progress.Step("kit", "copying the kit", 1.5),
+        progress.Step("harness", "linking the harness skills", 0.3),
+        progress.Step("workspace", "writing the workspace files", 0.4),
+        progress.Step("generated", "projecting the harness surface", 0.6),
+    ]
+    if run_npm:
+        plan.append(progress.Step("npm", "running npm install", 45.0))
+    if run_env:
+        plan.append(progress.Step("environment",
+                                  "provisioning the Python environment", 300.0))
+    plan.append(progress.Step("manifest", "validating and writing the baseline", 0.6))
+    report.plan(plan)
+
+    with report.step("kit"):
+        kit_root = resolve_and_validate()
+        version = manifest.kit_version(kit_root) or __version__
+        target = REMOTE_TARGETS[remote]
+        name = root.name
+        _create_topology(root)
+        copied = _copy_kit(root, kit_root)
     # A wired harness `skills` symlink is reported like every other kit file.
     # A path that could not be linked (no symlink privilege, read-only mount,
     # ELOOP) or that real content already occupies is surfaced as a warning
     # below; init still succeeds and `upgrade` repairs it once the cause is
     # fixed. Files are never copied in place of a link.
-    link_report = manifest.link_harness_skills_report(root, tools=tools)
-    copied.extend(link_report.linked)
-    _write_workspace_seed(root, name=name, title=title.strip(), topic=topic.strip(),
-                          target=target, version=version, tools=tools)
+    with report.step("harness"):
+        link_report = manifest.link_harness_skills_report(root, tools=tools)
+        copied.extend(link_report.linked)
 
-    stamp = config.utc_timestamp()
-    workspace_config = _default_config(name, tools, target, stamp)
-    config.write_json(root / ".papersmith" / "config.json", workspace_config)
-    # The destination is absent or empty by contract, so no damaged path can
-    # occupy these yet; unlike ``upgrade`` there is nothing to gate against.
-    (root / ".papersmith" / "version").write_text(version + "\n", encoding="utf-8")
-    (root / ".papersmith" / "runs_ledger.jsonl").touch()
+    with report.step("workspace"):
+        _write_workspace_seed(root, name=name, title=title.strip(), topic=topic.strip(),
+                              target=target, version=version, tools=tools)
+        stamp = config.utc_timestamp()
+        workspace_config = _default_config(name, tools, target, stamp)
+        config.write_json(root / ".papersmith" / "config.json", workspace_config)
+        # The destination is absent or empty by contract, so no damaged path can
+        # occupy these yet; unlike ``upgrade`` there is nothing to gate against.
+        (root / ".papersmith" / "version").write_text(version + "\n", encoding="utf-8")
+        (root / ".papersmith" / "runs_ledger.jsonl").touch()
 
     # Render exactly the declared tool set: the payload the CLI validated and
     # stored above is the same set every later consumer resolves through
     # ``generators.workspace_tools``.
     unsynchronized: list[str] = []
-    context = context_for_workspace(root)
-    generated = apply_generated(root, context, tools, skipped=unsynchronized)
+    with report.step("generated"):
+        context = context_for_workspace(root)
+        generated = apply_generated(root, context, tools, skipped=unsynchronized)
     warnings: list[str] = manifest.link_warnings(link_report)
     if run_npm:
-        warning = _run_npm_install(root)
+        with report.step("npm"):
+            warning = _run_npm_install(root, report)
         if warning:
             warnings.append(warning)
     if run_env:
-        warning = _run_env_install(root)
+        with report.step("environment"):
+            warning = _run_env_install(root, report)
         if warning:
             warnings.append(warning)
 
     # Validate the generated documents before making the manifest authoritative.
-    config.load_workspace_config(root)
-    config.load_papersmith_yaml(root)
-    framework_files = manifest.workspace_framework_files(root, kit_root)
-    for relpath in manifest.synchronized_paths(root, kit_root, context, tools):
-        # Any managed path the baseline cannot hash — non-regular, never
-        # written, or written but still unreadable — is recorded with a marker,
-        # so ``status`` reports it as drift instead of losing it in the rewrite.
-        if relpath not in framework_files:
-            framework_files[relpath] = UNSYNCHRONIZED
-    manifest.write_manifest(root, version, framework_files, kind="workspace")
+    with report.step("manifest"):
+        config.load_workspace_config(root)
+        config.load_papersmith_yaml(root)
+        framework_files = manifest.workspace_framework_files(root, kit_root)
+        for relpath in manifest.synchronized_paths(root, kit_root, context, tools):
+            # Any managed path the baseline cannot hash — non-regular, never
+            # written, or written but still unreadable — is recorded with a marker,
+            # so ``status`` reports it as drift instead of losing it in the rewrite.
+            if relpath not in framework_files:
+                framework_files[relpath] = UNSYNCHRONIZED
+        manifest.write_manifest(root, version, framework_files, kind="workspace")
     return {
         "workspace": str(root),
         "name": name,
@@ -314,10 +345,23 @@ def register(subparsers) -> None:
               "command center needs it, so `papersmith ui` will refuse until "
               "`python3 scripts/setup_env.py install` has run"))
     parser.set_defaults(handler=run_cli)
+    progress_flags = parser.add_mutually_exclusive_group()
+    progress_flags.add_argument(
+        "--progress", action="store_true",
+        help=("stream a plain progress log with an ETA; a terminal already gets "
+              "the bar, and a pipe stays silent unless this is asked for"))
+    progress_flags.add_argument(
+        "--no-progress", action="store_true",
+        help="never draw progress, even on a terminal")
 
 
 def run_cli(args) -> int:
     tools = [item.strip() for item in args.tools.split(",") if item.strip()]
+    report = progress.Reporter.for_stream(
+        sys.stdout,
+        requested=bool(getattr(args, "progress", False)),
+        suppressed=bool(getattr(args, "no_progress", False)),
+    )
     result = initialize(
         args.directory,
         title=args.title,
@@ -326,7 +370,9 @@ def run_cli(args) -> int:
         remote=args.remote,
         run_npm=not args.no_npm,
         run_env=not args.no_env,
+        report=report,
     )
+    report.finish()
     print(f"Initialized papersmith workspace: {result['workspace']}")
     print(f"Framework version: {result['version']}; default target: {result['default_target']}")
     print("Harness wiring:")
