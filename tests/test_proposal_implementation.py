@@ -9074,6 +9074,12 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                   "the one example this forge ships an adapter for, in the "
                   "module that must work for every backend",
     },
+    "plausibility/assets/atlas3d.bundle.js": {
+        "transfer": "a property name inside the vendored three.js build -- "
+                    "each color space's transfer function -- which a "
+                    "minifier cannot rename because it is an object key; "
+                    "generated third-party code, named by no target",
+    },
 }
 
 

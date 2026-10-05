@@ -14,6 +14,7 @@
     "setup": "npm install && python3 scripts/setup_env.py install && bash scripts/setup-harnesses.sh",
     "proposal-deliberation": "node skills/proposal-deliberation/cli.mjs",
     "setup:harnesses": "bash scripts/setup-harnesses.sh",
+    "build:atlas-viewer": "node scripts/build-atlas-viewer.mjs",
     "setup:env": "python3 scripts/setup_env.py install",
     "clean:env": "python3 scripts/setup_env.py clean",
     "typecheck": "tsc -p tsconfig.json"
@@ -24,6 +25,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "esbuild": "0.28.2",
+    "three": "0.186.1",
     "typescript": "^5.9.3"
   }
 }

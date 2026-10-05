@@ -28,3 +28,9 @@ script. Pi core has no sub-agents; those files are read only when the third-part
 `pi-subagents` package is installed. The guard extension
 `.pi/extensions/refuse-offpath-push.js` is generated too (see
 `docs/guard-hooks.md`).
+
+`.pi/mcp-adapter.json` is hand-maintained and Pi-only: it registers the
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) code
+graph server for `pi-mcp-adapter`. It needs the `codebase-memory-mcp` binary on
+`PATH`, and Pi asks once before starting it because it is a project-scoped
+server. The shared `.mcp.json` is left to the literature-search connectors.

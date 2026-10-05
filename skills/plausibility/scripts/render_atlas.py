@@ -1,24 +1,28 @@
 """Deterministic renderer: a green atlas to one self-contained HTML file.
 
 Reads ``sota-pool/atlas.json`` and writes a single ``atlas.html``: every
-system laid out on ONE shared 2D plane (golden-angle spiral, systems sorted
-by id — the same atlas always draws the same sky), intra-system links as
-straight segments, inter-system links as curves running planet to planet
-across systems. Inline SVG plus vanilla JavaScript — no CDN, no network at
-view time. Clicking a planet shows its detail and abstract quote; a family
-filter dims what does not belong; hovering a planet highlights its
-cross-system links.
+system placed in ONE shared 3D sky (family neighborhoods on a golden spiral,
+each lifted to its own height; systems sorted by id, each on its own tilted
+orbital plane — the same atlas always draws the same sky), intra-system links
+as straight segments, inter-system links as arcs running planet to planet
+across systems, and dashed ties between planets sharing a family name.
+
+The scene is computed here and written as a JSON data island; the vendored
+three.js viewer (``assets/atlas3d.bundle.js``, rebuilt with
+``npm run build:atlas-viewer``) is inlined verbatim and only draws it — no CDN,
+no network at view time. Clicking a planet shows its detail and abstract
+quote; a family filter dims what does not belong; hovering a planet
+highlights its cross-system links; drag orbits, wheel zooms.
 
 Exit 0 on a written file, 1 when the atlas fails this module's own shape
 read (run the checker first — it names violations, this one only refuses
-to draw), 2 on usage or unreadable input.
+to draw), 2 on usage, unreadable input, or a missing/unsafe viewer bundle.
 
 Stdlib only.
 """
 
 from __future__ import annotations
 
-import html
 import json
 import math
 import sys
@@ -48,15 +52,20 @@ REL_COLORS = {
 }
 
 ORBIT_RADII = {0: 0, 1: 90, 2: 170, 3: 250}
-SYSTEM_RADIUS = 280
 CLUSTER_STEP = 3400
 MEMBER_STEP = 660
 GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))
-MARGIN = 120
+PHI = (math.sqrt(5) - 1) / 2
+FAMILY_LIFT = 900
+MEMBER_LIFT = 260
+TILT_MAX = 0.9
+VIEWER = Path(__file__).resolve().parent.parent / "assets" / "atlas3d.bundle.js"
 
 
-def _escape(value: object) -> str:
-    return html.escape(str(value), quote=True)
+def _spread(index: int) -> float:
+    """A deterministic value in [-1, 1): the golden-ratio sequence, so
+    consecutive indices land far apart without any randomness."""
+    return 2 * ((index * PHI) % 1.0) - 1
 
 
 def _family_of(system: dict) -> str:
@@ -71,27 +80,40 @@ def _family_of(system: dict) -> str:
     return ""
 
 
-def _system_centers(systems: list[dict]) -> dict[str, tuple[float, float]]:
-    """One shared plane, grouped by family: each family owns a cluster
-    center on the outer spiral, and its member systems spiral locally
-    around it. A family reads as a neighborhood. Pure function of sorted
-    ids and labels — deterministic by construction."""
+def _system_centers(systems: list[dict]) -> dict[str, tuple[float, float, float]]:
+    """One shared sky, grouped by family: each family owns a cluster center
+    on an outer golden spiral lifted to its own height, and its member
+    systems spiral locally around it. A family reads as a neighborhood.
+    Pure function of sorted ids and labels — deterministic by construction."""
     by_family: dict[str, list[str]] = {}
     for system in sorted(systems, key=lambda s: s["id"]):
         by_family.setdefault(_family_of(system), []).append(system["id"])
-    centers: dict[str, tuple[float, float]] = {}
+    centers: dict[str, tuple[float, float, float]] = {}
     for findex, fam in enumerate(sorted(by_family)):
         radius = CLUSTER_STEP * math.sqrt(findex)
         angle = findex * GOLDEN_ANGLE
         ccx, ccy = radius * math.cos(angle), radius * math.sin(angle)
+        ccz = FAMILY_LIFT * _spread(findex)
         for mindex, sid in enumerate(by_family[fam]):
             mradius = MEMBER_STEP * math.sqrt(mindex)
             mangle = mindex * GOLDEN_ANGLE
             centers[sid] = (
                 round(ccx + mradius * math.cos(mangle), 1),
                 round(ccy + mradius * math.sin(mangle), 1),
+                round(ccz + MEMBER_LIFT * _spread(mindex + 1), 1),
             )
     return centers
+
+
+def _orbital_frame(index: int) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """The orthonormal basis (u, v) of one system's orbital plane: spun about
+    the vertical by the golden angle, then tilted out of the horizontal, so
+    neighboring systems never share a plane. Deterministic by index."""
+    spin = index * GOLDEN_ANGLE
+    tilt = TILT_MAX * _spread(index + 1)
+    u = (math.cos(spin), math.sin(spin), 0.0)
+    v = (-math.sin(spin) * math.cos(tilt), math.cos(spin) * math.cos(tilt), math.sin(tilt))
+    return tuple(round(c, 4) for c in u), tuple(round(c, 4) for c in v)
 
 
 def _local_positions(planets: list[dict]) -> dict[str, tuple[float, float]]:
@@ -116,31 +138,61 @@ def _local_positions(planets: list[dict]) -> dict[str, tuple[float, float]]:
     return positions
 
 
-def _family_ties(atlas: dict,
-                 absolute: dict[tuple[str, str], tuple[float, float]]) -> str:
-    """One dashed curve per shared family name, chaining its planets across
-    systems in system-id order. This draws identity, not findings: families
-    are the only planets two systems may share by name, so equal labels ARE
-    the same family and the curve only makes that visible. Deterministic —
-    same atlas, same ties."""
+def _family_ties(atlas: dict, positions: dict[str, list[float]]) -> list[dict]:
+    """One tie per consecutive pair of planets sharing a family name,
+    chaining them across systems in system-id order. This draws identity,
+    not findings: families are the only planets two systems may share by
+    name, so equal labels ARE the same family and the tie only makes that
+    visible. Deterministic — same atlas, same ties."""
     by_label: dict[str, list[tuple[str, str]]] = {}
     for system in atlas["systems"]:
         for planet in system["planets"]:
             if planet.get("slot") == "family":
                 by_label.setdefault(str(planet.get("label")), []).append(
                     (system["id"], planet["id"]))
-    parts = []
+    ties = []
     for label in sorted(by_label):
-        members = sorted(by_label[label])
+        members = [f"{sid}.{pid}" for sid, pid in sorted(by_label[label])]
         for first, second in zip(members, members[1:]):
-            a, b = absolute.get(first), absolute.get(second)
-            if not a or not b:
-                continue
-            mx, my = round((a[0] + b[0]) / 2), round((a[1] + b[1]) / 2 - 160, 1)
-            parts.append(
-                f'<path d="M {a[0]} {a[1]} Q {mx} {my} {b[0]} {b[1]}" '
-                f'class="link familytie" data-family="{_escape(label)}"/>')
-    return "\n".join(parts)
+            if first in positions and second in positions:
+                ties.append({"family": label, "from": first, "to": second})
+    return ties
+
+
+def _scene(atlas: dict) -> dict:
+    """Everything the viewer draws, precomputed: the viewer lays out nothing,
+    so the same atlas always yields the same scene."""
+    centers = _system_centers(atlas["systems"])
+    positions: dict[str, list[float]] = {}
+    frames: dict[str, dict] = {}
+    for index, system in enumerate(sorted(atlas["systems"], key=lambda s: s["id"])):
+        center = centers[system["id"]]
+        u, v = _orbital_frame(index)
+        frames[system["id"]] = {"center": list(center), "u": list(u), "v": list(v)}
+        for pid, (lx, ly) in _local_positions(system["planets"]).items():
+            positions[f"{system['id']}.{pid}"] = [
+                round(center[axis] + lx * u[axis] + ly * v[axis], 1) for axis in range(3)]
+    edges = []
+    for link in sorted(atlas["links"],
+                       key=lambda l: (str(l.get("from_system")), str(l.get("from")),
+                                      str(l.get("to_system")), str(l.get("to")))):
+        source = f"{link.get('from_system')}.{link.get('from')}"
+        target = f"{link.get('to_system')}.{link.get('to')}"
+        if source not in positions or target not in positions:
+            continue
+        edges.append({"from": source, "to": target, "rel": link.get("rel"),
+                      "color": REL_COLORS.get(link.get("rel"), "#4a5a80"),
+                      "inter": link.get("from_system") != link.get("to_system")})
+    return {
+        "version": 1,
+        "atlas": atlas,
+        "positions": dict(sorted(positions.items())),
+        "frames": dict(sorted(frames.items())),
+        "edges": edges,
+        "ties": _family_ties(atlas, positions),
+        "slot_colors": SLOT_COLORS,
+        "orbit_radii": {str(orbit): radius for orbit, radius in ORBIT_RADII.items() if radius},
+    }
 
 
 def _readable_shape(atlas: object) -> str | None:
@@ -156,247 +208,147 @@ def _readable_shape(atlas: object) -> str | None:
     return None
 
 
-def render(atlas: dict) -> str:
-    data = json.dumps(atlas).replace("<", "\\u003c")
-    centers = _system_centers(atlas["systems"])
-    absolute: dict[tuple[str, str], tuple[float, float]] = {}
-    for system in atlas["systems"]:
-        cx, cy = centers[system["id"]]
-        for pid, (lx, ly) in _local_positions(system["planets"]).items():
-            absolute[(system["id"], pid)] = (cx + lx, cy + ly)
-
-    xs = [x for x, _ in absolute.values()]
-    ys = [y for _, y in absolute.values()]
-    min_x, max_x = min(xs) - SYSTEM_RADIUS - MARGIN, max(xs) + SYSTEM_RADIUS + MARGIN
-    min_y, max_y = min(ys) - SYSTEM_RADIUS - MARGIN, max(ys) + SYSTEM_RADIUS + MARGIN
-    width, height = round(max_x - min_x), round(max_y - min_y)
-
-    parts = [f'<svg id="sky" class="sky" viewBox="{min_x} {min_y} {width} {height}">']
-    for system in sorted(atlas["systems"], key=lambda s: s["id"]):
-        cx, cy = centers[system["id"]]
-        parts.append(f'<g class="system" data-system="{_escape(system["id"])}">')
-        parts.append(f'<text x="{cx}" y="{cy - SYSTEM_RADIUS - 16}" class="sys-title">'
-                     f'{_escape(str(system.get("title", system["id"]))[:64])}</text>')
-        parts.append(f'<title>{_escape(system.get("title", system["id"]))}</title>')
-        for orbit in sorted({p["orbit"] for p in system["planets"] if p["orbit"] > 0}):
-            radius = ORBIT_RADII.get(orbit, 250)
-            parts.append(f'<circle cx="{cx}" cy="{cy}" r="{radius}" class="orbit"/>')
-        for planet in sorted(system["planets"], key=lambda p: p["id"]):
-            x, y = absolute[(system["id"], planet["id"])]
-            color = SLOT_COLORS.get(planet["slot"], "#cccccc")
-            size = 20 if planet["slot"] == "sun" else 11
-            full_label = _escape(planet["label"])
-            short_label = _escape(planet["label"][:28])
-            parts.append(
-                f'<g class="planet" data-system="{_escape(system["id"])}" '
-                f'data-planet="{_escape(planet["id"])}" data-slot="{_escape(planet["slot"])}">'
-                f'<title>{full_label} [{_escape(planet["slot"])}]</title>'
-                f'<circle cx="{x}" cy="{y}" r="{size}" fill="{color}"/>'
-                f'<text x="{x}" y="{y - size - 5}">{short_label}</text></g>')
-        parts.append("</g>")
-    for link in sorted(atlas["links"],
-                       key=lambda l: (str(l.get("from_system")), str(l.get("from")),
-                                      str(l.get("to_system")), str(l.get("to")))):
-        a = absolute.get((link.get("from_system"), link.get("from")))
-        b = absolute.get((link.get("to_system"), link.get("to")))
-        if not a or not b:
-            continue
-        color = REL_COLORS.get(link.get("rel"), "#4a5a80")
-        intra = link.get("from_system") == link.get("to_system")
-        if intra:
-            parts.append(
-                f'<line x1="{a[0]}" y1="{a[1]}" x2="{b[0]}" y2="{b[1]}" '
-                f'class="link intra" stroke="{color}" data-rel="{_escape(link.get("rel"))}"/>')
-        else:
-            mx, my = round((a[0] + b[0]) / 2), round((a[1] + b[1]) / 2 - 120, 1)
-            parts.append(
-                f'<path d="M {a[0]} {a[1]} Q {mx} {my} {b[0]} {b[1]}" '
-                f'class="link inter" stroke="{color}" data-rel="{_escape(link.get("rel"))}" '
-                f'data-from="{_escape(link.get("from_system"))}.{_escape(link.get("from"))}" '
-                f'data-to="{_escape(link.get("to_system"))}.{_escape(link.get("to"))}"/>')
-    parts.append(_family_ties(atlas, absolute))
-    parts.append("</svg>")
-    sky = "\n".join(parts)
-    return f"""<!DOCTYPE html>
+PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SOTA constellation</title>
 <style>
-html,body{{height:100%}}
-body{{font-family:system-ui,sans-serif;background:#0b1020;color:#e8e8e8;margin:0;padding:12px 16px;box-sizing:border-box;display:flex;flex-direction:column}}
-.sky{{flex:1 1 auto;min-height:0;width:100%;background:#111830;border:1px solid #2a3350;border-radius:8px;cursor:grab}}
-.sky:active{{cursor:grabbing}}
-.orbit{{fill:none;stroke:#2a3350;stroke-width:1}}
-.planet text{{fill:#cfd6ea;font-size:15px;text-anchor:middle}}
-.planet{{cursor:pointer}}
-.link{{stroke:#4a5a80;stroke-width:1.4;fill:none}}
-.link.inter{{stroke:#9b7ede;stroke-width:2}}
-.sys-title{{fill:#fff;font-size:30px}}
-#toolbar button{{font-size:15px;margin-right:6px;padding:4px 12px;cursor:pointer}}
-#panel{{background:#141b31;border:1px solid #2a3350;border-radius:8px;padding:10px 16px;margin:0 0 10px;max-width:900px}}
-#overlay{{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10}}
-#overlay.open{{display:flex}}
-#modal{{background:#141b31;border:1px solid #9b7ede;border-radius:10px;padding:16px 20px;max-width:580px;max-height:82vh;overflow:auto}}
-#modal .quote{{font-style:italic;color:#b9c4de}}
-#modalclose{{float:right;cursor:pointer;font-size:16px;padding:2px 10px}}
-#famlegend{{margin:0 0 8px}}
-.famchip{{margin:2px;padding:3px 12px;cursor:pointer;border-radius:12px;border:1px solid #9b7ede;background:#1a2140;color:#e8e8e8;font-size:13px}}
-.famchip.on{{background:#9b7ede;color:#0b1020}}
-#toolbar{{margin:0 0 8px}}
-.dim{{opacity:.15}}
+html,body{height:100%}
+body{font-family:system-ui,sans-serif;background:#0a0a10;color:#e4e4ed;margin:0;padding:12px 16px;box-sizing:border-box;display:flex;flex-direction:column}
+h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
+.sky{flex:1 1 auto;min-height:420px;width:100%;background:#0a0a10;border:1px solid #1e2236;border-radius:10px;overflow:hidden;cursor:grab}
+.sky:active{cursor:grabbing}
+#panel{color:#9aa3bd;font-size:13px;margin:0 0 8px}
+#overlay{position:fixed;inset:0;background:rgba(5,5,10,.65);display:none;align-items:center;justify-content:center;z-index:10}
+#overlay.open{display:flex}
+#modal{background:#11131f;border:1px solid #9b7ede;border-radius:10px;padding:16px 20px;max-width:580px;max-height:82vh;overflow:auto;box-shadow:0 0 40px rgba(155,126,222,.25)}
+#modal h3{margin:0 0 6px}
+#modal .quote{font-style:italic;color:#b9c4de;border-left:3px solid #9b7ede;margin:10px 0;padding-left:10px}
+#modalclose{float:right;cursor:pointer;font-size:14px;padding:2px 10px;background:#1a1d2e;color:#e4e4ed;border:1px solid #2a3350;border-radius:6px}
+#famlegend,#rellegend,#toolbar{margin:0 0 6px;font-size:13px;color:#9aa3bd}
+.famchip{margin:2px;padding:3px 12px;cursor:pointer;border-radius:12px;border:1px solid #9b7ede;background:#14172a;color:#e4e4ed;font-size:12px}
+.famchip.on{background:#9b7ede;color:#0a0a10}
+.dot{display:inline-block;width:16px;height:0;border-top:2px solid;margin:0 4px 3px 10px;vertical-align:middle}
+#toolbar button{font-size:13px;margin-right:6px;padding:3px 12px;cursor:pointer;background:#14172a;color:#e4e4ed;border:1px solid #2a3350;border-radius:6px}
 </style>
 </head>
 <body>
-<h1>SOTA constellation — one plane</h1>
-<div id="panel"><em>Click a planet to read it in a popup. Drag to pan, wheel to zoom.</em></div>
+<h1>SOTA constellation — one sky</h1>
+<div id="panel">Drag to orbit, right-drag to pan, wheel to zoom. Hover a planet to trace its cross-system links; click to read it; double-click to fly to it.</div>
 <div id="overlay"><div id="modal"><button id="modalclose">close</button><div id="modalbody"></div></div></div>
 <div id="famlegend"><em>Families:</em> <span id="famchips"></span></div>
 <div id="rellegend"><em>Links:</em> <span class="dot" style="border-color:#2ecc71"></span>extends <span class="dot" style="border-color:#5aa9e6"></span>supports <span class="dot" style="border-color:#e65a5a"></span>contradicts <span class="dot" style="border-color:#8a93ad"></span>addresses <span class="dot" style="border-color:#9b7ede;border-top-style:dashed"></span>shared family <span class="dot" style="border-color:#e8b339"></span>yields <span class="dot" style="border-color:#4a5a80"></span>about</div>
 <div id="toolbar"><button id="zoomin">zoom +</button><button id="zoomout">zoom −</button><button id="zoomreset">reset view</button></div>
-{sky}
+<div id="sky" class="sky"></div>
+<script type="application/json" id="atlas-data">@@DATA@@</script>
 <script>
-const ATLAS = {data};
-const svg = document.getElementById('sky');
-const homeRect = svg.viewBox.baseVal;
-const home = {{x: homeRect.x, y: homeRect.y, w: homeRect.width, h: homeRect.height}};
-let vb = {{x: home.x, y: home.y, w: home.w, h: home.h}};
-function apply() {{
-  svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
-}}
-function toSvg(clientX, clientY) {{
-  const rect = svg.getBoundingClientRect();
-  return {{
-    x: vb.x + (clientX - rect.left) / rect.width * vb.w,
-    y: vb.y + (clientY - rect.top) / rect.height * vb.h
-  }};
-}}
-function zoomAt(clientX, clientY, factor) {{
-  const m = toSvg(clientX, clientY);
-  vb.x = m.x - (m.x - vb.x) / factor;
-  vb.y = m.y - (m.y - vb.y) / factor;
-  vb.w /= factor;
-  vb.h /= factor;
-  apply();
-}}
-function zoomCenter(factor) {{
-  const rect = svg.getBoundingClientRect();
-  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
-}}
-svg.addEventListener('wheel', e => {{
-  e.preventDefault();
-  zoomAt(e.clientX, e.clientY, e.deltaY > 0 ? 1 / 1.2 : 1.2);
-}}, {{passive: false}});
-document.getElementById('zoomin').addEventListener('click', () => zoomCenter(1.5));
-document.getElementById('zoomout').addEventListener('click', () => zoomCenter(1 / 1.5));
-document.getElementById('zoomreset').addEventListener('click', () => {{
-  vb = {{x: home.x, y: home.y, w: home.width, h: home.height}};
-  apply();
-}});
-let drag = null;
-svg.addEventListener('pointerdown', e => {{
-  drag = {{x: e.clientX, y: e.clientY, moved: false}};
-}});
-svg.addEventListener('pointermove', e => {{
-  if (!drag) return;
-  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (!drag.moved) {{
-    if (Math.hypot(dx, dy) < 5) return;
-    drag.moved = true;
-    try {{ svg.setPointerCapture(e.pointerId); }} catch (_) {{}}
-  }}
-  const rect = svg.getBoundingClientRect();
-  vb.x -= dx / rect.width * vb.w;
-  vb.y -= dy / rect.height * vb.h;
-  drag = {{x: e.clientX, y: e.clientY, moved: true}};
-  apply();
-}});
-function endDrag() {{ drag = null; }}
-svg.addEventListener('pointerup', endDrag);
-svg.addEventListener('pointercancel', endDrag);
+@@VIEWER@@
+</script>
+<script>
+const SCENE = JSON.parse(document.getElementById('atlas-data').textContent);
+const ATLAS = SCENE.atlas;
+const PLANETS = new Map();
+ATLAS.systems.forEach(s => s.planets.forEach(p => PLANETS.set(s.id + '.' + p.id, {system: s, planet: p})));
 const panel = document.getElementById('modalbody');
 const overlay = document.getElementById('overlay');
-function closeModal() {{ overlay.classList.remove('open'); }}
+function closeModal() { overlay.classList.remove('open'); }
 document.getElementById('modalclose').addEventListener('click', closeModal);
-overlay.addEventListener('click', e => {{ if (e.target === overlay) closeModal(); }});
-document.addEventListener('keydown', e => {{ if (e.key === 'Escape') closeModal(); }});
-function openModal(titleHtml) {{
-  panel.innerHTML = titleHtml;
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+function line(tag, text, cls) {
+  const el = document.createElement(tag);
+  el.textContent = text;
+  if (cls) el.className = cls;
+  return el;
+}
+function openModal(nodes) {
+  panel.replaceChildren(...nodes);
   overlay.classList.add('open');
-}}
-function findPlanet(sys, pid) {{
-  const s = ATLAS.systems.find(s => s.id === sys);
-  return s ? s.planets.find(p => p.id === pid) : null;
-}}
-document.querySelectorAll('.planet').forEach(g => {{
-  g.addEventListener('click', () => {{
-    const p = findPlanet(g.dataset.system, g.dataset.planet);
-    if (!p) return;
-    const ev = p.evidence || {{}};
-    openModal('<h3>' + p.label + '</h3>'
-      + '<p><b>' + p.slot + '</b> · orbit ' + p.orbit + ' · ' + (p.provenance || '') + '</p>'
-      + '<p>' + (p.detail || '') + '</p>'
-      + '<p class="quote">' + (ev.quote || '') + '</p>'
-      + '<p><small>' + (ev.origin || '') + ' · retrieved ' + (ev.retrieved || '') + '</small></p>');
-  }});
-}});
-document.querySelectorAll('.planet').forEach(g => {{
-  g.addEventListener('mouseenter', () => {{
-    const pid = g.dataset.system + '.' + g.dataset.planet;
-    const keep = new Set([pid]);
-    ATLAS.links.forEach(l => {{
-      if (l.from_system !== l.to_system &&
-          ((l.from_system + '.' + l.from === pid) || (l.to_system + '.' + l.to === pid))) {{
-        keep.add(l.from_system + '.' + l.from);
-        keep.add(l.to_system + '.' + l.to);
-      }}
-    }});
-    if (g.dataset.slot === 'family') {{
-      const mine = planetLabel(g);
-      document.querySelectorAll('.planet').forEach(h => {{
-        if (h.dataset.slot === 'family' && planetLabel(h) === mine)
-          keep.add(h.dataset.system + '.' + h.dataset.planet);
-      }});
-    }}
-    document.querySelectorAll('.planet').forEach(h => {{
-      h.classList.toggle('dim', !keep.has(h.dataset.system + '.' + h.dataset.planet));
-    }});
-  }});
-  g.addEventListener('mouseleave', () => {{
-    document.querySelectorAll('.planet').forEach(h => h.classList.remove('dim'));
-  }});
-}});
-function planetLabel(h) {{
-  const p = findPlanet(h.dataset.system, h.dataset.planet);
-  return p ? p.label : '';
-}}
-const chips = document.getElementById('famchips');
-const fams = {{}};
-ATLAS.systems.forEach(s => s.planets.forEach(p => {{
-  if (p.slot === 'family') fams[p.label] = (fams[p.label] || 0) + 1;
-}}));
+}
+function showPlanet(key) {
+  const entry = PLANETS.get(key);
+  if (!entry) return;
+  const p = entry.planet;
+  const ev = p.evidence || {};
+  openModal([
+    line('h3', p.label),
+    line('p', p.slot + ' · orbit ' + p.orbit + ' · ' + (p.provenance || '') + ' · ' + (entry.system.title || entry.system.id)),
+    line('p', p.detail || ''),
+    line('p', ev.quote || '', 'quote'),
+    line('small', (ev.origin || '') + ' · retrieved ' + (ev.retrieved || '')),
+  ]);
+}
 let activeFam = null;
-Object.keys(fams).sort().forEach(label => {{
+function familyKeep() {
+  if (activeFam === null) return null;
+  const keep = new Set();
+  ATLAS.systems.forEach(s => {
+    if (s.planets.some(p => p.slot === 'family' && p.label === activeFam))
+      s.planets.forEach(p => keep.add(s.id + '.' + p.id));
+  });
+  return keep;
+}
+function hoverKeep(key) {
+  const keep = new Set([key]);
+  SCENE.edges.forEach(e => {
+    if (e.inter && (e.from === key || e.to === key)) { keep.add(e.from); keep.add(e.to); }
+  });
+  const entry = PLANETS.get(key);
+  if (entry && entry.planet.slot === 'family') {
+    PLANETS.forEach((other, otherKey) => {
+      if (other.planet.slot === 'family' && other.planet.label === entry.planet.label) keep.add(otherKey);
+    });
+  }
+  return keep;
+}
+const viewer = AtlasViewer.mount(document.getElementById('sky'), SCENE, {
+  onSelect: showPlanet,
+  onHover: key => { if (viewer) viewer.setDim(key ? hoverKeep(key) : familyKeep()); },
+});
+document.getElementById('zoomin').addEventListener('click', () => viewer && viewer.zoom(1.5));
+document.getElementById('zoomout').addEventListener('click', () => viewer && viewer.zoom(1 / 1.5));
+document.getElementById('zoomreset').addEventListener('click', () => {
+  if (!viewer) return;
+  activeFam = null;
+  document.querySelectorAll('.famchip').forEach(c => c.classList.remove('on'));
+  viewer.reset();
+});
+const chips = document.getElementById('famchips');
+const fams = {};
+ATLAS.systems.forEach(s => s.planets.forEach(p => {
+  if (p.slot === 'family') fams[p.label] = (fams[p.label] || 0) + 1;
+}));
+Object.keys(fams).sort().forEach(label => {
   const b = document.createElement('button');
   b.textContent = label + ' (' + fams[label] + ')';
   b.className = 'famchip';
-  b.addEventListener('click', () => {{
+  b.addEventListener('click', () => {
     activeFam = (activeFam === label) ? null : label;
-    document.querySelectorAll('.famchip').forEach(c => {{
-      c.classList.toggle('on', c.textContent.startsWith(label + ' (') && activeFam === label);
-    }});
-    document.querySelectorAll('.planet').forEach(h => {{
-      const hit = h.dataset.slot === 'family' && planetLabel(h) === activeFam;
-      h.classList.toggle('dim', activeFam !== null && !hit);
-    }});
-  }});
+    document.querySelectorAll('.famchip').forEach(c => c.classList.toggle('on', c === b && activeFam === label));
+    if (viewer) viewer.setDim(familyKeep());
+  });
   chips.appendChild(b);
-}});
+});
 </script>
 </body>
 </html>
 """
+
+
+def _viewer_bundle() -> str:
+    return VIEWER.read_text(encoding="utf-8")
+
+
+def render(atlas: dict, viewer: str | None = None) -> str:
+    bundle = _viewer_bundle() if viewer is None else viewer
+    if "</script" in bundle.lower():
+        raise ValueError("the viewer bundle contains </script and cannot be inlined")
+    data = json.dumps(_scene(atlas)).replace("<", "\\u003c")
+    head, rest = PAGE.split("@@DATA@@")
+    middle, tail = rest.split("@@VIEWER@@")
+    return head + data + middle + bundle + tail
 
 
 def main(argv: list[str]) -> int:
@@ -429,9 +381,18 @@ def main(argv: list[str]) -> int:
     if shape_error is not None:
         print(f"{shape_error}: run the checker first", file=sys.stderr)
         return 1
-    out_path.write_text(render(atlas), encoding="utf-8")
+    try:
+        page = render(atlas)
+    except OSError as error:
+        print(f"ATLAS_VIEWER_MISSING: {error} (run npm run build:atlas-viewer)",
+              file=sys.stderr)
+        return 2
+    except ValueError as error:
+        print(f"ATLAS_VIEWER_UNSAFE: {error}", file=sys.stderr)
+        return 2
+    out_path.write_text(page, encoding="utf-8")
     systems = len(atlas["systems"])
-    print(f"ATLAS_RENDERED: {systems} systems on one plane -> {out_path}")
+    print(f"ATLAS_RENDERED: {systems} systems in one sky -> {out_path}")
     return 0
 
 
