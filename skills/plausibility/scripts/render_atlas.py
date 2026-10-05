@@ -38,6 +38,7 @@ SLOT_COLORS = {
     "application": "#5ad1e6",
     "family": "#9b7ede",
     "novelty": "#e67e22",
+    "contribution": "#e879f9",
     "result": "#2ecc71",
     "conclusion": "#95a5a6",
 }

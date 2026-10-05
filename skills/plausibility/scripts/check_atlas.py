@@ -30,6 +30,7 @@ SLOTS = {
     "application": (1, 1, 1),
     "family": (2, 1, 1),
     "novelty": (1, 1, 1),
+    "contribution": (1, 0, 5),
     "result": (3, 1, 3),
     "conclusion": (3, 1, 2),
 }

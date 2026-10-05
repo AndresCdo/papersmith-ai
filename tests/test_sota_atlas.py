@@ -31,7 +31,7 @@ def scene_of(page):
 
 ORBITS = {"sun": 0, "branch": 1, "topic_app": 1, "topic_ai": 1,
           "problem": 1, "application": 1, "family": 2, "novelty": 1,
-          "result": 3, "conclusion": 3}
+          "contribution": 1, "result": 3, "conclusion": 3}
 BASE_SLOTS = ["sun", "topic_app", "topic_ai", "problem", "application",
               "novelty", "result", "conclusion"]
 
@@ -146,6 +146,29 @@ class CheckAtlasTests(unittest.TestCase):
         code, out = self.run_checker("{not json")
         self.assertEqual(code, 2, out)
         self.assertIn("ATLAS_NOT_JSON", out)
+
+    def test_optional_contributions_are_admitted_up_to_five(self):
+        """A proposal carries three to five concepts that hint at its novelty
+        and the issues it could resolve. A paper carries none, which is why the
+        row's floor is zero: the slot is optional for every system, so the SOTA
+        side of the same atlas keeps the shape it always had."""
+        nodes = system("a", "F1")["planets"] + [
+            planet(f"a-contrib-{i}", "contribution") for i in range(5)]
+        payload = atlas(systems=[{**system("a", "F1"), "planets": nodes},
+                                 system("b", "F2"), system("c", "F3")])
+        code, out = self.run_checker(payload)
+        self.assertEqual(code, 0, out)
+
+    def test_a_sixth_contribution_is_refused(self):
+        """Five is the ceiling the proposal contract names; a sixth concept is
+        a different claim and belongs in a revision of its own."""
+        nodes = system("a", "F1")["planets"] + [
+            planet(f"a-contrib-{i}", "contribution") for i in range(6)]
+        payload = atlas(systems=[{**system("a", "F1"), "planets": nodes},
+                                 system("b", "F2"), system("c", "F3")])
+        code, out = self.run_checker(payload)
+        self.assertEqual(code, 1, out)
+        self.assertIn("SLOT_COUNT_OUTSIDE_ROW", out)
 
 
 class RenderAtlasTests(unittest.TestCase):
