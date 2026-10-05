@@ -73,6 +73,20 @@ export interface PipelineStage {
   workers?: string[];
 }
 
+/** One edge of a flow, as the extractor draws it. */
+export interface FlowEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+/** The stage a gate inspects, and the lane its verdict lands in. */
+export interface GateLink {
+  from: string;
+  label?: string;
+  consumed_by?: string;
+}
+
 export interface WorkspaceTotals {
   sections?: number;
   blocks_total?: number;
@@ -107,6 +121,10 @@ export interface WorkspaceState {
   sections?: Section[];
   gates?: Gate[];
   pipeline_stages?: PipelineStage[];
+  /** The main chain, in order: the drawing follows it instead of a literal. */
+  pipeline_chain?: FlowEdge[];
+  /** Gate id -> the stage it checks and the audit lane that consumes it. */
+  gate_links?: Record<string, GateLink>;
   experiments?: { count?: number; files?: string[] };
   figures?: { count?: number; pdf?: string[]; rasters?: string[] };
   inbox?: { count?: number; paths?: string[]; directory?: string | null };

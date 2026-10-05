@@ -444,6 +444,8 @@ class PipelineFlowTests(unittest.TestCase):
         for gate_id, link in links.items():
             assert link["from"] in ids, (gate_id, link)
             assert link["label"], (gate_id, link)
+            assert link["consumed_by"] in ids, (gate_id, link)
+            assert link["consumed_by"] == self.AUDIT, (gate_id, link)
 
     def test_every_stage_still_follows_the_published_shape(self) -> None:
         """The node component reads these six keys; the catalogue changed, the
@@ -460,6 +462,24 @@ class PipelineFlowTests(unittest.TestCase):
         """Nothing on disk is nothing reported: a board that guesses is worse
         than a board that is empty."""
         assert self.active(self.new_workspace()) == set()
+
+    def test_a_scaffolds_placeholders_are_not_artifacts(self) -> None:
+        """Every drop zone ships with a placeholder so the folder travels.
+
+        Counting one lights its tramo with the only file the scaffold put
+        there, which is how `remote` came up green on a workspace that had just
+        been created and had never run anything.
+        """
+        root = self.new_workspace()
+        self.write(root / "skills" / "remote-execution" / "scripts" / "remote_cli.py",
+                   'INBOX_NAME = "kaggle-inbox"\n')
+        for zone in ("implementations", "proposals", "experiments", "kaggle-inbox"):
+            directory = root / zone
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / ".gitkeep").write_text("", encoding="utf-8")
+            (directory / ".gitignore").write_text("*\n", encoding="utf-8")
+
+        assert self.active(root) == set()
 
     def test_each_tramo_lights_up_from_its_own_artifact(self) -> None:
         def harness(root: Path) -> None:

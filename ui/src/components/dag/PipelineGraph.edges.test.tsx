@@ -30,7 +30,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
 
 const { default: PipelineGraph } = await import('./PipelineGraph');
 const graph = buildGraph(diagramState);
-const EDGE = 'stage:drafting->stage:auditing';
+const EDGE = 'stage:proposal->stage:writing';
 
 const select = (id: string, selected: boolean) => ({ type: 'select', id, selected });
 const flush = () => act(async () => { await Promise.resolve(); });
@@ -78,9 +78,9 @@ describe('PipelineGraph handler props', () => {
   it('switches edge to node in one batch: the new selection wins over the deselect', async () => {
     mount(EDGE);
     captured.props?.onEdgesChange([select(EDGE, false)]);
-    captured.props?.onNodesChange([select('stage:auditing', true)]);
+    captured.props?.onNodesChange([select('stage:audit', true)]);
     await flush();
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith('stage:auditing');
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('stage:audit');
   });
 
   it('clears when the current element is deselected and nothing else is selected', async () => {

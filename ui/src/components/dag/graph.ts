@@ -6,22 +6,16 @@ import { NODE_SIZE, layoutGraph, type GraphLayout } from './layout';
 import type { Gate, PipelineStage, Section, WorkspaceState } from '../../types';
 import { formatCount } from '../../lib/format';
 
-/** `ingestion -> deliberation`, guarded by presence on both ends. */
-const STAGE_CHAIN: readonly (readonly [string, string])[] = [
-  ['ingestion', 'deliberation'],
-  ['deliberation', 'drafting'],
-  ['experiments', 'drafting'],
-  ['drafting', 'auditing'],
-  ['auditing', 'publishing'],
-];
-
-/** Which stage each gate inspects, with the `parts` key that explains the link. */
-const GATE_SOURCES: Record<string, { from: string; label: string }> = {
-  'writing-readiness': { from: 'deliberation', label: 'contracts' },
-  'coupling-verification': { from: 'drafting', label: 'facts' },
-  'grounding-style-leak': { from: 'drafting', label: 'citations' },
-  'diagram-raster': { from: 'experiments', label: 'figures' },
-};
+/**
+ * The two flows the board draws.
+ *
+ * Both come out of the payload, never out of a literal here. The extractor owns
+ * the stage catalogue and the chain, and a chain written down twice is a chain
+ * that ends up disagreeing with itself -- which is what happened: this file
+ * carried a `STAGE_CHAIN` while the architecture diagram carried twelve tramos
+ * and a different order, and the board drew the file.
+ */
+export type FlowId = 'pipeline' | 'writing';
 
 export type AnyFlowNode = Node<Record<string, unknown>>;
 
@@ -67,10 +61,8 @@ export function relationKind(source: string, target: string): string {
       return 'gate input';
     case 'gate->stage':
       return 'gate releases';
-    case 'stage->section':
-      return 'drafts';
-    case 'section->stage':
-      return 'audited by';
+    case 'section->section':
+      return 'next section';
     default:
       return 'related';
   }
@@ -116,7 +108,7 @@ function layoutOnStructure(nodes: AnyFlowNode[], edges: Edge[]): GraphLayout {
   };
 }
 
-export function buildGraph(state: WorkspaceState | null): GraphModel {
+export function buildGraph(state: WorkspaceState | null, flow: FlowId = 'pipeline'): GraphModel {
   const stages = state?.pipeline_stages ?? [];
   const gates = state?.gates ?? [];
   const sections = state?.sections ?? [];
@@ -125,6 +117,50 @@ export function buildGraph(state: WorkspaceState | null): GraphModel {
   const edges: Edge[] = [];
   const mutatingNodes = new Set<string>();
   const stageIds = new Set(stages.map((stage) => stage.id));
+
+  const link = (source: string, target: string, label?: string) => {
+    const animated = mutatingNodes.has(source) || mutatingNodes.has(target);
+    edges.push({
+      id: `${source}->${target}`,
+      source,
+      target,
+      type: 'animated',
+      animated,
+      label,
+      data: { animated, relation: relationKind(source, target) },
+    });
+  };
+
+  const addSection = (section: Section) => {
+    const mutating = sectionIsMutating(section);
+    if (mutating) mutatingNodes.add(`section:${section.id}`);
+    const data: SectionNodeData = {
+      label: section.section ?? section.id,
+      status: section.status ?? 'UNKNOWN',
+      wordCount: section.word_count ?? 0,
+      maxWords: section.extent?.max_words ?? null,
+      blocksWritten: section.blocks_written ?? 0,
+      blocksTotal: section.blocks_total ?? 0,
+      placeholders: section.citations?.placeholders ?? 0,
+      mutating,
+    };
+    nodes.push({ id: `section:${section.id}`, type: 'section', position: { x: 0, y: 0 }, data, draggable: false });
+  };
+
+  if (flow === 'writing') {
+    // The writing flow is the paper's own order: one node per section, chained
+    // the way the sections are chained in `sections/` and rendered in `paper/`.
+    // The order is the payload's, so a section added to the scaffold appears
+    // here without anybody editing this file.
+    let previous: Section | null = null;
+    for (const section of sections) {
+      addSection(section);
+      if (previous) link(`section:${previous.id}`, `section:${section.id}`);
+      previous = section;
+    }
+    const writingLayout = layoutOnStructure(nodes, edges);
+    return { nodes: writingLayout.nodes, edges, width: writingLayout.width, height: writingLayout.height };
+  }
 
   for (const stage of stages) {
     const mutating = stageIsMutating(stage);
@@ -153,52 +189,24 @@ export function buildGraph(state: WorkspaceState | null): GraphModel {
     nodes.push({ id: `gate:${gate.id}`, type: 'gate', position: { x: 0, y: 0 }, data, draggable: false });
   }
 
-  for (const section of sections) {
-    const mutating = sectionIsMutating(section);
-    if (mutating) mutatingNodes.add(`section:${section.id}`);
-    const data: SectionNodeData = {
-      label: section.section ?? section.id,
-      status: section.status ?? 'UNKNOWN',
-      wordCount: section.word_count ?? 0,
-      maxWords: section.extent?.max_words ?? null,
-      blocksWritten: section.blocks_written ?? 0,
-      blocksTotal: section.blocks_total ?? 0,
-      placeholders: section.citations?.placeholders ?? 0,
-      mutating,
-    };
-    nodes.push({ id: `section:${section.id}`, type: 'section', position: { x: 0, y: 0 }, data, draggable: false });
+  // The main chain, as the extractor transcribed it from the architecture
+  // diagram. An endpoint the stage list does not carry is dropped here rather
+  // than drawn as a dangling edge.
+  for (const edge of state?.pipeline_chain ?? []) {
+    if (stageIds.has(edge.from) && stageIds.has(edge.to)) {
+      link(`stage:${edge.from}`, `stage:${edge.to}`, edge.label);
+    }
   }
 
-  const link = (source: string, target: string, label?: string) => {
-    const animated = mutatingNodes.has(source) || mutatingNodes.has(target);
-    edges.push({
-      id: `${source}->${target}`,
-      source,
-      target,
-      type: 'animated',
-      animated,
-      label,
-      data: { animated, relation: relationKind(source, target) },
-    });
-  };
-
-  for (const [from, to] of STAGE_CHAIN) {
-    if (stageIds.has(from) && stageIds.has(to)) link(`stage:${from}`, `stage:${to}`);
-  }
-
-  // Figure obligations are declared by section contracts; the diagram gate is
-  // reachable only when the figure pipeline has an `experiments` stage to feed it.
+  // Every gate hangs off the stage whose work it inspects and releases into the
+  // transversal audit lane -- the placement the diagram gives the audit lane.
   for (const gate of gates) {
-    const source = GATE_SOURCES[gate.id]?.from ?? 'auditing';
-    const label = GATE_SOURCES[gate.id]?.label;
-    if (stageIds.has(source)) link(`stage:${source}`, `gate:${gate.id}`, label);
-    if (stageIds.has('auditing')) link(`gate:${gate.id}`, 'stage:auditing');
-    else if (stageIds.has('publishing')) link(`gate:${gate.id}`, 'stage:publishing');
-  }
-
-  for (const section of sections) {
-    if (stageIds.has('drafting')) link('stage:drafting', `section:${section.id}`);
-    if (stageIds.has('auditing')) link(`section:${section.id}`, 'stage:auditing');
+    const gateLink = state?.gate_links?.[gate.id];
+    if (!gateLink) continue;
+    if (stageIds.has(gateLink.from)) link(`stage:${gateLink.from}`, `gate:${gate.id}`, gateLink.label);
+    if (gateLink.consumed_by && stageIds.has(gateLink.consumed_by)) {
+      link(`gate:${gate.id}`, `stage:${gateLink.consumed_by}`);
+    }
   }
 
   const laid = layoutOnStructure(nodes, edges);

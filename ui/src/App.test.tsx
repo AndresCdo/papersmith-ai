@@ -178,9 +178,9 @@ describe('App', () => {
     });
 
     it('keeps the element id of a deep link on mount', () => {
-      window.history.replaceState(null, '', '#pipeline?el=stage%3Adrafting');
+      window.history.replaceState(null, '', '#pipeline?el=stage%3Awriting');
       render(<App />);
-      expect(window.location.hash).toBe('#pipeline?el=stage%3Adrafting');
+      expect(window.location.hash).toBe('#pipeline?el=stage%3Awriting');
     });
 
     it('follows hashchange for the tab', async () => {
@@ -194,7 +194,7 @@ describe('App', () => {
     });
 
     it('drops the element id when another tab is chosen', async () => {
-      window.history.replaceState(null, '', '#pipeline?el=stage%3Adrafting');
+      window.history.replaceState(null, '', '#pipeline?el=stage%3Awriting');
       render(<App />);
       await userEvent.click(screen.getByRole('button', { name: 'Sections' }));
       expect(window.location.hash).toBe('#sections');
@@ -250,13 +250,13 @@ describe('App', () => {
       window.history.replaceState(null, '', '#pipeline');
       const { container } = render(<App />);
       const wrapper = await waitFor(() => {
-        const found = container.querySelector('.react-flow__node[data-id="stage:drafting"]') as HTMLElement;
+        const found = container.querySelector('.react-flow__node[data-id="stage:writing"]') as HTMLElement;
         expect(found).toBeTruthy();
         return found;
       });
       fireEvent.click(wrapper); // see PipelineGraph.test.tsx: user-event mousedown breaks d3-zoom in jsdom
       await screen.findByTestId('element-detail-panel');
-      expect(window.location.hash).toBe('#pipeline?el=stage%3Adrafting');
+      expect(window.location.hash).toBe('#pipeline?el=stage%3Awriting');
       await userEvent.click(screen.getByRole('button', { name: 'Close' }));
       expect(screen.queryByTestId('element-detail-panel')).not.toBeInTheDocument();
       expect(window.location.hash).toBe('#pipeline');
@@ -264,7 +264,7 @@ describe('App', () => {
 
     it('clears the selection and the hash on a pane click', async () => {
       withDiagram();
-      window.history.replaceState(null, '', '#pipeline?el=stage%3Adrafting');
+      window.history.replaceState(null, '', '#pipeline?el=stage%3Awriting');
       const { container } = render(<App />);
       await screen.findByTestId('element-detail-panel');
       fireEvent.click(container.querySelector('.react-flow__pane') as HTMLElement);

@@ -1,6 +1,6 @@
 {
   "name": "papersmith-ai",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "Papersmith AI — native Claude Code skills for paper ingestion and paper-proposal.",
@@ -15,6 +15,8 @@
     "proposal-deliberation": "node skills/proposal-deliberation/cli.mjs",
     "setup:harnesses": "bash scripts/setup-harnesses.sh",
     "build:atlas-viewer": "node scripts/build-atlas-viewer.mjs",
+    "build:ui": "npm --prefix ui install && npm --prefix ui run build",
+    "dev:ui": "npm --prefix ui run dev",
     "setup:env": "python3 scripts/setup_env.py install",
     "clean:env": "python3 scripts/setup_env.py clean",
     "typecheck": "tsc -p tsconfig.json"

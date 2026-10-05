@@ -7,18 +7,19 @@ import { diagramState } from './fixtures';
 import type { HistoryEntry } from '../../types';
 
 const graph = buildGraph(diagramState);
+const writingGraph = buildGraph(diagramState, 'writing');
 
 function entry(seq: number, element: string | null, summary: string): HistoryEntry {
   return { id: `b-${seq}`, boot_id: 'b', seq, ts: 1_700_000_000 + seq, kind: 'stage', element_id: element, summary, before: null, after: null };
 }
 
-function open(elementId: string, entries: HistoryEntry[] = []) {
+function open(elementId: string, entries: HistoryEntry[] = [], shown = graph) {
   const onSelect = vi.fn();
   render(
     <ElementDetailPanel
       elementId={elementId}
       state={diagramState}
-      graph={graph}
+      graph={shown}
       history={{ bootId: 'b', entries, gap: false }}
       onSelect={onSelect}
     />,
@@ -27,14 +28,14 @@ function open(elementId: string, entries: HistoryEntry[] = []) {
 }
 
 describe('ElementDetailPanel', () => {
-  it('shows the real fields of a stage and its linked gates and sections', () => {
-    const { panel } = open('stage:drafting');
-    expect(within(panel).getByRole('heading', { name: 'Drafting' })).toBeInTheDocument();
+  it('shows the real fields of a stage and its linked gates and chain neighbours', () => {
+    const { panel } = open('stage:writing');
+    expect(within(panel).getByRole('heading', { name: 'Writing' })).toBeInTheDocument();
     expect(panel).toHaveTextContent('writing blocks');
     expect(panel).toHaveTextContent('40%');
     expect(panel).toHaveTextContent('redactor');
     expect(panel).toHaveTextContent('active');
-    expect(within(panel).getByRole('button', { name: /Related Work/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Figures and grounding/ })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /Coupling verification/ })).toBeInTheDocument();
   });
 
@@ -44,27 +45,28 @@ describe('ElementDetailPanel', () => {
     expect(panel).toHaveTextContent('BLOCKED');
     expect(panel).toHaveTextContent('contract missing');
     expect(panel).toHaveTextContent('no extent');
-    expect(within(panel).getByRole('button', { name: /Deliberation/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Proposal deliberation/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Audit/ })).toBeInTheDocument();
   });
 
-  it('reuses SectionDetail for a section', () => {
-    const { panel } = open('section:Related Work');
+  it('reuses SectionDetail for a section, in the flow that carries sections', () => {
+    const { panel } = open('section:Related Work', [], writingGraph);
     expect(within(panel).getByRole('heading', { name: 'Related Work' })).toBeInTheDocument();
     expect(panel).toHaveTextContent('paper/sections/related.md');
     expect(panel).toHaveTextContent('smith2020');
   });
 
   it('shows source, target and relation kind of an edge', () => {
-    const { panel } = open('stage:deliberation->gate:writing-readiness');
+    const { panel } = open('stage:proposal->gate:writing-readiness');
     expect(panel).toHaveTextContent('gate input');
-    expect(within(panel).getByRole('button', { name: /Deliberation/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Proposal deliberation/ })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /Writing readiness/ })).toBeInTheDocument();
   });
 
   it('selects a neighbour from the Connections list', async () => {
-    const { panel, onSelect } = open('stage:drafting');
-    await userEvent.click(within(panel).getByRole('button', { name: /Related Work/ }));
-    expect(onSelect).toHaveBeenLastCalledWith('section:Related Work');
+    const { panel, onSelect } = open('stage:writing');
+    await userEvent.click(within(panel).getByRole('button', { name: /Figures and grounding/ }));
+    expect(onSelect).toHaveBeenLastCalledWith('stage:figures');
   });
 
   it('says "No longer present" for a vanished element', () => {
@@ -74,7 +76,7 @@ describe('ElementDetailPanel', () => {
   });
 
   it('closes with Escape and with the close button', async () => {
-    const { onSelect } = open('stage:drafting');
+    const { onSelect } = open('stage:writing');
     await userEvent.keyboard('{Escape}');
     expect(onSelect).toHaveBeenLastCalledWith(null);
     onSelect.mockClear();
@@ -87,7 +89,7 @@ describe('ElementDetailPanel', () => {
     document.body.appendChild(trigger);
     trigger.focus();
     const { unmount } = render(
-      <ElementDetailPanel elementId="stage:drafting" state={diagramState} graph={graph} history={{ bootId: null, entries: [], gap: false }} onSelect={() => {}} />,
+      <ElementDetailPanel elementId="stage:writing" state={diagramState} graph={graph} history={{ bootId: null, entries: [], gap: false }} onSelect={() => {}} />,
     );
     expect(screen.getByTestId('element-detail-panel').contains(document.activeElement)).toBe(true);
     unmount();
@@ -96,10 +98,10 @@ describe('ElementDetailPanel', () => {
   });
 
   it('lists only the history entries of the selected element, newest first', () => {
-    const { panel } = open('stage:drafting', [
-      entry(1, 'stage:drafting', 'older drafting change'),
+    const { panel } = open('stage:writing', [
+      entry(1, 'stage:writing', 'older drafting change'),
       entry(2, 'stage:other', 'other stage change'),
-      entry(3, 'stage:drafting', 'newer drafting change'),
+      entry(3, 'stage:writing', 'newer drafting change'),
     ]);
     const section = within(panel).getByRole('region', { name: 'History' });
     const items = within(section).getAllByRole('listitem');
@@ -109,14 +111,14 @@ describe('ElementDetailPanel', () => {
   });
 
   it('says so when the selected element has no history yet', () => {
-    const { panel } = open('stage:drafting');
+    const { panel } = open('stage:writing');
     expect(within(panel).getByRole('region', { name: 'History' })).toHaveTextContent('No changes recorded');
   });
 
   it('shows a loading message instead of "No longer present" while the state is null', () => {
     render(
       <ElementDetailPanel
-        elementId="stage:drafting"
+        elementId="stage:writing"
         state={null}
         graph={buildGraph(null)}
         history={{ bootId: null, entries: [], gap: false }}
@@ -130,10 +132,10 @@ describe('ElementDetailPanel', () => {
 
   it('moves focus to the heading and announces the new element when the selection changes', () => {
     const props = { state: diagramState, graph, history: { bootId: 'b', entries: [], gap: false }, onSelect: () => {} };
-    const { rerender } = render(<ElementDetailPanel elementId="stage:drafting" {...props} />);
+    const { rerender } = render(<ElementDetailPanel elementId="stage:writing" {...props} />);
     const region = screen.getByRole('status');
     expect(region).toHaveAttribute('aria-live', 'polite');
-    rerender(<ElementDetailPanel elementId="stage:auditing" {...props} />);
+    rerender(<ElementDetailPanel elementId="stage:audit" {...props} />);
     const heading = screen.getByRole('heading', { level: 3 });
     expect(document.activeElement).toBe(heading);
     expect(screen.getByRole('status')).toHaveTextContent(heading.textContent ?? 'missing');

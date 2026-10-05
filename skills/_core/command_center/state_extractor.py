@@ -91,6 +91,15 @@ GATE_SOURCES = {
     "diagram-raster": ("figures", "figures"),
 }
 
+#: The placeholders a scaffold leaves inside a drop zone so the folder travels.
+#: They are not artifacts, and counting one would light a tramo with the only
+#: file the scaffold put there -- a board reporting work nobody did.
+PLACEHOLDER_FILES = (".gitkeep", ".gitignore")
+
+#: The transversal lane every quality gate's verdict lands in, which is where
+#: the diagram draws the audit lane relative to the numbered tramos.
+AUDIT_STAGE = "audit"
+
 #: The harness projections a wired workspace carries, one per harness.
 HARNESS_PROJECTIONS = (".claude", ".pi", ".opencode", ".agents")
 
@@ -656,32 +665,31 @@ def _count_markdown(root: Path, *relative: str) -> int:
 def _count_matching(directory: Path, pattern: str) -> int:
     """Regular files under ``directory`` matching one glob.
 
-    ``.gitkeep`` never counts: it is the placeholder that lets an empty drop
-    zone travel, and reporting it as an artifact would light a tramo with the
-    only file the repository puts there on purpose.
+    Placeholders never count: they are what lets an empty drop zone travel, and
+    reporting one as an artifact would light a tramo with nothing in it.
     """
     if not directory.is_dir():
         return 0
     return sum(
         1 for path in directory.glob(pattern)
-        if path.is_file() and path.name != ".gitkeep"
+        if path.is_file() and path.name not in PLACEHOLDER_FILES
     )
 
 
 def _count_entries(directory: Path) -> int:
-    """Entries in a drop-zone directory, the placeholder aside."""
+    """Entries in a drop-zone directory, the placeholders aside."""
     if not directory.is_dir():
         return 0
-    return sum(1 for path in directory.iterdir() if path.name != ".gitkeep")
+    return sum(1 for path in directory.iterdir() if path.name not in PLACEHOLDER_FILES)
 
 
 def _count_recursive(directory: Path) -> int:
-    """Regular files anywhere under ``directory``, the placeholder aside."""
+    """Regular files anywhere under ``directory``, the placeholders aside."""
     if not directory.is_dir():
         return 0
     return sum(
         1 for path in directory.rglob("*")
-        if path.is_file() and path.name != ".gitkeep"
+        if path.is_file() and path.name not in PLACEHOLDER_FILES
     )
 
 
@@ -856,7 +864,10 @@ def _inbox(root: Path) -> dict[str, Any]:
     directory = root / name
     if not directory.is_dir():
         return {"count": 0, "paths": [], "directory": name}
-    paths = sorted(str(p.relative_to(directory)) for p in directory.iterdir() if p.name != ".gitignore")
+    paths = sorted(
+        str(path.relative_to(directory)) for path in directory.iterdir()
+        if path.name not in PLACEHOLDER_FILES
+    )
     return {"count": len(paths), "paths": paths, "directory": name}
 
 
@@ -942,7 +953,7 @@ def get_workspace_state(root: Path | str) -> dict[str, Any]:
             for source, target, label in PIPELINE_CHAIN
         ],
         "gate_links": {
-            gate_id: {"from": source, "label": label}
+            gate_id: {"from": source, "label": label, "consumed_by": AUDIT_STAGE}
             for gate_id, (source, label) in GATE_SOURCES.items()
         },
         "experiments": _experiments(root_path),
