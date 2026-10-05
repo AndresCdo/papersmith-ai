@@ -191,6 +191,37 @@ class RenderAtlasTests(unittest.TestCase):
         self.assertNotIn("<link ", page)
         self.assertNotIn("@import", page)
 
+    def test_default_title_is_the_sota_constellations_own_words(self):
+        """A second caller must not change the first one's artifact: the
+        default is the sentence this page always carried."""
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path))
+        self.assertEqual(code, 0, out)
+        page = self.out_path.read_text(encoding="utf-8")
+        self.assertIn("<title>SOTA constellation</title>", page)
+        self.assertIn("<h1>SOTA constellation — one sky</h1>", page)
+
+    def test_a_named_sky_says_its_own_name_in_both_places(self):
+        """A caller rendering another domain's sky names it. The tab title and
+        the heading both follow, so the page cannot contradict its own tab."""
+        named = "Propuesta r01 — sobre el cielo SOTA"
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path),
+                                      "--title", named)
+        self.assertEqual(code, 0, out)
+        page = self.out_path.read_text(encoding="utf-8")
+        self.assertIn(f"<title>{named}</title>", page)
+        self.assertIn(f"<h1>{named}</h1>", page)
+        self.assertNotIn("SOTA constellation — one sky", page)
+
+    def test_a_name_carrying_markup_is_escaped(self):
+        """The name is text, not markup: a proposal title with an angle bracket
+        must not become a tag in the artifact."""
+        code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path),
+                                      "--title", "<img src=x onerror=alert(1)>")
+        self.assertEqual(code, 0, out)
+        page = self.out_path.read_text(encoding="utf-8")
+        self.assertNotIn("<img src=x", page)
+        self.assertIn("&lt;img src=x", page)
+
     def test_vendored_viewer_is_inlined_verbatim(self):
         code, out = self.run_renderer(str(self.atlas_path), "--out", str(self.out_path))
         self.assertEqual(code, 0, out)
