@@ -16,7 +16,7 @@ from ..generators import (
 )
 from ..kit import resolve_and_validate
 from ..schema import validate_tools
-from . import config, fs, manifest, wiring
+from . import config, fs, manifest, migrations, wiring
 
 #: Dynamic rendered outputs — one file per discovered skill, so their membership
 #: cannot be enumerated by a static list. Only paths under these prefixes that
@@ -129,30 +129,6 @@ def _copy_if_needed(workspace: Path, kit_root: Path, relpath: str, *, force: boo
     return True
 
 
-def _version_order(value: str) -> tuple[int, ...] | None:
-    """`value` as an orderable tuple, or ``None`` when it carries no order.
-
-    Only the leading dot-separated run of integers is read, so `0.2.0rc1`
-    orders beside `0.2.0` rather than refusing: a prerelease suffix is a
-    claim this function is not equipped to rank, and treating the two as
-    equal declines to guess in the direction that blocks nothing. A value
-    with no leading integer at all -- a branch name, a build label, an
-    empty string -- returns ``None``, because there is no order to report
-    and inventing one is how a downgrade gets waved through.
-    """
-    parts: list[int] = []
-    for chunk in value.strip().split("."):
-        digits = ""
-        for character in chunk:
-            if not character.isdigit():
-                break
-            digits += character
-        if not digits:
-            break
-        parts.append(int(digits))
-    return tuple(parts) or None
-
-
 def _refuse_a_downgrade(root: Path, kit_version: str, *, allowed: bool) -> None:
     """Refuse to move a workspace to an older framework version.
 
@@ -186,8 +162,10 @@ def _refuse_a_downgrade(root: Path, kit_version: str, *, allowed: bool) -> None:
     recorded = read_workspace_version(root, "").strip()
     if not recorded:
         return
-    current = _version_order(recorded)
-    incoming = _version_order(kit_version)
+    # Shared with the migration gate, which refuses for the same reason: see
+    # ``migrations.version_order``.
+    current = migrations.version_order(recorded)
+    incoming = migrations.version_order(kit_version)
     if current is None or incoming is None:
         raise UserError(
             f"cannot tell whether {kit_version!r} precedes the version this "
