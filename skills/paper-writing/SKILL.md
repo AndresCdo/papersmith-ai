@@ -768,7 +768,7 @@ the redactor's account, never trusting an agent's account unjudged.
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
-`PI.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
+`.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`insumos-observer` cannot write to disk) becomes
@@ -1117,7 +1117,7 @@ cannot distinguish "nothing to cite" from "cannot be checked."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
-`PI.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
+`.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agents would have enforced (`redactor` and `contract-auditor` cannot write
@@ -1140,7 +1140,7 @@ distinguish "no style channel wanted" from "nothing to sample yet."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
-`PI.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
+`.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`style-sampler` cannot write to disk) becomes
@@ -1269,7 +1269,7 @@ ground" from "cannot be checked."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
-`PI.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
+`.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`section-grounding-auditor` cannot write to
@@ -1452,7 +1452,7 @@ a figure it cannot read cannot distinguish "clean" from "unreadable."
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
-`PI.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
+`.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. The tool boundary the
 agent would have enforced (`figure-auditor` cannot write to disk) becomes
@@ -1470,7 +1470,7 @@ an obligation it cannot read cannot distinguish "no components yet" from
 
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
-`PI.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
+`.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
 run this stretch in-process, as one step, in the same order, holding to the
 same measure-before-delegating gate before starting. `diagram-author`'s own
 doctrine says it only touches its `<id>.tex`/`<id>.diagram.json` pair, but

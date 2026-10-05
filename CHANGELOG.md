@@ -15,6 +15,16 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Changed
 
+- **The Pi entrypoint is the file Pi reads.** The `pi` runtime's generated
+  entrypoint moves from `PI.md` at the workspace root to
+  `.pi/APPEND_SYSTEM.md`. Pi never read `PI.md`: its project context candidates
+  are `AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md` and
+  `CLAUDE.MD`, while a trusted project `.pi/APPEND_SYSTEM.md` is appended to the
+  system prompt and takes precedence over the operator's own agent-level append
+  instead of combining with it. `upgrade` retires a baselined `PI.md` — nothing
+  else could, since a static entrypoint is deliberately outside the orphan rule
+  — and `audit` names a leftover one, in any workspace, as surplus. A `PI.md`
+  this tool never wrote is the operator's file and is never removed.
 - **The SOTA atlas is a 3D sky.** `/plausibility`'s `sota-pool/atlas.html`
   now draws the constellation with three.js instead of an inline SVG plane:
   family neighborhoods at their own heights, one tilted orbital plane per
