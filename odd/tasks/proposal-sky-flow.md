@@ -133,15 +133,24 @@ with `?embed=1` at 1400 px so the framing matches its predecessor.
   (`SKILL.md:241,277` → `251,287`); S4 fixes them, and the equality of the two
   ranges was checked against `git show` of the pre-edit file rather than assumed
   from the count.
-- **S4** `11e0648`. The sixth-node attempt was measured, not guessed: the
-  `proposals → sky` edge was first rejected for label room (`composition/label-gap`,
-  26px clear against a 127px need), and with the label removed the gate named the
-  real limit — a connection needs `gapX ≥ 24` and the widest label
-  (`/experimental-implementation`, ~185px) needs `cellW ≥ 190`, which puts a
-  six-column viewBox near 1370px against the 1240px budget that keeps 8px source
-  text at or above the 6px floor. With the graph as the second artifact of the
-  existing node the artifact finalizes green: `validate`, `deliver`, `check` and
-  `browser-check` all pass for
+- **S4** `11e0648`, re-measured after independent verification and corrected
+  here. The sixth-node attempt was a measurement, and it has now been re-run and
+  captured so the claim can be checked rather than inherited. First attempt
+  (`cols:6`, `cellW:176`, `gapX:14`): `composition/label-gap` refused the
+  `proposals → sky` edge — 26px of clear space for a label needing 127px — and
+  with the edge unlabelled `layout/constraint` refused the metrics themselves:
+  `Label "/experimental-implementation" (~185px) is wider than component
+  "expImpl" (176px)` and `Connection "canon->sync" is too short (14px; minimum
+  24px)`. Second attempt, at the least aggressive metrics that satisfy both of
+  those floors (`cellW:190`, `gapX:24`): one diagnostic survives,
+  `composition/desktop-readability`, with `viewBoxWidth` 1370, `scale` 0.6788,
+  `projectedFontPx` 5.43 against `minimumProjectedFontPx` 6, at
+  `availableDiagramWidth` 930 and `budgetBasis legacy-930` for 8px source text.
+  Those two numbers imply a 1240px ceiling, which the six-column figure clears
+  by nothing — it is 130px above it. Every number in this paragraph is gate
+  output from that reconstruction except the derived 1240. With the graph as the
+  second artifact of the existing node the artifact finalizes green: `validate`,
+  `deliver`, `check` and `browser-check` all pass for
   `6cd883d9a5eb4a330d06d965fbc9d6247adf803f54b538d667f1ecd78f557d08`, and the
   committed HTML is byte-identical to it. The browser gate's own measurements on
   that artifact: `viewBoxWidth` 1144, minimum projected node text 6.67px,
@@ -154,25 +163,71 @@ with `?embed=1` at 1400 px so the framing matches its predecessor.
   had been red on the branch before it, which is the rule firing and not a
   defect. The README pin stays on `v0.10.0`, following the 0.9.0 precedent
   (verified against `d9c9922`, where the tree said 0.9.0 and the pin 0.8.0).
-- **Whole branch**: fast tier `--since 04f76fc` → 6 failed, 3160 passed, 3
-  skipped, 1112 subtests in 5m12s. All six failures are pre-existing and
-  environmental: five `GateInterpreterTests` that need a micromamba environment
+- **Whole branch**, run twice and last at `726ae61`: fast tier
+  `--since 04f76fc` → 6 failed, 3161 passed, 3 skipped, 1112 subtests. The first
+  run, at `df81838` before the verification fix, reported 3160 passed; the new
+  test is the difference. All six failures are pre-existing and environmental: five `GateInterpreterTests` that need a micromamba environment
   this checkout does not have, and one that asserts a case-sensitive filesystem,
   which macOS is not. `sync-repo-harness.py --check` clean (92 files).
+
+### What independent verification changed, and what it did not
+
+An independent read-only pass checked this record against the code after the
+branch was written. It confirmed A–E and G (the extractor's counts and strings,
+the unchanged stage and chain shapes, the agent's section with its unchanged
+frontmatter and its absent write tools, the three regenerated projections, the
+skill's two new statements, the byte-identical arrival, and the three version
+literals) and it confirmed H for everything cheaply checkable while declining
+the five-minute fast-tier run. It also corrected three things in the prose
+above, which is why this section exists:
+
+1. **S4's rationale was not receipt-backed.** The rejected attempts left no
+   surviving receipt in the diagram's folder — `review-2` and `review-3` failed
+   on provenance, not composition — so the original wording presented an
+   un-reproducible measurement as settled. The paragraph above now quotes the
+   diagnostic codes verbatim from a re-run, separates the one derived number
+   from the measured ones, and the reconstruction itself is not kept, because
+   the diagram's source is not versioned (limitation 2).
+2. **The record named the wrong diagnostic.** The surviving receipts say
+   `delivery/provenance-hardlink-unsupported`; `requested-entry-hardlinked` was
+   the reason inside `finalize/receipt-publication` on an earlier run.
+3. **The folder's top-level receipt is a failure.**
+   `papersmith-pi.finalize.json` records `ok: false` for the committed sha
+   because that run stopped at `viewer/evidence-path-conflict`; only
+   `review-4/papersmith-pi.finalize.json` carries the four green gates for those
+   exact bytes. "The artifact finalizes green" is true of the newest run and was
+   not true of the first receipt a reader would open.
+
+Two consequences it surfaced, accepted rather than papered over:
+
+- **The agent's `description` still carries only the arrival**, so an
+  orchestrator choosing it by description gets no signal that the graph — or the
+  `owed` report — is part of the stretch. That follows from decision 1: the
+  arrival is held equal to `profile.ts` by
+  `tests/proposal-deliberation-objective-flow.test.mjs`, and moving it would be a
+  doctrine change, not this one.
+- **The artifact-name convention had no test binding its two ends.** The
+  extractor keys on `*.graph.html` and the skill instructs
+  `--out proposals/<revision>.graph.html`, with nothing comparing them. Both
+  ends now name the path (the agent says `proposals/<revision>.graph.html` when
+  it reports), and `test_the_glob_matches_the_artifact_the_skill_names` fails if
+  either side is renamed.
 
 ### Two limitations of this evidence, stated rather than implied
 
 1. **Archify's strict-provenance checks could not run here.**
    `visual-check --require-provenance` and `check` on the repository copy both
-   refuse: the artifact and its delivery sidecar report `links: 2`, and the gate
-   requires exactly one link to prove every name was updated atomically (the
-   same condition produced two spurious `requested-entry-hardlinked` failures
-   before the artifact finalized). The extra name is not findable: `find -inum`
-   over the whole tree returns only the file itself, while a fresh file written
-   by `cp`, by a shell redirect or by Python in the same directory reports one
-   link. The cause was not identified, so this is an observed property of the
-   environment, not a diagnosis — and it blocks the precedence chain, not the
-   four gates, which ran on the `.archify` artifact where the count was one.
+   refuse, in the surviving receipts, as
+   `delivery/provenance-hardlink-unsupported` with `links: 2`; an earlier run
+   reported the same condition as `finalize/receipt-publication` with reason
+   `requested-entry-hardlinked`. The gate requires exactly one link to prove
+   every name was updated atomically, and the extra name is not findable:
+   `find -inum` over the whole tree returns only the file itself, while a fresh
+   file written by `cp`, by a shell redirect or by Python in the same directory
+   reports one link. The cause was not identified, so this is an observed
+   property of the environment, not a diagnosis — and it blocks the provenance
+   chain, not the four gates, which ran on the `.archify` artifact where the
+   count was one.
 2. **The diagram's source is not versioned.** `.archify/…/build.mjs` lives in
    the parent directory, outside the repository and outside any git repository,
    so the regeneration above is not reproducible from a clone. Decision 5
