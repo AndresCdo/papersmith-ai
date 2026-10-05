@@ -221,11 +221,24 @@ class UpgradeTests(unittest.TestCase):
         major, minor, _ = (int(part) for part in version.split(".")[:3])
         return f"{major}.{minor + 1}.0"
 
+    def _a_version_newer_than_the_kit(self) -> str:
+        """A version strictly newer than the one a fresh workspace records.
+
+        Every downgrade test needs the same two things: a kit newer than the
+        workspace, installed first, and an older one installed over it. Only
+        the second may be a literal — it stays older for as long as the
+        project's version only grows. The first cannot, for the reason
+        :meth:`_one_minor_above` already states, and naming it once here is
+        what keeps the next version bump from quietly inverting four tests
+        into asserting the guard they were written to exercise.
+        """
+        return self._one_minor_above(
+            manifest.kit_version(upgrade_module.resolve_and_validate()))
+
     def test_upgrade_refreshes_version_from_a_new_kit(self) -> None:
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
-        newer = self._one_minor_above(
-            manifest.kit_version(upgrade_module.resolve_and_validate()))
+        newer = self._a_version_newer_than_the_kit()
         kit = tmp_path / f"kit-{newer}"
         for relpath, content in {
             "skills/paper-ingestion/SKILL.md": "# upgraded skill\n",
@@ -274,7 +287,8 @@ class UpgradeTests(unittest.TestCase):
         truth."""
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
-        self._kit_at(tmp_path, "0.9.0")
+        newer = self._a_version_newer_than_the_kit()
+        self._kit_at(tmp_path, newer)
         upgrade_module.upgrade(workspace)
 
         self._kit_at(tmp_path, "0.4.0")
@@ -282,7 +296,7 @@ class UpgradeTests(unittest.TestCase):
             upgrade_module.upgrade(workspace)
         message = str(caught.exception)
         self.assertIn("0.4.0", message)
-        self.assertIn("0.9.0", message)
+        self.assertIn(newer, message)
 
     def test_a_downgrade_needs_its_own_permission_not_force(self) -> None:
         """`--force` already means "write even when the bytes match". Letting
@@ -291,7 +305,7 @@ class UpgradeTests(unittest.TestCase):
         would get a version rollback with it."""
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
-        self._kit_at(tmp_path, "0.9.0")
+        self._kit_at(tmp_path, self._a_version_newer_than_the_kit())
         upgrade_module.upgrade(workspace)
 
         self._kit_at(tmp_path, "0.4.0")
@@ -304,10 +318,11 @@ class UpgradeTests(unittest.TestCase):
     def test_the_same_version_is_not_a_downgrade(self) -> None:
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
-        self._kit_at(tmp_path, "0.9.0")
+        newer = self._a_version_newer_than_the_kit()
+        self._kit_at(tmp_path, newer)
         upgrade_module.upgrade(workspace)
         result = upgrade_module.upgrade(workspace)
-        assert result["version"] == "0.9.0"
+        assert result["version"] == newer
 
     def test_a_workspace_with_no_recorded_version_is_never_a_downgrade(self) -> None:
         """A first upgrade has nothing to go backwards FROM, and refusing it
@@ -346,7 +361,8 @@ class UpgradeTests(unittest.TestCase):
         routing was declared and unexercised."""
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
-        self._kit_at(tmp_path, "0.9.0")
+        newer = self._a_version_newer_than_the_kit()
+        self._kit_at(tmp_path, newer)
         upgrade_module.upgrade(workspace)
         self._kit_at(tmp_path, "0.4.0")
 
@@ -355,7 +371,7 @@ class UpgradeTests(unittest.TestCase):
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
             assert main(["upgrade", str(workspace)]) != 0
-        assert (workspace / ".papersmith/version").read_text() == "0.9.0\n"
+        assert (workspace / ".papersmith/version").read_text() == f"{newer}\n"
         assert "0.4.0" in stderr.getvalue()
 
         buffer = io.StringIO()
