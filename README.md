@@ -3089,9 +3089,13 @@ viven en el frontend: el extractor las manda en el payload (`pipeline_chain` y
 
 Endpoints: `/api/state`, `/api/health/wiring`, `/api/health/run-wiring-smoke`
 (POST) y `/api/events` (SSE); el build del dashboard se sirve en `/`. El
-frontend se construye desde `ui/` con `npm run build:ui`, que emite en
+frontend se construye con `npm run setup:ui` una vez (instala desde el
+lockfile) y después `npm run build:ui`, que emite en
 `skills/_core/command_center/static/`; `npm run dev:ui` levanta el servidor de
-Vite con proxy al backend para trabajar sobre la interfaz. El smoke end-to-end
+Vite con proxy al backend para trabajar sobre la interfaz. El paso de
+instalación usa `npm ci` y no `npm install` a propósito: `install` reescribe el
+lockfile con los metadatos del npm local, y ese ruido no pertenece a ningún
+cambio de dependencias. El smoke end-to-end
 es `bash scripts/command-center-smoke.sh`.
 
 **Tema claro.** El dashboard usa un único tema claro, definido por tokens de
