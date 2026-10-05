@@ -75,11 +75,15 @@ Three surfaces have to carry it, and none of them does today:
    one; the graph is produced inside proposal deliberation, so it belongs to
    carril 3's drawing. `PIPELINE_CHAIN` is untouched: it is tramo-to-tramo, and
    this adds no tramo.
-5. **The diagram's own source is not versioned, and the record says so.**
-   `.archify/…/build.mjs` is untracked and lives outside the repository. The
-   regeneration is therefore not reproducible from a clone, which is a property
-   of the existing setup, not something this feature introduces — noted here so
-   the next person does not look for it.
+5. **The diagram's source moves into the repository.** `.archify/…/build.mjs`
+   was untracked and lived outside the repository, so the regeneration was not
+   reproducible from a clone — a defect this feature would otherwise have
+   inherited. The source is now `docs/diagrams/papersmith-pi-flow.build.mjs`,
+   with repository-relative paths, a `locales/es.json` vendored from Archify
+   3.0.1 (MIT), and the procedure in `docs/diagrams/README.md`. Re-running it
+   reproduces the archived candidate (`6a7540aa…`) and the committed artifact
+   (`6cd883d9…`) byte for byte, with the four gates green, from a scratch
+   directory and with no dependency on the machine-specific `.archify/` folder.
 
 ## Slices
 
@@ -186,8 +190,9 @@ above, which is why this section exists:
    on provenance, not composition — so the original wording presented an
    un-reproducible measurement as settled. The paragraph above now quotes the
    diagnostic codes verbatim from a re-run, separates the one derived number
-   from the measured ones, and the reconstruction itself is not kept, because
-   the diagram's source is not versioned (limitation 2).
+   from the measured ones, and the reconstruction is a four-field edit to the
+   versioned source (`cols`, `cellW`, `gapX`, plus the node), so a reader can
+   re-derive every number in it.
 2. **The record named the wrong diagnostic.** The surviving receipts say
    `delivery/provenance-hardlink-unsupported`; `requested-entry-hardlinked` was
    the reason inside `finalize/receipt-publication` on an earlier run.
@@ -213,7 +218,7 @@ Two consequences it surfaced, accepted rather than papered over:
   it reports), and `test_the_glob_matches_the_artifact_the_skill_names` fails if
   either side is renamed.
 
-### Two limitations of this evidence, stated rather than implied
+### Limitations of this evidence, the second of them since resolved
 
 1. **Archify's strict-provenance checks could not run here.**
    `visual-check --require-provenance` and `check` on the repository copy both
@@ -228,11 +233,13 @@ Two consequences it surfaced, accepted rather than papered over:
    property of the environment, not a diagnosis — and it blocks the provenance
    chain, not the four gates, which ran on the `.archify` artifact where the
    count was one.
-2. **The diagram's source is not versioned.** `.archify/…/build.mjs` lives in
-   the parent directory, outside the repository and outside any git repository,
-   so the regeneration above is not reproducible from a clone. Decision 5
-   records this as a property of the existing setup that this feature neither
-   introduced nor fixed.
+2. **The diagram's source was unversioned, and no longer is.** It lived in the
+   parent directory, outside the repository and outside any git repository, so
+   the regeneration above was not reproducible from a clone. That is now
+   decision 5: the source is versioned in `docs/diagrams/` and reproduces both
+   the archived candidate and the committed artifact byte for byte. What stays
+   external is Archify itself — the pinned 3.0.1 binary is a documented
+   prerequisite of the recipe, not something the repository carries.
 
 ## Next step
 
@@ -243,3 +250,6 @@ moves to `v0.11.0`, and the tag belongs on its merge commit.
 The first real deliberation in a workspace is still the first execution of this
 chain against real data, now with an agent that will report the missing overlay
 instead of skipping it silently.
+
+`docs/diagrams/README.md` carries the regeneration recipe; nothing else is owed
+by this record.
