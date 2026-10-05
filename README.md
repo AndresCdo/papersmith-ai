@@ -37,12 +37,12 @@ cómputo remoto, desarrollo y solución de problemas.
 Bienvenido. Esta forja está pensada para que puedas ir de un PDF a un paper
 compilado sin adivinar el orden. El camino mínimo:
 
-1. **Instalá el CLI y prepará el entorno** — ver [Puesta en marcha](#puesta-en-marcha).
+1. **Instala el CLI y prepara el entorno** — ver [Puesta en marcha](#puesta-en-marcha).
 2. **Creá tu workspace** — `papersmith init ~/papers/mi-paper --title "…" --topic "…"`.
    Qué te deja adentro, en [El workspace por dentro](#el-workspace-por-dentro).
-3. **Poné un PDF de referencia** en `guidance/reference-papers/` y corré
-   `papersmith ingest <pdf>` — o pedí `/paper-ingestion` dentro de tu harness.
-4. **Abrí la deliberación** con `/proposal-deliberation` y discutí la matemática
+3. **Pon un PDF de referencia** en `guidance/reference-papers/` y ejecuta
+   `papersmith ingest <pdf>` — o pide `/paper-ingestion` dentro de tu harness.
+4. **Abre la deliberación** con `/proposal-deliberation` y discute la matemática
    con el agente.
 
 No hace falta usar todas las skills ni en este orden: **cada una declara qué
@@ -60,8 +60,8 @@ vas a usar un agente de IA como copiloto, los que ya vienen definidos están en
 ## Flujo de uso — el camino corto
 
 Once skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
-castellano (*"ingerí los papers"*). **No hace falta usarlas todas ni en este orden**: cada
-una declara qué necesita antes y se niega si falta, así que si arrancás por el medio te
+castellano (*"ingiere los papers"*). **No hace falta usarlas todas ni en este orden**: cada
+una declara qué necesita antes y se niega si falta, así que si empiezas por el medio te
 lo va a decir ella.
 
 El camino completo, de un PDF a un paper compilado:
@@ -70,7 +70,7 @@ El camino completo, de un PDF a un paper compilado:
 |---|---------|----------|-------------------------|
 | 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
 | 2 | `/plausibility` | Explora la idea pre-ingesta en tres tramos: rastrea ~25 referencias por sus abstracts, mapea la constelación en un HTML único y discute la plausibilidad de la hipótesis contra ese SOTA | `sota-pool/` (ignorado, como `guidance/`) |
-| 3 | `/proposal-deliberation` | Discute la matemática con vos y publica cada acuerdo como una revisión gestionada | `proposals/` |
+| 3 | `/proposal-deliberation` | Discute la matemática contigo y publica cada acuerdo como una revisión gestionada | `proposals/` |
 | 4 | `/proposal-implementation` | Prueba de concepto: convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
 | 5 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
 | 6 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
@@ -80,10 +80,10 @@ El camino completo, de un PDF a un paper compilado:
 | 10 | `/figure-review` | Mira el render: rasteriza cada `Figures/<id>.pdf` y mide lo que un raster puede sostener (tinta fuera del canvas, colisiones) | un informe visual, nunca un cambio |
 | 11 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
 
-**Lo mínimo para empezar.** Si sólo querés probar la forja, arrancá por el paso 2
+**Lo mínimo para empezar.** Si sólo quieres probar la forja, empieza por el paso 2
 con tu idea en dos oraciones: `/plausibility` rastrea el SOTA y te devuelve la
-constelación más el top-5. Recién después, si quieres, poné un PDF en
-`guidance/reference-papers/`, corré `/paper-ingestion`, y deliberá con
+constelación más el top-5. Solo después, si quieres, pon un PDF en
+`guidance/reference-papers/`, ejecuta `/paper-ingestion`, y delibera con
 `/proposal-deliberation`. Los pasos 4 y 6 sólo tienen sentido cuando ya hay una propuesta
 publicada y un repositorio destino donde implementarla.
 
@@ -107,8 +107,8 @@ la fuente de cada nodo, está en
    inventa ni la saltea: sale con un código de rechazo que nombra qué falta. Un
    `PAPER_ABSENT` o un `SECTION_CONTRACTS_UNREADABLE` no es un error tuyo, es la skill
    diciéndote qué le falta.
-3. **La deliberación la cerrás vos.** Las dos skills de deliberación proponen, discuten y
-   preparan la edición, pero ninguna publica sin que vos aceptes. Eso no es una cortesía:
+3. **La deliberación la cierras tú.** Las dos skills de deliberación proponen, discuten y
+   preparan la edición, pero ninguna publica sin que aceptes. Eso no es una cortesía:
    está en el contrato de cada una y el motor lo hace cumplir.
 
 ---
@@ -117,12 +117,12 @@ la fuente de cada nodo, está en
 
 Nada de esto requiere claves ni servicios externos: la forja corre localmente.
 
-### 1. Instalá el CLI y prepará el entorno
+### 1. Instala el CLI y prepara el entorno
 
 ```bash
 # 1a. El CLI, siempre desde la última versión de la rama `main`
 pipx install git+https://github.com/Daprosero/papersmith-ai.git
-#     lo mismo con pip, si no usás pipx
+#     lo mismo con pip, si no usas pipx
 pip install "papersmith-ai @ git+https://github.com/Daprosero/papersmith-ai.git"
 
 # 1b. O desde un clon de `main` (si vas a desarrollar el framework)
@@ -131,7 +131,7 @@ pipx install .            # con pip: pip install .
 
 # 1c. Actualizar una instalación cuando sale una release nueva
 pipx upgrade papersmith-ai
-#     si `upgrade` no ve el cambio, forzá la reinstalación
+#     si `upgrade` no ve el cambio, fuerza la reinstalación
 pipx install --force git+https://github.com/Daprosero/papersmith-ai.git
 #     con pip, `--upgrade` sobre una URL de git no siempre vuelve a clonar
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/Daprosero/papersmith-ai.git"
@@ -145,21 +145,21 @@ npm run setup:harnesses
 ```
 
 **No hay `pip install papersmith-ai` a secas.** El paquete no está publicado en
-PyPI, así que la instalación va por git, como arriba. Y ojo con el nombre
+PyPI, así que la instalación va por git, como arriba. Y cuidado con el nombre
 vecino: `papersmith` —sin el `-ai`— sí está en PyPI, pero es **otro proyecto**
 (generación de documentos Word), así que `pip install papersmith` no instala
 esta forja.
 
-Instalá siempre desde `main`: es la única rama que se mantiene. La forma 1a
+Instala siempre desde `main`: es la única rama que se mantiene. La forma 1a
 recibe exactamente lo que `main` tiene hoy; la 1b toma el clon tal como está,
-incluidos cambios sin commitear, así que para reproducir un build usá 1a. Cada
-release queda además con su tag, así que si necesitás congelar un build exacto
+incluidos cambios sin commitear, así que para reproducir un build usa 1a. Cada
+release queda además con su tag, así que si necesitas congelar un build exacto
 fijalo en la URL — por ejemplo
 `pipx install --force "git+https://github.com/Daprosero/papersmith-ai@v0.8.0"`.
 El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
-Para actualizar, 1c alcanza: reinstala desde `main` y con eso quedás en la
-última release. Después confirmá qué quedó con `papersmith --version`. Ojo con
+Para actualizar, 1c alcanza: reinstala desde `main` y con eso quedas en la
+última release. Después confirma qué quedó con `papersmith --version`. Ojo con
 no confundir los dos `upgrade`: `papersmith upgrade` sincroniza un **workspace**
 con la versión instalada del framework y se niega a llevarlo a una versión
 anterior a la que él registra, salvo que se lo pidas con `--allow-downgrade`; no
@@ -193,7 +193,7 @@ sincroniza con `papersmith upgrade` y tus artefactos de investigación están
 protegidos por contrato. Qué crea `init` exactamente —y qué se versiona— en
 [El workspace por dentro](#el-workspace-por-dentro).
 
-### 3. Ingerí literatura
+### 3. Ingiere literatura
 
 ```bash
 papersmith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview o URL
@@ -206,7 +206,7 @@ LaTeX + tablas, con la bibliografía quitada) y las imágenes de sus figuras. El
 detalle del pipeline, en la sección de `paper-ingestion` de la
 [Anatomía](#anatomía-de-cada-skill).
 
-### 4. Deliberá, implementá y ejecutá
+### 4. Delibera, implementa y ejecuta
 
 ```bash
 papersmith deliberate . --action status                                   # estado de la propuesta gestionada
@@ -218,7 +218,7 @@ Dentro de un harness, las mismas capacidades se piden por nombre de skill:
 `/paper-ingestion`, `/proposal-deliberation`, `/experimental-deliberation`,
 `/proposal-implementation`, `/experimental-implementation`, `/paper-writing`.
 Y las que no dependen de un dominio — `/kaggle-accounts`, `/remote-execution`,
-`/skill-audit` — hacen de portero, memoria y auditor de lo que mandás afuera.
+`/skill-audit` — hacen de portero, memoria y auditor de lo que envías afuera.
 
 ---
 
@@ -226,7 +226,7 @@ Y las que no dependen de un dominio — `/kaggle-accounts`, `/remote-execution`,
 
 ### Paso 1 — Colocar cada PDF en la carpeta según su rol
 
-| Carpeta | Qué va acá |
+| Carpeta | Qué va aquí |
 |---------|------------|
 | `guidance/paper-guide/` | **Papers guía** — las referencias metodológicas / de estilo. `proposal-deliberation` las carga como contexto al inicio de cada deliberación. |
 | `guidance/reference-papers/` | **Corpus de referencia** — papers de apoyo, ingeridos a Markdown para consulta. No se cargan automáticamente en la deliberación. |
@@ -242,7 +242,7 @@ En **Claude Code**, invocar la skill:
 /paper-ingestion
 ```
 
-(o simplemente pedir: *"ingerí los papers"*). Por cada PDF **suelto**, crea una
+(o simplemente pedir: *"ingiere los papers"*). Por cada PDF **suelto**, crea una
 carpeta con el nombre del paper, mueve el PDF adentro y escribe un `<nombre>.md`
 liviano (texto + LaTeX + tablas, con la bibliografía quitada) junto con las
 imágenes de las figuras:
@@ -292,7 +292,7 @@ dos fases separadas:
 1. **Estructura.** Si el repo trae contenido, lo lleva al layout y verifica
    —sin ejecutar nada— que cuadernos, rutas y referencias sigan resolviendo. No
    audita ni valida el código que ya estaba: es lo que hay, ordenado.
-2. **Materialización.** Recién entonces implementa la matemática y la somete a
+2. **Materialización.** Solo entonces implementa la matemática y la somete a
    la escalera de validación.
 
 ```
@@ -310,9 +310,9 @@ matemática, medidos sobre 200 configuraciones aleatorias) y **remedios** (cada
 corrección propuesta validada con el mismo rigor). Un hallazgo sin remedio
 validado no se reporta.
 
-Eso es todo lo que hace falta para usar la forja. Si querés entender **qué pasa
+Eso es todo lo que hace falta para usar la forja. Si quieres entender **qué pasa
 adentro** de cada skill —sus pasos, sus piezas, cómo se conectan entre sí y qué
-limitaciones tiene cada una— seguí en [Anatomía de cada
+limitaciones tiene cada una— sigue en [Anatomía de cada
 skill](#anatomía-de-cada-skill). Y para el contrato literal, el `SKILL.md` de cada
 una.
 
@@ -335,11 +335,11 @@ mi-paper/
 │   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
 ├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
 ├── guidance/
-│   ├── reference-papers/        # drop-zone: dejá acá los PDFs de referencia
+│   ├── reference-papers/        # drop-zone: deja aquí los PDFs de referencia
 │   ├── paper-guide/             # papers guía de método y estilo (opcional pero recomendado)
 │   └── data-paper/              # paper de datos (obligatorio para experimental-deliberation)
 ├── proposals/                   # revisiones gestionadas, plano: research-concept-rNN.md
-├── paper/                       # el LaTeX del paper (paper-writing lo escribe acá)
+├── paper/                       # el LaTeX del paper (paper-writing lo escribe aquí)
 ├── experiments/                 # el protocolo experimental gestionado
 ├── implementations/             # repos destino; cada uno con su propio git
 ├── kaggle-inbox/                # lo que vuelve de los workers remotos
@@ -439,7 +439,7 @@ workspace, lo que muestra esta tabla. Es la misma matriz que
 `HARNESS_CAPABILITIES` en `src/papersmith/generators.py`, y un test
 (`tests/test_harness_parity.py`) verifica que ambas coincidan. `wired` es lo que
 se genera; `unsupported` es lo que no se genera; `opt-in` es lo que sólo se
-documenta y activás vos.
+documentas y activas tú.
 
 <!-- harness-capabilities:start -->
 | Harness | Skills | Comandos | Agentes | Plugins / guards |
@@ -475,7 +475,7 @@ Lo que la tabla no promete:
 - **Antigravity, sólo ubicaciones documentadas:** `.antigravity/rules.md` y
   `.antigravity/skills` ya no se generan. Antigravity usa `.agents/skills`,
   `.agents/agents/` y `.agents/AGENTS.md` (texto plano, sin frontmatter). Los
-  workspaces existentes no se migran: corré `papersmith init` en un workspace
+  workspaces existentes no se migran: ejecuta `papersmith init` en un workspace
   nuevo.
 
 #### Matriz de soporte verificada
@@ -499,7 +499,7 @@ herramienta documenta, no lo que Papersmith genera (eso es la tabla de arriba).
   <https://antigravity.google/docs/ide/workflows>).
 - Pi: los nombres de herramienta `mcp` y `mcpScript` no tienen fuente
   (unsupported, no source found).
-- Las docs de estas herramientas cambian rápido; volvé a verificar una celda antes
+- Las docs de estas herramientas cambian rápido; vuelve a verificar una celda antes
   de apoyarte en ella después de esa fecha.
 
 Las fuentes de cada celda están en
@@ -516,7 +516,7 @@ en `.claude/commands/`, `.opencode/commands/` y `.pi/prompts/`; Antigravity no
 recibe archivos de comandos y lee las skills por sus enlaces. Los agentes se
 proyectan desde `.claude/agents/` a `.opencode/agents/`, `.pi/agents/` y
 `.agents/agents/`. Para que tu harness
-liste las skills como comandos `/`, corré `npm run setup:harnesses` dentro del
+liste las skills como comandos `/`, ejecuta `npm run setup:harnesses` dentro del
 workspace: enlaza el árbol embarcado en `.claude/skills`, `.pi/skills`,
 `.opencode/skills` y `.agents/skills`, igual de relativo e idempotente que
 en el checkout. En este checkout, las proyecciones de comandos slash
@@ -532,16 +532,16 @@ repo).
 
 Un workspace trae **diecinueve subagentes** en `.claude/agents/`. No son
 reemplazos del CLI: son tiradas cortas de trabajo que tu harness lanza (por
-ejemplo, con la Task tool) cuando vos se lo pedís. La forma es siempre la
+ejemplo, con la Task tool) cuando se lo pides. La forma es siempre la
 misma — **una tirada entre dos compuertas del operador**: el agente decide
 nada, pregunta nada, y termina reportando qué encontró y cuánto costó
-establecerlo. Las compuertas las abrís y cerrás vos.
+establecerlo. Las compuertas las abres y cierras tú.
 
 | Agente | Para qué entra | Skill que carga |
 |--------|----------------|-----------------|
 | `implementation-build` | Del mapa objeto→módulo aprobado al informe de hallazgos: materializa el scaffolding, escribe un módulo por objeto con su procedencia y sus tests de invariantes, y valida los remedios admitidos. | `proposal-implementation` |
 | `implementation-walk` | Camina el flujo declarado acto por acto, en su orden: corre los pasos locales, registra cada producto y se detiene en el ensayo previo al lanzamiento. No tiene camino para enviar una campaña. | `proposal-implementation` |
-| `deliberation-publish` | Desde que aceptás un cambio hasta que la revisión sucesora queda publicada y vigente — la única forma en que la matemática viaja. La deliberación en sí no está acá: sólo vos la cerrás. | `proposal-deliberation` |
+| `deliberation-publish` | Desde que aceptas un cambio hasta que la revisión sucesora queda publicada y vigente — la única forma en que la matemática viaja. La deliberación en sí no está aquí: solo tú la cierras. | `proposal-deliberation` |
 | `experimental-publish` | Lo mismo que `deliberation-publish`, sobre el documento de experimentos. | `experimental-deliberation` |
 | `experimental-validation` | La etapa `validated`: busca el protocolo de evaluación del área —métricas, baselines, dataset, semillas, test de significancia—, verifica cada baseline contra su repo y su venue, y fecha cada URL que usa. | `experimental-deliberation` |
 | `experiments-build` | Del mapa aprobado de pasos del protocolo a comandos ejecutables: materializa lo que haga falta, cablea cada paso e instrumenta cada medición para que se pueda correr y leer. | `experimental-implementation` |
@@ -563,13 +563,13 @@ Tres reglas que ordenan todo lo demás:
 - **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
   harness (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
   `.agents/AGENTS.md`) listan
-  a los diecinueve enteros, y se generan: si querés cambiar un agente, se cambia
+  a los diecinueve enteros, y se generan: si quieres cambiar un agente, se cambia
   ahí, no en la proyección.
 - **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa
   atadura se verifica: un agente que apunte a una skill que el workspace no
   embarca no llega.
 - **Algunos agentes no son invocados por ningún camino de código**
-  (`contract-auditor`, `redactor`, `style-sampler`): los lanzás vos, y es el
+  (`contract-auditor`, `redactor`, `style-sampler`): los lanzas tú, y es el
   verbo `write` el que juzga lo que devuelven — nunca confía en tu relato ni en
   el borrador por sí solos.
 
@@ -577,14 +577,14 @@ Tres reglas que ordenan todo lo demás:
 
 ## Anatomía de cada skill
 
-Las secciones de arriba cuentan **qué hacés**. Esta cuenta **qué pasa adentro**.
+Las secciones de arriba cuentan **qué haces**. Esta cuenta **qué pasa adentro**.
 Está escrita para alguien que nunca vio el proyecto: cada skill se explica desde
 cero y **entera** —sus pasos, sus piezas, sus conexiones con las demás, sus
 limitaciones conocidas y su diagrama— sin mandarte a otra parte del documento.
 
 Antes de entrar, dos cosas.
 
-**Qué es una skill acá**, porque no es un programa que corrés y se acabó. Cada una
+**Qué es una skill aquí**, porque no es un programa que ejecutas y se acabó. Cada una
 tiene dos mitades que hacen cosas distintas:
 
 | Mitad | Qué es | Quién la ejecuta |
@@ -605,7 +605,7 @@ declaración de la skill que la recibe, no inferida del nombre de la carpeta.
 
 ```mermaid
 flowchart TD
-    PDF["PDFs que dejás en guidance/"] --> PI["1. paper-ingestion"]
+    PDF["PDFs que dejas en guidance/"] --> PI["1. paper-ingestion"]
     IDEA["tu idea, en dos oraciones"] --> PL["2. plausibility"]
 
     PI -- "guidance/paper-guide (opcional)" --> PD["3. proposal-deliberation"]
@@ -651,7 +651,7 @@ flowchart TD
 *Los dos lazos hacia arriba son el corazón de la forja.* La matemática baja a código
 y lo que el código descubre sube de vuelta al documento; lo mismo entre el protocolo
 experimental y su implementación. En los dos casos la vuelta pasa por una compuerta
-que **vos** abrís: el código propone la corrección, nunca la publica.
+que **abres tú**: el código propone la corrección, nunca la publica.
 
 *Las cuatro de en medio son dos pares sobre dos motores.* La 2 y la 6 comparten un
 motor de deliberación; la 3 y la 7, un motor de implementación. Lo único que cambia
@@ -674,19 +674,19 @@ para que el resto de la forja pueda **leer** el paper en vez de intentar
 descifrarlo. Todo corre localmente: sin claves, sin servicio externo.
 
 **De dónde recibe y a quién le entrega.** Es el principio de la cadena: lo único que
-recibe son los PDFs que vos dejás en `guidance/`. Lo que entrega tiene una
+recibe son los PDFs que dejas en `guidance/`. Lo que entrega tiene una
 consecuencia que conviene entender antes de usarla:
 
-- `guidance/paper-guide/` — lo que cae acá es lo que `proposal-deliberation` carga
+- `guidance/paper-guide/` — lo que cae aquí es lo que `proposal-deliberation` carga
   **automáticamente**, desde la constante `GUIDE_DIRECTORY = "guidance/paper-guide"`
   de su motor. Pero lo carga **una sola vez en toda la vida de la propuesta**: en la
   creación de la v1, y nunca más.
 - `guidance/reference-papers/` — corpus de consulta. **Nunca se carga solo.** Está
-  ahí para que vos o el agente lo lean cuando haga falta.
+  ahí para que tú o el agente lo lean cuando haga falta.
 
-> **El orden importa, y esto no es obvio.** Si ingerís un paper guía **después** de
+> **El orden importa, y esto no es obvio.** Si ingieres un paper guía **después** de
 > haber creado la v1 de la propuesta, ese paper ya no entra por esa vía: la carga es
-> irrepetible por diseño. Ingerí primero, deliberá después.
+> irrepetible por diseño. Ingiere primero, delibera después.
 
 **Qué necesita antes.** Una única preparación por máquina: correr
 `./.claude/skills/paper-ingestion/setup.sh`. Es idempotente y hace dos cosas:
@@ -695,10 +695,10 @@ el entorno virtual con `marker-pdf` adentro. La primera ingesta real descarga lo
 modelos (~1,5 GB) y los cachea; de ahí en más funciona offline.
 
 **Las etapas que declara.** El flujo no es la lista de comandos: es lo que cada
-etapa deja establecido, y cuándo podés darla por superada. Esta tabla está leída
+etapa deja establecido, y cuándo puedes darla por superada. Esta tabla está leída
 de `OBJECTIVE_FLOW` en el script, que un test mantiene igual al `SKILL.md`.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `filed` | El PDF está dentro de una carpeta temática propia — eso es lo que lo vuelve un paper y no una descarga | deja de aparecer entre los sueltos |
 | `extracted` | El Markdown existe al lado, con sus figuras escritas como archivos en vez de quedar dentro de la página | la carpeta del paper tiene el documento y sus imágenes |
@@ -734,7 +734,7 @@ división existe para que exista un momento de consentimiento.
 4. El agente te pregunta **cuáles** ingerir, como selección múltiple. Esta regla vive
    en `SKILL.md`, no en el script: el script no tiene mecanismo de consentimiento. La
    división en dos comandos es lo que hace posible que exista el paso de aprobación.
-5. Si no aprobás nada, se termina ahí. Nada se movió.
+5. Si no apruebas nada, se termina ahí. Nada se movió.
 
 *Fase 3 — Ejecutar:*
 
@@ -753,7 +753,7 @@ división existe para que exista un momento de consentimiento.
 *Reingerir:* no hay bandera de "forzar" ni archivo de estado. La idempotencia es
 puramente estructural: un PDF está *suelto* cuando el nombre de su carpeta padre no
 coincide con su propio nombre. Una vez que vive en `<nombre>/<nombre>.pdf`, dejó de
-estar suelto y nadie lo vuelve a tocar. **Para reingerir, borrás la carpeta del
+estar suelto y nadie lo vuelve a tocar. **Para reingerir, borras la carpeta del
 paper** y el PDF vuelve a quedar suelto para la próxima corrida.
 
 **Los módulos.**
@@ -775,7 +775,7 @@ de un PDF sin tema).
 
 ```
 guidance/reference-papers/<nombre>/
-├── <nombre>.pdf              el PDF original, movido acá al final
+├── <nombre>.pdf              el PDF original, movido aquí al final
 ├── <nombre>.md               texto + LaTeX + tablas, sin bibliografía
 └── _page_4_Figure_2.jpeg     las figuras que el .md referencia
 ```
@@ -797,7 +797,7 @@ Claves que respeta de `papersmith.yaml`, bajo el bloque `paper_ingestion:`: `eng
   convertiría permanentemente en una "carpeta temática" propia.
 - **Sólo revierte lo que creó.** Una carpeta que ya existía nunca se borra.
 
-**Limitaciones conocidas.** Ninguna abierta hoy. La que figuraba acá
+**Limitaciones conocidas.** Ninguna abierta hoy. La que figuraba aquí
 —`.claude/agents/paper-ingestion.md` describía una interfaz que el script no tiene:
 `--output-dir`, `--force`, un manifiesto versionado y extracción con PyMuPDF— **ya no
 aplica**: esa definición se corrigió y hoy sólo nombra la skill y delega el contrato en
@@ -849,7 +849,7 @@ flowchart TD
 largo: se discute una idea, se corrige una ecuación, se reordena una sección. El
 riesgo es que en ese ida y vuelta un modelo reescriba una ecuación "de paso", sin que
 nadie lo note. Esta skill hace dos cosas a la vez: convierte al agente en tutor
-matemático que discute con vos, y pone un motor determinista entre esa discusión y el
+matemático que discute contigo, y pone un motor determinista entre esa discusión y el
 archivo, para que **nada cambie salvo lo que aprobaste**.
 
 **De dónde recibe y a quién le entrega.**
@@ -861,7 +861,7 @@ no se los pasa. Para cualquier revisión que ya existe, esa carga **no se repite
 verdadera de la v1.
 
 *Recibe de `proposal-implementation`:* correcciones. Cuando la implementación
-encuentra un defecto en la matemática y lo valida, vuelve acá a publicarlo. Pero
+encuentra un defecto en la matemática y lo valida, vuelve aquí a publicarlo. Pero
 **entra por la puerta normal**, sin atajo: ubica la sección, arma el reemplazo, y pasa
 por la misma vista previa, la misma puerta de integridad matemática y la misma
 auditoría que cualquier otro cambio. Que la corrección venga de una medición no la
@@ -870,7 +870,7 @@ exime de nada.
 *Le entrega a todo el resto:* dos cosas. El archivo publicado
 (`proposals/research-concept-rNN.md`) y —tanto o más importante— la operación
 `STATUS`, que es de dónde **toda la forja** saca la respuesta a "cuál es la revisión
-vigente". Nadie mira el directorio a ojo. Esa es una regla dura, y existe porque el
+vigente". Nadie inspecciona el directorio a simple vista. Esa es una regla dura, y existe porque el
 listado del directorio puede mostrar archivos que el motor considera inválidos.
 
 **Qué necesita antes.** Nada más que Node. No usa claves de API ni llama a ningún
@@ -881,10 +881,10 @@ conversación — por eso el motor no necesita uno propio.
 `profile.ts`, que un test mantiene igual al `SKILL.md`. `STATUS` las reporta
 arriba del inventario, y las dos rutas de error del motor también las llevan.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `bound` | Cuál revisión es la actual y cuál entrada de ella toca el cambio | `STATUS` nombró la última y el objetivo resolvió a una entrada |
-| `deliberated` | El cambio se **discutió**, no se tipeó | **lo dijiste vos** — acá nada lo mide, y nada puede medirlo |
+| `deliberated` | El cambio se **discutió**, no se tipeó | **lo dijiste tú** — aquí nada lo mide, y nada puede medirlo |
 | `composed` | El reemplazo existe escrito COMO matemática —la ecuación, con su tag— y no como una descripción de ella | existe un bloque que lleva la ecuación y el tag donde aterriza |
 | `published` | La sucesora existe con el marcador del artefacto y es la revisión actual | es la llegada; no está detrás de nadie |
 
@@ -893,7 +893,7 @@ que viaja la matemática.
 
 **`deliberated` es la parada de una persona, y es deliberado que no se pueda
 medir.** El motor puede comprobar que existe un bloque; no puede comprobar que
-lo discutiste. Por eso esa etapa avanza sólo cuando vos lo decís.
+lo discutiste. Por eso esa etapa avanza sólo cuando lo dices.
 
 **El flujo, paso a paso.**
 
@@ -909,7 +909,7 @@ lo discutiste. Por eso esa etapa avanza sólo cuando vos lo decís.
    que nombre un lugar sería ambigua. Con una sola oración se niega en el acto
    (`INITIAL_IDEA_SINGLE_SENTENCE`) y no escribe nada. Una oración termina en `.`, `!`
    o `?`; un salto de línea no alcanza. El motor
-   carga los papers de `guidance/paper-guide/` **una sola vez** —acá y nunca más—,
+   carga los papers de `guidance/paper-guide/` **una sola vez** —aquí y nunca más—,
    redacta el documento a partir de tu idea, toma un candado único de proyecto (para
    que dos ideas en paralelo no puedan crear dos v1) y escribe
    `proposals/research-concept-r01.md`. La v1 se publica directo: no hay nada previo
@@ -917,23 +917,23 @@ lo discutiste. Por eso esa etapa avanza sólo cuando vos lo decís.
 4. **Deliberar.** Con una revisión ya existente, la discusión pasa **en la
    conversación**, no en el motor. El agente propone, refuta, exige necesidad
    matemática antes de formalizar. El motor no se entera de nada de esto, y así debe
-   ser: el estado de la charla vive donde vos podés verlo.
+   ser: el estado de la charla vive donde puedes verlo.
 5. **Ubicar el cambio.** Cuando algo queda aprobado hay que decirle al motor *dónde*
    aplica. Se lo nombra con palabras del encabezado, y el motor las puntúa contra la
    estructura real del documento. Si los dos mejores candidatos quedan demasiado
    cerca, **se bloquea y pregunta** en vez de elegir. Nunca adivina.
 6. **Vista previa.** El agente arma la decisión concreta —`replace`, `insert`,
-   `delete`, `move` o `copy`— y pide el sucesor. Acá el motor **no publica**: compila
+   `delete`, `move` o `copy`— y pide el sucesor. Aquí el motor **no publica**: compila
    el documento candidato pegando los bytes aprobados en el offset exacto, lo revalida
    entero, y devuelve un token de un solo uso junto con —lo importante— la lista de
    **qué matemática desaparecería**.
 7. **La puerta.** El agente te muestra en castellano llano cada ecuación, cada `\tag`
-   y cada cita `(Ec. N)` que se perdería. Vos confirmás. Recién ahí se reenvía la
+   y cada cita `(Ec. N)` que se perdería. Tú confirmas. Solo entonces se reenvía la
    misma operación con el token y con cada pérdida reconocida por nombre. Si falta una
    sola, se rechaza y no se escribe nada.
 8. **Publicar.** El motor vuelve a leer el archivo fuente, verifica que su hash no
    cambió desde el paso 6, aplica los parches, valida el resultado, verifica el fuente
-   **una segunda vez** justo antes de escribir, y recién entonces escribe
+   **una segunda vez** justo antes de escribir, y solo entonces escribe
    `research-concept-r<N+1>.md` de forma atómica.
 9. **Contabilidad.** Reconstruye los índices derivados y escribe un **recibo** con el
    sha256 del documento antes y después.
@@ -958,12 +958,12 @@ La `r01` no se puede retirar nunca, ni tampoco una revisión que tenga descendie
 | Aplicación de bytes | `patch-compiler.ts`, `successor-composite-engine.ts`, `ambient-supplied-planner.ts` | Pegan el texto aprobado en el offset exacto y verifican, por separado, que todo lo que quedó afuera del cambio siga idéntico. |
 | Puerta de preservación | `preservation.ts` (neutral) + `proposal-deliberation/preservation-math.ts` (extractor matemático) | Enumera los átomos que el perfil del dominio reconoce (para matemática: ecuaciones, `\tag`, macros y citas) antes y después. Reporta lo perdido, y **bloquea por su cuenta** ante violaciones de forma canónica: `$$` desbalanceado, delimitadores `\(...\)`, un símbolo Unicode de matemática metido adentro de un `$...$`. |
 | Validación del candidato | `candidate-validator.ts` | Re-parsea el documento entero resultante: Markdown bien formado, etiquetas únicas, referencias que resuelven, símbolos sin conflicto, bytes de afuera intactos. |
-| Auditoría | `consistency-audit.ts`, `self-audit.ts` | Recalculan el sha256 de cada revisión y lo cruzan contra su manifiesto y su recibo. De acá salen `RECEIPT_SHA_MISMATCH`, `ORPHAN_STATE` y compañía. |
+| Auditoría | `consistency-audit.ts`, `self-audit.ts` | Recalculan el sha256 de cada revisión y lo cruzan contra su manifiesto y su recibo. De aquí salen `RECEIPT_SHA_MISMATCH`, `ORPHAN_STATE` y compañía. |
 | Recibos y estado | `revision-receipt.ts`, `derived-state-store.ts`, `derived-state-builder.ts` | Escriben y releen la contabilidad: qué se publicó, desde qué, con qué hash. |
 | Ciclo de vida | `revision-lifecycle-store.ts`, `revision-lifecycle-transaction.ts` | Retiro y restauración transaccionales, con reversión en orden inverso si algo falla a mitad. |
 | Concurrencia | `mutation-lock.ts` | Impide dos publicaciones simultáneas sobre el mismo archivo. |
 | Token de aceptación | `successor-acceptance-registry.ts` | Ata una vista previa a su aceptación. Vive en memoria, es de un solo uso y muere con el proceso: no se puede aceptar mañana una previa de hoy. |
-| Agente delegado | `.claude/agents/deliberation-publish.md` | El tramo **terminal**, y arranca recién después de que vos aceptaste: resuelve la entrada, compone el reemplazo sustituyendo **adentro** de ella en vez de devolver un bloque pelado, y publica. `Read`, `Bash`, `Glob`, `Grep` — **sin `Write` ni `Edit`**, porque sólo el motor escribe. La deliberación misma no está en su tramo y no puede estarlo: eso no lo cierra nada más que vos. |
+| Agente delegado | `.claude/agents/deliberation-publish.md` | El tramo **terminal**, y arranca solo después de que aceptaste: resuelve la entrada, compone el reemplazo sustituyendo **adentro** de ella en vez de devolver un bloque pelado, y publica. `Read`, `Bash`, `Glob`, `Grep` — **sin `Write` ni `Edit`**, porque sólo el motor escribe. La deliberación misma no está en su tramo y no puede estarlo: eso no lo cierra nadie más que tú. |
 
 **Qué escribe en el disco.**
 
@@ -988,21 +988,21 @@ proposals/research-concept-rNN.md           la revisión, con un marcador de art
 - **Falla cerrado.** Una operación desconocida se rechaza; no cae al camino por
   defecto.
 
-**Limitaciones conocidas.** Vienen en tres grupos, y no las cuento acá a propósito: un
+**Limitaciones conocidas.** Vienen en tres grupos, y no las cuento aquí a propósito: un
 número escrito a mano al lado de una lista envejece la primera vez que alguien agrega una,
 y este documento ya tuvo tres casos así. Primero las del **motor de edición** —qué pasa,
-qué podés hacer igual, qué no, y cómo se arreglaría—; después las del **alcance de las
+qué puedes hacer igual, qué no, y cómo se arreglaría—; después las del **alcance de las
 garantías**, o sea qué es lo que esta skill, medida, no puede afirmar; y al final las del
 **motor compartido**, que valen igual para el otro dominio que lo usa.
 
-*La consulta que ubica un cambio es sensible a cómo la escribís.* Para aplicar un
+*La consulta que ubica un cambio es sensible a cómo la escribes.* Para aplicar un
 cambio hay que decirle a qué sección apunta. Esa consulta se compara **por substring
 contra la línea del encabezado**, y eso tiene dos filos. Las **tildes cuentan**:
 `Normalizacion terminos adaptacion` no encuentra `## 5. Normalización de los términos
 de adaptación`, aunque sea la misma frase. Solo molesta cuando la palabra acentuada es
 justo la que distingue: si quedan otras palabras distintivas sin tilde, resuelve
 igual. Y la consulta se **corta en el primer signo de puntuación**, así que `Sección
-3. Formulación…` se reduce a `3` antes de buscar nada. **Qué podés hacer:** escribir
+3. Formulación…` se reduce a `3` antes de buscar nada. **Qué puedes hacer:** escribir
 la consulta como **palabras distintivas del encabezado**, sin puntuación, sin el
 número de sección, y con las tildes tal como están escritas. `Normalización términos
 adaptación` funciona; la frase completa con puntuación, no. Las palabras vacías (`de`,
@@ -1013,16 +1013,16 @@ lados, y quedándose con la consulta completa en vez de cortarla en la puntuaci�
 la sección se busca con un puntuador distinto al de las ediciones normales: ese mira el
 **cuerpo entero** de cada entrada, no solo su encabezado. Como los párrafos de una
 sección contienen las mismas palabras que su título, la sección y sus propios párrafos
-empatan y la operación se bloquea pidiéndote que desambigües. **Qué podés hacer y qué
+empatan y la operación se bloquea pidiéndote que desambigües. **Qué puedes hacer y qué
 no:** se bloquea, no se equivoca — nunca vas a mover algo distinto de lo que pediste
-sin enterarte. Para desambiguar, nombrá el bloque concreto que querés mover en vez de
+sin enterarte. Para desambiguar, nombra el bloque concreto que quieres mover en vez de
 la sección completa. **Cómo se arregla:** haciendo que `move`/`copy` puntúe la línea
 del encabezado, igual que ya lo hacen las ediciones normales.
 
 *Un cambio se aplica sobre la sección completa.* La unidad mínima que se puede apuntar
 es una sección `##`. Para corregir una sola ecuación, la skill entrega la sección
 entera reescrita. Nada dentro de esa sección está protegido byte a byte: la garantía de
-bytes idénticos cubre lo que queda **fuera** del cambio. **Qué podés hacer y qué no:**
+bytes idénticos cubre lo que queda **fuera** del cambio. **Qué puedes hacer y qué no:**
 lo que sí protege lo de adentro es la puerta de integridad matemática — antes de
 publicar, la skill te lista cada ecuación, cada símbolo, cada `\tag` y cada cita `(Ec.
 N)` que existía antes y ya no está, y **no publica** hasta que esa desaparición se
@@ -1034,13 +1034,13 @@ contiene.
 *Mover contenido al lugar equivocado no lo detecta nadie.* La puerta de integridad
 matemática compara qué había antes y qué hay después. Un `move` que se lleva el bloque
 equivocado **no pierde** matemática: la reubica intacta. Como no falta nada, la puerta
-no tiene nada que objetar. **Qué podés hacer y qué no:** el riesgo real bajó bastante
+no tiene nada que objetar. **Qué puedes hacer y qué no:** el riesgo real bajó bastante
 —hoy una consulta ambigua se bloquea en vez de resolver a lo que no era— pero aun así,
-revisá el resultado de un `move` antes de seguir construyendo encima. **Cómo se
+revisa el resultado de un `move` antes de seguir construyendo encima. **Cómo se
 arregla:** comparando también **dónde** está cada bloque, no solo si sigue existiendo.
 
-*Editar una revisión publicada a mano rompe la auditoría.* Abrís
-`proposals/research-concept-r14.md` en el editor, corregís una palabra, guardás. La
+*Editar una revisión publicada a mano rompe la auditoría.* Abres
+`proposals/research-concept-r14.md` en el editor, corriges una palabra, guardas. La
 próxima operación de la skill reporta `auditStatus: FAIL` y no te deja seguir. **Por
 qué:** cada publicación deja un recibo en `.proposal-deliberation/receipts/` con el
 sha256 del documento. Antes de cualquier operación, la auditoría relee el archivo, lo
@@ -1048,12 +1048,12 @@ vuelve a hashear y exige que sea byte-idéntico a lo que el motor publicó
 (`consistency-audit.ts`, `RECEIPT_SHA_MISMATCH`). Una palabra distinta cambia el hash y
 el recibo deja de respaldar nada. **No es un defecto: es la garantía funcionando.** Sin
 recibos el motor no puede afirmar que una revisión sea lo que dice ser, y el linaje
-byte-exacto se queda sin respaldo. Sacarlos no es una opción. **Qué podés hacer:** hoy,
-o revertís la edición manual hasta que el archivo vuelva a coincidir, o reconciliás el
+byte-exacto se queda sin respaldo. Sacarlos no es una opción. **Qué puedes hacer:** hoy,
+o reviertes la edición manual hasta que el archivo vuelva a coincidir, o reconcilias el
 recibo a mano. Lo segundo es delicado y conviene evitarlo: un recibo actualizado sin
 cuidado deja al linaje afirmando algo que nadie comprobó. **Cómo se arregla:** con una
 operación de re-base autorizada —algo como `ADOPT_MANUAL_EDIT`: *"edité esta revisión a
-propósito, adoptá los bytes actuales como nueva línea base"*— que actualice el recibo
+propósito, adopta los bytes actuales como nueva línea base"*— que actualice el recibo
 tras confirmación explícita. Con eso, editar a mano dejaría de ser una ruptura y
 pasaría a ser un acto declarado.
 
@@ -1062,7 +1062,7 @@ la forja ninguna barrera que frene a alguien —o a un agente— que abra un arc
 gestionado y lo escriba por afuera del motor. `.claude/settings.json` tiene **un solo**
 hook `PreToolUse` (`refuse_offpath_push.py`, con matcher `Bash`, y es de
 `remote-execution`, no de esta skill), y su clave `permissions` **no tiene ninguna
-entrada `deny`**. **Qué significa para vos:** todo lo que esta skill opone a una edición
+entrada `deny`**. **Qué significa para ti:** todo lo que esta skill opone a una edición
 manual llega después del hecho — la auditoría del punto anterior te avisa en la
 operación siguiente, con los bytes ya escritos. **Qué no cubre:** el momento de la
 escritura, ni nada de lo que pase entre esa escritura y la próxima vez que alguien
@@ -1078,7 +1078,7 @@ rango de bytes— como una defensa contra una edición manual. **No lo es.**
 el disco, y sólo usa el guardado si valida contra ese mismo documento; si no valida —que
 es exactamente lo que pasa después de una edición a mano— lo **sobrescribe en silencio**
 con la reconstrucción fresca. Ningún error, ningún reporte, nada que llegue a quien
-llamó. **Qué significa para vos:** el estado guardado no contradice una edición manual;
+llamó. **Qué significa para ti:** el estado guardado no contradice una edición manual;
 se acomoda a ella. **Qué no cubre:** `consistency-audit.ts` tiene un
 `MANIFEST_SHA_MISMATCH`, pero no hay ninguna operación que puedas invocar para
 preguntarlo, y para cuando la auditoría corre el caché ya se curó. Lo que de verdad nota
@@ -1091,12 +1091,12 @@ arregla:** haciendo que el caché, cuando no valida, lo diga antes de curarse.
 
 *El estado no sobrevive a un clon.* `.proposal-deliberation/` es una entrada de
 `.gitignore` (línea 40), así que nada de lo que hay adentro —ni los índices, ni los
-recibos, ni la cuarentena— viaja en un clon nuevo. **Qué significa para vos:** un clon
+recibos, ni la cuarentena— viaja en un clon nuevo. **Qué significa para ti:** un clon
 fresco arranca sin contabilidad y la reconstruye a partir de los bytes que encuentra en
 `proposals/`, aceptándolos tal como están. Si esos bytes venían editados a mano, el clon
 no tiene contra qué notarlo: para él ese es el documento, y la auditoría cierra. **Qué
 no cubre:** la verificación byte a byte es una propiedad **de la máquina donde se
-publicó**, no del repositorio. Un linaje verificado acá no llega verificado allá. **Cómo
+publicó**, no del repositorio. Un linaje verificado aquí no llega verificado allá. **Cómo
 se arregla:** no está decidido. Habría que separar qué mitad de esa contabilidad es
 historia del proyecto y cuál es estado de máquina, y versionar sólo la primera. Por
 ahora está anotado, no resuelto.
@@ -1105,7 +1105,7 @@ ahora está anotado, no resuelto.
 base y con qué hash. Lo que no deja —ni puede dejar— es constancia de que la
 confirmación de la puerta la haya dado una persona: el token de aceptación es de un solo
 uso y ata una vista previa a su aprobación, pero lo consume quien llame al motor, y el
-agente que armó la vista previa puede llamarlo. **Qué significa para vos:** una decisión
+agente que armó la vista previa puede llamarlo. **Qué significa para ti:** una decisión
 registrada prueba que llegó al registro, nunca que alguien la tomó. Un agente puede
 abrir la pregunta y contestársela solo, y nadie más adelante en la cadena puede
 distinguir ese caso del otro. **Qué no cubre:** cualquier lectura del registro como
@@ -1189,12 +1189,12 @@ están validadas, y que sus informes dicen lo que los números dicen.
 Es la costura más importante de la forja, va en los dos sentidos, y **se comporta
 distinto en cada uno de los dos flujos**. Vale la pena verla entera antes que nada.
 
-**De deliberación hacia acá, tres cosas distintas entran:**
+**De deliberación hacia aquí, tres cosas distintas entran:**
 
 1. **Cuál es la revisión vigente.** Paso 1 de **los dos** flujos, sin excepción:
    `node .claude/skills/proposal-deliberation/cli.mjs '{ "operation": "STATUS" }'`
    → se toma `latest`. La skill **nunca adivina la base y nunca mira `proposals/` a
-   ojo**.
+   simple vista**.
 2. **El texto de la revisión.** El motor sí lee el archivo: `revision_source()` lo
    levanta del directorio de propuestas. Lo usa para juzgar **admisibilidad**: cada
    hallazgo declara qué notación *usa* —que tiene que aparecer textualmente en la
@@ -1208,7 +1208,7 @@ distinto en cada uno de los dos flujos**. Vale la pena verla entera antes que na
    escribió, y ese string tiene que ser igual a `latest`. Ese sello es lo que hace que
    la deriva sea **medible** en vez de opinable.
 
-**De acá hacia deliberación, una sola vía, y con compuerta:** cuando la auditoría
+**De aquí hacia deliberación, una sola vía, y con compuerta:** cuando la auditoría
 encuentra un defecto real en la matemática y lo valida, la corrección vuelve al
 documento. Detrás de una autorización explícita, esta sesión **maneja el motor de
 deliberación**: `handoff` dimensiona cada hallazgo, se ubica la entrada, `compose` arma
@@ -1219,7 +1219,7 @@ matemática y la misma auditoría que cualquier otro cambio.
 
 **Y ahora lo que distingue a los dos flujos.** La skill enruta por **existencia, no por
 fidelidad**: mira si `src/` tiene una implementación, y nada más. Eso es deliberado —
-preguntar por fidelidad acá mandaría un repositorio atado a `r14`, con `latest` en
+preguntar por fidelidad aquí mandaría un repositorio atado a `r14`, con `latest` en
 `r16`, a una primera pasada completa, reimplementando desde cero algo que sólo necesita
 ponerse al día. **La deriva es el cuarto paso del flujo B, no una razón para empezar de
 nuevo.**
@@ -1235,12 +1235,12 @@ Ese último renglón importa: **el flujo A desemboca en el flujo B**. Terminar e
 que la respuesta dependa de cómo llegaste en vez de qué hay en el repositorio.
 
 **Y la compuerta más importante de toda la skill está en el flujo B**, cuando la
-fidelidad no da: se te pregunta **si esos cambios los hiciste vos**.
+fidelidad no da: se te pregunta **si esos cambios los hiciste tú**.
 
-- **Los hiciste vos** → el código va *adelante* de la propuesta. Se te recuerda
+- **Los hiciste tú** → el código va *adelante* de la propuesta. Se te recuerda
   actualizar la matemática y se te entrega el prompt que lo hace. **Nunca se edita tu
   código para que coincida con una propuesta vieja.**
-- **No los hiciste vos** → el código derivó. Se corrige y se revalida, con un tope de
+- **No los hiciste tú** → el código derivó. Se corrige y se revalida, con un tope de
   tres pasadas.
 
 Con un matiz fino que evita trabajo inventado: el reporte de deriva cruza qué secciones
@@ -1266,10 +1266,10 @@ reporta un conteo. De ese pliegue sale el peldaño `poll-first`.
 de `OBJECTIVE_FLOW`, que un test mantiene igual al `SKILL.md`, y son
 deliberadamente **independientes de lo que haya en disco**: tienen que leerse
 igual en un repositorio vacío que en uno a mitad de campaña. Existen para el
-momento en que algo se rompe — una sesión que choca con un error se ubica acá,
+momento en que algo se rompe — una sesión que choca con un error se ubica aquí,
 resuelve lo que la bloquea y se reengancha, en vez de improvisar hacia adelante.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `standing` | Un repositorio donde escribir la matemática: aislado bajo `implementations/`, con intérprete propio, con la disposición que esta skill espera, los destinos del kit materializados, y **aprobado el mapa** de objeto matemático a módulo | `structure` no reporta huecos de andamiaje y la declaración del benchmark lleva la revisión y las premisas con las que se aprobó el mapa — que es lo que `materialize --stage objects` se niega a hacer sin ellas |
 | `fidelity` | El código dice lo que dice la revisión ligada, y cada afirmación lleva un invariante con su test | `fidelity` está limpio y la suite propia del destino está verde bajo su propio intérprete |
@@ -1297,20 +1297,20 @@ saltear — las dos cosas están mal.
 `verify` alcanza el adaptador de `remote-execution`, que evalúa `tuple[int, int] | None` al
 importar, y el comando muere con un `TypeError` en vez de negarse. Peor: `main()` anota esa
 excepción como un defecto abierto, y un defecto abierto niega otros ocho comandos hasta que
-alguien lo cierre. No se cuentan acá a propósito: un número escrito a mano al lado de un
+alguien lo cierre. No se cuentan aquí a propósito: un número escrito a mano al lado de un
 roster que la máquina publica envejece la primera vez que alguien agrega un comando, y esta
 tabla decía nueve cuando ya eran veinte.
 
 | Comando | Qué hace |
 |---------|----------|
-| `env` | Crea y verifica el entorno virtual **del repositorio destino** (se niega si lo corrés desde un intérprete de la forja). Reporta también el estado de los punteros de Git LFS — acá, porque es el primer comando después de un clon, justo cuando un repositorio lleno de marcadores parece completo. |
+| `env` | Crea y verifica el entorno virtual **del repositorio destino** (se niega si lo ejecutas desde un intérprete de la forja). Reporta también el estado de los punteros de Git LFS — aquí, porque es el primer comando después de un clon, justo cuando un repositorio lleno de marcadores parece completo. |
 | `name` | Función pura, sin repositorio. Normaliza lo que escribiste a la forma de carpeta `<Name>/` y a la forma importable `src/<Package>/`. **Rechaza cualquier carácter que no sea ASCII alfanumérico** (`NAME_NOT_ALPHANUMERIC`, nombrando el carácter): antes esos caracteres se caían en silencio y el nombre salía mutilado — `Ñandú` daba `And`. Separadores y camelCase siguen funcionando igual. |
 | `plan` | Plan de migración de **sólo lectura**: qué se renombra, qué se mueve, qué directorios faltan, qué referencias hay que reescribir, qué conflictos hay y qué archivos no sabe clasificar. Se niega sobre un árbol sucio. |
 | `apply` | Ejecuta un plan **ya aprobado** como un único commit atómico. Revalida que el plan no haya quedado viejo; ante cualquier falla revierte duro y reporta. Nunca deja un árbol a medio migrar. |
 | `admit` | Decide la **admisibilidad** de una corrección antes de medir si funciona: comprueba contra el texto de la revisión que la notación que cita exista de verdad. El veredicto se escribe en el destino; el texto de la propuesta se queda en la forja. |
 | `handoff` | Mide cuánto alcance tiene cada hallazgo dentro del documento y decide si se puede resolver en el momento o si merece su propia sesión de deliberación. |
 | `compose` | Arma el texto de reemplazo para llevar una corrección de vuelta a la propuesta, empatando por el `\tag{n}` de la ecuación. |
-| `probe` | Informe de sólo lectura de qué falta para poder correr el benchmark. Acá vive la escalera de `nextStep`. |
+| `probe` | Informe de sólo lectura de qué falta para poder correr el benchmark. Aquí vive la escalera de `nextStep`. |
 | `verify` | El gran lector estático: cumplimiento del layout, fidelidad a la revisión, integridad del trabajo previo, acuerdos, prosa desactualizada, declaraciones de búsqueda, estado de la ejecución remota, contrato del informe, auditoría y escalera de validación. Todo en un solo JSON. |
 
 **Las dos fases.** Están separadas a propósito:
@@ -1321,9 +1321,9 @@ tabla decía nueve cuando ya eran veinte.
    leer de verdad, se niega a aplicarla directo y te la entrega como trabajo para una
    sesión aparte — porque una lista así de larga se aprueba sin leerla, y una
    aprobación sin lectura no es una aprobación. Lo que cuenta son las decisiones que
-   vos leés, no los archivos arrastrados: renombrar una carpeta de doscientos archivos
+   lees tú, no los archivos arrastrados: renombrar una carpeta de doscientos archivos
    es **una** línea para leer y **un** comando para deshacer.
-2. **Materialización.** Recién entonces se escribe la matemática, con aprobación
+2. **Materialización.** Solo entonces se escribe la matemática, con aprobación
    humana en cada bisagra: el mapa de objeto a módulo, el nombre, y la autorización
    para implementar.
 
@@ -1400,8 +1400,8 @@ igual.
 | `assets/kit/nb/benchmark.py` | Entrena las dos implementaciones bajo una misma reducción acotada. Se niega a correr bajo un intérprete ajeno —porque el tiempo de pared y la memoria pico **son** la medición— y se niega a correr sin cableado declarado. |
 | `assets/kit/nb/verdict.py` | La lógica de juicio: sólo concede un ganador cuando las medias difieren más que el error estándar combinado, y por debajo de tres repeticiones **no da veredicto**, sólo imprime una estimación puntual. |
 | `assets/kit/nb/report_digest.py` | Hashea todo `src/` en un sello que el informe imprime y que `verify` recalcula, para poder probar que un informe está atado al código exacto que lo produjo. |
-| `.claude/agents/implementation-build.md` | El tramo **entre dos compuertas tuyas**: del mapa objeto-a-módulo aprobado al informe de hallazgos que vos decidís. Materializa el andamiaje, escribe un módulo por objeto matemático con su procedencia y sus tests de invariante, barre las configuraciones declaradas, y **falla sobre la admisibilidad de cada remedio ANTES de medirlo**. `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. No decide ni pregunta: termina reportando qué encontró y cuánto costó establecerlo. |
-| `.claude/agents/implementation-walk.md` | El tramo **de las colocaciones ya decididas al lanzamiento que vos tenés que autorizar**: camina el flujo declarado acto por acto en su propio orden, corre los pasos locales, commitea el producto de cada uno, refresca la posición, y genera las carpetas de trabajo que un paso remoto necesita. `Read`, `Bash`, `Glob`, `Grep` — sin `Write`. **Se detiene en el lanzamiento y no tiene camino para enviar una campaña**, ni para ejecutar un ensayo: ningún acto del motor realiza un ensayo, y `walk` dejó de prometerlo — se detiene ahí y te dice que lo corras a mano, que es lo que la doctrina prescribió siempre. |
+| `.claude/agents/implementation-build.md` | El tramo **entre dos compuertas tuyas**: del mapa objeto-a-módulo aprobado al informe de hallazgos que decides. Materializa el andamiaje, escribe un módulo por objeto matemático con su procedencia y sus tests de invariante, barre las configuraciones declaradas, y **falla sobre la admisibilidad de cada remedio ANTES de medirlo**. `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. No decide ni pregunta: termina reportando qué encontró y cuánto costó establecerlo. |
+| `.claude/agents/implementation-walk.md` | El tramo **de las colocaciones ya decididas al lanzamiento que tienes que autorizar**: camina el flujo declarado acto por acto en su propio orden, corre los pasos locales, commitea el producto de cada uno, refresca la posición, y genera las carpetas de trabajo que un paso remoto necesita. `Read`, `Bash`, `Glob`, `Grep` — sin `Write`. **Se detiene en el lanzamiento y no tiene camino para enviar una campaña**, ni para ejecutar un ensayo: ningún acto del motor realiza un ensayo, y `walk` dejó de prometerlo — se detiene ahí y te dice que lo corras a mano, que es lo que la doctrina prescribió siempre. |
 | `walk` | Camina el flujo declarado hacia el rung al que apunta el encabezado de posición. Ejecuta los pasos locales, commitea el producto de cada uno y genera las carpetas de trabajo que un paso remoto necesita. **Se detiene en el lanzamiento**, y también en un ensayo: ningún acto del motor realiza uno. |
 | `step` | Corre **un** paso local declarado, aislado, bajo el venv del propio destino. Nunca el intérprete de la forja. |
 | `position` | El único escritor de la sección de posición de `<Name>/AGREED.md`. Marca qué se midió, qué falta y qué quedó sin medir, y ata cada marca a la revisión y a su sha256 — porque una revisión puede reescribirse en su lugar bajo el mismo nombre de archivo, y sólo el hash lo detecta. |
@@ -1476,8 +1476,8 @@ página de GitHub con el botón de descarga **cuesta exactamente lo mismo**. Git
 todas las descargas contra el ancho de banda del dueño del repositorio, por cualquier
 vía — el comando, el navegador, y hasta el zip del código fuente si contiene esos
 objetos. La franquicia gratuita es de 1 GiB por mes. No hay ruta que la evite, y creer
-que la hay es la forma más común de gastarse el mes sin querer. **Qué podés hacer antes
-de gastarla:** mirá lo que `probe` reporta bajo `acquisition` — el material que el
+que la hay es la forma más común de gastarse el mes sin querer. **Qué puedes hacer antes
+de gastarla:** mira lo que `probe` reporta bajo `acquisition` — el material que el
 repositorio se baja, clona o desempaqueta **por su cuenta** no cuesta cuota, y lo que
 salió de un entrenamiento se vuelve a producir entrenando. La cuota se gasta sólo en lo
 que de verdad no existe en ningún otro lado. **Qué no hace:** no puede impedir que un
@@ -1489,14 +1489,14 @@ conservadora.
 *Una corrida larga en esta máquina es invisible mientras corre.* `probe` sabe decir
 que hay una submisión afuera cuya respuesta no volvió —es el peldaño `poll-first`— y lo
 puede decir porque `remote-execution` mantiene un registro append-only que la forja lee.
-Consultás en mitad de un envío, te lo dice, y te vas a hacer otra cosa. **Por qué en
+Consultas en mitad de un envío, te lo dice, y te vas a hacer otra cosa. **Por qué en
 local no pasa lo mismo:** una corrida en tu propia máquina deja lo que el repositorio
 destino haya decidido dejar —un parcial, un checkpoint, un lock— con un nombre que sólo
 ese repositorio conoce, y mirarlo obligaría a cablear el vocabulario de un paper dentro
-de una herramienta que tiene que servir a todos. **Qué pasa entonces:** lanzás una
-búsqueda o una campaña larga, consultás mientras corre, y `verify` lee que el registro
+de una herramienta que tiene que servir a todos. **Qué pasa entonces:** lanzas una
+búsqueda o una campaña larga, consultas mientras corre, y `verify` lee que el registro
 declarado no existe — reporta el trabajo como no empezado y `probe` te ofrece lanzarlo
-otra vez. **Qué podés hacer mientras tanto:** mirar si el registro que tu declaración
+otra vez. **Qué puedes hacer mientras tanto:** mirar si el registro que tu declaración
 nombra en `record` ya existe, o si al lado quedó un parcial; dos `ls` contestan la
 pregunta. **Qué no hace:** no borra nada ni pisa la corrida en curso, y si el
 repositorio destino sabe retomar desde su parcial el segundo lanzamiento salta lo ya
@@ -1511,10 +1511,10 @@ separa esos dos casos no sirve para gatillar nada. Es la misma razón por la que
 módulo declara se contrasta contra la revisión vigente con una sola comparación:
 `module["stale"] = bool(revision) and module["revision"] != revision`. Es una
 comparación **de strings**, y el `__provenance__` del módulo no lleva ningún hash del
-texto contra el que se escribió. **Qué significa para vos:** si una revisión se
+texto contra el que se escribió. **Qué significa para ti:** si una revisión se
 reescribe **bajo su mismo nombre** —se corrige una ecuación y el archivo se sigue
 llamando igual—, `verify` no ve nada: ningún módulo queda marcado como viejo y la pasada
-sale limpia. La deriva recién aparece más tarde, en `gate` o en `close`, como
+sale limpia. La deriva aparece solo más tarde, en `gate` o en `close`, como
 `POSITION_STALE` —"atada a una revisión cuyos bytes ya no coinciden"—, que sí compara
 bytes. **Qué no cubre, y es lo importante:** un `verify` limpio **no significa que la
 matemática se haya sostenido**. Significa que ningún módulo nombra una revisión distinta
@@ -1525,23 +1525,23 @@ contenido, para que la comparación sea contra los bytes y no contra la etiqueta
 test lo respalda, con un token `test_<id>`. La CLI **no corre ninguna suite**: para
 resolver ese token hace un recorrido `ast` sobre `tests/` y junta los nombres de las
 funciones. Encontrar el nombre prueba que existe una función así, y nada más. **Qué
-significa para vos:** un testigo bien formado cuyo test existe se reporta `unmeasured`,
+significa para ti:** un testigo bien formado cuyo test existe se reporta `unmeasured`,
 y `unmeasured` es un estado **terminal** — lo único que puede sacarlo de ahí es que el
-test desaparezca, y recién entonces, con el ítem tildado, pasa a `disagrees`. Cruzar un
+test desaparezca, y solo entonces, con el ítem tildado, pasa a `disagrees`. Cruzar un
 testigo contra el resultado de una corrida no existe. **Qué no cubre:** un test que
 existe y falla, o que existe y no prueba lo que dice. Los dos se leen igual que uno que
 pasa. **Cómo se arregla:** con un cruce contra el resultado real de la suite, que hoy no
 tiene por dónde entrar.
 
-*Ninguna edición a mano está impedida, y acá ni siquiera se detecta.* Vale la misma
+*Ninguna edición a mano está impedida, y aquí ni siquiera se detecta.* Vale la misma
 observación que en `proposal-deliberation` —un solo hook `PreToolUse`, que es de
 `remote-execution`, y ninguna entrada `deny`—, pero la diferencia entre las dos skills
 importa. Allá una edición manual rompe un recibo y se nota en la operación siguiente;
-acá no hay recibo que romper. El `SKILL.md` de esta skill lo dice sin adornos sobre el
+aquí no hay recibo que romper. El `SKILL.md` de esta skill lo dice sin adornos sobre el
 token de testigo: escribirlo a mano es doctrina no soportada, **no** una prevención
 técnica — el parser no puede distinguir, y no distingue, un token escrito por la skill
 de uno escrito a mano, y `verify` y `close` evalúan los dos exactamente igual. **Qué
-significa para vos:** una marca o un testigo puestos a mano en el archivo de acuerdos
+significa para ti:** una marca o un testigo puestos a mano en el archivo de acuerdos
 son indistinguibles de los que puso la herramienta. **Qué no cubre:** ni el momento de
 la escritura, ni ninguna lectura posterior que los separe. **Qué lo contiene:** el
 lanzamiento no depende de ese archivo. `gate` lee la escalera de posición, la
@@ -1557,7 +1557,7 @@ línea 61). Para una mitad de lo que guarda eso es lo correcto: una autorizació
 lanzamiento que aparece en un clon es una autorización que nadie en ese clon dio. Para
 la otra mitad no lo es: la deliberación —lo que se preguntó, lo que se respondió, y por
 eso los acuerdos dicen lo que dicen— es historia del proyecto, y el clon no recibe nada.
-**Qué significa para vos:** un clon fresco arranca sin registro y toma el archivo de
+**Qué significa para ti:** un clon fresco arranca sin registro y toma el archivo de
 acuerdos tal como está, sin nada con qué contrastarlo. **Qué no cubre:** todo lo que
 dependa de haber visto la deliberación previa. **Cómo se arregla:** separando las dos
 mitades, que es un cambio en lo que todo lector del registro espera encontrar en un solo
@@ -1565,7 +1565,7 @@ lugar. Está anotado en el `SKILL.md` de la skill, no resuelto.
 
 *Nada prueba quién decidió.* La precondición de que un acuerdo haya sido discutido antes
 de colocarse se satisface con **cualquier** evento de discusión respondido. Nada
-comprueba que la respuesta haya venido de una persona. **Qué significa para vos:** vale
+comprueba que la respuesta haya venido de una persona. **Qué significa para ti:** vale
 lo mismo que del otro lado de la costura — un acuerdo registrado prueba que llegó al
 registro, nunca que alguien lo decidió. Un agente puede abrir la pregunta y
 contestársela solo, y nadie más adelante en la cadena puede distinguir ese caso del
@@ -1614,7 +1614,7 @@ cuantificador nunca fue cierto. Hoy leen el mismo archivo igual, y nada los ata.
 
 *Resuelto: las tres piezas sueltas del kit, cada una con su propia respuesta.*
 `ruled_revision` **se cableó**, porque cerraba una ventana real: `require_admissible`
-miraba el veredicto y nunca la revisión, así que un fallo viejo pasaba al medir y recién
+miraba el veredicto y nunca la revisión, así que un fallo viejo pasaba al medir y solo
 aparecía en `verify`. `resolve_device` **se borró**: cero referencias en toda la forja,
 incluidas las notebooks. Y el fixture `rng` **se cableó donde entra** —`test_synthetic.py`,
 que sí es un ítem que pytest recolecta— dejando el generador local de `sweep.py` con la
@@ -1665,8 +1665,8 @@ flowchart TD
     Q --> R
     E --> R
     R --> S{"¿Suite verde y fidelidad limpia?"}
-    S -- "Test rojo" --> T["Ese ES el hallazgo. Se corta acá"]
-    S -- "Hay diferencias" --> U{"Compuerta: ¿esos cambios los hiciste vos?"}
+    S -- "Test rojo" --> T["Ese ES el hallazgo. Se corta aquí"]
+    S -- "Hay diferencias" --> U{"Compuerta: ¿esos cambios los hiciste tú?"}
     U -- Sí --> V["El código va adelante.<br/>Se te da el prompt para actualizar la matemática.<br/>NUNCA se edita tu código hacia atrás"]
     U -- No --> W["El código derivó. Corregir, máximo 3 pasadas"]
     W --> R
@@ -1693,7 +1693,7 @@ funcionaba ayer puede fallar hoy a mitad de una corrida. Esta skill responde la 
 pregunta que la máquina puede verificar de verdad —**¿esta credencial todavía
 autentica?**— y mantiene un depósito chico, ignorado por git, con las que pasan.
 
-**De dónde recibe y a quién le entrega.** Recibe archivos que **vos** dejás en
+**De dónde recibe y a quién le entrega.** Recibe archivos que **dejas** en
 `kaggle-inbox/`: un `kaggle.json`, o un `.txt`/`.md` con una credencial por línea. Le
 entrega a `remote-execution` dos cosas, y sólo dos:
 
@@ -1716,7 +1716,7 @@ igual al `SKILL.md`. `list` contesta *dónde estoy*; esto contesta *para qué es
 que ninguna lista implica: una cuenta está en el almacén porque alguien la puso,
 no porque funcione.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `taken-in` | Lo que entregaste está en el almacén, **de a una fila por vez**, así una fila mala nunca cuesta las de al lado | el inbox soltó todo lo que tenía y se consumió, o quedó porque todavía hay filas adentro |
 | `proven` | Cada cuenta guardada se le preguntó al servicio, bajo cualquiera de los dos esquemas de token que use de verdad | cada cuenta lleva un veredicto **de esta corrida** |
@@ -1758,7 +1758,7 @@ aparece si hay algo que eliminar.
 9. Una cuenta que dejó de autenticar se **reporta, no se borra**. Eliminar es una
    decisión tuya, aparte.
 
-*Eliminar:* se listan las cuentas reales, elegís de una lista —nunca escribís un nombre
+*Eliminar:* se listan las cuentas reales, eliges de una lista —nunca escribes un nombre
 a mano— y si alguna de las elegidas no existe **se rechaza el lote entero**. Un borrado
 parcial por un typo es peor que no borrar nada.
 
@@ -1770,7 +1770,7 @@ parcial por un typo es peor que no borrar nada.
 | `scripts/accounts_cli.py` | La implementación entera, sin dependencias externas. Subcomandos: `list`, `discover`, `validate`, `remove` y `materialize`. Los cuatro primeros son para una persona; **`materialize` es para código**: escribe la credencial guardada de un worker a un archivo de texto plano y devuelve **dónde**, nunca **qué**. Ese es el contrato que deja que `remote-execution` use un token sin que ninguna skill lo lea ni lo imprima. |
 | `store/accounts.json` | El depósito. Permisos `0600`, escritura atómica. |
 | `store/.gitignore` | Ignora **todo** el contenido de `store/` por regla de contenido, no por nombre — así cubre también el temporal de la escritura atómica y cualquier archivo futuro. Está commiteado para que la regla exista *antes* de que se escriba la primera credencial. |
-| `store/workers/<usuario>/token` | Se crea recién en la primera entrega. Contiene sólo el token, sin envoltorio JSON: es la forma que el cliente de Kaggle espera. |
+| `store/workers/<usuario>/token` | Se crea solo en la primera entrega. Contiene sólo el token, sin envoltorio JSON: es la forma que el cliente de Kaggle espera. |
 
 **Los seguros.**
 
@@ -1779,7 +1779,7 @@ parcial por un typo es peor que no borrar nada.
 - **No hay bandera para pasar la clave.** Un secreto como argumento quedaría en la lista
   de procesos y en el historial del shell. La entrada interactiva usa entrada oculta y
   **se niega si no hay una terminal real** — que es exactamente cómo detecta a un agente
-  intentando hacerlo por vos.
+  intentando hacerlo por ti.
 - **No escribe si git no lo ignora.** Verifica la regla de ignorado *antes* de crear
   ningún directorio, así una negativa no deja ni el andamio.
 - **Escritura atómica siempre**, con los permisos puestos antes del primer byte.
@@ -1871,7 +1871,7 @@ disco: `status` contesta *dónde estoy* plegando lo que pasó, esto contesta *pa
 qué es*. Las catorce rutas de rechazo de este CLI la llevan, y para eso hubo que
 crear el único lugar por el que todas llegan a un lector.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `reachable` | Una carpeta de job **fijada a un commit que el remoto declarado puede servir de verdad**, que es lo que un worker clona | `generate-job` escribió la carpeta — prueba el pin contra el remoto **antes de escribir un byte**, así que una carpeta que existe es un pin que se publicó |
 | `wire` | Que este worker, en este pin, lleva corriente — pagado en minutos en vez de en las horas que cuesta una campaña | `readiness` dice listo, con un veredicto **derivado de la evidencia de un ensayo**, nunca afirmado |
@@ -1896,9 +1896,9 @@ clonaría, sin el cual `generate-job` se niega y lo nombra con precisión, y
 | Comando | Qué hace | Cuándo se usa |
 |---------|----------|---------------|
 | `generate-job` | Arma la carpeta del trabajo: configuración de corrida, cuaderno ejecutor y el archivo de metadatos del servicio. Se construye en un directorio parcial y se renombra atómicamente al terminar — **una carpeta a medio escribir no puede existir**. | Una vez, antes del primer envío. |
-| `submit` | El camino de envío completo, en orden fijo: guardia de ruta → resolver el producto → digest fresco del fuente → clamp de capacidad → envío real → **y recién entonces** anotar en el registro. Anotar último significa que nunca se registra algo que no salió. `--smoke` marca la corrida como ensayo y la manda al registro de ensayos. | Cada vez que mandás trabajo. |
-| `status` | Pliega el registro y muestra el estado por punto de entrada: pendiente, devuelto, con error, en cuarentena, en vuelo hace demasiado. **No recibe adaptador**: es estructuralmente incapaz de resolver nada, sólo reporta. | Cuando querés saber dónde estás parado. |
-| `poll` | Pregunta por una entrega y **re-valida** que el estado devuelto esté dentro del vocabulario de cinco valores del seam. Una defensa contra un adaptador que se porte mal. | Mientras esperás. |
+| `submit` | El camino de envío completo, en orden fijo: guardia de ruta → resolver el producto → digest fresco del fuente → clamp de capacidad → envío real → **y solo entonces** anotar en el registro. Anotar último significa que nunca se registra algo que no salió. `--smoke` marca la corrida como ensayo y la manda al registro de ensayos. | Cada vez que envías trabajo. |
+| `status` | Pliega el registro y muestra el estado por punto de entrada: pendiente, devuelto, con error, en cuarentena, en vuelo hace demasiado. **No recibe adaptador**: es estructuralmente incapaz de resolver nada, sólo reporta. | Cuando quieres saber dónde estás parado. |
+| `poll` | Pregunta por una entrega y **re-valida** que el estado devuelto esté dentro del vocabulario de cinco valores del seam. Una defensa contra un adaptador que se porte mal. | Mientras esperas. |
 | `fetch` | Trae el resultado. Evalúa la vigencia **antes** de escribir nada; si el resultado ya no corresponde al código actual, se redirige a cuarentena. Materializa en un directorio parcial, verifica que esté completo, renombra, y sólo entonces anota la devolución. | Cuando la corrida terminó. |
 | `reconcile` | Compara lo que el servicio dice tener contra lo que el registro cree, en las dos direcciones. Reporta huérfanos; nunca los adopta ni los cancela solo. | Cuando algo no cuadra. Siempre lo corre un humano. |
 | `smoke record` | Anota el veredicto de un ensayo, y ese veredicto sale de **la evidencia del artefacto traído**, no de que alguien diga que anduvo. | Después de traer el ensayo. |
@@ -1917,7 +1917,7 @@ posterior**.
 lo recibe por parámetro ni lo tiene escrito a mano—, arranca de lo pendiente según el
 registro, y lo refina preguntándole al servicio qué tiene activo. La cuenta es
 `otorgado = max(0, min(pedido, tope) - en_vuelo)`, y se reporta como cuatro números
-distintos para que nadie confunda "pedí 5 y me dieron 2 porque el tope es 2" con "pedí
+distintos para que nadie confunda "pide 5 y me dieron 2 porque el tope es 2" con "pide
 exactamente 2".
 
 **Los módulos.**
@@ -1981,8 +1981,8 @@ mismo contra un módulo envenenado. **Qué significa en
 la práctica:** todo lo que está *arriba* del seam —el registro, el pliegue, la vigencia,
 el clamp, la cuarentena— sí está probado, y esas son las partes cuyo error sería
 silencioso. Lo que no está probado en vivo es el archivo de abajo, cuyos errores son
-ruidosos: un comando mal formado falla y se ve. **Qué podés hacer:** si algo falla en
-vivo por primera vez, empezá a buscar ahí y no en el seam. **Cómo se arregla:** con un
+ruidosos: un comando mal formado falla y se ve. **Qué puedes hacer:** si algo falla en
+vivo por primera vez, empieza a buscar ahí y no en el seam. **Cómo se arregla:** con un
 ensayo real —para eso existe `submit --smoke`—, que es exactamente el camino más barato
 para descubrirlo antes de gastar una corrida grande.
 
@@ -2056,11 +2056,11 @@ tiene equivalente en absoluto.
 
 - **`guidance/data-paper`** (obligatoria) — el paper de datos. Es el **techo**: acota qué se
   puede afirmar, y una afirmación que los datos no sostienen no es un experimento, es un deseo.
-- **`proposals`** (obligatoria) — el directorio gestionado de `proposal-deliberation`, leído acá
+- **`proposals`** (obligatoria) — el directorio gestionado de `proposal-deliberation`, leído aquí
   y nunca escrito. Pero el motor sólo exige que el directorio **exista**; el contenido nunca
   entra por el motor, porque los revisiones gestionadas son archivos `.md` sueltos y el cargador
   sólo desciende un nivel dentro de cada fuente. Las afirmaciones de la propuesta llegan al
-  documento porque **vos** las llevás, en la idea que escribís y en la deliberación que sigue.
+  documento porque **las llevas tú**, en la idea que escribes y en la deliberación que sigue.
 
 *Le entrega a `experimental-implementation`:* el archivo publicado
 (`experiments/experiments-<slug>-vNN.md`) es, medido, el documento 0 que esa skill lee como su
@@ -2069,7 +2069,7 @@ del motor empuja ese archivo hacia el otro lado; `experimental-implementation` l
 cuando corre.
 
 *Le entrega a todo el resto:* la operación `STATUS`, de dónde sale la respuesta a "cuál es la
-revisión vigente". Nadie abre el directorio a ojo.
+revisión vigente". Nadie abre el directorio a simple vista.
 
 **Qué necesita antes.** Nada más que Node. El motor es keyless — no llama a ningún modelo ni
 usa `ANTHROPIC_API_KEY` — porque el "modelo" de esta deliberación es el agente ya sentado en la
@@ -2080,11 +2080,11 @@ conversación.
 prueba es estructural: tiene una etapa, `validated`, de la que el hermano no
 tiene equivalente ninguno.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `bound` | Cuál revisión es la actual y cuál entrada de ella toca el cambio | `STATUS` nombró la última y el objetivo resolvió a una entrada |
 | `validated` | El protocolo, la métrica, el baseline, el dataset y el esquema están dichos y **salieron de una búsqueda, no de una suposición** | frena esta etapa: una URL sin tag fechado, un baseline sin repositorio o sin año de venue, una línea `**Dataset:**` no dada o dada dos veces, o un esquema que no muestre test, semillas o repeticiones |
-| `deliberated` | El cambio se discutió, no se tipeó | **lo dijiste vos** — nada acá lo mide, y nada puede |
+| `deliberated` | El cambio se discutió, no se tipeó | **lo dijiste tú** — nada aquí lo mide, y nada puede |
 | `composed` | El reemplazo existe escrito **como el experimento**, no como una descripción de él | existe un bloque que lleva el experimento y lo que debe cumplir |
 | `published` | La sucesora existe con el marcador del artefacto y es la revisión actual | es la llegada; no está detrás de nadie |
 
@@ -2129,9 +2129,9 @@ aparece cuando alguien pide la fuente. Por eso la validación externa corre
    (`preservationDelta`) y qué conflicto de fuente detectó (`ACHIEVED_RESULT`, ver **Los
    seguros**).
 8. **La puerta.** El agente muestra en castellano llano qué desaparece y qué frase leyó como un
-   resultado logrado. Confirmás cada una por nombre.
-9. **Publicar** (delegado al agente `experimental-publish`, que empieza recién después de que
-   vos aceptaste). Reenvía la misma operación con el token, `acknowledgedRemovals` y
+   resultado logrado. Confirmas cada una por nombre.
+9. **Publicar** (delegado al agente `experimental-publish`, que empieza solo después de que
+   aceptaste). Reenvía la misma operación con el token, `acknowledgedRemovals` y
    `acknowledgedSourceConflicts`. Escribe `experiments-<slug>-vNN+1.md` de forma atómica.
 10. **Auditoría.** Recibo con sha256 antes/después, y una relectura byte a byte de todas las
     revisiones.
@@ -2165,7 +2165,7 @@ aparece cuando alguien pide la fuente. Por eso la validación externa corre
   legítimamente cita el resultado publicado de otro.
 - **Dataset y esquema de validación, exactamente una vez cada uno.** Cero y dos-o-más se
   rechazan igual — dos líneas son una ambigüedad sobre qué corre el plan, y el motor no elige por
-  vos.
+  ti.
 - **Una idea de una sola oración no llega a ser v1.** Ver el paso 3 de **El flujo**.
 - **Nunca se inventa un repositorio, una URL, un venue o un año.** Lo que no salió de una
   búsqueda de esta corrida se marca `[pending-verification]`; una URL plausible es peor que una
@@ -2265,7 +2265,7 @@ la forja: el `.venv` es siempre del destino.
 que el norte de `proposal-implementation`: independientes de lo que haya en
 disco, para que una sesión que chocó con un error se pueda ubicar y reenganchar.
 
-| Etapa | Qué deja establecido | La tenés detrás cuando |
+| Etapa | Qué deja establecido | La tienes detrás cuando |
 |---|---|---|
 | `standing` | Un repositorio armado como esta skill espera, con intérprete propio y **los pasos declarados del protocolo puestos como comandos ejecutables** | `structure` no reporta huecos de andamiaje y el protocolo al que responde la corrida está nombrado y es legible |
 | `binding` | El código que corre dice lo que dice la revisión de experimentos ligada, con cada paso declarado trazado a un comando ejecutable | `fidelity` está limpio contra esa revisión y la suite propia del destino está verde bajo su propio intérprete |
@@ -2305,11 +2305,11 @@ experimento responde—, escribir código con la clave de procedencia que corres
 *Flujo B —toda pasada posterior.* Lee `src/` y toma la revisión más nueva de **cada**
 documento declarado por separado —nunca un solo nombre asumido para los dos—. Corre la
 suite del destino y después `verify`. Una diferencia de fidelidad **en cualquiera de los
-dos documentos** abre la misma compuerta del hermano ("¿ese cambio lo hiciste vos?"), sin
+dos documentos** abre la misma compuerta del hermano ("¿ese cambio lo hiciste tú?"), sin
 esperar a que el otro documento también discrepe. Con los dos limpios, `agree` —disponible
 sólo porque esta skill siempre declara más de un documento— nombra cada citación cruzada
 que un documento hace y el otro no reconoce, en las dos direcciones, y nunca falla un
-veredicto sobre cuál lado debe cambiar. Recién con `agree` sin discrepancias pendientes,
+veredicto sobre cuál lado debe cambiar. Solo con `agree` sin discrepancias pendientes,
 `handoff` dimensiona los hallazgos abiertos hacia `experimental-deliberation`.
 
 **Los módulos.**
@@ -2367,7 +2367,7 @@ nunca pasaba `--regenerate`, así que en el único estado para el que `rehearse`
 **Corregido** en `7fdec85`: el acto se movió de "lo que `walk` realiza" a "lo que `walk`
 se detiene a pedir", y el agente `experiments-walk` ya lo describe así —"generar las
 carpetas de trabajo que un paso remoto necesita y detenerse en el ensayo, que ningún acto
-acá realiza y la doctrina deja en manos de una persona". El ensayo se hace a mano, como
+aquí realiza y la doctrina deja en manos de una persona". El ensayo se hace a mano, como
 la doctrina siempre prescribió; lo que cambió es que la herramienta ya no promete
 automatizarlo.
 
@@ -2443,7 +2443,7 @@ flowchart TD
     D --> D1["Leer la revisión más nueva de CADA documento por separado"]
     D1 --> D2["Correr la suite del destino, luego verify"]
     D2 --> D3{"¿Fidelidad limpia en los DOS documentos?"}
-    D3 -- No, en cualquiera --> D4["[GATE] ¿Ese cambio lo hiciste vos?"]
+    D3 -- No, en cualquiera --> D4["[GATE] ¿Ese cambio lo hiciste tú?"]
     D4 -- Sí --> D5["El código va adelante; se actualiza la matemática o el protocolo"]
     D4 -- No --> D6["Corregir y revalidar"]
     D6 --> D2
@@ -2507,7 +2507,7 @@ y el flujo es el orden en que esos grupos se habilitan entre sí.
 
 **El motor de sustitución son cuatro de esos diecinueve** —`scaffold`, `status`,
 `open`, `substitute`— y tienen una regla que conviene saber: **no existe
-`--force`**. Nada acá descarta jamás el texto en disco de una persona a favor de
+`--force`**. Nada aquí descarta jamás el texto en disco de una persona a favor de
 un cuerpo entrante. La única salida de un bloque editado a mano es `--adopt`,
 que rebasa el digest y **deja el cuerpo intacto**.
 
@@ -2562,7 +2562,7 @@ donde nada quedó afirmado sin que una corrida lo haya chequeado.
 | `scripts/paper_tikz.py` | Optimizador de código TikZ: poda librerías no usadas, detecta librerías faltantes y factoriza estilos repetidos en `\tikzset`. |
 | `scripts/paper_figure_audit.py` | Auditor semántico de figuras: compara nodos del manifiesto contra la prosa de la sección y las pipeline steps. |
 | `scripts/paper_latex.py` | El único módulo al que esta skill le permite importar `subprocess` — descubrimiento de toolchain, la única llamada a `latexmk`, parseo de log, veredicto de tres señales. |
-| `scripts/paper_coupling_evidence.py` | Toda lectura de disco que `verify` necesita, aislada acá y en ningún otro lado. |
+| `scripts/paper_coupling_evidence.py` | Toda lectura de disco que `verify` necesita, aislada aquí y en ningún otro lado. |
 | `scripts/paper_verify.py` | Ocho chequeos puros sobre esa evidencia (incluyendo `figure-semantics`) — cero I/O propio, reporte de sólo lectura. |
 | `scripts/paper_objective.py` | El norte declarado: `OBJECTIVE_FLOW`, leído por `tests/test_agents.py` vía `ast.literal_eval` — literales puros, sin llamadas ni imports. |
 | `sections/*.md` | Los diez contratos reales, versionados: front-matter JSON + prosa. Entrada real, no fixture. |
@@ -2577,7 +2577,7 @@ donde nada quedó afirmado sin que una corrida lo haya chequeado.
   `os.exec*` ni `multiprocessing` — con una única excepción nombrada y hoy sin uso,
   reservada para `latexmk`. `write` no puede correr desatendido por construcción: el
   agente orquestador arma los cuatro insumos del redactor, delega, escribe el JSON a
-  un archivo, y recién ahí corre `write --draft <path> --audit <path>`.
+  un archivo, y solo entonces corre `write --draft <path> --audit <path>`.
 - **Un solo re-borrador, contado en disco.** `AUDIT_EXHAUSTED` refuta un tercer
   intento bajo el mismo contrato/evidencia/mode — el conteo vive en una ledger de
   archivo, no en memoria del proceso que podría reiniciarse.
@@ -2999,7 +2999,7 @@ campaña, repetible), `--force`, `--resolve`, más los flags de definición de
 trabajo (`--service`, `--job-name`, `--product`, `--commit`, `--repo-url`,
 `--repo-ref`, `--run-module`, `--run-function`, `--clone-path`,
 `--regenerate`). Los tokens extra se reenvían a `remote_cli.py`. Un envío real
-gasta cuota: preferí `--smoke` y `--dry-run` primero (ver
+gasta cuota: prefiere `--smoke` y `--dry-run` primero (ver
 [Cómputo remoto, con cuidado](#cómputo-remoto-con-cuidado)).
 
 ### `papersmith target {list,set,check}`
@@ -3293,7 +3293,7 @@ ensayos baratos. Bajala en orden; no la saltees:
    ledger; **no despacha nada**.
 4. `papersmith remote … --smoke` — ensayo real contra el backend, sin gastar
    campaña.
-5. Recién ahí, la corrida real (`--consent <token>` cuando corresponda).
+5. Solo entonces, la corrida real (`--consent <token>` cuando corresponda).
 
 Los targets y los perfiles son los de tu `papersmith.yaml` (ver
 [El workspace por dentro](#el-workspace-por-dentro)). El ledger
@@ -3309,7 +3309,7 @@ detalle de ese contrato vive en la sección de `remote-execution` de la
 
 **Cuota real.** Un envío real gasta cuota y horas de GPU. La doctrina de la casa
 es simple: todo lo que se pueda ensayar con `--dry-run` y `--smoke`, se ensaya;
-lo que quede después de eso, lo decidís vos.
+lo que quede después de eso, lo decides tú.
 
 ---
 
@@ -3354,7 +3354,7 @@ papersmith-ai/
 ## Desarrollo y pruebas
 
 Son **dos suites**, no una. Correr una sola y dar un veredicto es un error que
-este repositorio ya cometió, así que las dos van acá con su invocación exacta:
+este repositorio ya cometió, así que las dos van aquí con su invocación exacta:
 
 ```bash
 npm test                                  # motor compartido de deliberación
@@ -3431,11 +3431,11 @@ hay que volver a correrlo.
 
 **"La skill se negó a arrancar."** Es el comportamiento esperado: cada skill
 declara qué necesita antes y sale con un código de rechazo que nombra lo que
-falta, en vez de inventarlo o saltearlo. Leé el código como una lista de
+falta, en vez de inventarlo o saltearlo. Lee el código como una lista de
 tareas — dice exactamente qué entrada falta. No es un error tuyo.
 
 **"`node --test` a secas falla."** Por diseño: el motor de deliberación se niega
-a servir sin un perfil de dominio. Usá `npm test` (que lo fija) o el CLI de la
+a servir sin un perfil de dominio. Usa `npm test` (que lo fija) o el CLI de la
 skill. Lo mismo vale para los motores de implementación:
 `IMPLEMENTATION_DOMAIN_PROFILE_REQUIRED` significa que los estás invocando
 directo en vez de a través de `implementation_cli.py`, que es quien los arranca
@@ -3444,25 +3444,25 @@ con su perfil.
 **"El workspace no tiene `.claude/skills`."** Es el estado por defecto: un
 workspace embarca el árbol `skills/` completo y `.claude/agents/`, y sus
 documentos de routing apuntan al árbol canónico `skills/*/SKILL.md`; los
-agentes leen las skills desde ahí. Si querés que tu harness las liste como
-comandos `/`, corré `npm run setup:harnesses` dentro del workspace: crea las
+agentes leen las skills desde ahí. Si quieres que tu harness las liste como
+comandos `/`, ejecuta `npm run setup:harnesses` dentro del workspace: crea las
 proyecciones de los cuatro harness, relativas e idempotentes.
 
 **"`papersmith audit` reporta drift."** Algún archivo generado cambió respecto
-del manifest. No lo edites a mano: corré `papersmith upgrade` (y `--force` si
+del manifest. No lo edites a mano: ejecuta `papersmith upgrade` (y `--force` si
 hace falta) para volver a la versión del framework.
 
 **"No puedo correr `papersmith accounts`."** Todavía no existe (follow-up
-registrado). Usá
+registrado). Usa
 `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
 
 **"`status` sale con código 0 aunque haya drift."** Gap conocido y registrado:
-hoy el exit code no es estricto. Para un gate de CI, mirá el JSON (`--json`) en
+hoy el exit code no es estricto. Para un gate de CI, mira el JSON (`--json`) en
 vez del código de salida.
 
 **"La primera ingesta descarga ~1.5 GB."** Son los pesos de Surya si el entorno
 no quedó pre-provisionado. `papersmith init` ya provisiona el entorno salvo que
-hayas pasado `--no-env`; en ese caso corré `python3 scripts/setup_env.py install`
+hayas pasado `--no-env`; en ese caso ejecuta `python3 scripts/setup_env.py install`
 antes de la primera ingesta.
 
 ---
