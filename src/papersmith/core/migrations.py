@@ -325,10 +325,65 @@ def _entry(migration: Migration, kit_version: str, actions: Sequence[str]) -> di
     }
 
 
+# --------------------------------------------------------------------------
+# The catalog. Everything above is mechanism; everything below is what this
+# release asks of a workspace's own artifacts.
+# --------------------------------------------------------------------------
+
+#: The plausibility flow's graph pool, relative to a workspace.
+GRAPH_POOL = "sota-pool"
+
+
+class ScaffoldGraphPool(Migration):
+    """Give an existing workspace the graph pool its release now scaffolds.
+
+    ``init`` creates ``sota-pool/.gitkeep`` from this release on, so every
+    workspace made after it already satisfies this. A workspace made before it
+    cannot be reached by any other mechanism: ``upgrade`` synchronizes kit
+    files and renders projections, and this directory is neither — it is not in
+    ``KIT_ENTRIES``, so a kit can never ship it, and no generator derives it.
+
+    It is convergence rather than version-gated on purpose. The claim it makes
+    is about the workspace's shape, which the filesystem answers directly, and
+    a probe that asks is correct for a workspace at any history — including one
+    whose recorded version was lost, which is exactly the damaged workspace
+    ``upgrade`` exists to repair.
+
+    It scaffolds the folder and stops. The pool holds research state the
+    ``sota-scout`` and ``sota-grapher`` agents produce, and rewriting an atlas
+    would destroy the work the folder exists for.
+    """
+
+    id = "sota-pool-scaffold"
+    summary = "scaffold sota-pool/ so the graph pool travels like every other drop-zone"
+
+    def _keepfile(self, workspace: Path) -> Path:
+        return workspace / GRAPH_POOL / ".gitkeep"
+
+    def plan(self, workspace: Path) -> list[str]:
+        if fs.is_regular_file(self._keepfile(workspace)):
+            return []
+        return [f"create {GRAPH_POOL}/.gitkeep"]
+
+    def apply(self, workspace: Path) -> tuple[list[str], list[str]]:
+        keepfile = self._keepfile(workspace)
+        # ``fs.write_text`` creates the parents and reports an occupied or
+        # unwritable path rather than raising, which is what this contract
+        # needs: a migration that raises aborts a run that has already
+        # synchronized files and leaves no report of what did happen.
+        if not fs.write_text(keepfile, ""):
+            return [], [f"could not create {GRAPH_POOL}/.gitkeep: "
+                        f"{workspace / GRAPH_POOL} is occupied by something "
+                        "other than a writable directory"]
+        return [f"created {GRAPH_POOL}/.gitkeep"], []
+
+
 #: Every migration this release ships, in the order they must run.
 #:
 #: A gate at or below the current version would never be selected for a
 #: workspace already on it and would fire for every older one without the
 #: release that introduced it ever existing — ``test_the_shipped_registry_
 #: declares_no_gate_at_or_below_this_release`` holds the rule.
-REGISTRY: tuple[Migration, ...] = ()
+REGISTRY: tuple[Migration, ...] = (
+    ScaffoldGraphPool(),
+)
