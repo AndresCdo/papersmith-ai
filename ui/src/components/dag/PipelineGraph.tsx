@@ -15,7 +15,7 @@ import StageNode from './nodes/StageNode';
 import GateNode from './nodes/GateNode';
 import SectionNode from './nodes/SectionNode';
 import AnimatedEdge from './edges/AnimatedEdge';
-import type { GraphModel } from './graph';
+import type { GraphModel, FlowId } from './graph';
 import { reduceSelection, type AnyChange } from '../../lib/selection';
 
 const nodeTypes = {
@@ -29,18 +29,24 @@ const edgeTypes = {
 } satisfies EdgeTypes;
 
 /**
- * The pipeline DAG: six stages in a top-to-bottom chain, the four quality gates
- * hanging off the stage they inspect, and every section placed between
- * `drafting` and `auditing`. Edges animate while either endpoint is mutating.
+ * One of the board's two flows, drawn from a graph the extractor built.
+ *
+ * The general flow is the twelve tramos of the architecture diagram plus the
+ * four quality gates, which hang off the stage they inspect and release into
+ * the transversal audit lane. The writing flow is the paper's sections in their
+ * own order. Both arrive precomputed: this component draws the flow, it does
+ * not decide what the flow is. Edges animate while either endpoint is mutating.
  */
 export default function PipelineGraph({
   graph,
   selectedId,
   onSelect,
+  flow = 'pipeline',
 }: {
   graph: GraphModel;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  flow?: FlowId;
 }) {
   const { width, height } = graph;
 
@@ -83,8 +89,12 @@ export default function PipelineGraph({
   if (graph.nodes.length === 0) {
     return (
       <div className="panel panel--empty">
-        <h2>Pipeline</h2>
-        <p>No pipeline stages in the latest state payload. The command center is waiting for the first read.</p>
+        <h2>{flow === 'writing' ? 'Writing' : 'Pipeline'}</h2>
+        <p>
+          {flow === 'writing'
+            ? 'No paper sections in the latest state payload. The command center is waiting for the first read.'
+            : 'No pipeline stages in the latest state payload. The command center is waiting for the first read.'}
+        </p>
       </div>
     );
   }
@@ -122,7 +132,7 @@ export default function PipelineGraph({
         <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
         <Controls showInteractive={false} />
         <Panel position="top-left" className="graph-legend">
-          <span className="graph-legend__title">Pipeline DAG</span>
+          <span className="graph-legend__title">{flow === 'writing' ? 'Writing flow' : 'Pipeline DAG'}</span>
           <span className="graph-legend__item">
             <i className="legend-swatch" data-kind="stage" /> stage
           </span>

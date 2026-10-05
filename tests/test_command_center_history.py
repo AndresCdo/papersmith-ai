@@ -18,7 +18,7 @@ def _state(**over) -> dict:
         ],
         "gates": [{"id": "writing-readiness", "state": "BLOCKED",
                    "reasons": ["no contract"], "parts": {"n": 1}}],
-        "pipeline_stages": [{"id": "drafting", "active": False, "progress": 0.0,
+        "pipeline_stages": [{"id": "writing", "active": False, "progress": 0.0,
                              "detail": "0/4 blocks written"}],
     }
     state.update(over)
@@ -93,7 +93,7 @@ class DiffStatesTests(unittest.TestCase):
         (change,) = history.diff_states(prev, curr)
 
         assert change.kind == "stage"
-        assert change.element_id == "stage:drafting"
+        assert change.element_id == "stage:writing"
         assert change.before == {"active": False, "progress": 0.0}
         assert change.after == {"active": True, "progress": 0.5}
 
@@ -102,29 +102,29 @@ class DiffStatesTests(unittest.TestCase):
         progress = copy.deepcopy(prev)
         progress["pipeline_stages"][0]["progress"] = 1.0
         (change,) = history.diff_states(prev, progress)
-        assert change.summary == "Stage drafting: progress 0% -> 100%"
+        assert change.summary == "Stage writing: progress 0% -> 100%"
 
         active = copy.deepcopy(prev)
         active["pipeline_stages"][0]["active"] = True
         (change,) = history.diff_states(prev, active)
-        assert change.summary == "Stage drafting became active"
+        assert change.summary == "Stage writing became active"
 
         idle = copy.deepcopy(active)
         idle["pipeline_stages"][0]["active"] = False
         (change,) = history.diff_states(active, idle)
-        assert change.summary == "Stage drafting became inactive"
+        assert change.summary == "Stage writing became inactive"
 
         both = copy.deepcopy(prev)
         both["pipeline_stages"][0].update(active=True, progress=0.5)
         (change,) = history.diff_states(prev, both)
-        assert change.summary == "Stage drafting became active; progress 0% -> 50%"
+        assert change.summary == "Stage writing became active; progress 0% -> 50%"
 
     def test_sub_percent_progress_stays_readable(self) -> None:
         prev = _state()
         tiny = copy.deepcopy(prev)
         tiny["pipeline_stages"][0]["progress"] = 0.004
         (change,) = history.diff_states(prev, tiny)
-        assert change.summary == "Stage drafting: progress 0% -> <1%"
+        assert change.summary == "Stage writing: progress 0% -> <1%"
 
     def test_non_finite_or_boolean_progress_renders_n_a_and_keeps_the_diff(self) -> None:
         for odd in (float("nan"), float("inf"), float("-inf"), True):
@@ -133,7 +133,7 @@ class DiffStatesTests(unittest.TestCase):
                 curr = copy.deepcopy(prev)
                 curr["pipeline_stages"][0]["progress"] = odd
                 (change,) = history.diff_states(prev, curr)
-                assert change.summary == "Stage drafting: progress 0% -> n/a"
+                assert change.summary == "Stage writing: progress 0% -> n/a"
 
     def test_percent_helper_never_raises(self) -> None:
         for odd in (float("nan"), float("inf"), None, "x", True, [1]):
@@ -152,7 +152,7 @@ class DiffStatesTests(unittest.TestCase):
             curr = copy.deepcopy(prev)
             curr["pipeline_stages"][0]["progress"] = after
             (change,) = history.diff_states(prev, curr)
-            assert change.summary == f"Stage drafting: progress {expected}"
+            assert change.summary == f"Stage writing: progress {expected}"
 
     def test_element_ids_keep_the_raw_id_with_spaces_and_unicode(self) -> None:
         prev = _state()

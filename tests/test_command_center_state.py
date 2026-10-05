@@ -88,14 +88,18 @@ class StateExtractorTests(unittest.TestCase):
 
         assert set(state) == {
             "generated_at", "workspace", "paper_metadata", "sections",
-            "gates", "pipeline_stages", "experiments", "figures", "inbox", "totals",
+            "gates", "pipeline_stages", "pipeline_chain", "gate_links",
+            "experiments", "figures", "inbox", "totals",
         }
         assert [gate["id"] for gate in state["gates"]] == [
             "writing-readiness", "coupling-verification",
             "grounding-style-leak", "diagram-raster",
         ]
         assert [stage["id"] for stage in state["pipeline_stages"]] == [
-            "ingestion", "deliberation", "experiments", "drafting", "auditing", "publishing",
+            "harness", "plausibility", "ingestion", "proposal",
+            "implementation", "experimental-deliberation",
+            "experimental-implementation", "credentials", "remote",
+            "writing", "figures", "paper", "audit",
         ]
 
     def test_a_missing_workspace_is_empty_not_an_error(self) -> None:
@@ -345,3 +349,203 @@ class StateExtractorTests(unittest.TestCase):
         assert section["mode"] is None
         assert section["section"] == "materials-and-methods"
 
+
+
+class PipelineFlowTests(unittest.TestCase):
+    """The dashboard's flows are the architecture diagram's flows.
+
+    The diagram (``docs/diagrams/papersmith-pi-flow.html``, built from
+    ``.archify/architecture-papersmith-pi-20261004-173559/build.mjs``) fixes
+    twelve numbered tramos and the main chain between them. The extractor used
+    to ship six stages invented in this directory -- ``ingestion``,
+    ``deliberation``, ``experiments``, ``drafting``, ``auditing``,
+    ``publishing`` -- and nothing compared the two, so the board drew a project
+    that was not the project. These lock the transcription and the honest half
+    of it: a tramo with no artifact on disk lights up for nothing.
+    """
+
+    TRAMOS = [
+        "harness", "plausibility", "ingestion", "proposal", "implementation",
+        "experimental-deliberation", "experimental-implementation", "credentials",
+        "remote", "writing", "figures", "paper",
+    ]
+
+    #: The diagram draws the audit lane beside the twelve tramos rather than
+    #: numbering it among them, and the board follows: it is a stage so the four
+    #: gates have somewhere to land, and no chain edge touches it.
+    AUDIT = "audit"
+
+    CHAIN = [
+        ("plausibility", "ingestion", "top-5 to ingest"),
+        ("ingestion", "proposal", "guidance/"),
+        ("proposal", "implementation", "rNN revision"),
+        ("implementation", "experimental-deliberation", "proof of concept"),
+        ("experimental-deliberation", "experimental-implementation", "protocol + repo"),
+        ("experimental-implementation", "credentials", "job ready"),
+        ("credentials", "remote", "accounts validated"),
+        ("remote", "writing", "measured facts"),
+        ("writing", "figures", "sections"),
+        ("figures", "paper", "anchors"),
+    ]
+
+    def new_workspace(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name).resolve()
+        (root / "sections").mkdir(parents=True)
+        (root / "paper").mkdir()
+        return root
+
+    @staticmethod
+    def write(path: Path, text: str = "{}\n") -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def active(self, root: Path) -> set[str]:
+        return {
+            stage["id"]
+            for stage in state_extractor.get_workspace_state(root)["pipeline_stages"]
+            if stage["active"]
+        }
+
+    def test_the_stages_are_the_diagrams_tramos_in_order(self) -> None:
+        state = state_extractor.get_workspace_state(self.new_workspace())
+
+        assert [stage["id"] for stage in state["pipeline_stages"]] == self.TRAMOS + [self.AUDIT]
+
+    def test_the_audit_lane_lights_only_when_every_gate_passed(self) -> None:
+        """The audit lane is the gates' outcome, not a fifth opinion about them."""
+        root = self.new_workspace()
+        stages = {
+            stage["id"]: stage
+            for stage in state_extractor.get_workspace_state(root)["pipeline_stages"]
+        }
+
+        assert stages[self.AUDIT]["active"] is False
+        assert "gates passed" in stages[self.AUDIT]["detail"]
+
+    def test_the_chain_is_the_diagrams_main_chain(self) -> None:
+        state = state_extractor.get_workspace_state(self.new_workspace())
+        ids = {stage["id"] for stage in state["pipeline_stages"]}
+
+        chain = [(edge["from"], edge["to"], edge["label"]) for edge in state["pipeline_chain"]]
+
+        assert chain == self.CHAIN
+        assert all(source in ids and target in ids for source, target, _ in chain), (
+            "the chain names a stage the stage list does not carry, so the "
+            "drawing would drop the edge without saying so")
+
+    def test_every_gate_hangs_off_a_known_stage(self) -> None:
+        state = state_extractor.get_workspace_state(self.new_workspace())
+        ids = {stage["id"] for stage in state["pipeline_stages"]}
+        links = state["gate_links"]
+
+        assert set(links) == {gate["id"] for gate in state["gates"]}
+        for gate_id, link in links.items():
+            assert link["from"] in ids, (gate_id, link)
+            assert link["label"], (gate_id, link)
+            assert link["consumed_by"] in ids, (gate_id, link)
+            assert link["consumed_by"] == self.AUDIT, (gate_id, link)
+
+    def test_every_stage_still_follows_the_published_shape(self) -> None:
+        """The node component reads these six keys; the catalogue changed, the
+        contract did not."""
+        for stage in state_extractor.get_workspace_state(self.new_workspace())["pipeline_stages"]:
+            assert set(stage) == {"id", "title", "active", "progress", "detail", "workers"}, stage
+            assert stage["title"]
+            assert isinstance(stage["active"], bool)
+            assert 0.0 <= stage["progress"] <= 1.0
+            assert stage["detail"], f"{stage['id']} reported no detail"
+            assert isinstance(stage["workers"], list)
+
+    def test_an_empty_workspace_lights_no_tramo(self) -> None:
+        """Nothing on disk is nothing reported: a board that guesses is worse
+        than a board that is empty."""
+        assert self.active(self.new_workspace()) == set()
+
+    def test_a_scaffolds_placeholders_are_not_artifacts(self) -> None:
+        """Every drop zone ships with a placeholder so the folder travels.
+
+        Counting one lights its tramo with the only file the scaffold put
+        there, which is how `remote` came up green on a workspace that had just
+        been created and had never run anything.
+        """
+        root = self.new_workspace()
+        self.write(root / "skills" / "remote-execution" / "scripts" / "remote_cli.py",
+                   'INBOX_NAME = "kaggle-inbox"\n')
+        for zone in ("implementations", "proposals", "experiments", "kaggle-inbox"):
+            directory = root / zone
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / ".gitkeep").write_text("", encoding="utf-8")
+            (directory / ".gitignore").write_text("*\n", encoding="utf-8")
+
+        assert self.active(root) == set()
+
+    def test_each_tramo_lights_up_from_its_own_artifact(self) -> None:
+        def harness(root: Path) -> None:
+            (root / ".pi").mkdir()
+
+        def credentials(root: Path) -> None:
+            self.write(root / "skills" / "accounts-owner" / "scripts" / "accounts_cli.py",
+                       'STORE_NAME = "store"\nSTORE_FILE = "accounts.json"\n')
+            self.write(root / "skills" / "accounts-owner" / "store" / "accounts.json",
+                       '{"accounts": []}\n')
+
+        def remote(root: Path) -> None:
+            self.write(root / "skills" / "remote-execution" / "scripts" / "remote_cli.py",
+                       'INBOX_NAME = "kaggle-inbox"\n')
+            self.write(root / "kaggle-inbox" / "ledger.jsonl")
+
+        def writing(root: Path) -> None:
+            self.write(root / "sections" / "01-materials-and-methods.md",
+                       _contract("materials-and-methods", 1, [{"id": "mm-preamble"}]))
+            self.write(root / "paper" / "main.tex",
+                       "\\documentclass{article}\n"
+                       "%% paper-writing block materials-and-methods.mm-preamble begin sha256="
+                       + "a" * 64 + "\n"
+                       "one two three\n"
+                       "%% paper-writing block materials-and-methods.mm-preamble end\n")
+
+        cases = [
+            ("harness", harness, {"harness"}),
+            ("plausibility",
+             lambda root: self.write(root / "sota-pool" / "atlas.json"), {"plausibility"}),
+            ("ingestion",
+             lambda root: self.write(root / "guidance" / "paper-guide" / "a.md", "# a\n"),
+             {"ingestion"}),
+            ("proposal",
+             lambda root: self.write(root / "proposals" / "research-concept-r01.md", "# r\n"),
+             {"proposal"}),
+            ("implementation",
+             lambda root: self.write(root / "implementations" / "repo" / "main.py", "x = 1\n"),
+             {"implementation"}),
+            ("experimental-deliberation",
+             lambda root: self.write(root / ".experimental-deliberation" / "receipts" / "r.json"),
+             {"experimental-deliberation"}),
+            ("experimental-implementation",
+             lambda root: self.write(root / "experiments" / "experiments-slug-v01.md", "# e\n"),
+             {"experimental-implementation"}),
+            ("credentials", credentials, {"credentials"}),
+            ("remote", remote, {"remote"}),
+            # A drafted block requires paper/main.tex to exist, so this case
+            # legitimately lights the paper tramo too.
+            ("writing", writing, {"writing", "paper"}),
+            ("figures",
+             lambda root: self.write(root / "paper" / "Figures" / "arch.pdf", "%PDF-1.7\n"),
+             {"figures"}),
+            ("paper",
+             lambda root: (root / "paper" / "main.tex").write_text(
+                 "\\documentclass{article}\n", encoding="utf-8"),
+             {"paper"}),
+        ]
+
+        covered = set()
+        for stage_id, setup, expected in cases:
+            with self.subTest(stage=stage_id):
+                root = self.new_workspace()
+                setup(root)
+                assert self.active(root) == expected
+                covered.add(stage_id)
+
+        assert covered == set(self.TRAMOS), (
+            f"a tramo has no artifact case: {sorted(set(self.TRAMOS) - covered)}")

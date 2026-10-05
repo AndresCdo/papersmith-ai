@@ -71,8 +71,15 @@ from pathlib import Path
 # .../skills/kaggle-accounts/scripts/accounts_cli.py
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
-STORE_DIR = SKILL_ROOT / "store"
-STORE_PATH = STORE_DIR / "accounts.json"
+STORE_NAME = "store"
+STORE_FILE = "accounts.json"
+# Both paths derive from the two declarations above, so the names the command
+# center reads are the ones this CLI actually writes to. The declaration exists
+# for the same reason `INBOX_NAME` does in remote-execution: a reader that
+# restates the path puts one target's vocabulary into a file every workspace
+# receives, and the skill that owns the store stops being its source of truth.
+STORE_DIR = SKILL_ROOT / STORE_NAME
+STORE_PATH = STORE_DIR / STORE_FILE
 
 # Any authenticated endpoint proves the credential; this is the cheapest one.
 # Kaggle answers 401 both anonymously and with a bad key, so 200 is the only

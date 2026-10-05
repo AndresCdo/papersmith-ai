@@ -3063,7 +3063,7 @@ papersmith ui --export-static ./dashboard-static
 | `--allowed-host HOST:PORT` | Acepta además ese encabezado `Host` (repetible); solo se reenvía al backend si lo das |
 
 Sirve el **Paper Command Center**: un dashboard local dentro del workspace con
-el DAG de etapas, las cuatro compuertas de calidad, la matriz de las diez
+sus dos flujos, las cuatro compuertas de calidad, la matriz de las diez
 secciones y la salud del wiring de harnesses. Se actualiza en vivo por
 Server-Sent Events, con un debounce de 300 ms sobre `sections/`, `openspec/`,
 `experiments/` y `papersmith.yaml`.
@@ -3075,11 +3075,28 @@ con cada workspace) y corre standalone sin Node/npm:
 python -m skills._core.command_center.server --port 8080
 ```
 
+**Los dos flujos.** La pestaña *Pipeline* dibuja el flujo general: los doce
+tramos del diagrama de arquitectura, en su orden, más la vía transversal de
+auditoría donde aterrizan las cuatro compuertas. Cada tramo se enciende con lo
+que hay en disco —`sota-pool/`, `guidance/`, `proposals/`, `implementations/`,
+`.experimental-deliberation/`, `experiments/`, el store de credenciales, el
+inbox, `paper/Figures/` y `sections/`— y un tramo sin artefacto se reporta
+inactivo diciendo qué falta, nunca con un progreso inventado. La pestaña
+*Writing* dibuja el flujo de redacción: una sección por nodo, en orden de
+renderizado, cada una con su estado, sus palabras y sus bloques. Las aristas no
+viven en el frontend: el extractor las manda en el payload (`pipeline_chain` y
+`gate_links`), de modo que el tablero no puede contradecir al diagrama.
+
 Endpoints: `/api/state`, `/api/health/wiring`, `/api/health/run-wiring-smoke`
 (POST) y `/api/events` (SSE); el build del dashboard se sirve en `/`. El
-frontend se construye desde `ui/` con `npm --prefix ui run build`, que emite en
-`skills/_core/command_center/static/`. El smoke end-to-end es
-`bash scripts/command-center-smoke.sh`.
+frontend se construye con `npm run setup:ui` una vez (instala desde el
+lockfile) y después `npm run build:ui`, que emite en
+`skills/_core/command_center/static/`; `npm run dev:ui` levanta el servidor de
+Vite con proxy al backend para trabajar sobre la interfaz. El paso de
+instalación usa `npm ci` y no `npm install` a propósito: `install` reescribe el
+lockfile con los metadatos del npm local, y ese ruido no pertenece a ningún
+cambio de dependencias. El smoke end-to-end
+es `bash scripts/command-center-smoke.sh`.
 
 **Tema claro.** El dashboard usa un único tema claro, definido por tokens de
 color en `ui/src/styles.css`; un test de Vitest rechaza cualquier color

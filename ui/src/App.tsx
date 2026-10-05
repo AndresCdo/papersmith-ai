@@ -100,9 +100,16 @@ export default function App() {
     setRoute({ tab: next, el });
   }, []);
 
-  const graph = useMemo(() => buildGraph(state), [state]);
+  const pipelineGraph = useMemo(() => buildGraph(state, 'pipeline'), [state]);
+  const writingGraph = useMemo(() => buildGraph(state, 'writing'), [state]);
+  // The detail panel and the deep links are shared, so the active tab decides
+  // which flow an element id resolves against.
+  const graph = tab === 'writing' ? writingGraph : pipelineGraph;
   const presentIds = useMemo(() => new Set(graph.nodes.map((node) => node.id)), [graph]);
-  const selectElement = useCallback((id: string | null) => navigate('pipeline', id), [navigate]);
+  const selectElement = useCallback(
+    (id: string | null) => navigate(tab === 'writing' ? 'writing' : 'pipeline', id),
+    [navigate, tab],
+  );
 
   const selectTab = useCallback((next: TabId) => navigate(next), [navigate]);
 
@@ -230,6 +237,26 @@ export default function App() {
                 </ul>
               )}
             </section>
+          </>
+        ) : null}
+
+        {tab === 'writing' ? (
+          <>
+            <PipelineGraph
+              flow="writing"
+              graph={writingGraph}
+              selectedId={route.el}
+              onSelect={selectElement}
+            />
+            {route.el ? (
+              <ElementDetailPanel
+                elementId={route.el}
+                state={state}
+                graph={writingGraph}
+                history={history}
+                onSelect={selectElement}
+              />
+            ) : null}
           </>
         ) : null}
 

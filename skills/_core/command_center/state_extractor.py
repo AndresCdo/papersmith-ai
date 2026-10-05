@@ -43,34 +43,102 @@ SECTION_ORDER = (
     "10-back-matter",
 )
 
-#: Pipeline stages shown as DAG nodes, in order.
+#: The pipeline's stages, in the order the architecture diagram fixes them.
+#:
+#: The diagram is `docs/diagrams/papersmith-pi-flow.html`, generated from
+#: `.archify/architecture-papersmith-pi-20261004-173559/build.mjs`; its twelve
+#: numbered tramos are these, lane for lane, followed by the transversal audit
+#: lane it draws beside them. The board used to ship six stages invented in this
+#: directory, and nothing compared the two.
 PIPELINE_STAGES = (
+    ("harness", "Harness"),
+    ("plausibility", "Plausibility"),
     ("ingestion", "Ingestion"),
-    ("deliberation", "Deliberation"),
-    ("experiments", "Experiments"),
-    ("drafting", "Drafting"),
-    ("auditing", "Auditing"),
-    ("publishing", "Publishing"),
+    ("proposal", "Proposal deliberation"),
+    ("implementation", "Proof of concept"),
+    ("experimental-deliberation", "Experimental deliberation"),
+    ("experimental-implementation", "Experimental implementation"),
+    ("credentials", "Credentials"),
+    ("remote", "Remote execution"),
+    ("writing", "Writing"),
+    ("figures", "Figures and grounding"),
+    ("paper", "Paper"),
+    ("audit", "Audit (transversal)"),
 )
 
-#: Persona -> pipeline stage, used for the "active worker" pills.
+#: The diagram's main chain, `(from, to, label)`, in its order. The drawing
+#: reads this instead of carrying a chain of its own, which is what let the
+#: board and the diagram disagree in the first place.
+PIPELINE_CHAIN = (
+    ("plausibility", "ingestion", "top-5 to ingest"),
+    ("ingestion", "proposal", "guidance/"),
+    ("proposal", "implementation", "rNN revision"),
+    ("implementation", "experimental-deliberation", "proof of concept"),
+    ("experimental-deliberation", "experimental-implementation", "protocol + repo"),
+    ("experimental-implementation", "credentials", "job ready"),
+    ("credentials", "remote", "accounts validated"),
+    ("remote", "writing", "measured facts"),
+    ("writing", "figures", "sections"),
+    ("figures", "paper", "anchors"),
+)
+
+#: Where each quality gate hangs in that flow: the stage whose work it checks.
+#: The gate itself feeds the transversal audit lane, so nothing here names it.
+GATE_SOURCES = {
+    "writing-readiness": ("proposal", "contracts"),
+    "coupling-verification": ("writing", "facts"),
+    "grounding-style-leak": ("writing", "citations"),
+    "diagram-raster": ("figures", "figures"),
+}
+
+#: The placeholders a scaffold leaves inside a drop zone so the folder travels.
+#: They are not artifacts, and counting one would light a tramo with the only
+#: file the scaffold put there -- a board reporting work nobody did.
+PLACEHOLDER_FILES = (".gitkeep", ".gitignore")
+
+#: The transversal lane every quality gate's verdict lands in, which is where
+#: the diagram draws the audit lane relative to the numbered tramos.
+AUDIT_STAGE = "audit"
+
+#: The harness projections a wired workspace carries, one per harness.
+HARNESS_PROJECTIONS = (".claude", ".pi", ".opencode", ".agents")
+
+#: The plausibility flow's own artifacts, under `sota-pool/`.
+SOTA_POOL_ARTIFACTS = ("atlas.json", "atlas.html", "candidates.json")
+
+#: The declarations a skill makes when it owns a credential store: module-level
+#: string constants naming the directory and the file inside it. Same rule as
+#: `INBOX_DECLARATION`, and for the same reason -- the skill that owns the store
+#: stays its single source of truth, so the forge ships no target's own
+#: vocabulary into every workspace.
+STORE_DECLARATION = "STORE_NAME"
+STORE_FILE_DECLARATION = "STORE_FILE"
+
+#: The experimental deliberation's sidecar, written beside `experiments/`.
+EXPERIMENTAL_DELIBERATION = ".experimental-deliberation"
+
+#: The experimental implementation's revisions, under `experiments/`.
+EXPERIMENTAL_REVISION_GLOB = "experiments-*.md"
+
+#: Persona -> pipeline stage, used for the "active worker" pills. Read off the
+#: diagram's own lane placement of each agent, not off the old six stages.
 AGENT_STAGES = {
-    "insumos-observer": "ingestion",
     "paper-ingestion": "ingestion",
-    "deliberation-publish": "deliberation",
-    "experimental-publish": "deliberation",
-    "experimental-validation": "experiments",
-    "experiments-build": "experiments",
-    "experiments-walk": "experiments",
-    "implementation-build": "experiments",
-    "implementation-walk": "experiments",
-    "redactor": "drafting",
-    "diagram-author": "drafting",
-    "style-sampler": "drafting",
-    "contract-auditor": "auditing",
-    "section-grounding-auditor": "auditing",
-    "figure-auditor": "auditing",
-    "audit-report": "auditing",
+    "deliberation-publish": "proposal",
+    "experimental-publish": "experimental-deliberation",
+    "experimental-validation": "experimental-deliberation",
+    "experiments-build": "experimental-implementation",
+    "experiments-walk": "experimental-implementation",
+    "implementation-build": "implementation",
+    "implementation-walk": "implementation",
+    "insumos-observer": "writing",
+    "redactor": "writing",
+    "contract-auditor": "writing",
+    "style-sampler": "writing",
+    "diagram-author": "figures",
+    "figure-auditor": "figures",
+    "section-grounding-auditor": "figures",
+    "audit-report": "audit",
 }
 
 _EXTENT_RE = re.compile(
@@ -597,6 +665,37 @@ def _count_markdown(root: Path, *relative: str) -> int:
     return total
 
 
+def _count_matching(directory: Path, pattern: str) -> int:
+    """Regular files under ``directory`` matching one glob.
+
+    Placeholders never count: they are what lets an empty drop zone travel, and
+    reporting one as an artifact would light a tramo with nothing in it.
+    """
+    if not directory.is_dir():
+        return 0
+    return sum(
+        1 for path in directory.glob(pattern)
+        if path.is_file() and path.name not in PLACEHOLDER_FILES
+    )
+
+
+def _count_entries(directory: Path) -> int:
+    """Entries in a drop-zone directory, the placeholders aside."""
+    if not directory.is_dir():
+        return 0
+    return sum(1 for path in directory.iterdir() if path.name not in PLACEHOLDER_FILES)
+
+
+def _count_recursive(directory: Path) -> int:
+    """Regular files anywhere under ``directory``, the placeholders aside."""
+    if not directory.is_dir():
+        return 0
+    return sum(
+        1 for path in directory.rglob("*")
+        if path.is_file() and path.name not in PLACEHOLDER_FILES
+    )
+
+
 def _active_agents(root: Path) -> dict[str, list[str]]:
     by_stage: dict[str, list[str]] = {stage: [] for stage, _ in PIPELINE_STAGES}
     agents_dir = root / ".claude" / "agents"
@@ -611,17 +710,26 @@ def _active_agents(root: Path) -> dict[str, list[str]]:
 
 def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
                      gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One node per tramo, lit only by bytes the workspace actually holds.
+
+    Every reader below answers a question about a file or a directory; none of
+    them infers progress from a task list. A stage whose artifact is absent
+    reports ``active: False`` and a detail that says what is missing, which is
+    the honest answer and the one the board needs to be trusted.
+    """
     agents = _active_agents(root)
+    harness_dirs = [name for name in HARNESS_PROJECTIONS if (root / name).is_dir()]
+    sota = [name for name in SOTA_POOL_ARTIFACTS if (root / "sota-pool" / name).is_file()]
     guidance_files = _count_markdown(root, "guidance")
-    proposals = len([p for p in (root / "proposals").glob("*.md")]) if (root / "proposals").is_dir() else 0
-    experiments = (
-        len([
-            p for p in (root / "experiments").rglob("*")
-            if p.is_file() and p.name != ".gitkeep"
-        ])
-        if (root / "experiments").is_dir()
-        else 0
-    )
+    proposals = _count_matching(root / "proposals", "*.md")
+    implementations = _count_entries(root / "implementations")
+    deliberation_records = _count_recursive(root / EXPERIMENTAL_DELIBERATION)
+    experimental_revisions = _count_matching(root / "experiments",
+                                             EXPERIMENTAL_REVISION_GLOB)
+    store = credentials_store(root)
+    credentials = store is not None and store.is_file()
+    inbox = _inbox(root)
+    figures = _figures(root)
     blocks_total = sum(s["blocks_total"] for s in sections)
     blocks_written = sum(s["blocks_written"] for s in sections)
     gates_passed = sum(1 for g in gates if g["state"] == "PASSED")
@@ -634,17 +742,54 @@ def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
         return round(min(1.0, done / total), 3)
 
     definitions = {
-        "ingestion": (guidance_files > 0, ratio(1 if guidance_files else 0, 1), f"{guidance_files} guidance file(s)"),
-        "deliberation": (proposals > 0, ratio(min(proposals, 1), 1), f"{proposals} proposal(s)"),
-        "experiments": (experiments > 0, ratio(min(experiments, 1), 1), f"{experiments} experiment artifact(s)"),
-        "drafting": (blocks_written > 0, ratio(blocks_written, blocks_total), f"{blocks_written}/{blocks_total} blocks written"),
-        "auditing": (gates_passed == len(gates) and bool(sections), ratio(gates_passed, len(gates)), f"{gates_passed}/{len(gates)} gates passed"),
-        "publishing": (pdf, 1.0 if pdf else 0.0, "paper/main.pdf present" if pdf else "paper/main.pdf absent"),
+        "harness": (
+            bool(harness_dirs), ratio(len(harness_dirs), len(HARNESS_PROJECTIONS)),
+            f"{len(harness_dirs)}/{len(HARNESS_PROJECTIONS)} harness projection(s)",
+        ),
+        "plausibility": (
+            bool(sota), ratio(len(sota), len(SOTA_POOL_ARTIFACTS)),
+            "sota-pool/: " + ", ".join(sota) if sota else "no sota-pool artifact",
+        ),
+        "ingestion": (guidance_files > 0, ratio(1 if guidance_files else 0, 1),
+                      f"{guidance_files} guidance file(s)"),
+        "proposal": (proposals > 0, ratio(min(proposals, 1), 1),
+                     f"{proposals} proposal(s)"),
+        "implementation": (implementations > 0, ratio(min(implementations, 1), 1),
+                           f"{implementations} implementation(s)"),
+        "experimental-deliberation": (
+            deliberation_records > 0, ratio(min(deliberation_records, 1), 1),
+            f"{deliberation_records} deliberation record(s)",
+        ),
+        "experimental-implementation": (
+            experimental_revisions > 0, ratio(min(experimental_revisions, 1), 1),
+            f"{experimental_revisions} experimental revision(s)",
+        ),
+        "credentials": (
+            credentials, 1.0 if credentials else 0.0,
+            f"{store.parent.name}/{store.name} present" if store is not None and credentials
+            else "no validated credentials",
+        ),
+        "remote": (inbox["count"] > 0, ratio(min(inbox["count"], 1), 1),
+                   f"{inbox['count']} inbox entry(ies)"),
+        "writing": (blocks_written > 0, ratio(blocks_written, blocks_total),
+                    f"{blocks_written}/{blocks_total} blocks written"),
+        "figures": (figures["count"] > 0, ratio(min(figures["count"], 1), 1),
+                    f"{figures['count']} figure file(s)"),
+        "paper": (
+            main_tex, 1.0 if pdf else (0.5 if main_tex else 0.0),
+            "paper/main.tex + main.pdf" if pdf else (
+                "paper/main.tex present" if main_tex else "paper/main.tex absent"),
+        ),
+        "audit": (
+            bool(gates) and gates_passed == len(gates),
+            ratio(gates_passed, len(gates)),
+            f"{gates_passed}/{len(gates)} gates passed",
+        ),
     }
     stages: list[dict[str, Any]] = []
     for stage, title in PIPELINE_STAGES:
         active, progress, detail = definitions[stage]
-        if stage == "drafting" and not main_tex and sections:
+        if stage == "writing" and not main_tex and sections:
             progress = 0.0
         stages.append({
             "id": stage,
@@ -691,29 +836,59 @@ def _figures(root: Path) -> dict[str, Any]:
 INBOX_DECLARATION = "INBOX_NAME"
 
 
-def inbox_directory(root: Path) -> str | None:
-    """The drop-zone directory the workspace's own skills declare, if any.
+def _module_string_constants(script: Path, names: tuple[str, ...]) -> dict[str, str]:
+    """Module-level string constants of one script, by name.
 
     Parsed with `ast`, never grepped: a name mentioned in a docstring or an
     error message is not a declaration, and a scanner that could not tell them
     apart would pick up whichever it met first.
     """
+    try:
+        tree = ast.parse(script.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return {}
+    found: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
+            continue
+        for target in node.targets:
+            name = getattr(target, "id", None)
+            if name in names:
+                found[name] = node.value.value
+    return found
+
+
+def inbox_directory(root: Path) -> str | None:
+    """The drop-zone directory the workspace's own skills declare, if any."""
     skills_dir = root / "skills"
     if not skills_dir.is_dir():
         return None
     for script in sorted(skills_dir.glob("*/scripts/*.py")):
-        try:
-            tree = ast.parse(script.read_text(encoding="utf-8"))
-        except (SyntaxError, UnicodeDecodeError, OSError):
-            continue
-        for node in tree.body:
-            if not isinstance(node, ast.Assign):
-                continue
-            if not any(getattr(target, "id", None) == INBOX_DECLARATION
-                       for target in node.targets):
-                continue
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                return node.value.value
+        declared = _module_string_constants(script, (INBOX_DECLARATION,))
+        if INBOX_DECLARATION in declared:
+            return declared[INBOX_DECLARATION]
+    return None
+
+
+def credentials_store(root: Path) -> Path | None:
+    """The credential store the workspace's own skill declares, if any.
+
+    The store's owner names its directory and its file, and this reads both
+    rather than restating either. A restated path is the same one this reader
+    would have had to spell out, and it would put one target's vocabulary inside
+    a file every workspace receives.
+    """
+    skills_dir = root / "skills"
+    if not skills_dir.is_dir():
+        return None
+    wanted = (STORE_DECLARATION, STORE_FILE_DECLARATION)
+    for script in sorted(skills_dir.glob("*/scripts/*.py")):
+        declared = _module_string_constants(script, wanted)
+        if set(declared) == set(wanted):
+            # parents[1] is the skill directory the script's own `scripts/` sits in.
+            return script.parents[1] / declared[STORE_DECLARATION] / declared[STORE_FILE_DECLARATION]
     return None
 
 
@@ -724,7 +899,10 @@ def _inbox(root: Path) -> dict[str, Any]:
     directory = root / name
     if not directory.is_dir():
         return {"count": 0, "paths": [], "directory": name}
-    paths = sorted(str(p.relative_to(directory)) for p in directory.iterdir() if p.name != ".gitignore")
+    paths = sorted(
+        str(path.relative_to(directory)) for path in directory.iterdir()
+        if path.name not in PLACEHOLDER_FILES
+    )
     return {"count": len(paths), "paths": paths, "directory": name}
 
 
@@ -805,6 +983,14 @@ def get_workspace_state(root: Path | str) -> dict[str, Any]:
         "sections": sections,
         "gates": gates,
         "pipeline_stages": stages,
+        "pipeline_chain": [
+            {"from": source, "to": target, "label": label}
+            for source, target, label in PIPELINE_CHAIN
+        ],
+        "gate_links": {
+            gate_id: {"from": source, "label": label, "consumed_by": AUDIT_STAGE}
+            for gate_id, (source, label) in GATE_SOURCES.items()
+        },
         "experiments": _experiments(root_path),
         "figures": _figures(root_path),
         "inbox": _inbox(root_path),
