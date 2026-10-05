@@ -32,8 +32,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from ..errors import SourceError, UserError
-from . import fs
+from ..bridges.python import run_script
+from ..errors import PapersmithError, SourceError, UserError
+from . import fs, manifest
 from .config import utc_timestamp
 
 #: The applied-migration ledger, workspace state like ``runs_ledger.jsonl``
@@ -378,7 +379,98 @@ class ScaffoldGraphPool(Migration):
         return [f"created {GRAPH_POOL}/.gitkeep"], []
 
 
+class RefreshRenderedAtlas(Migration):
+    """Re-render ``sota-pool/atlas.html`` when the release changed what makes it.
+
+    The page is DERIVED, and both of its producers are kit files:
+    ``render_atlas.py`` builds it and inlines ``atlas3d.bundle.js`` whole. So a
+    release that ships either leaves the rendered graph stale while every file
+    around it moved, and nothing in the workspace notices — the one artifact
+    gap that is visible on ``main`` today rather than waiting for a future
+    shape change.
+
+    Staleness is decided by a hash of the atlas, the renderer and the viewer
+    bundle, recorded in ``sota-pool/.atlas-render.json``, not by comparing
+    modification times. A copy's mtime says when the file was written, which an
+    ``upgrade`` rewrites for reasons that have nothing to do with the page; the
+    same reasoning the manifest already applies to framework files. A stamp
+    that is missing or unreadable reads as *unknown*, which re-renders: the
+    cost is one deterministic rebuild, and the alternative is trusting a page
+    nobody can place.
+
+    The atlas itself is never written. This migration reads research state and
+    rebuilds only the view of it.
+    """
+
+    id = "atlas-render-refresh"
+    summary = "re-render sota-pool/atlas.html when its renderer or viewer bundle moved"
+
+    ATLAS = f"{GRAPH_POOL}/atlas.json"
+    PAGE = f"{GRAPH_POOL}/atlas.html"
+    STAMP = f"{GRAPH_POOL}/.atlas-render.json"
+    RENDERER = "skills/plausibility/scripts/render_atlas.py"
+    VIEWER = "skills/plausibility/assets/atlas3d.bundle.js"
+
+    def _fingerprint(self, workspace: Path) -> dict[str, str | None]:
+        return {
+            "atlas": manifest.sha256_if_readable(workspace / self.ATLAS),
+            "renderer": manifest.sha256_if_readable(workspace / self.RENDERER),
+            "viewer": manifest.sha256_if_readable(workspace / self.VIEWER),
+        }
+
+    def _recorded(self, workspace: Path) -> dict | None:
+        """The stamp, or ``None`` for "unknown" — which re-renders."""
+        text = fs.read_text(workspace / self.STAMP)
+        if text is None:
+            return None
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def plan(self, workspace: Path) -> list[str]:
+        if not fs.is_regular_file(workspace / self.ATLAS):
+            # The pool is empty until the grapher fills it. Rendering a page
+            # from an atlas that does not exist would invent a graph.
+            return []
+        if not fs.is_regular_file(workspace / self.PAGE):
+            return [f"render {self.PAGE} from {self.ATLAS}"]
+        recorded = self._recorded(workspace)
+        if recorded is not None and all(
+                recorded.get(key) == value
+                for key, value in self._fingerprint(workspace).items()):
+            return []
+        return [f"re-render {self.PAGE}: its atlas, renderer or viewer bundle moved"]
+
+    def apply(self, workspace: Path) -> tuple[list[str], list[str]]:
+        try:
+            completed = run_script(
+                workspace, self.RENDERER,
+                [str(workspace / self.ATLAS), "--out", str(workspace / self.PAGE)],
+                timeout=300)
+        except PapersmithError as error:
+            # A missing script or a timeout is typed, and it belongs in the
+            # report rather than aborting a run that already moved files.
+            return [], [f"could not run {self.RENDERER}: {error}"]
+        if completed.returncode != 0:
+            # The renderer speaks in typed codes on stderr — ATLAS_NOT_JSON,
+            # SYSTEMS_NOT_A_NONEMPTY_LIST, ATLAS_VIEWER_MISSING. Carry its own
+            # last word through instead of restating it less precisely.
+            lines = (completed.stderr or completed.stdout or "").strip().splitlines()
+            reason = lines[-1].strip() if lines else f"exit {completed.returncode}"
+            return [], [f"{self.RENDERER} refused {self.ATLAS}: {reason}"]
+        if not fs.write_text(workspace / self.STAMP,
+                             json.dumps(self._fingerprint(workspace), indent=2) + "\n"):
+            return ([f"rendered {self.PAGE}"],
+                    [f"could not record {self.STAMP}, so the page will be "
+                     "re-rendered on every run until that path is writable"])
+        return [f"rendered {self.PAGE}"], []
+
+
 #: Every migration this release ships, in the order they must run.
+#:
+#: Order is contract: the scaffold creates the pool the renderer writes into.
 #:
 #: A gate at or below the current version would never be selected for a
 #: workspace already on it and would fire for every older one without the
@@ -386,4 +478,5 @@ class ScaffoldGraphPool(Migration):
 #: declares_no_gate_at_or_below_this_release`` holds the rule.
 REGISTRY: tuple[Migration, ...] = (
     ScaffoldGraphPool(),
+    RefreshRenderedAtlas(),
 )
