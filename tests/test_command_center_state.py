@@ -485,6 +485,12 @@ class PipelineFlowTests(unittest.TestCase):
         def harness(root: Path) -> None:
             (root / ".pi").mkdir()
 
+        def credentials(root: Path) -> None:
+            self.write(root / "skills" / "accounts-owner" / "scripts" / "accounts_cli.py",
+                       'STORE_NAME = "store"\nSTORE_FILE = "accounts.json"\n')
+            self.write(root / "skills" / "accounts-owner" / "store" / "accounts.json",
+                       '{"accounts": []}\n')
+
         def remote(root: Path) -> None:
             self.write(root / "skills" / "remote-execution" / "scripts" / "remote_cli.py",
                        'INBOX_NAME = "kaggle-inbox"\n')
@@ -519,11 +525,7 @@ class PipelineFlowTests(unittest.TestCase):
             ("experimental-implementation",
              lambda root: self.write(root / "experiments" / "experiments-slug-v01.md", "# e\n"),
              {"experimental-implementation"}),
-            ("credentials",
-             lambda root: self.write(
-                 root / "skills" / "kaggle-accounts" / "store" / "accounts.json",
-                 '{"accounts": []}\n'),
-             {"credentials"}),
+            ("credentials", credentials, {"credentials"}),
             ("remote", remote, {"remote"}),
             # A drafted block requires paper/main.tex to exist, so this case
             # legitimately lights the paper tramo too.

@@ -106,10 +106,13 @@ HARNESS_PROJECTIONS = (".claude", ".pi", ".opencode", ".agents")
 #: The plausibility flow's own artifacts, under `sota-pool/`.
 SOTA_POOL_ARTIFACTS = ("atlas.json", "atlas.html", "candidates.json")
 
-#: The accounts CLI's store, relative to the workspace root. Its own
-#: `accounts_cli.py` declares it as `SKILL_ROOT / "store"`, and the skill is
-#: copied into the workspace at `skills/kaggle-accounts/`.
-CREDENTIALS_STORE = Path("skills") / "kaggle-accounts" / "store" / "accounts.json"
+#: The declarations a skill makes when it owns a credential store: module-level
+#: string constants naming the directory and the file inside it. Same rule as
+#: `INBOX_DECLARATION`, and for the same reason -- the skill that owns the store
+#: stays its single source of truth, so the forge ships no target's own
+#: vocabulary into every workspace.
+STORE_DECLARATION = "STORE_NAME"
+STORE_FILE_DECLARATION = "STORE_FILE"
 
 #: The experimental deliberation's sidecar, written beside `experiments/`.
 EXPERIMENTAL_DELIBERATION = ".experimental-deliberation"
@@ -723,7 +726,8 @@ def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
     deliberation_records = _count_recursive(root / EXPERIMENTAL_DELIBERATION)
     experimental_revisions = _count_matching(root / "experiments",
                                              EXPERIMENTAL_REVISION_GLOB)
-    credentials = (root / CREDENTIALS_STORE).is_file()
+    store = credentials_store(root)
+    credentials = store is not None and store.is_file()
     inbox = _inbox(root)
     figures = _figures(root)
     blocks_total = sum(s["blocks_total"] for s in sections)
@@ -762,7 +766,8 @@ def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
         ),
         "credentials": (
             credentials, 1.0 if credentials else 0.0,
-            "store/accounts.json present" if credentials else "no validated credentials",
+            f"{store.parent.name}/{store.name} present" if store is not None and credentials
+            else "no validated credentials",
         ),
         "remote": (inbox["count"] > 0, ratio(min(inbox["count"], 1), 1),
                    f"{inbox['count']} inbox entry(ies)"),
@@ -831,29 +836,59 @@ def _figures(root: Path) -> dict[str, Any]:
 INBOX_DECLARATION = "INBOX_NAME"
 
 
-def inbox_directory(root: Path) -> str | None:
-    """The drop-zone directory the workspace's own skills declare, if any.
+def _module_string_constants(script: Path, names: tuple[str, ...]) -> dict[str, str]:
+    """Module-level string constants of one script, by name.
 
     Parsed with `ast`, never grepped: a name mentioned in a docstring or an
     error message is not a declaration, and a scanner that could not tell them
     apart would pick up whichever it met first.
     """
+    try:
+        tree = ast.parse(script.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return {}
+    found: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
+            continue
+        for target in node.targets:
+            name = getattr(target, "id", None)
+            if name in names:
+                found[name] = node.value.value
+    return found
+
+
+def inbox_directory(root: Path) -> str | None:
+    """The drop-zone directory the workspace's own skills declare, if any."""
     skills_dir = root / "skills"
     if not skills_dir.is_dir():
         return None
     for script in sorted(skills_dir.glob("*/scripts/*.py")):
-        try:
-            tree = ast.parse(script.read_text(encoding="utf-8"))
-        except (SyntaxError, UnicodeDecodeError, OSError):
-            continue
-        for node in tree.body:
-            if not isinstance(node, ast.Assign):
-                continue
-            if not any(getattr(target, "id", None) == INBOX_DECLARATION
-                       for target in node.targets):
-                continue
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                return node.value.value
+        declared = _module_string_constants(script, (INBOX_DECLARATION,))
+        if INBOX_DECLARATION in declared:
+            return declared[INBOX_DECLARATION]
+    return None
+
+
+def credentials_store(root: Path) -> Path | None:
+    """The credential store the workspace's own skill declares, if any.
+
+    The store's owner names its directory and its file, and this reads both
+    rather than restating either. A restated path is the same one this reader
+    would have had to spell out, and it would put one target's vocabulary inside
+    a file every workspace receives.
+    """
+    skills_dir = root / "skills"
+    if not skills_dir.is_dir():
+        return None
+    wanted = (STORE_DECLARATION, STORE_FILE_DECLARATION)
+    for script in sorted(skills_dir.glob("*/scripts/*.py")):
+        declared = _module_string_constants(script, wanted)
+        if set(declared) == set(wanted):
+            # parents[1] is the skill directory the script's own `scripts/` sits in.
+            return script.parents[1] / declared[STORE_DECLARATION] / declared[STORE_FILE_DECLARATION]
     return None
 
 
