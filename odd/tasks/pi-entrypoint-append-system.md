@@ -63,23 +63,46 @@ Delivery: one branch, work-unit commits, Conventional messages, no AI attributio
 Push, PR and merge stay the user's decision.
 
 ## Tasks
-1. [ ] `tests/test_skill_descriptions.py` (RED) then the two compressed
+1. [x] `tests/test_skill_descriptions.py` (RED) then the two compressed
        descriptions plus the provenance date back in the body (GREEN)
-2. [ ] Rename the `pi` static output and its template; update `TOOL_OUTPUTS`,
+2. [x] Rename the `pi` static output and its template; update `TOOL_OUTPUTS`,
        the audit surplus table, the pinned expected-path sets and the kit
-3. [ ] `upgrade`: create `.pi/APPEND_SYSTEM.md`, remove the stale `PI.md`
-4. [ ] Tests: generators, init, upgrade, workspace agents e2e, workspace commands
+3. [x] `upgrade`: create `.pi/APPEND_SYSTEM.md`, remove the stale `PI.md`
+4. [x] Tests: generators, init, upgrade, workspace agents e2e, workspace commands
        e2e, harness parity, executor pin, wiring smoke script
-5. [ ] Docs: `README.md`, `README.es.md`, `.pi/README.md`,
+5. [x] Docs: `README.md`, `README.es.md`, `.pi/README.md`,
        `openspec/project-context.md`, `docs/harness-support-matrix.md`, the seven
        skill prose references, `CHANGELOG.md`, version literals
-6. [ ] Regenerate the Archify diagram (label + pin) and re-validate it
-7. [ ] Verification: fast tier, node suite, full pytest, `sync-repo-harness.py
+6. [x] Regenerate the Archify diagram (label + pin) and re-validate it
+7. [x] Verification: fast tier, node suite, full pytest, `sync-repo-harness.py
        --check`, kit rebuild, real-browser check
 
 ## Evidence
-(pending)
+
+Backfilled on 2026-10-05, after the fact: the branch shipped in **0.8.0** and
+this section was left as `(pending)` while the record was untracked, then
+committed that way in `44a5107`. Each row cites the commit that carries the
+claim. The checks in the last row were run by the session that made them, not
+re-run when this section was written.
+
+| Task | Commit | What it carries |
+| --- | --- | --- |
+| 1 — the description budget | `188facd` | `tests/test_skill_descriptions.py` (93 lines) holds the 1024-unit budget, measured in UTF-16 code units because that is the unit JS `length` counts; `paper-writing` 1680 → 1015, `remote-execution` 1814 → 923; the `since 2025-07-11` provenance date moved into the body; the six generated command projections regenerated |
+| 2 — the rename | `4808830` | `PI.md` → `.pi/APPEND_SYSTEM.md` in `generators.py` (`TOOL_OUTPUTS`, `TEMPLATES`), the template, the wiring smoke script and the tests that pin the path |
+| 3 — `upgrade` retires the old path | `5f5d71a` | `generators.RETIRED_STATIC`, the two removal conditions in `upgrade` (baselined **and** the runtime still declared, so an operator's own `PI.md` survives), and `audit`'s surplus scan widened to retired paths |
+| 4 — tests | `4808830`, `5f5d71a` | generators, init, upgrade, workspace agents/commands e2e, executor pin and the wiring smoke script updated with the path |
+| 5 — docs | `1a7930d` | `README.md`, `.pi/README.md`, `openspec/project-context.md`, `docs/harness-support-matrix.md`, seven skill prose spots and `CHANGELOG.md`; the kit rebuilt because it ships `skills/` |
+| 6 — the diagram | `1128a48` | the Pi flow regenerated against `63486ce` with Archify 3.0.1 and the four gates green; it rode its own branch (`docs/pi-flow-labels`, merged in `39eff48`) because it followed the rename rather than shipping with it |
+| 7 — verification | — | fast tier, node suite, full pytest, `sync-repo-harness.py --check`, kit rebuild and browser check, run in the branch's own session. Independent verification passed A, C–K and caught one live defect: the diagram merged in `63486ce` still named `PI.md`, which is why task 6 exists |
+
+The branch merged into `main` as `63486ce` and shipped in **0.8.0** (`e7fb53f`,
+tag `v0.8.0`). No `PI.md` reference survives at `HEAD` except the ones that
+name it *as retired*: `RETIRED_STATIC` in `generators.py:48`, the audit
+docstring, the upgrade rule, the tests that pin the retirement, and the two
+CHANGELOG entries.
 
 ## Next step
-Confirm the D1 shape with the operator if it is not already implied by their
-"apply the stash fix" answer, then start with task 1's RED guard.
+
+None: shipped, tagged and released in 0.8.0. The record is kept for the
+reasoning it captures — `dist/core/resource-loader.js:116` for the entrypoint
+and `dist/core/skills.js:11` for the ceiling — not as pending work.

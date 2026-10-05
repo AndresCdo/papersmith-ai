@@ -129,5 +129,9 @@ declared requirement), vitest 216 passed, and the bundle current.
 
 ## Next step
 
-Merge, then release 0.10.0 following `docs/releasing.md` -- the procedure this
-cycle wrote down.
+None: the cycle is closed. Merged into `main` as `02fe9f5`, released as
+**0.10.0** — `4b378ec` bumped the three version literals, the `## 0.10.0`
+CHANGELOG section and the pinned install example, and `435aab6` is the merge
+commit the tag points at. Annotated tag `v0.10.0` and its GitHub release are
+public; `docs/releasing.md`, written during this cycle, is the procedure that
+was followed to publish it.

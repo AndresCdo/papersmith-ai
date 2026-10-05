@@ -61,13 +61,44 @@ novelty and the issues it could resolve.
   gains the `--title` note; CHANGELOG.
 
 ## Checks
+
 Runners: `.venv/bin/python -m pytest tests/test_sota_atlas.py tests/<new> -q`,
 then the fast tier `.venv/bin/python scripts/fast_tests.py`, kit rebuild
 (`python3 scripts/build-kit.py`, because `skills/` changed), and
 `python scripts/sync-repo-harness.py --check`.
 
 ## Evidence
-(pending)
+
+Backfilled on 2026-10-05, after the fact: the branch shipped in **0.8.0** and
+this section was left as `(pending)` while the record was untracked, then
+committed that way in `44a5107`. Each row cites the commit that carries the
+claim; the counts are the ones the commits state, not re-measured when this
+section was written.
+
+| Slice | Commit | What it carries |
+| --- | --- | --- |
+| S1 — `--title` | `6baadf3` | `render_atlas.py` names the page in both the tab title and the heading, escaped; three tests, two of which fail against the previous renderer (it exits 2 on the unknown flag). Default output unchanged across a before/after render: `cf2fbdf1…` plain, `720f4f11…` with links |
+| S2 — the merge | `6514389` | `merge_proposal_sky.py` plus the optional `contribution` slot (orbit 1, 0..5); twelve tests hold the chain end to end (merge, check, render) and the three refusals, and the two contract tests fail against a merger with the 3..5 range removed |
+| S3 — contract and docs | `4854ee6` | the `contribution` row and the `--title` note in `plausibility/SKILL.md`, the overlay shape and the merge → check → render chain in `proposal-deliberation/SKILL.md`, plus the CHANGELOG entry. Independent verification read both files against the code and found three prose gaps, all fixed here: the relation set listed six of seven members, the overlay's planets omitted the `result` and `conclusion` nodes the checker requires of every system, and "stage 3" named a step neither skill defines. The forge-wide vocabulary guard also caught "ceiling" in the new script's prose as another repository's vocabulary, and the sentence now says "upper bound" |
+
+Contract decision worth keeping: the merger refuses only merge incoherence (an
+id already taken, a link with no planet to land on) and the overlay's own
+contract; `check_atlas.py` stays the single authority on families, orbits and
+evidence. That split is proven by the five-family pool that merges fine and is
+then refused by the checker, named, in the same run.
+
+The branch merged into `main` as `6236d61` and shipped in **0.8.0** (`e7fb53f`,
+tag `v0.8.0`).
+
+## Known gap (not a task)
+
+The chain was never run against a real workspace: the two SKILL examples were
+not executed over a real `sota-pool/atlas.json` and a real overlay, because the
+overlay is authored by the deliberation itself. The first real deliberation in a
+workspace is therefore the first execution of this path against real data, and
+should be treated as such.
 
 ## Next step
-S1: add `--title` and capture the before/after sha256 of a rendered fixture.
+
+None: shipped in 0.8.0. The gap above is a property of when the path gets its
+first real input, not pending work in this record.
