@@ -11,6 +11,38 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.11.0
+
+### Changed
+
+- **The proposal tramo reports its two artifacts separately.** It was lit only
+  by `proposals/*.md`, so a published revision and a published revision with
+  its graph read the same to the board. It now counts the revisions and the sky
+  graphs (`proposals/*.graph.html`), names both in its detail, and reports
+  their ratio as its progress -- a revision without its graph is exactly the
+  half-done state worth showing.
+- **The Pi flow diagram names both artifacts** on `proposals/` and draws a
+  dashed `atlas.json` edge from `sota-grapher` to `deliberation-publish`. A
+  sixth node in that carril was measured infeasible: Archify's gates require a
+  cell wide enough for `/experimental-implementation` and a gap wide enough for
+  a connection, which puts a six-column viewBox near 1370px against the 1240px
+  desktop budget at showcase quality.
+
+### Added
+
+- **The proposal's sky graph is a step of the flow.** Stage 3's graph -- the
+  SOTA constellation with the proposal inside it -- was documented, tested and
+  run by nobody: the architecture diagram had no node for it, the *Pipeline*
+  tab could not see it, and no agent produced it. Three surfaces now carry it.
+  `deliberation-publish` requires the overlay, reporting it as `owed` rather
+  than inventing a relation to have something to draw, runs
+  `merge_proposal_sky.py`, `check_atlas.py` and `render_atlas.py` in that
+  order, and reports the rendered path, the checker's verdict and whether the
+  published revision names it. The deliberation's own skill now pins *when* the
+  overlay is authored -- before the change is accepted, because the successor's
+  text is what names the picture -- and the publish stretch has no `Write`, so
+  an overlay it cannot find is reported rather than manufactured.
+
 ## 0.10.0
 
 ### Changed
