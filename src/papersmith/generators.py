@@ -35,6 +35,19 @@ TOOL_OUTPUTS = {
     "antigravity": (".agents/AGENTS.md",),
 }
 
+#: Static entrypoints an earlier release generated and a later one retired.
+#:
+#: Kept as a named table rather than dropped from history so the two questions a
+#: retired path raises stay answerable. ``bridges.audit`` reports one that is
+#: still on disk, because nothing regenerates it and no other check would ever
+#: mention it again. ``core.upgrade`` removes one that this tool itself
+#: baselined, for a runtime the workspace still declares: a path that was never
+#: baselined is not this tool's output and is never removed, which is the same
+#: boundary ``core.upgrade._orphaned`` holds for dynamic outputs.
+RETIRED_STATIC = {
+    "pi": ("PI.md",),
+}
+
 #: Baseline marker for a managed path a run could not synchronize or remove.
 #: A sha256 digest is 64 hex characters, so this cannot collide with one, and
 #: ``workspace_framework_files`` omits such a path from the live map — the
