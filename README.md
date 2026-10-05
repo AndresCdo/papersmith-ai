@@ -122,10 +122,19 @@ Nada de esto requiere claves ni servicios externos: la forja corre localmente.
 ```bash
 # 1a. El CLI, siempre desde la última versión de la rama `main`
 pipx install git+https://github.com/Daprosero/papersmith-ai.git
+#     lo mismo con pip, si no usás pipx
+pip install "papersmith-ai @ git+https://github.com/Daprosero/papersmith-ai.git"
 
 # 1b. O desde un clon de `main` (si vas a desarrollar el framework)
 git clone https://github.com/Daprosero/papersmith-ai.git && cd papersmith-ai
-pipx install .
+pipx install .            # con pip: pip install .
+
+# 1c. Actualizar una instalación cuando sale una release nueva
+pipx upgrade papersmith-ai
+#     si `upgrade` no ve el cambio, forzá la reinstalación
+pipx install --force git+https://github.com/Daprosero/papersmith-ai.git
+#     con pip, `--upgrade` sobre una URL de git no siempre vuelve a clonar
+pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/Daprosero/papersmith-ai.git"
 
 # 2. Runtime aislado de ingestión (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
 python3 scripts/setup_env.py install
@@ -135,15 +144,26 @@ npm install
 npm run setup:harnesses
 ```
 
-Instalá siempre desde `main`: es la única rama que se mantiene, y no hay
-instrucciones para fijar una versión o un tag. La forma 1a recibe exactamente
-lo que `main` tiene hoy; la 1b toma el clon tal como está, incluidos cambios
-sin commitear, así que para reproducir un build usá 1a. El historial de
-cambios está en [CHANGELOG.md](CHANGELOG.md).
+**No hay `pip install papersmith-ai` a secas.** El paquete no está publicado en
+PyPI, así que la instalación va por git, como arriba. Y ojo con el nombre
+vecino: `papersmith` —sin el `-ai`— sí está en PyPI, pero es **otro proyecto**
+(generación de documentos Word), así que `pip install papersmith` no instala
+esta forja.
 
-Una versión instalada se lee con `papersmith --version`, y `papersmith upgrade`
-se niega a llevar un workspace a una versión anterior a la que registra salvo
-que se lo pidas con `--allow-downgrade`.
+Instalá siempre desde `main`: es la única rama que se mantiene. La forma 1a
+recibe exactamente lo que `main` tiene hoy; la 1b toma el clon tal como está,
+incluidos cambios sin commitear, así que para reproducir un build usá 1a. Cada
+release queda además con su tag, así que si necesitás congelar un build exacto
+fijalo en la URL — por ejemplo
+`pipx install --force "git+https://github.com/Daprosero/papersmith-ai@v0.8.0"`.
+El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
+
+Para actualizar, 1c alcanza: reinstala desde `main` y con eso quedás en la
+última release. Después confirmá qué quedó con `papersmith --version`. Ojo con
+no confundir los dos `upgrade`: `papersmith upgrade` sincroniza un **workspace**
+con la versión instalada del framework y se niega a llevarlo a una versión
+anterior a la que él registra, salvo que se lo pidas con `--allow-downgrade`; no
+toca la instalación del CLI.
 
 `scripts/setup_env.py install` provisiona **todo** el stack de ingestión en un
 entorno micromamba aparte (CPU o CUDA, según lo que detecte), incluido el
