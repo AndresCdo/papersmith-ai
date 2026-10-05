@@ -31,7 +31,7 @@ ALL_TOOLS = ("claude", "opencode", "pi", "antigravity")
 TOOL_OUTPUTS = {
     "claude": ("CLAUDE.md",),
     "opencode": ("OPENCODE.md",),
-    "pi": ("PI.md", ".pi/gentle-ai/persona.json"),
+    "pi": (".pi/APPEND_SYSTEM.md", ".pi/gentle-ai/persona.json"),
     "antigravity": (".agents/AGENTS.md",),
 }
 
@@ -664,7 +664,7 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
     templates = {
         "claude": ("CLAUDE.md", "claude.md.tpl"),
         "opencode": ("OPENCODE.md", "opencode.md.tpl"),
-        "pi": ("PI.md", "pi.md.tpl"),
+        "pi": (".pi/APPEND_SYSTEM.md", "pi.md.tpl"),
         "antigravity": (".agents/AGENTS.md", "antigravity-rules.md.tpl"),
     }
     commands: list[dict[str, str]] | None = None

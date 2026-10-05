@@ -104,7 +104,7 @@ class GeneratedWorkspaceTests(unittest.TestCase):
             "papersmith.yaml",
             "CLAUDE.md",
             "OPENCODE.md",
-            "PI.md",
+            ".pi/APPEND_SYSTEM.md",
             ".pi/gentle-ai/persona.json",
             ".agents/AGENTS.md",
             "README.md",
@@ -289,7 +289,7 @@ class RenderedSetLifecycleTests(unittest.TestCase):
     """
 
     KIT_COMMAND_NAMES = HarnessCommandProjectionTests.COMMAND_NAMES
-    STATIC_ENTRYPOINTS = ("OPENCODE.md", "PI.md", ".agents/AGENTS.md")
+    STATIC_ENTRYPOINTS = ("OPENCODE.md", ".pi/APPEND_SYSTEM.md", ".agents/AGENTS.md")
 
     @staticmethod
     def _init_subset(base: Path, tools: str) -> Path:

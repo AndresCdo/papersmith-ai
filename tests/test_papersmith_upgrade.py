@@ -132,7 +132,7 @@ class UpgradeTests(unittest.TestCase):
         assert result["active_tools"] == ["claude", "pi"]
         assert config.load_workspace_config(workspace)["active_tools"] == ["claude", "pi"]
         assert (workspace / "CLAUDE.md").is_file()
-        assert (workspace / "PI.md").is_file()
+        assert (workspace / ".pi/APPEND_SYSTEM.md").is_file()
 
     def test_upgrade_refuses_missing_manifest(self) -> None:
         tmp_path = self.new_tmp()

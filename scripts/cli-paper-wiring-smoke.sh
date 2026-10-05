@@ -9,7 +9,7 @@
 #      .agents/skills are relative symlinks that resolve to the workspace's own skills/.
 #   2. Every .claude/agents/*.md's referenced .claude/skills/<name>/SKILL.md
 #      resolves both canonically and through every harness's own symlink.
-#   3. The agent roster in CLAUDE.md/OPENCODE.md/PI.md/.agents/AGENTS.md
+#   3. The agent roster in CLAUDE.md/OPENCODE.md/.pi/APPEND_SYSTEM.md/.agents/AGENTS.md
 #      matches the real .claude/agents/*.md files.
 #   4. .claude/commands/, .opencode/commands/ and .pi/prompts/ list the same
 #      filenames as each other and as skills/'s top-level SKILL.md directories.
@@ -66,7 +66,7 @@ done
 
 # Check 3: agent roster parity across the four generated harness docs.
 agent_names="$(cd "$WS/.claude/agents" && ls -- *.md | sed 's/\.md$//' | sort)"
-for doc in CLAUDE.md OPENCODE.md PI.md .agents/AGENTS.md; do
+for doc in CLAUDE.md OPENCODE.md .pi/APPEND_SYSTEM.md .agents/AGENTS.md; do
   doc_names="$(grep -oE '^- `[^`]+`' "$WS/$doc" | sed -E 's/^- `([^`]+)`$/\1/' | sort || true)"
   [[ "$doc_names" == "$agent_names" ]] \
     || fail 3 "$doc agent roster does not match .claude/agents/*.md"
