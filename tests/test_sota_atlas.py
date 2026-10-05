@@ -160,7 +160,7 @@ class CheckAtlasTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
     def test_a_sixth_contribution_is_refused(self):
-        """Five is the ceiling the proposal contract names; a sixth concept is
+        """Five is the widest the proposal contract names; a sixth concept is
         a different claim and belongs in a revision of its own."""
         nodes = system("a", "F1")["planets"] + [
             planet(f"a-contrib-{i}", "contribution") for i in range(6)]

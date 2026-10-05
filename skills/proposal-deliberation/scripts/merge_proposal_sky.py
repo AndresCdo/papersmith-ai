@@ -90,7 +90,8 @@ def merge(atlas: dict, overlay: object) -> tuple[dict | None, str | None]:
     if not isinstance(overlay_links, list):
         return None, "OVERLAY_LINKS_NOT_A_LIST"
 
-    # The overlay's own floor and ceiling. This is the proposal's contract, not
+    # The overlay's own floor and upper bound. This is the proposal's contract,
+    # not
     # the constellation's: a paper states one novelty, a proposal argues three
     # to five concepts that carry it and name the issues it could resolve. That
     # is why the rule lives here and the slot's row stays 0..5 in the checker --

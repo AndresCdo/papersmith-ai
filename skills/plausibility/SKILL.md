@@ -51,6 +51,7 @@ and the 20-planet limit per system is absolute.
 | `application` | exactly 1 | 1 | Where it lands in the world |
 | `family` | exactly 1 | 2 | The group this system belongs to: one family per paper, 3 to 5 families per pool |
 | `novelty` | exactly 1 | 1 | What the paper adds over those families |
+| `contribution` | 0 to 5 | 1 | Concepts argued beyond the one novelty claim: empty for a paper, 3 to 5 for a proposal overlaid on the pool |
 | `result` | 1 to 3 | 3 | Punctual results, one claim per planet |
 | `conclusion` | 1 to 2 | 3 | Conclusions, one claim per node |
 
@@ -113,8 +114,16 @@ planet highlights its links across systems; double-clicking flies to it. Family
 ties — the dashed curves joining same-named family planets — are
 presentation computed from shared identity, never findings: families are
 the only planets two systems may share by name, so the curve draws what
-the data already says. Exit 2 on a
-red atlas — the renderer never draws what the checker refused.
+the data already says. Exit 1 on a
+red atlas — the renderer never draws what the checker refused; exit 2 is usage,
+unreadable input or a missing viewer bundle.
+
+`--title <text>` names the page in both the tab title and the heading, because a
+caller who names it means both places it is read. Stage 3 is that caller: it
+renders this constellation with a proposal inside it, and a page headed "SOTA
+constellation — one sky" would be false for it. The default stays this
+constellation's own words, and the name is escaped, since a proposal title is
+text and not markup.
 
 ## Screening: the dialogue
 
