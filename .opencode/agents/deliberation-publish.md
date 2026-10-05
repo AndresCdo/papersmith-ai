@@ -58,10 +58,11 @@ section says what is yours and what refuses.
   checker is the only authority on the constellation's shape, which is why it
   runs on the merged file; a refusal from it is a refusal of the overlay, and
   its own message names what to fix.
-- **Report the path you rendered and the verdict you got**, and whether the
-  published revision names that path. The link belongs in the successor's own
-  text, and the engine wrote that text: a revision that publishes without its
-  link is `owed`, and a closed transaction is not yours to reopen.
+- **Report the path you rendered — `proposals/<revision>.graph.html` — and the
+  verdict you got**, and whether the published revision names that path. The
+  link belongs in the successor's own text, and the engine wrote that text: a
+  revision that publishes without its link is `owed`, and a closed transaction
+  is not yours to reopen.
 
 ## Agreement is not arrival
 

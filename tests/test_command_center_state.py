@@ -7,7 +7,9 @@ generator.
 
 from __future__ import annotations
 
+import fnmatch
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -599,3 +601,22 @@ class PipelineFlowTests(unittest.TestCase):
         assert complete["progress"] == 1.0, complete
 
         assert proposal_stage(lambda root: None)["detail"] == "no proposal revision"
+
+    def test_the_glob_matches_the_artifact_the_skill_names(self) -> None:
+        """The tramo's signal and the skill's own output name are one convention
+        held in two files, and nothing else in the repository compares them.
+
+        The path is written in the deliberation's instructions and the pattern
+        is in the extractor, so a rename on either side would leave the graph
+        sitting on disk while the tramo stays dark -- exactly the failure this
+        signal exists to prevent.
+        """
+        skill = (Path(__file__).resolve().parent.parent
+                 / "skills" / "proposal-deliberation" / "SKILL.md")
+        named = re.findall(r"--out\s+proposals/(\S+)", skill.read_text(encoding="utf-8"))
+
+        assert len(named) == 1, f"expected one artifact name under proposals/, got {named}"
+        assert fnmatch.fnmatch(named[0], state_extractor.PROPOSAL_GRAPH_GLOB), (
+            f"the skill writes proposals/{named[0]} and the extractor counts "
+            f"{state_extractor.PROPOSAL_GRAPH_GLOB}, so the graph would be on "
+            "disk and the tramo still dark")
