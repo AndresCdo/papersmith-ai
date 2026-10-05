@@ -6,6 +6,10 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D21-green.svg)](https://nodejs.org/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
+<p align="center">
+  <img src="https://i.redd.it/jtiaurw1gknf1.gif" alt="Agent Smith, The Matrix" width="320">
+</p>
+
 Este README es el **manual completo, en español**: instalación, el workspace por
 dentro, los doce comandos del CLI, las once skills, los diecinueve agentes,
 cómputo remoto, desarrollo y solución de problemas.
@@ -67,8 +71,8 @@ El camino completo, de un PDF a un paper compilado:
 | 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
 | 2 | `/plausibility` | Explora la idea pre-ingesta en tres tramos: rastrea ~25 referencias por sus abstracts, mapea la constelación en un HTML único y discute la plausibilidad de la hipótesis contra ese SOTA | `sota-pool/` (ignorado, como `guidance/`) |
 | 3 | `/proposal-deliberation` | Discute la matemática con vos y publica cada acuerdo como una revisión gestionada | `proposals/` |
-| 4 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
-| 5 | `/proposal-implementation` | Convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
+| 4 | `/proposal-implementation` | Prueba de concepto: convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
+| 5 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
 | 6 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
 | 7 | `/kaggle-accounts` | Prueba que las credenciales de Kaggle autentican de verdad | `store/` (nunca sale del disco) |
 | 8 | `/remote-execution` | Manda trabajo a un worker remoto y lleva el registro de lo que volvió | el ledger del repo destino |
@@ -80,8 +84,17 @@ El camino completo, de un PDF a un paper compilado:
 con tu idea en dos oraciones: `/plausibility` rastrea el SOTA y te devuelve la
 constelación más el top-5. Recién después, si quieres, poné un PDF en
 `guidance/reference-papers/`, corré `/paper-ingestion`, y deliberá con
-`/proposal-deliberation`. Los pasos 5 y 6 sólo tienen sentido cuando ya hay una propuesta
+`/proposal-deliberation`. Los pasos 4 y 6 sólo tienen sentido cuando ya hay una propuesta
 publicada y un repositorio destino donde implementarla.
+
+**El flujo completo, dibujado.** El diagrama muestra cada etapa en este orden con
+su comando, sus agentes (con las herramientas que cada uno declara en Pi), sus
+compuertas humanas y lo que deja en disco. La versión interactiva, con enlaces a
+la fuente de cada nodo, está en
+[`docs/diagrams/papersmith-pi-flow.html`](docs/diagrams/papersmith-pi-flow.html)
+(se abre en el navegador; generada con [Archify](https://github.com/tt-a1i/archify)).
+
+[![Flujo de papersmith-ai en Pi: comandos, skills y agentes](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 
 **Tres cosas que conviene saber antes de la primera corrida.**
 
@@ -3444,6 +3457,8 @@ antes de la primera ingesta.
 - **Suites y gates**: `tests/` y los scripts de `package.json` (`test`,
   `test:all`, `typecheck`).
 - **Servidor MCP y catálogo de herramientas**: [docs/mcp.md](docs/mcp.md).
+- **Diagrama del flujo (comandos, skills y agentes en Pi)**:
+  [docs/diagrams/papersmith-pi-flow.html](docs/diagrams/papersmith-pi-flow.html).
 
 ---
 
