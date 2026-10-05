@@ -90,17 +90,21 @@ too, and they are not. One flag must not overstate its reach.
       0.10.0 bump (pre-existing on `main`, not caused by this feature)
 - [x] T1 Migration core: `core/migrations.py` — `Migration`, `REGISTRY`,
       selection, applied ledger, damaged-ledger refusal
-- [ ] T2 Wire into `upgrade()`: ordering, the version-advances-only-on-success
+- [x] T2 Wire into `upgrade()`: ordering, the version-advances-only-on-success
       invariant, `--no-migrate`, `--plan-migrations`, CLI reporting
-- [ ] T3 Protect graph artifacts by contract: `sota-pool/**` in
-      `PRESERVE_PATTERNS`, `sota-pool` in `_create_topology` with a `.gitkeep`
-- [ ] T4 Convergence migration `sota-pool-topology`: scaffold the graph
+- [x] T3 Fix the graph-pool contract at the source: `sota-pool` in
+      `_create_topology` with a `.gitkeep`, and the missing entry in
+      `gitignore.tpl`. **Reframed**: `sota-pool/**` is NOT added to
+      `PRESERVE_PATTERNS` — proven dead code, see Decisions
+- [x] T4 Convergence migration `sota-pool-scaffold`: scaffold the graph
       directory in workspaces that predate T3
-- [ ] T5 Convergence migration `atlas-html-rerender`: re-render a stale
+- [x] T5 Convergence migration `atlas-render-refresh`: re-render a stale
       `sota-pool/atlas.html` from `atlas.json`, degrading honestly when the
       renderer, the viewer bundle or the input is unusable
-- [ ] T6 Surface migrations in `status`'s `framework` block
-- [ ] T7 Docs: `docs/releasing.md` gains "how to add a migration"; CHANGELOG
+- [x] T6 Surface migrations in `status`'s `framework` block
+- [x] T7 Docs: `README.md` (Spanish, the project's convention) and
+      `docs/releasing.md` gains "how to add a migration". **No CHANGELOG
+      entry and no version bump** — see Open questions
 - [ ] T8 Full verification
 
 ## Review workload
@@ -129,6 +133,33 @@ chains into three slices that each stand alone:
   one implementation for the downgrade guard and the migration gate;
   `tests.test_papersmith_migrations tests.test_papersmith_upgrade` → 35 ran, OK.
 
+- **T2** — RED: 11 of 13 failing (`TypeError: unexpected keyword argument
+  'migrate'`, `KeyError: 'migrations'`, and five assertion failures). GREEN:
+  13 ran, OK. The early damaged-ledger refusal was then covered explicitly and
+  its RED observed by removing the guard line: the stale framework file was
+  synchronized before the failure, exactly the half-moved workspace the guard
+  prevents. Restored: 14 ran, OK. Commit `5a36637`.
+- **T3/T4** — RED: 6 of 7 failing. GREEN: 7 ran, OK. Commit `20fce7d`.
+- **T5** — RED: all 7 new tests failing. GREEN: 14 ran, OK. Commit `994cca6`.
+  Found while building the fixture and left alone as out of scope:
+  `render_atlas._readable_shape` admits a system without an `id`, which
+  `_scene` then requires, so such an atlas crashes with an untyped `KeyError`
+  traceback instead of one of the renderer's typed codes.
+- **T6** — RED: `KeyError: 'migrations'` on three tests plus the text report.
+  GREEN: 18 ran, OK. Commit `66705b8`.
+- **Regression check against `main`** — a throwaway detached worktree at `main`
+  ran the same focused set (`test_papersmith_status`, `test_command_center_state`,
+  `test_command_center_cli`, `test_command_center_history`, `test_cli_paper_e2e`):
+  14 failures on `main`, the same 14 on this branch, empty regression diff.
+- **Pre-existing failures, confirmed by stashing and by the base worktree**:
+  `test_papersmith_init` (2: `test_the_mcp_init_tool_skips_provisioning_unless_asked`,
+  `test_checkout_with_pyproject_keeps_editable_install`),
+  `test_workspace_skills_e2e` (2), `test_workspace_commands_e2e` (1), and the
+  `test_mcp_*` / `test_command_center_*` loader errors, which are a runner
+  problem rather than a defect: those modules import sibling helpers
+  (`workspace_series`, `domain_profile`) and need `tests` on `PYTHONPATH`.
+  This worktree has no `.venv`, no `.micromamba` and no `node_modules`.
+
 ## Decisions
 
 - Migration bookkeeping lives in `.papersmith/migrations.json`, not in
@@ -140,6 +171,38 @@ chains into three slices that each stand alone:
   feature's to make (`docs/releasing.md`).
 - `render_atlas.py` is invoked through `bridges/python.run_script`, the
   established idiom for skill entrypoints, rather than imported.
+- **`sota-pool/**` is not added to `PRESERVE_PATTERNS`.** The original plan
+  called it a preservation fix; it would have been dead code. All three
+  `is_preserved` callers (`manifest.py:414`, `upgrade.py:119`, `upgrade.py:245`)
+  iterate `kit_files(kit_root)` alone, and `walk_kit_files` walks only
+  `KIT_ENTRIES`, which has no `sota-pool`. A kit can therefore never ship such a
+  path, and `workspace_framework_files` never walks the workspace, so the pool
+  can never enter the framework manifest either. The real defects were the
+  unscaffolded directory and the missing `gitignore.tpl` entry, both fixed at
+  the source.
+- The MCP `upgrade` tool is left untouched. It already exposes a deliberate
+  subset (`tools`, `force`) and never carried `--allow-downgrade`, so widening
+  it is a separate reviewable decision; the default `migrate=True` is the right
+  behaviour for an agent-driven upgrade.
+
+## Open questions
+
+**The version bump is not made here, and the release-hygiene test is red
+because of it.** `test_shipped_changes_since_the_last_release_moved_the_version`
+holds the documented rule: once a tag exists, a change under `src/`, `skills/`
+or `scripts/` forces a version move. It is green on `main`
+(`git diff v0.10.0..main -- src skills scripts` is empty) and red here, exactly
+as intended.
+
+It is not taken because the sibling session's branch `feat/proposal-sky-flow`
+has already bumped `src/papersmith/__init__.py` to `0.11.0`. Both branches
+claiming the same version would collide in four files (`__init__.py`,
+`package.json`, `package-lock.json`, `CHANGELOG.md`), and the release is the
+maintainer's decision, not this feature's. Whoever merges second bumps, adds
+the `## X.Y.Z` changelog section, and that test goes green.
+
+No migration in this release carries an `applies_from`, so nothing here depends
+on which number is chosen.
 
 ## Constraints
 

@@ -399,7 +399,16 @@ lo sincroniza —con `--force` si hace falta— dejando tus artefactos intactos.
 En este repositorio la misma regla vale para Git: el andamiaje se versiona, el
 contenido no. Las carpetas de investigación viajan con su `.gitkeep` y nada
 más; `guidance/` versiona las carpetas y nunca los PDFs ni el Markdown
-ingerido.
+ingerido. `sota-pool/` sigue el mismo contrato: la carpeta viaja, y el
+`candidates.json`, el `atlas.json` y el `atlas.html` —que inlinea el visor 3D
+completo— se quedan en la máquina que los produjo.
+
+Preservar, eso sí, no es migrar. No tocar un artefacto lo protege mientras su
+forma no cambie; el día que un release la cambia, hace falta algo que lo lleve
+hasta ella. Eso es trabajo de las [migraciones de
+artefactos](#migraciones-de-artefactos), y es también la razón por la que
+`.papersmith/version` dejó de avanzar por el solo hecho de haber copiado
+archivos.
 
 ### El estado: `.papersmith/`
 
@@ -410,6 +419,14 @@ ingerido.
   se despacha queda registrada con su target, su perfil y su resultado.
 - **`config.json`** guarda el target activo, el perfil activo y las rutas de
   configuración del ledger.
+- **`migrations.json`** registra qué migraciones de artefactos atadas a una
+  versión ya se aplicaron, para que `upgrade` no las repita. Las de
+  convergencia nunca se anotan: no terminan nunca. Si el archivo se daña,
+  `upgrade` se niega y `status` lo reporta; no lo edites a mano.
+- **`version`** es la versión que el workspace declara para sus **artefactos**,
+  no para sus archivos. De los dos marcadores es el que se queda atrás cuando
+  una migración falla, y por eso `status` puede decir que el workspace todavía
+  no llegó al release instalado.
 
 ---
 
@@ -2906,12 +2923,72 @@ papersmith upgrade ~/papers/sparse-ae
 | `--tools TEXT` | Reemplaza los generators de runtime activos |
 | `--force` | Fuerza la escritura de archivos del framework |
 | `--allow-downgrade` | Permite instalar una versión del framework anterior a la que registra el workspace |
+| `--no-migrate` | Sincroniza los archivos del framework sin migrar artefactos; la versión registrada no avanza |
+| `--plan-migrations` | Informa las migraciones de artefactos pendientes y termina sin escribir nada |
 
 Sólo toca archivos gestionados por el framework — jamás `guidance/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
 `papersmith.yaml`, `package.json`, `README.md` ni los `.env*`.
 Contra un checkout del kit sin reinstalar:
 `PAPERSMITH_KIT_ROOT=/ruta/al/papersmith-ai papersmith upgrade <dir>`.
+
+#### Migraciones de artefactos
+
+Sincronizar archivos no alcanza. Un release puede cambiar la forma de un
+artefacto que el workspace ya produjo, y entonces el andamiaje nuevo queda
+leyendo estado viejo sin que nada lo note. Por eso `upgrade` corre migraciones
+de artefactos en un único lugar: después de copiar el kit, porque una migración
+puede necesitar los scripts y los assets del release que acaba de llegar, y
+antes de escribir `.papersmith/version`.
+
+De ese orden sale una regla sin excepciones. **La versión registrada avanza
+cuando las migraciones de esa versión están hechas.** Si una falla, el marcador
+se queda donde estaba, el comando termina con código distinto de cero y la
+corrida siguiente reintenta. `--no-migrate` tampoco mueve el marcador cuando
+algo quedaba pendiente: avanzarlo ahí convertiría el flag en una forma de
+registrar un release que tus artefactos nunca alcanzaron, y el `version_match`
+de `status` reportaría esa mentira como acuerdo.
+
+El manifest es el caso opuesto y se escribe siempre. Describe archivos, y los
+archivos sí se movieron; retenerlo haría que `status` reportara como deriva
+todo lo que acababa de sincronizar.
+
+Hay dos clases de migración. Una está **atada a una versión** y corre una sola
+vez, cuando el workspace está por debajo de su compuerta y el kit instalado en
+ella o más arriba; queda registrada en `.papersmith/migrations.json` y no se
+repite. La otra es de **convergencia**: no tiene compuerta, pregunta al
+sistema de archivos mediante una sonda de sólo lectura y se evalúa en cada
+corrida, porque el release siguiente puede cambiar aquello hacia lo que hay que
+converger. Un workspace que ya la satisface no escribe nada.
+
+La versión actual trae dos migraciones de convergencia:
+
+- **`sota-pool-scaffold`** crea `sota-pool/.gitkeep` en los workspaces
+  anteriores al release que empezó a andamiar el pool de grafos.
+- **`atlas-render-refresh`** vuelve a renderizar `sota-pool/atlas.html` cuando
+  su atlas, su renderizador o el bundle del visor que inlinea cambiaron. La
+  decisión se toma con hashes guardados en `sota-pool/.atlas-render.json`, no
+  con fechas de modificación: el mtime de una copia dice cuándo se escribió el
+  archivo, y `upgrade` lo reescribe por razones que nada tienen que ver con la
+  página.
+
+Cuando la versión registrada no se puede ordenar —el marcador se perdió, o
+dice algo sin número— una migración atada a versión no se puede ubicar a
+ninguno de los dos lados de su compuerta. Se reporta como `undetermined` y no
+se aplica nunca: migrar artefactos bajo una relación que nadie estableció es
+exactamente el silencio que el guardia de downgrade ya elimina del lado de los
+archivos. Las de convergencia no se ven afectadas, porque preguntan al disco.
+
+`--plan-migrations` no se llama `--dry-run` a propósito. Ese nombre sugeriría
+que también previsualiza la copia del kit, las proyecciones por harness y la
+limpieza de huérfanos, y no lo hace: un flag no debe exagerar su alcance.
+
+Un `.papersmith/migrations.json` dañado hace que `upgrade` se niegue antes de
+escribir un byte, junto al guardia de downgrade y por el mismo motivo. Leerlo
+como vacío volvería a aplicar cada migración que estaba registrando. `status`
+responde distinto a propósito: lo reporta como advertencia, porque un comando
+que sólo informa y además revienta deja al workspace sin forma de preguntar
+qué le pasa.
 
 ### `papersmith status [<dir>]`
 
