@@ -13,7 +13,30 @@ from ..bridges.python import run_script
 from ..errors import PapersmithError, UserError
 from ..generators import read_workspace_version
 from ..kit import resolve_and_validate
-from . import config, fs, manifest
+from . import config, fs, manifest, migrations
+
+
+def _migration_status(root: Path, kit_version: str) -> dict[str, Any]:
+    """Pending artifact migrations, or why they could not be read.
+
+    `status` is the command that reports and `upgrade` is the one that acts, so
+    the two answer a damaged migration ledger differently and deliberately:
+    `upgrade` refuses on it, because acting under an unreadable record of what
+    already ran is how a migration gets applied twice, while `status` surfaces
+    it as a warning. A reporting command that crashes is a workspace with no
+    way left to ask what is wrong with it.
+    """
+    report: dict[str, Any] = {"pending": [], "undetermined": [], "applied": [],
+                              "warning": None}
+    try:
+        preview = migrations.plan(root, recorded=read_workspace_version(root, ""),
+                                  kit_version=kit_version)
+        report["pending"] = [entry.migration_id for entry in preview.pending]
+        report["undetermined"] = list(preview.undetermined)
+        report["applied"] = [entry["id"] for entry in migrations.read_applied(root)]
+    except PapersmithError as error:
+        report["warning"] = str(error)
+    return report
 
 
 def _read_ledger(root: Path) -> list[dict[str, Any]]:
@@ -182,6 +205,7 @@ def status(workspace: str | Path = ".") -> dict[str, Any]:
             "workspace_version": workspace_version,
             "version_match": workspace_version == kit_version,
             "drifted_files": drifted,
+            "migrations": _migration_status(root, kit_version),
         },
         "runtimes": _runtime_status(root),
         "proposal": _proposal_status(root),
@@ -212,6 +236,13 @@ def print_human(snapshot: dict[str, Any]) -> None:
         f"CLI {framework['installed_cli_version']}"
     )
     print("Framework drift: " + (", ".join(framework["drifted_files"]) if framework["drifted_files"] else "none"))
+    pending = framework["migrations"]["pending"]
+    print("Pending artifact migrations: " + (", ".join(pending) if pending else "none"))
+    if framework["migrations"]["undetermined"]:
+        print("Undetermined artifact migrations: "
+              + ", ".join(framework["migrations"]["undetermined"]))
+    if framework["migrations"]["warning"]:
+        print(f"Warning: {framework['migrations']['warning']}")
     if runtimes:
         node_status = "OK" if runtimes.get("node") else "Missing"
         llama_status = "OK" if runtimes.get("llama_server") else "Missing"

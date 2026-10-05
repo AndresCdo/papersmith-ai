@@ -20,7 +20,7 @@ from unittest import mock
 
 from papersmith.cli import main
 from papersmith.core import init as init_module, manifest, migrations as migrations_module
-from papersmith.core import upgrade as upgrade_module
+from papersmith.core import status as status_module, upgrade as upgrade_module
 from papersmith.core.migrations import Migration
 from papersmith.errors import UserError
 
@@ -316,6 +316,64 @@ class UpgradeMigrationTests(unittest.TestCase):
             assert main(["upgrade", str(workspace), "--no-migrate"]) == 0
 
         assert "probe" in buffer.getvalue()
+
+
+class StatusMigrationTests(unittest.TestCase):
+    """`status` is the command that reports; `upgrade` is the one that acts.
+
+    A workspace whose artifacts are behind the installed release must be able
+    to say so without being upgraded first, and it must say it even when the
+    record of what already ran is unreadable — reporting a problem and
+    refusing to act under it are different answers.
+    """
+
+    def new_tmp(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        return Path(holder.name).resolve()
+
+    def workspace(self, tmp_path: Path) -> Path:
+        root = tmp_path / "paper"
+        init_module.initialize(root, run_npm=False, run_env=False)
+        return root
+
+    def test_status_names_a_pending_artifact_migration(self) -> None:
+        workspace = self.workspace(self.new_tmp())
+        keep = workspace / "sota-pool" / ".gitkeep"
+        keep.unlink()
+        keep.parent.rmdir()
+
+        snapshot = status_module.status(workspace)
+
+        assert snapshot["framework"]["migrations"]["pending"] == ["sota-pool-scaffold"]
+        assert snapshot["framework"]["migrations"]["warning"] is None
+
+    def test_status_reports_none_pending_for_a_converged_workspace(self) -> None:
+        workspace = self.workspace(self.new_tmp())
+        snapshot = status_module.status(workspace)
+
+        assert snapshot["framework"]["migrations"]["pending"] == []
+
+    def test_a_damaged_ledger_is_a_warning_in_status_not_a_refusal(self) -> None:
+        workspace = self.workspace(self.new_tmp())
+        (workspace / ".papersmith/migrations.json").write_text("not json", encoding="utf-8")
+
+        snapshot = status_module.status(workspace)
+
+        assert "corrupted migrations ledger" in snapshot["framework"]["migrations"]["warning"]
+        assert snapshot["framework"]["migrations"]["pending"] == []
+
+    def test_the_text_report_names_pending_migrations(self) -> None:
+        workspace = self.workspace(self.new_tmp())
+        keep = workspace / "sota-pool" / ".gitkeep"
+        keep.unlink()
+        keep.parent.rmdir()
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            assert main(["status", str(workspace)]) == 0
+
+        assert "sota-pool-scaffold" in buffer.getvalue()
 
 
 if __name__ == "__main__":
