@@ -11,6 +11,65 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.12.0
+
+### Added
+
+- **`upgrade` migrates workspace artifacts, not only framework files.** The
+  recorded `.papersmith/version` is now a claim about a workspace's artifacts
+  rather than about which skills tree it holds, and a release that changes an
+  artifact's shape can carry an older workspace to it. Migrations run in one
+  place — after the kit is copied, because a migration may need the scripts and
+  assets of the release that just arrived, and before the version marker is
+  written. The mechanism is `src/papersmith/core/migrations.py`.
+- **Two classes of migration, and only one of them is recorded.** A
+  version-bound migration runs once, when the workspace sits below its gate and
+  the installed kit at or above it, and lands in `.papersmith/migrations.json`
+  so it cannot run twice. A convergence migration has no gate: it asks the
+  filesystem through a read-only probe and is evaluated on every run, because
+  the next release can change what it converges toward.
+- **`sota-pool/` is a declared directory instead of a survivor.** It holds
+  `candidates.json` and `atlas.json` from the scouting agents plus the derived
+  `atlas.html`, and it survived upgrades only because `upgrade` deletes nothing
+  it did not baseline first. This release ships two convergence migrations:
+  `sota-pool-scaffold` creates the pool's `.gitkeep` in older workspaces, and
+  `atlas-render-refresh` re-renders `sota-pool/atlas.html` when its atlas, its
+  renderer or the vendored viewer bundle it inlines has changed — decided by
+  hashes stored in `sota-pool/.atlas-render.json` and never by modification
+  times, because `upgrade` rewrites files for reasons that have nothing to do
+  with the page.
+- **`status` reports pending migrations**, and `upgrade` gained
+  `--plan-migrations`, which reports the pending set and writes nothing. It is
+  deliberately not named `--dry-run`: that name would imply the kit copy, the
+  harness projections and the orphan sweep were previewed as well, and they are
+  not.
+
+### Changed
+
+- **The version marker advances only when that version's migrations are done.**
+  A failed migration leaves `.papersmith/version` where it was, exits non-zero,
+  and the next run retries. `--no-migrate` does not advance it either — doing so
+  would record a release the workspace never reached and let `status`'s
+  `version_match` report that as agreement. The manifest is the opposite case
+  and is always written: it describes files, and the files did move.
+- **A version that cannot be ordered refuses rather than guesses.** With the
+  marker missing or unreadable, a version-bound migration is reported
+  `undetermined` and never applied: migrating artifacts under a relation nobody
+  established is the silence the downgrade guard already removed on the file
+  side. Convergence migrations are unaffected, because they ask the disk.
+- **The downgrade guard and the migration gate share one ordering
+  implementation** (`migrations.version_order`), replacing `upgrade`'s own
+  `_version_order`.
+
+### Fixed
+
+- **Four `test_papersmith_upgrade` fixtures derive a version newer than the
+  kit's instead of pinning `0.9.0`.** A fresh workspace records the
+  *distribution* version, so once the package moved past `0.9.0` those fixtures
+  turned their own setup upgrade into a downgrade that the guard correctly
+  refused: the guard doing its job while the tests asserted the opposite. They
+  had been failing the CI gate since `0.10.0`.
+
 ## 0.11.0
 
 ### Changed
