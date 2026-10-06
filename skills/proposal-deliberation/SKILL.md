@@ -86,8 +86,9 @@ python skills/plausibility/scripts/render_atlas.py \
 ```
 
 The overlay (`proposals/<revision>.sky.json`) is authored during the
-deliberation and carries one system — the proposal — plus its links into the
-constellation:
+deliberation — before the change is accepted, not after it is published,
+because the successor's own text is what names the picture — and carries one
+system, the proposal, plus its links into the constellation:
 
 - the **main idea**, as `application` (where it lands), `topic_app` and
   `topic_ai` (the topics it takes from the SOTA papers) and `sun` (the title);
@@ -116,6 +117,15 @@ constellation's shape; the merger refuses only what makes the merge incoherent
 overlay's own contract forbids. Link the HTML from the published revision; the
 engine's publish transaction never sees either file, so the mathematics stays
 byte-exact.
+
+**Who runs the three steps: the publish stretch.** `deliberation-publish` is
+the only stretch of this flow that is delegated, and the graph is part of its
+work: it requires the overlay, runs the chain in the order above, and reports
+the rendered path and the checker's verdict. That agent has no `Write` and no
+`Edit`, so an overlay it cannot find is an `owed` it reports rather than a file
+it invents — every planet and link in that file is a claim about which SOTA
+papers this proposal takes from and why, and that claim belongs to the
+deliberation, not to the stretch that publishes it.
 
 ## You are the tutor
 

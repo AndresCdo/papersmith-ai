@@ -120,6 +120,12 @@ EXPERIMENTAL_DELIBERATION = ".experimental-deliberation"
 #: The experimental implementation's revisions, under `experiments/`.
 EXPERIMENTAL_REVISION_GLOB = "experiments-*.md"
 
+#: The sky graph the proposal deliberation draws beside a published revision:
+#: the SOTA constellation with the proposal inside it, rendered by the
+#: plausibility flow's own renderer. It is a second artifact of the same tramo,
+#: not a second tramo -- a revision can be published before its graph exists.
+PROPOSAL_GRAPH_GLOB = "*.graph.html"
+
 #: Persona -> pipeline stage, used for the "active worker" pills. Read off the
 #: diagram's own lane placement of each agent, not off the old six stages.
 AGENT_STAGES = {
@@ -722,6 +728,7 @@ def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
     sota = [name for name in SOTA_POOL_ARTIFACTS if (root / "sota-pool" / name).is_file()]
     guidance_files = _count_markdown(root, "guidance")
     proposals = _count_matching(root / "proposals", "*.md")
+    proposal_graphs = _count_matching(root / "proposals", PROPOSAL_GRAPH_GLOB)
     implementations = _count_entries(root / "implementations")
     deliberation_records = _count_recursive(root / EXPERIMENTAL_DELIBERATION)
     experimental_revisions = _count_matching(root / "experiments",
@@ -741,6 +748,16 @@ def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
             return 1.0 if done else 0.0
         return round(min(1.0, done / total), 3)
 
+    #: The proposal tramo holds two kinds of artifact, and both are named even
+    #: when one is zero: a revision published without its sky graph is exactly
+    #: the half-done state worth showing, and a detail that only reported the
+    #: revision would read as finished.
+    proposal_progress = ratio((1 if proposals else 0) + (1 if proposal_graphs else 0), 2)
+    proposal_detail = (
+        f"{proposals} proposal(s), {proposal_graphs} sky graph(s)"
+        if proposals or proposal_graphs else "no proposal revision"
+    )
+
     definitions = {
         "harness": (
             bool(harness_dirs), ratio(len(harness_dirs), len(HARNESS_PROJECTIONS)),
@@ -752,8 +769,8 @@ def _pipeline_stages(root: Path, sections: list[dict[str, Any]],
         ),
         "ingestion": (guidance_files > 0, ratio(1 if guidance_files else 0, 1),
                       f"{guidance_files} guidance file(s)"),
-        "proposal": (proposals > 0, ratio(min(proposals, 1), 1),
-                     f"{proposals} proposal(s)"),
+        "proposal": (proposals > 0 or proposal_graphs > 0, proposal_progress,
+                     proposal_detail),
         "implementation": (implementations > 0, ratio(min(implementations, 1), 1),
                            f"{implementations} implementation(s)"),
         "experimental-deliberation": (
