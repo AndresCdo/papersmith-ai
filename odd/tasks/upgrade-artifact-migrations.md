@@ -232,6 +232,14 @@ the `## X.Y.Z` changelog section, and that test goes green.
 No migration in this release carries an `applies_from`, so nothing here depends
 on which number is chosen.
 
+**Resolved, and shipped as 0.12.0.** The merge that came second was this one, so
+it carried the bump: `bec2b32` on `chore/release-0.12.0`, merged into `main` as
+`ceba49d`, with the manual's pinned example moving in `877d4e7` and the release
+merge `f24dece` tagged `v0.12.0` and published. The release-hygiene test is
+green, and the four version-coupled fixtures this feature repaired were the last
+thing keeping CI red: it went green again on `ceba49d`, the first green `main`
+had since 0.8.0.
+
 ## Constraints
 
 - A sibling worktree `../papersmith-ai` on `feat/proposal-sky-flow` belongs to
