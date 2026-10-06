@@ -36,3 +36,8 @@ experiments/*
 !experiments/.gitkeep
 implementations/*
 !implementations/.gitkeep
+# The plausibility flow's graph pool. It was the one entry this file claimed to
+# mirror and did not carry, so a workspace committed its own run product by
+# default — `atlas.html` alone inlines the whole 3D viewer bundle.
+sota-pool/*
+!sota-pool/.gitkeep

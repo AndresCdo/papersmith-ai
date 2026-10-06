@@ -68,6 +68,13 @@ def _create_topology(root: Path) -> None:
         "kaggle-inbox",
         "paper",
         "experiments",
+        # The plausibility flow's graph pool: `candidates.json` from
+        # `sota-scout`, `atlas.json` from `sota-grapher`, and the `atlas.html`
+        # rendered from it. It was the one drop-zone the topology never
+        # scaffolded, so unlike every sibling above it did not travel through
+        # git as an empty folder and this framework's own root `.gitignore`
+        # named a `sota-pool/.gitkeep` that nothing created.
+        "sota-pool",
     )
     for relpath in directories:
         (root / relpath).mkdir(parents=True, exist_ok=True)
@@ -86,6 +93,7 @@ def _create_topology(root: Path) -> None:
         "kaggle-inbox/.gitkeep",
         "paper/.gitkeep",
         "experiments/.gitkeep",
+        "sota-pool/.gitkeep",
     ):
         path = root / relpath
         if not fs.exists(path):

@@ -97,6 +97,48 @@ One trap when reading the remote: `git ls-remote --tags origin vX.Y.Z` prints th
 **tag object's** hash, not the commit. Peel it with `vX.Y.Z^{}` when you want to
 confirm the tag lands on `main`.
 
+## When the release changes an artifact, not just a file
+
+The rule above — a change under `src/`, `skills/` or `scripts/` forces a
+version move — is about files a user receives. A release can also change the
+shape of something the user's workspace already produced, and `upgrade`
+synchronizing files does nothing for that. `src/papersmith/core/migrations.py`
+is where that case is handled, and its registry is the only place a release
+declares it.
+
+Ask one question first: does the workspace have to reach this shape *because of
+this release*, or does it have to match the installed release whatever its
+history?
+
+**Because of this release** — a version-gated migration. Set `applies_from` to
+the version you are about to ship, never to one already tagged. A gate at or
+below the current version would never be selected for a workspace already on it
+and would fire for every older one without the release that introduced it ever
+existing; `test_the_shipped_registry_declares_no_gate_at_or_below_this_release`
+refuses it. The migration runs once per workspace and is recorded in
+`.papersmith/migrations.json`, so write it to be correct exactly once.
+
+**Whatever its history** — a convergence migration, with `applies_from` left
+`None`. It is evaluated on every upgrade, so `plan` must be a read-only probe
+that asks the filesystem and returns no actions when the workspace already
+satisfies it. Nothing records it, because the next release can change what
+there is to converge to.
+
+Two rules bind both kinds:
+
+- **Neither `plan` nor `apply` may raise for a state a workspace can be in.** A
+  missing script, an unreadable artifact, a read-only parent: each is a failure
+  *returned* by `apply`. A migration that raises aborts a run that has already
+  synchronized files and leaves the operator no report of what did happen.
+- **A failure holds `.papersmith/version` back.** That is the contract the
+  whole mechanism exists for, so a migration that half-finishes must report the
+  failure rather than swallow it. The next run retries.
+
+A migration that regenerates a derived artifact should decide staleness from
+content hashes, the way `atlas-render-refresh` does, rather than from
+modification times. `upgrade` rewrites file mtimes for reasons that have
+nothing to do with any artifact.
+
 ## What has no automation, and the history behind it
 
 Nothing creates a tag or a release. There is no CI job for either, so the four

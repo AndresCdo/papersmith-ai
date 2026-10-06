@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -16,7 +17,8 @@ from ..generators import (
 )
 from ..kit import resolve_and_validate
 from ..schema import validate_tools
-from . import config, fs, manifest, wiring
+from . import config, fs, manifest, migrations, wiring
+from .exit_codes import EXECUTION_ERROR
 
 #: Dynamic rendered outputs — one file per discovered skill, so their membership
 #: cannot be enumerated by a static list. Only paths under these prefixes that
@@ -129,30 +131,6 @@ def _copy_if_needed(workspace: Path, kit_root: Path, relpath: str, *, force: boo
     return True
 
 
-def _version_order(value: str) -> tuple[int, ...] | None:
-    """`value` as an orderable tuple, or ``None`` when it carries no order.
-
-    Only the leading dot-separated run of integers is read, so `0.2.0rc1`
-    orders beside `0.2.0` rather than refusing: a prerelease suffix is a
-    claim this function is not equipped to rank, and treating the two as
-    equal declines to guess in the direction that blocks nothing. A value
-    with no leading integer at all -- a branch name, a build label, an
-    empty string -- returns ``None``, because there is no order to report
-    and inventing one is how a downgrade gets waved through.
-    """
-    parts: list[int] = []
-    for chunk in value.strip().split("."):
-        digits = ""
-        for character in chunk:
-            if not character.isdigit():
-                break
-            digits += character
-        if not digits:
-            break
-        parts.append(int(digits))
-    return tuple(parts) or None
-
-
 def _refuse_a_downgrade(root: Path, kit_version: str, *, allowed: bool) -> None:
     """Refuse to move a workspace to an older framework version.
 
@@ -186,8 +164,10 @@ def _refuse_a_downgrade(root: Path, kit_version: str, *, allowed: bool) -> None:
     recorded = read_workspace_version(root, "").strip()
     if not recorded:
         return
-    current = _version_order(recorded)
-    incoming = _version_order(kit_version)
+    # Shared with the migration gate, which refuses for the same reason: see
+    # ``migrations.version_order``.
+    current = migrations.version_order(recorded)
+    incoming = migrations.version_order(kit_version)
     if current is None or incoming is None:
         raise UserError(
             f"cannot tell whether {kit_version!r} precedes the version this "
@@ -202,8 +182,23 @@ def _refuse_a_downgrade(root: Path, kit_version: str, *, allowed: bool) -> None:
             f"(`--allow-downgrade`) if the rollback is deliberate")
 
 
+def _as_pending(outcome: migrations.Outcome) -> dict:
+    """One pending migration, in the single shape every caller reports."""
+    return {
+        "id": outcome.migration_id,
+        "summary": outcome.summary,
+        "actions": list(outcome.actions),
+    }
+
+
+def _empty_migration_report() -> dict:
+    return {"ran": False, "applied": [], "satisfied": [], "undetermined": [],
+            "pending": [], "failures": []}
+
+
 def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
-            force: bool = False, allow_downgrade: bool = False) -> dict:
+            force: bool = False, allow_downgrade: bool = False,
+            migrate: bool = True, plan_migrations: bool = False) -> dict:
     root = Path(workspace).expanduser().resolve()
     stored = manifest.load_manifest(root)
     if stored is None:
@@ -212,9 +207,34 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     kit_root = resolve_and_validate()
     kit_files = manifest.kit_files(kit_root)
     version = manifest.kit_version(kit_root)
+    # Read once, before this run can rewrite it: every later decision about
+    # migrations asks where the workspace STARTED, not where it ended up.
+    recorded = read_workspace_version(root, "").strip()
+
+    if plan_migrations:
+        # A preview that synchronized files on the way would be a preview of
+        # something that already happened. Nothing below this branch runs, the
+        # downgrade guard included: it refuses writes, and there are none.
+        preview = migrations.plan(root, recorded=recorded, kit_version=version)
+        return {
+            "workspace": str(root),
+            "version": version,
+            "planned": True,
+            "migrations": {
+                **_empty_migration_report(),
+                "satisfied": preview.satisfied,
+                "undetermined": preview.undetermined,
+                "pending": [_as_pending(entry) for entry in preview.pending],
+            },
+        }
+
     # Before a single byte is written, and never after: by the time the kit
     # files are copied the rollback is already the workspace's state.
     _refuse_a_downgrade(root, version, allowed=allow_downgrade)
+    # Same reason, same place: a damaged migration ledger cannot be told from
+    # an empty one, and discovering that after the files are synchronized
+    # leaves the operator with a half-moved workspace and no record of why.
+    migrations.read_applied(root)
     workspace_config = config.load_workspace_config(root)
     active_tools = validate_tools(list(tools) if tools is not None else workspace_config["active_tools"])
     changed: list[str] = []
@@ -286,10 +306,49 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
             continue
         removed.append(relpath)
 
+    # Artifact migrations run here and nowhere else: after the kit is
+    # synchronized, because a migration may need the new release's own scripts
+    # and assets (the atlas renderer is a kit file), and before the version
+    # marker below, because that marker is a claim about artifacts.
+    if migrate:
+        report = migrations.run(root, recorded=recorded, kit_version=version)
+        migration_report = {
+            "ran": True,
+            "applied": [{"id": outcome.migration_id, "actions": list(outcome.actions),
+                         "failures": list(outcome.failures)} for outcome in report.applied],
+            "satisfied": report.satisfied,
+            "undetermined": report.undetermined,
+            "pending": [],
+            "failures": report.failures,
+        }
+        # Undetermined is deliberately not a blocker: nothing was attempted, so
+        # nothing is half-done. A failure is, because something is.
+        artifacts_reached_this_version = report.ok
+    else:
+        preview = migrations.plan(root, recorded=recorded, kit_version=version)
+        migration_report = {
+            **_empty_migration_report(),
+            "satisfied": preview.satisfied,
+            "undetermined": preview.undetermined,
+            "pending": [_as_pending(entry) for entry in preview.pending],
+        }
+        artifacts_reached_this_version = not preview.pending
+
+    # One rule, no exception: the marker moves when the migrations for this
+    # version are done. `--no-migrate` is not an exemption from it — advancing
+    # the marker over artifacts the operator asked this run to leave alone
+    # would turn the flag into a way to record a release they never reached,
+    # and `status`'s `version_match` would report the lie as agreement.
+    #
+    # The manifest above is the opposite case and is written unconditionally:
+    # it is a claim about FILES, and the files did move. Holding it back would
+    # make `status` report every synchronized file as drift and bury the one
+    # fact that matters.
+    #
     # The marker is a managed path like any other, so it takes the same gate on
     # both sides: reading a FIFO would block, and writing one would block too —
     # in the command whose whole job is to repair a damaged workspace.
-    if read_workspace_version(root, "") != version:
+    if artifacts_reached_this_version and read_workspace_version(root, "") != version:
         if fs.write_text(root / ".papersmith" / "version", version + "\n"):
             changed.append(".papersmith/version")
         else:
@@ -317,6 +376,9 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     return {
         "workspace": str(root),
         "version": version,
+        "planned": False,
+        "migrations": migration_report,
+        "recorded_version": read_workspace_version(root, "").strip(),
         "active_tools": active_tools,
         "changed_files": changed,
         "preserved_files": preserved,
@@ -335,7 +397,35 @@ def register(subparsers) -> None:
     parser.add_argument("--force", action="store_true", help="force framework-file writes")
     parser.add_argument("--allow-downgrade", action="store_true",
                         help="permit installing an older framework version")
+    parser.add_argument("--no-migrate", dest="migrate", action="store_false",
+                        help="synchronize framework files without migrating workspace "
+                             "artifacts; the recorded version stays where it is")
+    # Deliberately not `--dry-run`: a flag by that name on `upgrade` would
+    # imply the kit copy, the projections and the orphan sweep were previewed
+    # too, and they are not. One flag must not overstate its reach.
+    parser.add_argument("--plan-migrations", action="store_true",
+                        help="report the pending artifact migrations and exit, writing nothing")
     parser.set_defaults(handler=run_cli)
+
+
+def _migration_lines(report: dict) -> list[str]:
+    """The report's own lines, so a caller can tell an empty one from a section.
+
+    A migration that failed before doing anything has actions to report: none.
+    Deciding the section header from the fact that one RAN printed a label with
+    nothing under it, while the line that mattered went to stderr.
+    """
+    lines: list[str] = []
+    for entry in report["pending"]:
+        lines.append(f"pending {entry['id']}: {entry['summary']}")
+        lines.extend(f"  - {action}" for action in entry["actions"])
+    for entry in report["applied"]:
+        lines.extend(f"{entry['id']}: {action}" for action in entry["actions"])
+    for identifier in report["undetermined"]:
+        lines.append(f"undetermined {identifier}: this workspace records no "
+                     "orderable version, so nothing places it against the "
+                     "migration's gate")
+    return lines
 
 
 def run_cli(args) -> int:
@@ -343,7 +433,21 @@ def run_cli(args) -> int:
     if args.tools is not None:
         tools = [item.strip() for item in args.tools.split(",") if item.strip()]
     result = upgrade(args.directory, tools=tools, force=args.force,
-                     allow_downgrade=args.allow_downgrade)
+                     allow_downgrade=args.allow_downgrade, migrate=args.migrate,
+                     plan_migrations=args.plan_migrations)
+
+    if result["planned"]:
+        report = result["migrations"]
+        print(f"Pending artifact migrations for {result['workspace']} "
+              f"at framework version {result['version']}:")
+        lines = _migration_lines(report)
+        if not lines:
+            print("  none; this workspace's artifacts already match the installed release")
+        for line in lines:
+            print(f"  {line}")
+        print("Nothing was written.")
+        return 0
+
     print(f"Upgraded papersmith workspace: {result['workspace']}")
     print(f"Framework version: {result['version']}; changed files: {len(result['changed_files'])}")
     for relpath in result["unsynchronized"]:
@@ -353,4 +457,22 @@ def run_cli(args) -> int:
         print(f"  {line}")
     for warning in result["link_warnings"]:
         print(f"Warning: {warning}")
+
+    report = result["migrations"]
+    lines = _migration_lines(report)
+    if lines:
+        print("Artifact migrations:")
+        for line in lines:
+            print(f"  {line}")
+    # Say which version the workspace actually records, every time the two
+    # disagree. A held-back marker that nothing reports is the same silence as
+    # a marker that moved without its artifacts.
+    if result["recorded_version"] != result["version"]:
+        print(f"Recorded version stays at {result['recorded_version'] or '(none)'}: "
+              f"the artifact migrations for {result['version']} are not done. "
+              "Re-run `papersmith upgrade` once their cause is fixed.")
+    if report["failures"]:
+        for failure in report["failures"]:
+            print(f"Migration failed: {failure}", file=sys.stderr)
+        return EXECUTION_ERROR
     return 0
