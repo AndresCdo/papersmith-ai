@@ -38,7 +38,7 @@ Bienvenido. Esta forja está pensada para que puedas ir de un PDF a un paper
 compilado sin adivinar el orden. El camino mínimo:
 
 1. **Instala el CLI y prepara el entorno** — ver [Puesta en marcha](#puesta-en-marcha).
-2. **Creá tu workspace** — `papersmith init ~/papers/mi-paper --title "…" --topic "…"`.
+2. **Crea tu workspace** — `papersmith init ~/papers/mi-paper --title "…" --topic "…"`.
    Qué te deja adentro, en [El workspace por dentro](#el-workspace-por-dentro).
 3. **Pon un PDF de referencia** en `guidance/reference-papers/` y ejecuta
    `papersmith ingest <pdf>` — o pide `/paper-ingestion` dentro de tu harness.
@@ -129,12 +129,17 @@ pip install "papersmith-ai @ git+https://github.com/Daprosero/papersmith-ai.git"
 git clone https://github.com/Daprosero/papersmith-ai.git && cd papersmith-ai
 pipx install .            # con pip: pip install .
 
-# 1c. Actualizar una instalación cuando sale una release nueva
+# 1c. Actualizar el CLI cuando sale una release nueva
 pipx upgrade papersmith-ai
 #     si `upgrade` no ve el cambio, fuerza la reinstalación
 pipx install --force git+https://github.com/Daprosero/papersmith-ai.git
 #     con pip, `--upgrade` sobre una URL de git no siempre vuelve a clonar
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/Daprosero/papersmith-ai.git"
+
+# 1d. Y llevar a esa versión los workspaces que ya existen
+papersmith upgrade --plan-migrations ~/papers/sparse-ae  # qué artefactos faltan, sin escribir nada
+papersmith upgrade ~/papers/sparse-ae                    # sincroniza los archivos y migra los artefactos
+papersmith status ~/papers/sparse-ae                     # deriva y migraciones pendientes
 
 # 2. Runtime aislado de ingestión (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
 python3 scripts/setup_env.py install
@@ -154,16 +159,30 @@ Instala siempre desde `main`: es la única rama que se mantiene. La forma 1a
 recibe exactamente lo que `main` tiene hoy; la 1b toma el clon tal como está,
 incluidos cambios sin commitear, así que para reproducir un build usa 1a. Cada
 release queda además con su tag, así que si necesitas congelar un build exacto
-fijalo en la URL — por ejemplo
+fíjalo en la URL — por ejemplo
 `pipx install --force "git+https://github.com/Daprosero/papersmith-ai@v0.11.0"`.
 El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
-Para actualizar, 1c alcanza: reinstala desde `main` y con eso quedas en la
-última release. Después confirma qué quedó con `papersmith --version`. Ojo con
-no confundir los dos `upgrade`: `papersmith upgrade` sincroniza un **workspace**
-con la versión instalada del framework y se niega a llevarlo a una versión
-anterior a la que él registra, salvo que se lo pidas con `--allow-downgrade`; no
-toca la instalación del CLI.
+Actualizar son dos pasos y son dos objetos distintos. El **1c** reinstala el
+CLI desde `main`; confirma qué quedó con `papersmith --version`. El **1d**
+mueve cada **workspace** que ya existe, y no es opcional: un release puede
+cambiar la forma de un artefacto que el workspace ya produjo —el `atlas.html`
+del pool de grafos, por ejemplo—, así que sincronizar los archivos del
+framework sin migrar los artefactos deja el andamiaje nuevo leyendo estado
+viejo.
+
+`papersmith upgrade` sincroniza el workspace con la versión instalada y aplica
+las migraciones de artefactos de esa versión. La versión que el workspace
+registra no avanza hasta que esas migraciones están hechas, así que
+`papersmith status` puede decirte que todavía no llegó al release que acabas de
+instalar. `--plan-migrations` informa lo pendiente y termina sin escribir nada;
+no se llama `--dry-run` a propósito, porque no previsualiza la copia del kit.
+`--no-migrate` sincroniza los archivos y deja los artefactos como están, con el
+marcador de versión donde estaba.
+
+Ojo con no confundir los dos `upgrade`: ninguno de los dos toca al otro.
+`papersmith upgrade` se niega a llevar un workspace a una versión anterior a la
+que él registra, salvo que se lo pidas con `--allow-downgrade`.
 
 `scripts/setup_env.py install` provisiona **todo** el stack de ingestión en un
 entorno micromamba aparte (CPU o CUDA, según lo que detecte), incluido el
@@ -175,7 +194,7 @@ y `.agents/skills`, con enlaces relativos e idempotentes (ver
 primera corrida de `papersmith ingest` descarga ~1.5 GB de pesos de Surya si el
 entorno no quedó pre-provisionado.
 
-### 2. Creá un workspace
+### 2. Crea un workspace
 
 ```bash
 papersmith init ~/papers/sparse-ae \
