@@ -243,9 +243,11 @@ Two consequences it surfaced, accepted rather than papered over:
 
 ## Next step
 
-Merge `feat/proposal-sky-flow` into `main`, then release 0.11.0 following
-`docs/releasing.md`: the release commit is where the README's pinned example
-moves to `v0.11.0`, and the tag belongs on its merge commit.
+None: shipped. `feat/proposal-sky-flow` merged into `main` as `ff12fb0`,
+`chore/release-0.11.0` as `4eb4606`, and annotated tag `v0.11.0` sits on
+`4eb4606` with the GitHub release published. The audit over all thirteen tags
+is consistent, `pip install "papersmith-ai @ git+…@v0.11.0"` in a throwaway
+environment yields 0.11.0, and the merged branches are deleted.
 
 The first real deliberation in a workspace is still the first execution of this
 chain against real data, now with an agent that will report the missing overlay
