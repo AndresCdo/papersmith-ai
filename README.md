@@ -162,7 +162,7 @@ recibe exactamente lo que `main` tiene hoy; la 1b toma el clon tal como está,
 incluidos cambios sin commitear, así que para reproducir un build usa 1a. Cada
 release queda además con su tag, así que si necesitas congelar un build exacto
 fíjalo en la URL — por ejemplo
-`pipx install --force "git+https://github.com/Daprosero/papersmith-ai@v0.11.0"`.
+`pipx install --force "git+https://github.com/Daprosero/papersmith-ai@v0.12.0"`.
 El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
 Actualizar son dos pasos y son dos objetos distintos. El **1c** reinstala el
