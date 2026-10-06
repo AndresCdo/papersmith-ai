@@ -408,17 +408,24 @@ def register(subparsers) -> None:
     parser.set_defaults(handler=run_cli)
 
 
-def _print_migrations(report: dict) -> None:
+def _migration_lines(report: dict) -> list[str]:
+    """The report's own lines, so a caller can tell an empty one from a section.
+
+    A migration that failed before doing anything has actions to report: none.
+    Deciding the section header from the fact that one RAN printed a label with
+    nothing under it, while the line that mattered went to stderr.
+    """
+    lines: list[str] = []
     for entry in report["pending"]:
-        print(f"  pending {entry['id']}: {entry['summary']}")
-        for action in entry["actions"]:
-            print(f"    - {action}")
+        lines.append(f"pending {entry['id']}: {entry['summary']}")
+        lines.extend(f"  - {action}" for action in entry["actions"])
     for entry in report["applied"]:
-        for action in entry["actions"]:
-            print(f"  {entry['id']}: {action}")
+        lines.extend(f"{entry['id']}: {action}" for action in entry["actions"])
     for identifier in report["undetermined"]:
-        print(f"  undetermined {identifier}: this workspace records no orderable "
-              "version, so nothing places it against the migration's gate")
+        lines.append(f"undetermined {identifier}: this workspace records no "
+                     "orderable version, so nothing places it against the "
+                     "migration's gate")
+    return lines
 
 
 def run_cli(args) -> int:
@@ -433,9 +440,11 @@ def run_cli(args) -> int:
         report = result["migrations"]
         print(f"Pending artifact migrations for {result['workspace']} "
               f"at framework version {result['version']}:")
-        if not (report["pending"] or report["undetermined"]):
+        lines = _migration_lines(report)
+        if not lines:
             print("  none; this workspace's artifacts already match the installed release")
-        _print_migrations(report)
+        for line in lines:
+            print(f"  {line}")
         print("Nothing was written.")
         return 0
 
@@ -450,9 +459,11 @@ def run_cli(args) -> int:
         print(f"Warning: {warning}")
 
     report = result["migrations"]
-    if report["pending"] or report["applied"] or report["undetermined"]:
+    lines = _migration_lines(report)
+    if lines:
         print("Artifact migrations:")
-        _print_migrations(report)
+        for line in lines:
+            print(f"  {line}")
     # Say which version the workspace actually records, every time the two
     # disagree. A held-back marker that nothing reports is the same silence as
     # a marker that moved without its artifacts.

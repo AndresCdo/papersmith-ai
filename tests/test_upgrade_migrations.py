@@ -29,11 +29,16 @@ class _Probe(Migration):
     """A migration whose plan and outcome the test dictates."""
 
     def __init__(self, identifier: str = "probe", *, applies_from: str | None = None,
-                 actions: list[str] | None = None, failures: list[str] | None = None) -> None:
+                 actions: list[str] | None = None, failures: list[str] | None = None,
+                 applied_actions: list[str] | None = None) -> None:
         self.id = identifier
         self.applies_from = applies_from
         self.summary = f"probe {identifier}"
         self._actions = actions if actions is not None else ["touched an artifact"]
+        # What `apply` reports having done, which a failing migration may leave
+        # empty while `plan` still had something to propose — the shape
+        # `RefreshRenderedAtlas` takes when the renderer refuses its atlas.
+        self._applied = applied_actions if applied_actions is not None else self._actions
         self._failures = failures or []
         self.applied_times = 0
         self.seen_paths: list[Path] = []
@@ -44,7 +49,7 @@ class _Probe(Migration):
     def apply(self, workspace: Path) -> tuple[list[str], list[str]]:
         self.applied_times += 1
         self.seen_paths.append(workspace)
-        return list(self._actions), list(self._failures)
+        return list(self._applied), list(self._failures)
 
 
 class UpgradeMigrationTests(unittest.TestCase):
@@ -290,6 +295,24 @@ class UpgradeMigrationTests(unittest.TestCase):
         assert code != 0
         assert "renderer missing" in buffer.getvalue() + errors.getvalue()
         assert self.recorded_version(workspace) == before
+
+    def test_a_failed_migration_prints_no_empty_section_header(self) -> None:
+        """A migration that fails before doing anything has actions to report:
+        none. The header was printed from the fact that it RAN, so the operator
+        got a label with nothing under it while the real line went to stderr.
+        """
+        tmp_path = self.new_tmp()
+        workspace = self.workspace(tmp_path)
+        self.use_registry(_Probe(actions=["render it"], applied_actions=[],
+                                 failures=["renderer missing"]))
+        self.newer_kit(tmp_path)
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+            main(["upgrade", str(workspace)])
+        printed = buffer.getvalue()
+
+        assert "Artifact migrations:" not in printed, printed
 
     def test_cli_plan_migrations_prints_the_pending_set_and_exits_zero(self) -> None:
         tmp_path = self.new_tmp()
