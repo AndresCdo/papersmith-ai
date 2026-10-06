@@ -105,7 +105,7 @@ too, and they are not. One flag must not overstate its reach.
 - [x] T7 Docs: `README.md` (Spanish, the project's convention) and
       `docs/releasing.md` gains "how to add a migration". **No CHANGELOG
       entry and no version bump** — see Open questions
-- [ ] T8 Full verification
+- [x] T8 Full verification
 
 ## Review workload
 
@@ -151,6 +151,34 @@ chains into three slices that each stand alone:
   ran the same focused set (`test_papersmith_status`, `test_command_center_state`,
   `test_command_center_cli`, `test_command_center_history`, `test_cli_paper_e2e`):
   14 failures on `main`, the same 14 on this branch, empty regression diff.
+- **T8, full suite against `main`** — `python3 -m unittest discover -s tests -p
+  "test_*.py"` with `PYTHONPATH=src:tests`, run in a throwaway detached
+  worktree at `main` and again here, failure lists sorted and diffed:
+  4713 tests, 101 unique failures on `main`, 98 here. The diff is exactly
+  **one regression** —
+  `test_shipped_changes_since_the_last_release_moved_the_version`, the release
+  rule discussed under Open questions — and **four fixed**, the version-coupled
+  fixtures T0 repaired. Every other failure is byte-identical on both sides.
+- **T8, end to end on a real workspace** — `python scripts/build-kit.py` (249
+  files), then `papersmith init /tmp/ps-e2e-ws --no-npm --no-env`, then, all
+  observed: `sota-pool/.gitkeep` present; `.gitignore` lines 42-43 carry
+  `sota-pool/*` and `!sota-pool/.gitkeep`; `--plan-migrations` on a converged
+  workspace reports none and writes nothing; a real `atlas.json` renders a
+  584 929-byte `atlas.html` plus the three-hash `.atlas-render.json` stamp; a
+  second upgrade leaves the page byte-identical (sha256 compared) and reports
+  the migration satisfied; tampering the stamp's `viewer` hash re-renders, which
+  is the "release shipped a new bundle" case; a malformed atlas exits `4` and
+  carries the renderer's own `SYSTEMS_NOT_A_NONEMPTY_LIST` through to stderr;
+  deleting `sota-pool/` and upgrading recreates the keepfile via
+  `sota-pool-scaffold`; `migrations.json` stays absent, since no version-gated
+  migration ran. One cosmetic defect was found this way and fixed with a test
+  (`325afda`): an empty `Artifact migrations:` header.
+- **Not run**: the Node suite (`npm test`) and `npm run typecheck`. This
+  worktree has no `node_modules` and this change touches no JavaScript or
+  TypeScript. Checked rather than assumed: no `tests/*.mjs` asserts the
+  workspace topology or the ignore template — the one `.mjs` hit for `.gitkeep`
+  is `proposal-deliberation-status.test.mjs`, which seeds its own `proposals/`
+  fixture.
 - **Pre-existing failures, confirmed by stashing and by the base worktree**:
   `test_papersmith_init` (2: `test_the_mcp_init_tool_skips_provisioning_unless_asked`,
   `test_checkout_with_pyproject_keeps_editable_install`),
