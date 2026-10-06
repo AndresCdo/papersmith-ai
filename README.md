@@ -70,7 +70,7 @@ El camino completo, de un PDF a un paper compilado:
 |---|---------|----------|-------------------------|
 | 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
 | 2 | `/plausibility` | Explora la idea pre-ingesta en tres tramos: rastrea ~25 referencias por sus abstracts, mapea la constelación en un HTML único y discute la plausibilidad de la hipótesis contra ese SOTA | `sota-pool/` (ignorado, como `guidance/`) |
-| 3 | `/proposal-deliberation` | Discute la matemática contigo y publica cada acuerdo como una revisión gestionada | `proposals/` |
+| 3 | `/proposal-deliberation` | Discute la matemática contigo y publica cada acuerdo como una revisión gestionada, con la constelación del SOTA al lado | `proposals/` (la revisión y su `graph.html`) |
 | 4 | `/proposal-implementation` | Prueba de concepto: convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
 | 5 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
 | 6 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
@@ -92,7 +92,9 @@ su comando, sus agentes (con las herramientas que cada uno declara en Pi), sus
 compuertas humanas y lo que deja en disco. La versión interactiva, con enlaces a
 la fuente de cada nodo, está en
 [`docs/diagrams/papersmith-pi-flow.html`](docs/diagrams/papersmith-pi-flow.html)
-(se abre en el navegador; generada con [Archify](https://github.com/tt-a1i/archify)).
+(se abre en el navegador; generada con [Archify](https://github.com/tt-a1i/archify),
+y su fuente y su receta están versionadas en
+[`docs/diagrams/`](docs/diagrams/README.md)).
 
 [![Flujo de papersmith-ai en Pi: comandos, skills y agentes](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 
@@ -295,6 +297,16 @@ como contexto y actúa como tutor matemático. Desde ahí se puede:
 
 Las propuestas viven en `proposals/`, una por revisión gestionada
 (`research-concept-rNN.md`).
+
+Cada revisión publicada viaja con su propia constelación: la del SOTA con la
+propuesta adentro, en `proposals/research-concept-rNN.graph.html`, dibujada por
+el mismo visor 3D que el atlas y nombrada desde la revisión. La produce el
+tramo de publicación de la deliberación, a partir de la superposición
+`proposals/research-concept-rNN.sky.json` que se redacta durante la discusión:
+ahí la idea principal, los temas que la propuesta toma de los papers del SOTA,
+su novedad, el problema que resolvería y de tres a cinco conceptos quedan como
+nodos y aristas en vez de como frases. Si esa superposición no existe, el tramo
+lo reporta como pendiente en lugar de dibujar relaciones que nadie acordó.
 
 ### Paso 4 — Llevar la propuesta a código (`proposal-implementation`)
 
