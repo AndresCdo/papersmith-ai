@@ -31,6 +31,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `--plan-migrations` must not be described as a dry run, and how to read a
   non-zero exit instead of summarizing it as done.
 
+- **The package is publishable to an index, and is not published yet.**
+  `pyproject.toml` gained what a published version needs — an SPDX licence
+  expression, project URLs, classifiers, and the manual as the long description —
+  and `.github/workflows/publish.yml` runs the Node suite, builds the kit,
+  inspects both archives and installs the built wheel into a clean virtualenv
+  before it uploads anything, because everything above that can pass on an
+  artifact that still cannot do its job. It authenticates through Trusted
+  Publishing: PyPI verifies a short-lived OIDC token naming this repository, this
+  workflow and the `pypi` environment, so no durable credential sits in the
+  repository to leak or rotate. It runs on a published release rather than on a
+  push, because a version number is spent forever, and it can be rehearsed with
+  `gh workflow run publish.yml -f dry_run=true`. The matching publisher on
+  pypi.org is configured outside the repository and does not exist yet, which is
+  why this release is a draft: the first publication stays a human step.
+
 ### Changed
 
 - **The Paper Command Center speaks the architecture diagram's visual
@@ -50,6 +65,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   meaning and only their hues move. On the canvas a node's role is now a full
   stroke over a translucent fill of the same hue, the way the diagram states
   it, instead of an accent bar on one edge.
+
+- **The repository lives in the LIAUNAL organization.** The install URLs and the
+  badge in the manual, the package metadata, the MCP catalogue and the release
+  guide moved from `Daprosero/papersmith-ai` in one commit. GitHub redirects the
+  old address, so existing checkouts and pinned URLs keep resolving. The flow
+  diagram's recorded source evidence still cites `Daprosero/papersmith-ai` at the
+  revision it was read from, which is provenance rather than an address.
 
 ### Added
 
