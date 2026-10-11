@@ -126,6 +126,46 @@ written. The prior failure was a single test inside the clean-context gate (the
 log reads `1 failing test(s)`, the same one under the empty home and the decoy
 home), so the gate's exit code is the thing to read when the run lands.
 
+## The first publication
+
+The pending human step from `docs/releasing.md` was taken, and this is where its
+evidence lives.
+
+The `pypi` environment already existed (created 2026-10-08T17:14:37Z) with a
+required reviewer and a deployment branch policy admitting the `v*` tag. The
+reviewer was removed at the operator's instruction and the tag policy preserved:
+the read-back after the change shows `protection_rules` holding only
+`branch_policy`, with `v*` still listed.
+
+The rehearsal ran first — `gh workflow run publish.yml -f dry_run=true` →
+`38180489269`, build job green in 2m15s, publish job correctly skipped. Then the
+draft was published (`gh release edit v0.13.0 --draft=false`, `publishedAt
+2026-10-11T22:36:40Z`), which fired `38181107017`:
+
+```
+✓ Build and verify the artifacts in 2m14s
+✓ Publish to PyPI in 23s
+    ✓ Run pypa/gh-action-pypi-publish@release/v1
+```
+
+And the name that could not be typed before now resolves:
+
+```
+$ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/papersmith-ai/json
+200
+$ pip install papersmith-ai && papersmith --version
+papersmith 0.13.0
+```
+
+`requires_dist` is `null` on the index, which is the `dependencies = []`
+decision visible from the outside.
+
+**The manual's paragraph was edited in a follow-up commit, not in the release
+commit.** `docs/releasing.md` assigns that edit to the release commit that first
+publishes, and `0b630fa` was cut while this release was still a draft and nothing
+published. Rewriting it would have meant moving a pushed tag, which the same
+document refuses. The follow-up is the smaller wrong.
+
 ## Follow-ups (found, not taken)
 
 - The `--no-npm`/`--no-env` window in `SuiteStaysOfflineTests.invocations_outside_the_suite`
