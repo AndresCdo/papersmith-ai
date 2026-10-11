@@ -180,11 +180,12 @@ npm install
 npm run setup:harnesses
 ```
 
-**No hay `pip install papersmith-ai` a secas.** El paquete no está publicado en
-PyPI, así que la instalación va por git, como arriba. Y cuidado con el nombre
-vecino: `papersmith` —sin el `-ai`— sí está en PyPI, pero es **otro proyecto**
-(generación de documentos Word), así que `pip install papersmith` no instala
-esta forja.
+**El paquete ya está publicado en PyPI.** `pipx install papersmith-ai` trae la
+última versión publicada; las URLs de git de arriba traen la punta de `main`, que
+es lo que conviene si vas a desarrollar el framework. Y cuidado con el nombre
+vecino: `papersmith` —sin el `-ai`— también está en PyPI, pero es **otro
+proyecto** (generación de documentos Word), así que `pip install papersmith` no
+instala esta forja.
 
 Instala siempre desde `main`: es la única rama que se mantiene. La forma 1a
 recibe exactamente lo que `main` tiene hoy; la 1b toma el clon tal como está,
