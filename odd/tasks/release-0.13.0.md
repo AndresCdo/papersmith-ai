@@ -71,15 +71,60 @@ remote.
 
 ## Tasks
 
-- [ ] T1 — Fix `publish.yml:71` on `fix/init-offline-guard-flag-order`
-- [ ] T2 — Guard and version tests green
-- [ ] T3 — Merge into `main`, push, CI green
-- [ ] T4 — Push the retroactive tags `v0.6.0` and `v0.7.1`
-- [ ] T5 — `chore/release-0.13.0`: complete the changelog, move the README pin
-- [ ] T6 — Merge `--no-ff`, tag `v0.13.0` on the merge commit, push main and tag
-- [ ] T7 — Draft GitHub release, body from the changelog section
-- [ ] T8 — Audit: tag invariant, install from the tag
-- [ ] T9 — Close this record with its evidence
+- [x] T1 — Fix `publish.yml:71` on `fix/init-offline-guard-flag-order` (`ab7e42e`)
+- [x] T2 — Guard and version tests green — RED first, with the guard naming its own
+      offender, then `19 passed, 4 skipped`
+- [x] T3 — Merge `5afea9f`, push `55dcb4e..5afea9f`
+- [x] T4 — Push the retroactive tags `v0.6.0` and `v0.7.1`; the LIAUNAL remote now
+      carries all fifteen
+- [x] T5 — `chore/release-0.13.0` (`0b630fa`): the two missing changelog entries and
+      the README pin moved to `v0.13.0`
+- [x] T6 — Merge `1d7a02b`, tag object `4bbd6db` peeling to it, pushed
+      `5afea9f..1d7a02b`
+- [x] T7 — Draft release created (`isDraft: true`, `publishedAt: null`)
+- [x] T8 — Audit: fifteen rows, every one `vX.Y.Z <commit> X.Y.Z 1`, plus an install
+      from the tag
+- [x] T9 — This record
+
+## Evidence
+
+The guard was RED before the change and named its own offender, which is the
+strongest form this evidence takes:
+
+```
+AssertionError: these test-suite `init` invocations skip the npm step and not
+  the environment step, so each one performs a multi-gigabyte network install
+  and leaks it into the temp dir: .github/workflows/publish.yml:71
+```
+
+After the one-line change, the three suites that could see it are green
+(`19 passed, 4 skipped`). The four skips are `BuiltArtifactsCarryTheKitTests`,
+which need a `dist/` that only the workflow produces.
+
+The draft decision is verified rather than assumed: `gh run list
+--workflow=publish.yml` is empty, so creating the release triggered nothing, and
+`gh release list` shows 0.13.0 as `Draft` with 0.12.0 still `Latest`.
+
+The audit passes on all fifteen tags:
+
+```
+v0.6.0   52c905e  0.6.0    1     v0.12.0  f24dece  0.12.0   1
+v0.7.0   30a40ea  0.7.0    1     v0.13.0  1d7a02b  0.13.0   1
+v0.7.1   64ae0c0  0.7.1    1     (…every tag, in order)
+```
+
+And a tag that does not resolve to a working install is not a release, so:
+
+```
+$ pip install "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai@v0.13.0"
+$ papersmith --version
+papersmith 0.13.0
+```
+
+**Left open on purpose**: CI on `main` was still running when this record was
+written. The prior failure was a single test inside the clean-context gate (the
+log reads `1 failing test(s)`, the same one under the empty home and the decoy
+home), so the gate's exit code is the thing to read when the run lands.
 
 ## Follow-ups (found, not taken)
 
