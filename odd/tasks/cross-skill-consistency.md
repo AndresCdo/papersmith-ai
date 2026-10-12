@@ -68,6 +68,14 @@ Route legend: D = delegated writer, I = inline.
   - [x] B9 — default run profile resolves the target and its venv (D, writer trigger: executor + template + README + test)
   - [x] X8c — launcher refuses a sibling profile from any skills tree (D, writer trigger: 2 launchers + test + 2 docs)
 - [ ] C1–C14
+  - [x] C4 — v1 headings drop terminal punctuation; derivation documented (D, writer trigger: renderer + 3 test files + 4 docs)
+  - [x] C1 — instruction cap enforced on the CLI, documented, `instructionBudget` (D, writer trigger: workspace + test + 4 docs)
+  - [x] C6 — `CREATE_INITIAL_REVISION --dry-run` (D, writer trigger: creation + workspace + cli + test + 4 docs)
+  - [x] C2 — source window reported, warned, widenable (D, writer trigger: workspace + test + 4 docs)
+  - [x] C3 — declared parameters table (D, writer trigger: preservation + test + 2 docs)
+  - [x] C7 — successor receipt `rationale`/`decider` (D, writer trigger: workspace + orchestrator + types + test + 4 docs)
+  - [x] C5 — `ADOPT_INITIAL_REVISION` rename + record (D, writer trigger: creation + renderer + receipt + workspace + cli + 2 tests + 4 docs)
+  - [ ] C14 — out-of-scope declaration for `agree`: verified missing; blocked on edit surface (implementation engine)
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
@@ -795,3 +803,14 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `ACCEPTED_OPERATIONS` (pins the set by design). Core comment reworded ("stops"). Additive receipt key: no migration.
   Not done (outside surfaces): `src/papersmith/bridges/deliberation.py` exposes no adopt verb.
   Commit: `feat(deliberation): ADOPT_INITIAL_REVISION gives an adopted v1 the created v1's state, receipt and gate` (the commit carrying this line)
+
+- C14 (verified, real; blocked on edit surface): `cmd_agree` (`skills/_core/implementation/engine/implementation_engine.py`
+  ~:10064) computes `untested = declared - crossed` in `crossing_state` (~:9427) and only clears an entry through the
+  request-scoped `--acknowledge untested:<id>` argv; no machine-readable out-of-scope declaration exists in either
+  document or in `skills/_core/conventions/experiments.json`. Adding one needs the implementation engine (reader) and
+  the experimental-implementation docs, outside this writer's surfaces. Candidate paths:
+  `skills/_core/implementation/engine/implementation_engine.py`, `skills/_core/conventions/experiments.json`,
+  `skills/experimental-implementation/SKILL.md`, `skills/experimental-implementation/references/usage.md`,
+  `skills/experimental-deliberation/SKILL.md`, `tests/test_experimental_implementation_*.py` (new test), CHANGELOG.md.
+  Proposed shape: an `outOfScope` marker in the convention (e.g. `[out-of-scope:N]`) read from the experiments
+  document and subtracted from `untested` (absent = today's behaviour); watch `tests/test_implementation_domain_lock.py`.
