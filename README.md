@@ -23,7 +23,7 @@ remote compute, development and troubleshooting.
 5. [Inside the workspace](#inside-the-workspace)
 6. [Harnesses and skill projection](#harnesses-and-skill-projection)
 7. [The agents](#the-agents)
-8. [Anatomy of each skill](#anatomía-de-cada-skill)
+8. [Anatomy of each skill](#anatomy-of-each-skill)
 9. [The CLI commands](#los-comandos-del-cli)
 10. [Remote compute, carefully](#cómputo-remoto-con-cuidado)
 11. [Architecture](#arquitectura)
@@ -258,7 +258,7 @@ papersmith ingest ~/Downloads/scan.pdf --ocr       # scanned: balanced OCR mode
 Each loose PDF ends up in its own folder, next to its Markdown (text + LaTeX +
 tables, with the bibliography stripped) and the images of its figures. The
 pipeline's details, in the `paper-ingestion` section of the
-[Anatomy](#anatomía-de-cada-skill).
+[Anatomy](#anatomy-of-each-skill).
 
 ### 4. Deliberate, implement and run
 
@@ -400,7 +400,7 @@ with the same rigour). A finding without a validated remedy isn't reported.
 That's all it takes to use the forge. If you want to understand **what goes on
 inside** each skill —its steps, its pieces, how they connect to each other and
 what limitations each one has— read on in [Anatomy of each
-skill](#anatomía-de-cada-skill). And for the literal contract, each one's
+skill](#anatomy-of-each-skill). And for the literal contract, each one's
 `SKILL.md`.
 
 ---
@@ -677,65 +677,67 @@ Three rules that order everything else:
 
 ---
 
-## Anatomía de cada skill
+## Anatomy of each skill
 
-Las secciones de arriba cuentan **qué haces**. Esta cuenta **qué pasa adentro**.
-Está escrita para alguien que nunca vio el proyecto: cada skill se explica desde
-cero y **entera** —sus pasos, sus piezas, sus conexiones con las demás, sus
-limitaciones conocidas y su diagrama— sin mandarte a otra parte del documento.
+The sections above describe **what you do**. This one describes **what happens
+inside**. It is written for someone who has never seen the project: each skill is
+explained from nothing and **in full** — its steps, its parts, its connections to
+the others, its known limits and its diagram — without sending the reader
+elsewhere in the document.
 
-Antes de entrar, dos cosas.
+Two things before the first skill.
 
-**Qué es una skill aquí**, porque no es un programa que ejecutas y se acabó. Cada una
-tiene dos mitades que hacen cosas distintas:
+**What a skill is here**, because it is not a program that runs once and stops.
+Each one has two halves that do different jobs:
 
-| Mitad | Qué es | Quién la ejecuta |
-|-------|--------|------------------|
-| `SKILL.md` | Un contrato en prosa: cuándo activarse, qué preguntar, qué no hacer nunca. No es código: es la instrucción de conducta. | **El agente** lo lee y se comporta según eso. |
-| El motor (`scripts/`, `engine/`) | Código determinista: mismas entradas, misma salida. Sin modelo, sin red, sin claves. | **La máquina** lo ejecuta y devuelve un veredicto que el agente no puede negociar. |
+| Half | What it is | Who runs it |
+| --- | --- | --- |
+| `SKILL.md` | A prose contract: when to activate, what to ask, what never to do. It is not code; it is the instruction of conduct. | **The agent** reads it and behaves according to it. |
+| The engine (`scripts/`, `engine/`) | Deterministic code: same input, same output. No model, no network, no keys. | **The machine** runs it and returns a verdict the agent cannot negotiate. |
 
-Esa división es la idea central de toda la forja: **el agente decide, el motor
-verifica**. El agente propone un cambio; el motor comprueba que ese cambio no
-rompió nada y, si lo rompió, se niega. Un agente puede equivocarse. Un motor
-determinista no cambia de opinión.
+That division is the forge's central idea: **the agent decides, the engine
+verifies**. The agent proposes a change; the engine checks that the change broke
+nothing and refuses when it did. An agent can be wrong. A deterministic engine does
+not change its mind.
 
-**Y cómo se encadenan.** Las doce no son islas: cada una recibe algo concreto de
-otra y le entrega algo concreto a la siguiente. Este es el mapa; cada skill explica
-su propia costura en detalle, en su apartado. Las flechas dicen **qué** pasa por la
-costura, no sólo que existe — y cada una de las etiquetas de abajo está leída de la
-declaración de la skill que la recibe, no inferida del nombre de la carpeta.
+**How they chain.** The twelve are not islands: each one receives something
+specific from another and hands something specific to the next. This is the map,
+and each skill explains its own seam in detail in its own section. The arrows state
+**what** crosses the seam rather than merely that a seam exists, and every label
+below is read from the declaration of the skill that receives it, not inferred from
+the folder name.
 
 ```mermaid
 flowchart TD
-    PDF["PDFs que dejas en guidance/"] --> PI["1. paper-ingestion"]
-    IDEA["tu idea, en dos oraciones"] --> PL["2. plausibility"]
+    IDEA["the idea, in two sentences"] --> PL["1. plausibility"]
+    PDF["PDFs placed in guidance/"] --> PI["2. paper-ingestion"]
 
-    PI -- "guidance/paper-guide (opcional)" --> PD["3. proposal-deliberation"]
-    PL -- "top-5 + reporte provisional" --> PD
-    PI -- "guidance/data-paper (obligatoria)" --> ED["4. experimental-deliberation"]
-    PI -- "guidance/paper-guide (opcional)" --> ED
+    PI -- "guidance/paper-guide (optional)" --> PD["3. proposal-deliberation"]
+    PL -- "top-5 + provisional report" --> PD
+    PI -- "guidance/data-paper (mandatory)" --> ED["4. experimental-deliberation"]
+    PI -- "guidance/paper-guide (optional)" --> ED
 
-    PD -- "proposals/ — la revisión publicada" --> ED
-    PD -- "STATUS + el texto de la revisión" --> IMP["5. proposal-implementation"]
-    ED -- "experiments/ — el protocolo publicado" --> EIM["8. experimental-implementation"]
-    PD -- "proposals/ — el documento 1 del par" --> EIM
+    PD -- "proposals/ — the published revision" --> ED
+    PD -- "STATUS + the revision text" --> IMP["5. proposal-implementation"]
+    ED -- "experiments/ — the published protocol" --> EIM["8. experimental-implementation"]
+    PD -- "proposals/ — document 1 of the pair" --> EIM
 
-    IMP -- "correcciones, detrás de compuerta" --> PD
-    EIM -- "correcciones, detrás de compuerta" --> ED
+    IMP -- "corrections, behind a gate" --> PD
+    EIM -- "corrections, behind a gate" --> ED
 
-    IMP -- "el repo destino en implementations/" --> EIM
-    IMP -- "carpeta del trabajo en tools/" --> RE["7. remote-execution"]
-    EIM -- "carpeta del trabajo en tools/" --> RE
-    KA["6. kaggle-accounts"] -- "worker + ruta al token, nunca el valor" --> RE
-    RE -- "el registro, sólo lectura" --> IMP
+    IMP -- "the target repo in implementations/" --> EIM
+    IMP -- "the job folder in tools/" --> RE["7. remote-execution"]
+    EIM -- "the job folder in tools/" --> RE
+    KA["6. kaggle-accounts"] -- "worker + path to the token, never its value" --> RE
+    RE -- "the ledger, read-only" --> IMP
 
     PD -- "proposals/" --> PW["9. paper-writing"]
     ED -- "experiments/" --> PW
-    EIM -- "el código del destino y lo que sus corridas devolvieron" --> PW
+    EIM -- "the target's code and what its runs returned" --> PW
     PW --> PAPER["paper/main.tex + Figures/"]
-    PAPER -- "Figures/<id>.pdf ya compilado" --> FR["10. figure-review"]
+    PAPER -- "Figures/<id>.pdf already compiled" --> FR["10. figure-review"]
 
-    SA["11. skill-audit"] -. "informa, nunca cambia" .-> PI
+    SA["11. skill-audit"] -. "reports, never changes" .-> PI
     SA -. " " .-> PL
     SA -. " " .-> PD
     SA -. " " .-> IMP
@@ -745,28 +747,90 @@ flowchart TD
     SA -. " " .-> EIM
     SA -. " " .-> PW
     SA -. " " .-> FR
-    SA -. "y a sí misma" .-> SA
+    SA -. "and at itself" .-> SA
 ```
 
-**Tres cosas que el mapa dice y conviene leer despacio.**
+**Three things the map states.**
 
-*Los dos lazos hacia arriba son el corazón de la forja.* La matemática baja a código
-y lo que el código descubre sube de vuelta al documento; lo mismo entre el protocolo
-experimental y su implementación. En los dos casos la vuelta pasa por una compuerta
-que **abres tú**: el código propone la corrección, nunca la publica.
+*The two upward loops are the forge's core.* The mathematics goes down to code and
+what the code discovers goes back up to the document; the same holds between the
+experimental protocol and its implementation. In both cases the return passes
+through a gate the operator opens: the code proposes a correction and never
+publishes one.
 
-*Las cuatro de en medio son dos pares sobre dos motores.* La 2 y la 6 comparten un
-motor de deliberación; la 3 y la 7, un motor de implementación. Lo único que cambia
-entre los dos huéspedes de cada par es su `profile.ts` o su `impl_profile.py` — por
-eso un defecto en un motor aparece en dos skills a la vez, y por eso las
-limitaciones del motor están anotadas en las dos.
+*The four in the middle are two pairs over two engines.* Skills 3 and 5 share a
+deliberation engine; 4 and 6 share an implementation engine. The only thing that
+differs between the two hosts of a pair is their `profile.ts` or their
+`impl_profile.py`, which is why a defect in one engine appears in two skills at once
+and why the engine's limits are recorded in both.
 
-*La 8 es la única que lee de todo lo anterior a la vez*, y la 9 no está en la cadena:
-se para al costado y mira a cualquiera, incluida a sí misma.
+*Skill 9 is the only one that reads everything before it at once*, and 11 is not in
+the chain: it stands aside and looks at any of them, itself included.
+
+The map draws the eleven skills that take part in the flow. Skill 12,
+`upgrade-project`, is not a stage: it operates on the workspace the flow runs
+inside, and its own section below explains it.
 
 ---
 
-### 1. `paper-ingestion` — de PDF a Markdown
+### 1. `plausibility` — map the territory before collecting it
+
+Before any PDF is ingested there is an idea, and this is the skill that tests it.
+It needs no PDFs, which is why it runs first: all three of its stretches work from
+the idea and from what can be found about it.
+
+**The three stretches.**
+
+| Stretch | Delegated to | Begins after | Ends at |
+| --- | --- | --- | --- |
+| Scout | `sota-scout` | the idea is stated in at least two sentences | the pool: 25 candidates with abstracts, in 3 to 5 families |
+| Constellation | `sota-grapher` | the pool holds its 25 candidates | one `atlas.html` beside `atlas.json`, with the checker green |
+| Screen | `novelty-screener` | the hypothesis is stated and the pool holds its candidates | the plausibility report: graded claims, a ranked top 5, and one closing paragraph on where the proposal stands |
+
+What moves between the stretches is execution, never doctrine. The rules for
+scouting and mapping live in the skill; the rules for screening live in the
+agent's own section; and each agent's first instruction is to load the skill.
+
+**The slot contract.** Every system in the constellation carries exactly these
+slots, and the 20-planet limit per system is absolute.
+
+| Slot | Planets | What it holds |
+| --- | --- | --- |
+| `sun` | exactly 1 | the paper: title at the center |
+| `branch` | 0 to 2 | research branches the paper claims |
+| `topic_app` | exactly 1 | the topic as the application domain states it |
+| `topic_ai` | exactly 1 | the same topic framed as an AI problem |
+| `problem` | exactly 1 | the problem the paper faces, in one claim |
+| `application` | exactly 1 | where it lands in the world |
+| `family` | exactly 1 | the group this system belongs to: one per paper, 3 to 5 families per pool |
+| `novelty` | exactly 1 | what the paper adds over those families |
+| `contribution` | 0 to 5 | concepts argued beyond the one novelty claim |
+| `result` | 1 to 3 | punctual results, one claim per planet |
+| `conclusion` | 1 to 2 | conclusions, one claim per node |
+
+**What leaves it.** Nothing is ingested, nothing is filed into `guidance/`, and
+nothing is published. Everything lands in `sota-pool/`, which travels gitignored
+like `guidance/`. The pool is what `proposal-deliberation` shows beside the
+mathematics, and the ranked top 5 is what tells the ingestion step which PDFs are
+worth having.
+
+**The acceptance gate.** The report is not handed on until the operator accepts
+it. The gate is narrow: it approves the reading and not the idea, it publishes
+nothing and it files nothing. Every re-screen is a new reading and carries its own
+gate, because an acceptance of a previous report is not an acceptance of this one.
+
+**Its refusals.** An idea under two sentences is refused before the search starts.
+Fewer than 25 resolvable candidates is reported short, with what was tried, and is
+never padded with unquoted entries. More than 5 families means keeping the 5 the
+abstracts lean on hardest and naming the ones left out. A claim with no abstract
+passage behind it does not become a planet: a quoteless planet is a drawing.
+
+**What it never does.** It never writes a planet whose quote was not read in the
+same pass from the abstract its evidence names, and never grades a claim whose
+abstract was not read in the same reply. An invented quote reads as a finding and
+is acted on as one.
+
+### 2. `paper-ingestion` — from PDF to Markdown
 
 **Para qué está.** Los papers llegan como PDF, y un PDF es, para un agente, una
 caja cerrada: el texto está mezclado con la maquetación, las ecuaciones son dibujos
@@ -945,7 +1009,7 @@ flowchart TD
 
 ---
 
-### 2. `proposal-deliberation` — discutir la matemática y publicar revisiones
+### 3. `proposal-deliberation` — discuss the mathematics and publish revisions
 
 **Para qué está.** Escribir una propuesta de paper matemático es un ida y vuelta
 largo: se discute una idea, se corrige una ecuación, se reordena una sección. El
@@ -1278,7 +1342,7 @@ flowchart TD
 
 ---
 
-### 3. `proposal-implementation` — de la matemática al código que se prueba solo
+### 4. `proposal-implementation` — from the mathematics to code that tests itself
 
 **Para qué está.** Una propuesta publicada es un documento. Esta skill la convierte en
 un repositorio Python que funciona, y después **demuestra mecánicamente** —no por
@@ -1788,355 +1852,7 @@ flowchart TD
 
 ---
 
-### 4. `kaggle-accounts` — el portero de las credenciales
-
-**Para qué está.** Los tokens de Kaggle vencen y rotan sin avisar: una cuenta que
-funcionaba ayer puede fallar hoy a mitad de una corrida. Esta skill responde la única
-pregunta que la máquina puede verificar de verdad —**¿esta credencial todavía
-autentica?**— y mantiene un depósito chico, ignorado por git, con las que pasan.
-
-**De dónde recibe y a quién le entrega.** Recibe archivos que **dejas** en
-`kaggle-inbox/`: un `kaggle.json`, o un `.txt`/`.md` con una credencial por línea. Le
-entrega a `remote-execution` dos cosas, y sólo dos:
-
-- **Identidad de worker**, por su comando `list`, que devuelve **nada más que
-  usuarios**. El diccionario de salida se reconstruye desde cero con sólo ese campo, así
-  que una clave no puede llegar ahí ni por accidente.
-- **Una ruta a un archivo de token**, nunca el valor. Su comando de entrega escribe el
-  token como archivo suelto con permisos `0600` en un directorio `0700` e imprime **la
-  ruta**.
-
-Del otro lado, `remote-execution` no abre ese depósito jamás: corre estos dos comandos
-como procesos hijo y lee su salida. Es una costura de una sola dirección y de una sola
-forma.
-
-**Qué necesita antes.** Python 3.10+ y red. **Nada más**: no hay entorno virtual, no hay
-`pip install kaggle`. Todo se hace con la biblioteca estándar y una llamada HTTPS cruda.
-
-**Las etapas que declara.** Leídas de `OBJECTIVE_FLOW`, que un test mantiene
-igual al `SKILL.md`. `list` contesta *dónde estoy*; esto contesta *para qué es*,
-que ninguna lista implica: una cuenta está en el almacén porque alguien la puso,
-no porque funcione.
-
-| Etapa | Qué deja establecido | La tienes detrás cuando |
-|---|---|---|
-| `taken-in` | Lo que entregaste está en el almacén, **de a una fila por vez**, así una fila mala nunca cuesta las de al lado | el inbox soltó todo lo que tenía y se consumió, o quedó porque todavía hay filas adentro |
-| `proven` | Cada cuenta guardada se le preguntó al servicio, bajo cualquiera de los dos esquemas de token que use de verdad | cada cuenta lleva un veredicto **de esta corrida** |
-| `decided` | Qué pasa con las que dejaron de funcionar — que es tu decisión y nunca un efecto secundario de preguntar | es la llegada; no está detrás de nadie |
-
-**Llegada:** cada cuenta con un veredicto **actual**, y las que fallan
-respondidas, no apenas reportadas. Un veredicto se vence: los tokens se rotan y
-expiran, así que *"autenticó una vez"* tampoco es llegada. Una sesión que corre
-`validate`, ve un fallo reportado y para, **no llegó**.
-
-**Dos paradas son de una persona:** consentir la validación, porque escribe —
-guarda credenciales y consume el inbox—, y decidir qué pasa con una cuenta que
-dejó de funcionar. Una credencial muerta se reporta y **nunca se borra sola**,
-a propósito: borrarla es tu otra opción, no una consecuencia de preguntar.
-
-**El flujo.** Al activarse corre `list` en silencio para saber qué hay guardado, y
-después hace **una sola pregunta**: validar o eliminar. La opción de eliminar sólo
-aparece si hay algo que eliminar.
-
-*Validar:*
-
-1. Carga el depósito. Si está corrupto **falla cerrado** y no escribe nada — nunca lo
-   trata como "vacío", porque eso permitiría que una escritura posterior pisara
-   credenciales todavía buenas.
-2. Re-verifica **cada cuenta ya guardada** contra la API real. Cada una da su propia
-   línea de pase o falla.
-3. Decide de dónde salen las nuevas: por defecto, lo que haya en `kaggle-inbox/`.
-4. Parsea cada archivo. Un `kaggle.json` da una credencial; un `.txt` o `.md` da una por
-   línea, y una línea mala se marca sin arruinar las demás.
-5. Valida cada una: primero autenticación básica y, **sólo si vuelve un 401**, reintenta
-   como token bearer. Un timeout de red no reintenta nada: una falla de red no es
-   evidencia sobre la credencial.
-6. La que pasa se guarda o reemplaza su clave; la que falla se reporta por número de
-   línea.
-7. Escribe el depósito de forma atómica, y sólo si el archivo está efectivamente
-   ignorado por git.
-8. Un archivo del inbox se borra **sólo si entró entero**. Si alguna fila quedó afuera,
-   el archivo se conserva y te dice cuántas.
-9. Una cuenta que dejó de autenticar se **reporta, no se borra**. Eliminar es una
-   decisión tuya, aparte.
-
-*Eliminar:* se listan las cuentas reales, eliges de una lista —nunca escribes un nombre
-a mano— y si alguna de las elegidas no existe **se rechaza el lote entero**. Un borrado
-parcial por un typo es peor que no borrar nada.
-
-**Los módulos.**
-
-| Archivo | Qué hace y por qué existe |
-|---------|---------------------------|
-| `SKILL.md` | El contrato de conducta: cuándo preguntar, qué no leer nunca, cómo reportar. Sin esto, el agente no tendría motivo para preguntar antes de escribir. |
-| `scripts/accounts_cli.py` | La implementación entera, sin dependencias externas. Subcomandos: `list`, `discover`, `validate`, `remove` y `materialize`. Los cuatro primeros son para una persona; **`materialize` es para código**: escribe la credencial guardada de un worker a un archivo de texto plano y devuelve **dónde**, nunca **qué**. Ese es el contrato que deja que `remote-execution` use un token sin que ninguna skill lo lea ni lo imprima. |
-| `store/accounts.json` | El depósito. Permisos `0600`, escritura atómica. |
-| `store/.gitignore` | Ignora **todo** el contenido de `store/` por regla de contenido, no por nombre — así cubre también el temporal de la escritura atómica y cualquier archivo futuro. Está commiteado para que la regla exista *antes* de que se escriba la primera credencial. |
-| `store/workers/<usuario>/token` | Se crea solo en la primera entrega. Contiene sólo el token, sin envoltorio JSON: es la forma que el cliente de Kaggle espera. |
-
-**Los seguros.**
-
-- **La credencial nunca cruza como valor.** `list` devuelve sólo usuarios; la entrega
-  devuelve sólo una ruta.
-- **No hay bandera para pasar la clave.** Un secreto como argumento quedaría en la lista
-  de procesos y en el historial del shell. La entrada interactiva usa entrada oculta y
-  **se niega si no hay una terminal real** — que es exactamente cómo detecta a un agente
-  intentando hacerlo por ti.
-- **No escribe si git no lo ignora.** Verifica la regla de ignorado *antes* de crear
-  ningún directorio, así una negativa no deja ni el andamio.
-- **Escritura atómica siempre**, con los permisos puestos antes del primer byte.
-- **Nunca lee el depósito para contestar "qué cuentas hay".** Para eso está `list`.
-
-**Limitaciones conocidas.**
-
-*El auditor la mira, pero sólo de un lado.* La validación toca la API real, así que lo
-que reporta es evidencia y no inferencia, y el punto flojo de la cadena está del otro lado
-de la costura, en el adaptador de `remote-execution` (ver su apartado). Esta skill ya tiene
-su receta `accepted-operations` en `skill-audit`, que deriva sus cinco operaciones del
-propio rechazo del CLI. Lo que todavía no tiene es la otra mitad: su `SKILL.md` declara ese
-conjunto en prosa y no en una tabla cerrada, así que el auditor responde
-`comparison: not-run` — deriva lo que el código acepta y no puede compararlo contra lo que
-el documento promete. **Cómo se arregla:** una tabla cerrada en el `SKILL.md`, como la que
-`remote-execution` ya tiene.
-
-**Diagrama.**
-
-```mermaid
-flowchart TD
-    A["Usuario invoca la skill"] --> B["list en silencio"]
-    B --> C{"¿El depósito está vacío?"}
-    C -- Sí --> D["Pregunta: sólo validar"]
-    C -- No --> E["Pregunta: validar o eliminar"]
-    D --> F["validate"]
-    E -- validar --> F
-    E -- eliminar --> G["Lista de cuentas para elegir"]
-    G --> H{"¿Todas las elegidas existen?"}
-    H -- No --> I["Rechaza el lote entero"]
-    H -- Sí --> J["Reescribe el depósito y reporta"]
-    F --> K["Re-verifica cada cuenta guardada"]
-    K --> L["Lee kaggle-inbox/"]
-    L --> M["Parsea cada credencial"]
-    M --> N["Autenticación básica contra la API"]
-    N --> O{"¿Devolvió 401?"}
-    O -- Sí --> P["Reintenta como bearer"]
-    O -- "No, otra falla" --> Q{"¿Pasa?"}
-    P --> Q
-    Q -- No --> R["Reporta por número de línea. No guarda"]
-    Q -- Sí --> S{"¿git ignora el depósito?"}
-    S -- No --> T["Se niega a escribir"]
-    S -- Sí --> U["Escritura atómica 0600"]
-    U --> V{"¿El archivo del inbox entró entero?"}
-    V -- Sí --> W["Borra el archivo del inbox"]
-    V -- No --> X["Lo conserva y dice cuántas faltaron"]
-    W --> Y["Reporte final al usuario"]
-    X --> Y
-    R --> Y
-    U --> Z["remote-execution pide un worker:<br/>recibe usuario y ruta, nunca el valor"]
-```
-
----
-
-### 5. `remote-execution` — la memoria de lo que se mandó afuera
-
-**Para qué está.** Mandar un entrenamiento a una máquina remota, hoy, se hace copiando
-un comando, corriéndolo a mano y **recordando de memoria** si salió, si volvió, y si lo
-que volvió sigue correspondiéndose con el código que lo produjo. Esta skill reemplaza
-esa memoria humana por un registro durable y de sólo agregado: qué se mandó, qué volvió,
-si ese resultado todavía es confiable contra el código actual, y cuántos trabajos puede
-aceptar un worker a la vez.
-
-**De dónde recibe y a quién le entrega.**
-
-*Recibe de `kaggle-accounts`:* la identidad de los workers y la ruta de la credencial,
-por las dos costuras descritas en aquel apartado. Vale la pena seguir el recorrido
-entero del secreto, porque es el diseño más cuidado de la forja: el valor del token vive
-en el depósito de `kaggle-accounts`; la entrega lo escribe como archivo suelto; esta
-skill lee **sólo la ruta** de la salida de ese proceso hijo; esa ruta viaja adentro de un
-handle congelado; y su único destino es una variable de entorno en el proceso hijo que
-ejecuta el cliente del servicio. **El valor del secreto nunca entra en la memoria de esta
-skill ni en la del agente.**
-
-*Recibe de `proposal-implementation`:* la carpeta del trabajo, que vive bajo
-`<destino>/tools/<servicio>/<trabajo>/` dentro del repositorio de la implementación.
-
-*Le entrega a `proposal-implementation`:* el registro. Aquella skill lo pliega en modo
-sólo lectura, reutilizando **este mismo** código de pliegue en vez de reimplementarlo —
-dos definiciones de "este resultado ya no es vigente" sería una que deriva de la otra en
-silencio. De ese pliegue sale su peldaño `poll-first`.
-
-**Qué necesita antes.** Python 3.10+, biblioteca estándar, sin entorno virtual. Para
-hablar con un servicio real hace falta un adaptador registrado y una credencial.
-
-**El flujo, por etapas.** Esta sección tampoco tenía uno. Leídas de
-`OBJECTIVE_FLOW`, independientes de todo ledger, carpeta de job o resultado en
-disco: `status` contesta *dónde estoy* plegando lo que pasó, esto contesta *para
-qué es*. Las catorce rutas de rechazo de este CLI la llevan, y para eso hubo que
-crear el único lugar por el que todas llegan a un lector.
-
-| Etapa | Qué deja establecido | La tienes detrás cuando |
-|---|---|---|
-| `reachable` | Una carpeta de job **fijada a un commit que el remoto declarado puede servir de verdad**, que es lo que un worker clona | `generate-job` escribió la carpeta — prueba el pin contra el remoto **antes de escribir un byte**, así que una carpeta que existe es un pin que se publicó |
-| `wire` | Que este worker, en este pin, lleva corriente — pagado en minutos en vez de en las horas que cuesta una campaña | `readiness` dice listo, con un veredicto **derivado de la evidencia de un ensayo**, nunca afirmado |
-| `authorized` | Un lanzamiento atado a este commit, este entrypoint y esta lista de unidades, con un token acuñado para él y consumido una sola vez | un registro de `gate` coincide; un hecho ligado que se movió lo vuelve stale, que no es lo mismo que pasar el tiempo |
-| `sent` | La entrega salió y el ledger lo sabe, así ninguna segunda contesta una pregunta que ya se está contestando | el ledger lo tiene con un estado terminal |
-| `returned` | El resultado está en disco, actual, y no en cuarentena | es la llegada; no está detrás de nadie |
-
-**Llegada:** el resultado en disco y verificado como el actual — lo único de lo
-que alguien puede leer un número. **No** la entrega aceptada: una entrega que el
-servicio tomó es un recibo, no un resultado.
-
-**`reconcile` no es una etapa y nunca avanza ninguna.** Es el camino de vuelta
-cuando el ledger y el servicio dejan de coincidir —`drift`, o una línea que no
-se pudo leer— y devuelve a `sent`.
-
-**Dos paradas son de una persona:** **publicar el commit** que un worker
-clonaría, sin el cual `generate-job` se niega y lo nombra con precisión, y
-**autorizar el lanzamiento**, que son horas de la cuota de alguien.
-
-**Los comandos.**
-
-| Comando | Qué hace | Cuándo se usa |
-|---------|----------|---------------|
-| `generate-job` | Arma la carpeta del trabajo: configuración de corrida, cuaderno ejecutor y el archivo de metadatos del servicio. Se construye en un directorio parcial y se renombra atómicamente al terminar — **una carpeta a medio escribir no puede existir**. | Una vez, antes del primer envío. |
-| `submit` | El camino de envío completo, en orden fijo: guardia de ruta → resolver el producto → digest fresco del fuente → clamp de capacidad → envío real → **y solo entonces** anotar en el registro. Anotar último significa que nunca se registra algo que no salió. `--smoke` marca la corrida como ensayo y la manda al registro de ensayos. | Cada vez que envías trabajo. |
-| `status` | Pliega el registro y muestra el estado por punto de entrada: pendiente, devuelto, con error, en cuarentena, en vuelo hace demasiado. **No recibe adaptador**: es estructuralmente incapaz de resolver nada, sólo reporta. | Cuando quieres saber dónde estás parado. |
-| `poll` | Pregunta por una entrega y **re-valida** que el estado devuelto esté dentro del vocabulario de cinco valores del seam. Una defensa contra un adaptador que se porte mal. | Mientras esperas. |
-| `fetch` | Trae el resultado. Evalúa la vigencia **antes** de escribir nada; si el resultado ya no corresponde al código actual, se redirige a cuarentena. Materializa en un directorio parcial, verifica que esté completo, renombra, y sólo entonces anota la devolución. | Cuando la corrida terminó. |
-| `reconcile` | Compara lo que el servicio dice tener contra lo que el registro cree, en las dos direcciones. Reporta huérfanos; nunca los adopta ni los cancela solo. | Cuando algo no cuadra. Siempre lo corre un humano. |
-| `smoke record` | Anota el veredicto de un ensayo, y ese veredicto sale de **la evidencia del artefacto traído**, no de que alguien diga que anduvo. | Después de traer el ensayo. |
-| `readiness` | Reporta —nunca envía— si un trabajo está listo para su corrida completa. Ata el último ensayo a tres cosas: que pasó, mismo commit, mismo worker. **No lee ningún reloj**: un ensayo caduca porque cambió el commit o el worker, jamás por tiempo transcurrido. | Antes de gastar una corrida grande. |
-
-**El registro y su pliegue.** El registro es un archivo de una línea JSON por evento,
-sólo de agregado. Se escribe con un descriptor crudo en modo de anexado, verificando que
-la cantidad de bytes escritos sea la esperada, con un tope por evento. Nada se guarda
-como "estado actual mutable": el estado se **deriva** releyendo el log en dos pasadas —
-la primera resuelve cuál es el último envío de cada punto de entrada, la segunda decide
-si cada resultado devuelto sigue vigente. Hacen falta dos pasadas porque **un resultado
-que era vigente cuando llegó deja de serlo en el instante en que aterriza un reenvío
-posterior**.
-
-**El clamp de capacidad.** El empaquetador lee el tope directamente del adaptador —nunca
-lo recibe por parámetro ni lo tiene escrito a mano—, arranca de lo pendiente según el
-registro, y lo refina preguntándole al servicio qué tiene activo. La cuenta es
-`otorgado = max(0, min(pedido, tope) - en_vuelo)`, y se reporta como cuatro números
-distintos para que nadie confunda "pide 5 y me dieron 2 porque el tope es 2" con "pide
-exactamente 2".
-
-**Los módulos.**
-
-| Archivo | Qué hace y por qué existe |
-|---------|---------------------------|
-| `scripts/adapter.py` | El seam: una clase abstracta con exactamente seis operaciones, las formas congeladas que la cruzan, y un registro de nombre a clase. Gracias a esto, todo lo que está arriba es ciego respecto de qué servicio hay abajo. Un backend nuevo entra sin tocar nada más. |
-| `scripts/ledger.py` | El registro: el camino de escritura confiable y el pliegue que deriva el estado, incluida la vigencia. Es el módulo que `proposal-implementation` importa. |
-| `scripts/packer.py` | El clamp de capacidad. El único lugar que combina lo que sabe el repositorio con lo que sabe el servicio. |
-| `scripts/remote_cli.py` | La puerta de entrada. También la guardia de ruta, que resuelve los enlaces simbólicos **antes** de comprobar contención y admite exactamente dos formas de ruta. |
-| `scripts/credentials.py` | El único productor de un handle de credencial. Importa nada más que `subprocess`, `json`, `pathlib` y el seam: **estructuralmente no puede leer un secreto**. |
-| `scripts/jobfolder.py` | Genera y lee la carpeta del trabajo, y calcula la única condición de obsolescencia: que el fuente se haya movido más allá del commit fijado, dentro de las rutas declaradas. |
-| `scripts/shard_io.py` | Un único predicado de completitud de evidencia, compartido por el registro de ensayos y por el paso de fusión posterior. Una sola definición, cero deriva. |
-| `scripts/adapters/kaggle.py`, `colab.py` | Los adaptadores de servicio autorizados a nombrar un backend. Invocan el CLI oficial correspondiente (`kaggle` o `google-colab-cli`); nunca importan paquetes privados ni leen secretos directamente. |
-| `assets/runner_bootstrap.py` | La celda 0 de todo cuaderno generado: valida la configuración, clona el commit fijado, pone `src/` en el path e importa los módulos declarados verificando que resuelvan **dentro del clon**. Corre en la máquina remota, antes que cualquier código tuyo. |
-| `assets/runner_invoke.py` | La celda 1: elige el bloque normal o el de ensayo y llama al punto de entrada declarado. |
-| `distribute` | Reparte las unidades declaradas entre los workers disponibles y devuelve el reparto, **sin enviar nada**. Es la respuesta a "¿en cuántos pedazos entra esto y quién corre cada uno?", separada de `submit` a propósito: decidir el reparto y gastar cuota son dos actos distintos. |
-
-**Qué escribe en el disco.**
-
-```
-<destino>/<Producto>/.remote-execution/
-├── ledger.jsonl              el registro principal
-├── smoke.jsonl               los ensayos: archivo FÍSICAMENTE distinto
-└── quarantine/<id>/          resultados que llegaron fuera de vigencia
-<destino>/tools/<servicio>/<trabajo>/
-├── run-config.json           qué se corre, con qué argumentos, en qué commit
-├── runner.ipynb              el cuaderno que clona el commit fijado y ejecuta
-└── <metadatos del servicio>
-```
-
-Los ensayos van a un archivo aparte y no a un cuarto tipo de evento en el registro
-principal, y la razón es concreta: un envío de ensayo se convertiría en el "último
-envío" del punto de entrada y **taparía en silencio una corrida real todavía
-pendiente**.
-
-**Los seguros.**
-
-- **Sólo se agrega.** Un envío es un hecho una vez que ocurrió; un reenvío agrega una
-  línea nueva, jamás borra la que supera.
-- **Falla cerrado.** Un proceso hijo que sale con error o vence su tiempo es una
-  negativa, nunca un estado inventado.
-- **La cuarentena no se puede olvidar.** Un resultado fuera de vigencia se escribe
-  estructuralmente afuera del único árbol que el lector de resultados recorre: no hay
-  filtro que alguien pueda olvidarse de aplicar.
-- **La preparación se prueba, no se declara.** El veredicto de un ensayo sale de la
-  evidencia traída, y no hay ningún reloj involucrado en ninguna parte.
-- **Sólo los adaptadores nombran un servicio.** `scripts/adapters/kaggle.py` y
-  `scripts/adapters/colab.py` son los únicos lugares autorizados; hay guardas a
-  nivel de código fuente que verifican que el resto de la skill sea ciego respecto
-  del backend.
-
-**Limitaciones conocidas.**
-
-*El adaptador de Kaggle nunca se probó contra un servicio real.* Está verificado contra
-la fuente del driver —hoy `kagglesdk==0.1.37` con token Bearer, no el camino Basic-auth
-del CLI, que la skill retiró— y contra un binario falso en los tests, pero **ninguna
-prueba de esta skill toca la red ni una cuenta real**. Eso último no es un descuido: un
-test tripwire falla si aparece una llamada de red a nivel de módulo, y se prueba a sí
-mismo contra un módulo envenenado. **Qué significa en
-la práctica:** todo lo que está *arriba* del seam —el registro, el pliegue, la vigencia,
-el clamp, la cuarentena— sí está probado, y esas son las partes cuyo error sería
-silencioso. Lo que no está probado en vivo es el archivo de abajo, cuyos errores son
-ruidosos: un comando mal formado falla y se ve. **Qué puedes hacer:** si algo falla en
-vivo por primera vez, empieza a buscar ahí y no en el seam. **Cómo se arregla:** con un
-ensayo real —para eso existe `submit --smoke`—, que es exactamente el camino más barato
-para descubrirlo antes de gastar una corrida grande.
-
-*Resuelto: los nueve sitios de impresión llevan red.* `status` reventaba con
-`TypeError: Object of type PosixPath is not JSON serializable` en cada invocación, porque
-alguien le agregó un sub-bloque anidado y nadie revisó los sitios de impresión. El arreglo
-—`json.dumps(..., default=str)`— llegó a cuatro de los nueve: **exactamente los cuatro que
-tenían test de regresión**. Los otros cinco quedaron pelados, y tres de ellos se probaron
-crasheables por mutación. Ahora los nueve tienen red y los nueve tienen su test. El
-defecto nunca fue "tres comandos pueden reventar": era **un arreglo aplicado donde había
-cobertura en vez de donde se repite la forma**.
-
-**Diagrama.**
-
-```mermaid
-flowchart TD
-    KA["kaggle-accounts entrega worker + ruta"] --> C
-    B0["proposal-implementation deja la carpeta en tools/"] --> A
-    A["generate-job"] --> B["Carpeta del trabajo: config + cuaderno + metadatos"]
-    B --> C["submit"]
-    C --> D{"¿La ruta pasa la guardia?"}
-    D -- No --> E["Rechazado"]
-    D -- Sí --> F["Digest fresco del fuente"]
-    F --> G["Clamp de capacidad"]
-    G --> H{"¿Otorgado mayor que cero?"}
-    H -- No --> I["No se envía: el worker está al tope"]
-    H -- Sí --> J["El adaptador envía vía el CLI del servicio"]
-    J --> K{"¿El servicio confirmó un id?"}
-    K -- No --> L["Falla cerrado. Nada se anota"]
-    K -- Sí --> M["Anota el envío"]
-    M --> N["ledger.jsonl o smoke.jsonl"]
-    N --> O["status: pliega el registro y reporta"]
-    N --> P["poll: pregunta por una entrega"]
-    P --> Q["fetch"]
-    Q --> R{"¿El resultado sigue vigente?"}
-    R -- No --> S["Cuarentena, fuera del árbol de resultados"]
-    R -- Sí --> T["Materializa en un directorio parcial"]
-    T --> U{"¿Llegó completo?"}
-    U -- No --> V["No se anota nada. Se puede reintentar"]
-    U -- Sí --> W["Renombra atómico al destino"]
-    W --> X["Anota la devolución"]
-    X --> Y["smoke record: veredicto por evidencia"]
-    Y --> Z["readiness: ¿pasó, mismo commit, mismo worker?"]
-    N --> AA["reconcile: registro contra servicio. Lo corre un humano"]
-    N --> AB["proposal-implementation pliega esto en sólo lectura"]
-```
-
----
-
----
-
-### 6. `experimental-deliberation` — discutir el diseño experimental y publicar el plan, nunca el resultado
+### 5. `experimental-deliberation` — discuss the experimental design and publish the plan, never the result
 
 **Para qué está.** Un paper matemático necesita experimentos que sostengan sus afirmaciones,
 y ese diseño tiene su propia tentación: que un modelo escriba "el término adaptado supera al
@@ -2337,7 +2053,7 @@ flowchart TD
 
 ---
 
-### 7. `experimental-implementation` — el segundo huésped, dos documentos, un motor sin tocar
+### 6. `experimental-implementation` — the second host, two documents, one engine left untouched
 
 **Para qué está.** Un protocolo de experimentos publicado (`experiments/experiments-<slug>-vNN.md`)
 también es un documento. Esta skill lo convierte en un repositorio Python que corre, y
@@ -2562,7 +2278,355 @@ flowchart TD
 
 ---
 
-### 8. `paper-writing` — de los contratos de sección al PDF, sin que nada se asuma
+### 7. `kaggle-accounts` — the gatekeeper of the credentials
+
+**Para qué está.** Los tokens de Kaggle vencen y rotan sin avisar: una cuenta que
+funcionaba ayer puede fallar hoy a mitad de una corrida. Esta skill responde la única
+pregunta que la máquina puede verificar de verdad —**¿esta credencial todavía
+autentica?**— y mantiene un depósito chico, ignorado por git, con las que pasan.
+
+**De dónde recibe y a quién le entrega.** Recibe archivos que **dejas** en
+`kaggle-inbox/`: un `kaggle.json`, o un `.txt`/`.md` con una credencial por línea. Le
+entrega a `remote-execution` dos cosas, y sólo dos:
+
+- **Identidad de worker**, por su comando `list`, que devuelve **nada más que
+  usuarios**. El diccionario de salida se reconstruye desde cero con sólo ese campo, así
+  que una clave no puede llegar ahí ni por accidente.
+- **Una ruta a un archivo de token**, nunca el valor. Su comando de entrega escribe el
+  token como archivo suelto con permisos `0600` en un directorio `0700` e imprime **la
+  ruta**.
+
+Del otro lado, `remote-execution` no abre ese depósito jamás: corre estos dos comandos
+como procesos hijo y lee su salida. Es una costura de una sola dirección y de una sola
+forma.
+
+**Qué necesita antes.** Python 3.10+ y red. **Nada más**: no hay entorno virtual, no hay
+`pip install kaggle`. Todo se hace con la biblioteca estándar y una llamada HTTPS cruda.
+
+**Las etapas que declara.** Leídas de `OBJECTIVE_FLOW`, que un test mantiene
+igual al `SKILL.md`. `list` contesta *dónde estoy*; esto contesta *para qué es*,
+que ninguna lista implica: una cuenta está en el almacén porque alguien la puso,
+no porque funcione.
+
+| Etapa | Qué deja establecido | La tienes detrás cuando |
+|---|---|---|
+| `taken-in` | Lo que entregaste está en el almacén, **de a una fila por vez**, así una fila mala nunca cuesta las de al lado | el inbox soltó todo lo que tenía y se consumió, o quedó porque todavía hay filas adentro |
+| `proven` | Cada cuenta guardada se le preguntó al servicio, bajo cualquiera de los dos esquemas de token que use de verdad | cada cuenta lleva un veredicto **de esta corrida** |
+| `decided` | Qué pasa con las que dejaron de funcionar — que es tu decisión y nunca un efecto secundario de preguntar | es la llegada; no está detrás de nadie |
+
+**Llegada:** cada cuenta con un veredicto **actual**, y las que fallan
+respondidas, no apenas reportadas. Un veredicto se vence: los tokens se rotan y
+expiran, así que *"autenticó una vez"* tampoco es llegada. Una sesión que corre
+`validate`, ve un fallo reportado y para, **no llegó**.
+
+**Dos paradas son de una persona:** consentir la validación, porque escribe —
+guarda credenciales y consume el inbox—, y decidir qué pasa con una cuenta que
+dejó de funcionar. Una credencial muerta se reporta y **nunca se borra sola**,
+a propósito: borrarla es tu otra opción, no una consecuencia de preguntar.
+
+**El flujo.** Al activarse corre `list` en silencio para saber qué hay guardado, y
+después hace **una sola pregunta**: validar o eliminar. La opción de eliminar sólo
+aparece si hay algo que eliminar.
+
+*Validar:*
+
+1. Carga el depósito. Si está corrupto **falla cerrado** y no escribe nada — nunca lo
+   trata como "vacío", porque eso permitiría que una escritura posterior pisara
+   credenciales todavía buenas.
+2. Re-verifica **cada cuenta ya guardada** contra la API real. Cada una da su propia
+   línea de pase o falla.
+3. Decide de dónde salen las nuevas: por defecto, lo que haya en `kaggle-inbox/`.
+4. Parsea cada archivo. Un `kaggle.json` da una credencial; un `.txt` o `.md` da una por
+   línea, y una línea mala se marca sin arruinar las demás.
+5. Valida cada una: primero autenticación básica y, **sólo si vuelve un 401**, reintenta
+   como token bearer. Un timeout de red no reintenta nada: una falla de red no es
+   evidencia sobre la credencial.
+6. La que pasa se guarda o reemplaza su clave; la que falla se reporta por número de
+   línea.
+7. Escribe el depósito de forma atómica, y sólo si el archivo está efectivamente
+   ignorado por git.
+8. Un archivo del inbox se borra **sólo si entró entero**. Si alguna fila quedó afuera,
+   el archivo se conserva y te dice cuántas.
+9. Una cuenta que dejó de autenticar se **reporta, no se borra**. Eliminar es una
+   decisión tuya, aparte.
+
+*Eliminar:* se listan las cuentas reales, eliges de una lista —nunca escribes un nombre
+a mano— y si alguna de las elegidas no existe **se rechaza el lote entero**. Un borrado
+parcial por un typo es peor que no borrar nada.
+
+**Los módulos.**
+
+| Archivo | Qué hace y por qué existe |
+|---------|---------------------------|
+| `SKILL.md` | El contrato de conducta: cuándo preguntar, qué no leer nunca, cómo reportar. Sin esto, el agente no tendría motivo para preguntar antes de escribir. |
+| `scripts/accounts_cli.py` | La implementación entera, sin dependencias externas. Subcomandos: `list`, `discover`, `validate`, `remove` y `materialize`. Los cuatro primeros son para una persona; **`materialize` es para código**: escribe la credencial guardada de un worker a un archivo de texto plano y devuelve **dónde**, nunca **qué**. Ese es el contrato que deja que `remote-execution` use un token sin que ninguna skill lo lea ni lo imprima. |
+| `store/accounts.json` | El depósito. Permisos `0600`, escritura atómica. |
+| `store/.gitignore` | Ignora **todo** el contenido de `store/` por regla de contenido, no por nombre — así cubre también el temporal de la escritura atómica y cualquier archivo futuro. Está commiteado para que la regla exista *antes* de que se escriba la primera credencial. |
+| `store/workers/<usuario>/token` | Se crea solo en la primera entrega. Contiene sólo el token, sin envoltorio JSON: es la forma que el cliente de Kaggle espera. |
+
+**Los seguros.**
+
+- **La credencial nunca cruza como valor.** `list` devuelve sólo usuarios; la entrega
+  devuelve sólo una ruta.
+- **No hay bandera para pasar la clave.** Un secreto como argumento quedaría en la lista
+  de procesos y en el historial del shell. La entrada interactiva usa entrada oculta y
+  **se niega si no hay una terminal real** — que es exactamente cómo detecta a un agente
+  intentando hacerlo por ti.
+- **No escribe si git no lo ignora.** Verifica la regla de ignorado *antes* de crear
+  ningún directorio, así una negativa no deja ni el andamio.
+- **Escritura atómica siempre**, con los permisos puestos antes del primer byte.
+- **Nunca lee el depósito para contestar "qué cuentas hay".** Para eso está `list`.
+
+**Limitaciones conocidas.**
+
+*El auditor la mira, pero sólo de un lado.* La validación toca la API real, así que lo
+que reporta es evidencia y no inferencia, y el punto flojo de la cadena está del otro lado
+de la costura, en el adaptador de `remote-execution` (ver su apartado). Esta skill ya tiene
+su receta `accepted-operations` en `skill-audit`, que deriva sus cinco operaciones del
+propio rechazo del CLI. Lo que todavía no tiene es la otra mitad: su `SKILL.md` declara ese
+conjunto en prosa y no en una tabla cerrada, así que el auditor responde
+`comparison: not-run` — deriva lo que el código acepta y no puede compararlo contra lo que
+el documento promete. **Cómo se arregla:** una tabla cerrada en el `SKILL.md`, como la que
+`remote-execution` ya tiene.
+
+**Diagrama.**
+
+```mermaid
+flowchart TD
+    A["Usuario invoca la skill"] --> B["list en silencio"]
+    B --> C{"¿El depósito está vacío?"}
+    C -- Sí --> D["Pregunta: sólo validar"]
+    C -- No --> E["Pregunta: validar o eliminar"]
+    D --> F["validate"]
+    E -- validar --> F
+    E -- eliminar --> G["Lista de cuentas para elegir"]
+    G --> H{"¿Todas las elegidas existen?"}
+    H -- No --> I["Rechaza el lote entero"]
+    H -- Sí --> J["Reescribe el depósito y reporta"]
+    F --> K["Re-verifica cada cuenta guardada"]
+    K --> L["Lee kaggle-inbox/"]
+    L --> M["Parsea cada credencial"]
+    M --> N["Autenticación básica contra la API"]
+    N --> O{"¿Devolvió 401?"}
+    O -- Sí --> P["Reintenta como bearer"]
+    O -- "No, otra falla" --> Q{"¿Pasa?"}
+    P --> Q
+    Q -- No --> R["Reporta por número de línea. No guarda"]
+    Q -- Sí --> S{"¿git ignora el depósito?"}
+    S -- No --> T["Se niega a escribir"]
+    S -- Sí --> U["Escritura atómica 0600"]
+    U --> V{"¿El archivo del inbox entró entero?"}
+    V -- Sí --> W["Borra el archivo del inbox"]
+    V -- No --> X["Lo conserva y dice cuántas faltaron"]
+    W --> Y["Reporte final al usuario"]
+    X --> Y
+    R --> Y
+    U --> Z["remote-execution pide un worker:<br/>recibe usuario y ruta, nunca el valor"]
+```
+
+---
+
+### 8. `remote-execution` — the record of what was sent out
+
+**Para qué está.** Mandar un entrenamiento a una máquina remota, hoy, se hace copiando
+un comando, corriéndolo a mano y **recordando de memoria** si salió, si volvió, y si lo
+que volvió sigue correspondiéndose con el código que lo produjo. Esta skill reemplaza
+esa memoria humana por un registro durable y de sólo agregado: qué se mandó, qué volvió,
+si ese resultado todavía es confiable contra el código actual, y cuántos trabajos puede
+aceptar un worker a la vez.
+
+**De dónde recibe y a quién le entrega.**
+
+*Recibe de `kaggle-accounts`:* la identidad de los workers y la ruta de la credencial,
+por las dos costuras descritas en aquel apartado. Vale la pena seguir el recorrido
+entero del secreto, porque es el diseño más cuidado de la forja: el valor del token vive
+en el depósito de `kaggle-accounts`; la entrega lo escribe como archivo suelto; esta
+skill lee **sólo la ruta** de la salida de ese proceso hijo; esa ruta viaja adentro de un
+handle congelado; y su único destino es una variable de entorno en el proceso hijo que
+ejecuta el cliente del servicio. **El valor del secreto nunca entra en la memoria de esta
+skill ni en la del agente.**
+
+*Recibe de `proposal-implementation`:* la carpeta del trabajo, que vive bajo
+`<destino>/tools/<servicio>/<trabajo>/` dentro del repositorio de la implementación.
+
+*Le entrega a `proposal-implementation`:* el registro. Aquella skill lo pliega en modo
+sólo lectura, reutilizando **este mismo** código de pliegue en vez de reimplementarlo —
+dos definiciones de "este resultado ya no es vigente" sería una que deriva de la otra en
+silencio. De ese pliegue sale su peldaño `poll-first`.
+
+**Qué necesita antes.** Python 3.10+, biblioteca estándar, sin entorno virtual. Para
+hablar con un servicio real hace falta un adaptador registrado y una credencial.
+
+**El flujo, por etapas.** Esta sección tampoco tenía uno. Leídas de
+`OBJECTIVE_FLOW`, independientes de todo ledger, carpeta de job o resultado en
+disco: `status` contesta *dónde estoy* plegando lo que pasó, esto contesta *para
+qué es*. Las catorce rutas de rechazo de este CLI la llevan, y para eso hubo que
+crear el único lugar por el que todas llegan a un lector.
+
+| Etapa | Qué deja establecido | La tienes detrás cuando |
+|---|---|---|
+| `reachable` | Una carpeta de job **fijada a un commit que el remoto declarado puede servir de verdad**, que es lo que un worker clona | `generate-job` escribió la carpeta — prueba el pin contra el remoto **antes de escribir un byte**, así que una carpeta que existe es un pin que se publicó |
+| `wire` | Que este worker, en este pin, lleva corriente — pagado en minutos en vez de en las horas que cuesta una campaña | `readiness` dice listo, con un veredicto **derivado de la evidencia de un ensayo**, nunca afirmado |
+| `authorized` | Un lanzamiento atado a este commit, este entrypoint y esta lista de unidades, con un token acuñado para él y consumido una sola vez | un registro de `gate` coincide; un hecho ligado que se movió lo vuelve stale, que no es lo mismo que pasar el tiempo |
+| `sent` | La entrega salió y el ledger lo sabe, así ninguna segunda contesta una pregunta que ya se está contestando | el ledger lo tiene con un estado terminal |
+| `returned` | El resultado está en disco, actual, y no en cuarentena | es la llegada; no está detrás de nadie |
+
+**Llegada:** el resultado en disco y verificado como el actual — lo único de lo
+que alguien puede leer un número. **No** la entrega aceptada: una entrega que el
+servicio tomó es un recibo, no un resultado.
+
+**`reconcile` no es una etapa y nunca avanza ninguna.** Es el camino de vuelta
+cuando el ledger y el servicio dejan de coincidir —`drift`, o una línea que no
+se pudo leer— y devuelve a `sent`.
+
+**Dos paradas son de una persona:** **publicar el commit** que un worker
+clonaría, sin el cual `generate-job` se niega y lo nombra con precisión, y
+**autorizar el lanzamiento**, que son horas de la cuota de alguien.
+
+**Los comandos.**
+
+| Comando | Qué hace | Cuándo se usa |
+|---------|----------|---------------|
+| `generate-job` | Arma la carpeta del trabajo: configuración de corrida, cuaderno ejecutor y el archivo de metadatos del servicio. Se construye en un directorio parcial y se renombra atómicamente al terminar — **una carpeta a medio escribir no puede existir**. | Una vez, antes del primer envío. |
+| `submit` | El camino de envío completo, en orden fijo: guardia de ruta → resolver el producto → digest fresco del fuente → clamp de capacidad → envío real → **y solo entonces** anotar en el registro. Anotar último significa que nunca se registra algo que no salió. `--smoke` marca la corrida como ensayo y la manda al registro de ensayos. | Cada vez que envías trabajo. |
+| `status` | Pliega el registro y muestra el estado por punto de entrada: pendiente, devuelto, con error, en cuarentena, en vuelo hace demasiado. **No recibe adaptador**: es estructuralmente incapaz de resolver nada, sólo reporta. | Cuando quieres saber dónde estás parado. |
+| `poll` | Pregunta por una entrega y **re-valida** que el estado devuelto esté dentro del vocabulario de cinco valores del seam. Una defensa contra un adaptador que se porte mal. | Mientras esperas. |
+| `fetch` | Trae el resultado. Evalúa la vigencia **antes** de escribir nada; si el resultado ya no corresponde al código actual, se redirige a cuarentena. Materializa en un directorio parcial, verifica que esté completo, renombra, y sólo entonces anota la devolución. | Cuando la corrida terminó. |
+| `reconcile` | Compara lo que el servicio dice tener contra lo que el registro cree, en las dos direcciones. Reporta huérfanos; nunca los adopta ni los cancela solo. | Cuando algo no cuadra. Siempre lo corre un humano. |
+| `smoke record` | Anota el veredicto de un ensayo, y ese veredicto sale de **la evidencia del artefacto traído**, no de que alguien diga que anduvo. | Después de traer el ensayo. |
+| `readiness` | Reporta —nunca envía— si un trabajo está listo para su corrida completa. Ata el último ensayo a tres cosas: que pasó, mismo commit, mismo worker. **No lee ningún reloj**: un ensayo caduca porque cambió el commit o el worker, jamás por tiempo transcurrido. | Antes de gastar una corrida grande. |
+
+**El registro y su pliegue.** El registro es un archivo de una línea JSON por evento,
+sólo de agregado. Se escribe con un descriptor crudo en modo de anexado, verificando que
+la cantidad de bytes escritos sea la esperada, con un tope por evento. Nada se guarda
+como "estado actual mutable": el estado se **deriva** releyendo el log en dos pasadas —
+la primera resuelve cuál es el último envío de cada punto de entrada, la segunda decide
+si cada resultado devuelto sigue vigente. Hacen falta dos pasadas porque **un resultado
+que era vigente cuando llegó deja de serlo en el instante en que aterriza un reenvío
+posterior**.
+
+**El clamp de capacidad.** El empaquetador lee el tope directamente del adaptador —nunca
+lo recibe por parámetro ni lo tiene escrito a mano—, arranca de lo pendiente según el
+registro, y lo refina preguntándole al servicio qué tiene activo. La cuenta es
+`otorgado = max(0, min(pedido, tope) - en_vuelo)`, y se reporta como cuatro números
+distintos para que nadie confunda "pide 5 y me dieron 2 porque el tope es 2" con "pide
+exactamente 2".
+
+**Los módulos.**
+
+| Archivo | Qué hace y por qué existe |
+|---------|---------------------------|
+| `scripts/adapter.py` | El seam: una clase abstracta con exactamente seis operaciones, las formas congeladas que la cruzan, y un registro de nombre a clase. Gracias a esto, todo lo que está arriba es ciego respecto de qué servicio hay abajo. Un backend nuevo entra sin tocar nada más. |
+| `scripts/ledger.py` | El registro: el camino de escritura confiable y el pliegue que deriva el estado, incluida la vigencia. Es el módulo que `proposal-implementation` importa. |
+| `scripts/packer.py` | El clamp de capacidad. El único lugar que combina lo que sabe el repositorio con lo que sabe el servicio. |
+| `scripts/remote_cli.py` | La puerta de entrada. También la guardia de ruta, que resuelve los enlaces simbólicos **antes** de comprobar contención y admite exactamente dos formas de ruta. |
+| `scripts/credentials.py` | El único productor de un handle de credencial. Importa nada más que `subprocess`, `json`, `pathlib` y el seam: **estructuralmente no puede leer un secreto**. |
+| `scripts/jobfolder.py` | Genera y lee la carpeta del trabajo, y calcula la única condición de obsolescencia: que el fuente se haya movido más allá del commit fijado, dentro de las rutas declaradas. |
+| `scripts/shard_io.py` | Un único predicado de completitud de evidencia, compartido por el registro de ensayos y por el paso de fusión posterior. Una sola definición, cero deriva. |
+| `scripts/adapters/kaggle.py`, `colab.py` | Los adaptadores de servicio autorizados a nombrar un backend. Invocan el CLI oficial correspondiente (`kaggle` o `google-colab-cli`); nunca importan paquetes privados ni leen secretos directamente. |
+| `assets/runner_bootstrap.py` | La celda 0 de todo cuaderno generado: valida la configuración, clona el commit fijado, pone `src/` en el path e importa los módulos declarados verificando que resuelvan **dentro del clon**. Corre en la máquina remota, antes que cualquier código tuyo. |
+| `assets/runner_invoke.py` | La celda 1: elige el bloque normal o el de ensayo y llama al punto de entrada declarado. |
+| `distribute` | Reparte las unidades declaradas entre los workers disponibles y devuelve el reparto, **sin enviar nada**. Es la respuesta a "¿en cuántos pedazos entra esto y quién corre cada uno?", separada de `submit` a propósito: decidir el reparto y gastar cuota son dos actos distintos. |
+
+**Qué escribe en el disco.**
+
+```
+<destino>/<Producto>/.remote-execution/
+├── ledger.jsonl              el registro principal
+├── smoke.jsonl               los ensayos: archivo FÍSICAMENTE distinto
+└── quarantine/<id>/          resultados que llegaron fuera de vigencia
+<destino>/tools/<servicio>/<trabajo>/
+├── run-config.json           qué se corre, con qué argumentos, en qué commit
+├── runner.ipynb              el cuaderno que clona el commit fijado y ejecuta
+└── <metadatos del servicio>
+```
+
+Los ensayos van a un archivo aparte y no a un cuarto tipo de evento en el registro
+principal, y la razón es concreta: un envío de ensayo se convertiría en el "último
+envío" del punto de entrada y **taparía en silencio una corrida real todavía
+pendiente**.
+
+**Los seguros.**
+
+- **Sólo se agrega.** Un envío es un hecho una vez que ocurrió; un reenvío agrega una
+  línea nueva, jamás borra la que supera.
+- **Falla cerrado.** Un proceso hijo que sale con error o vence su tiempo es una
+  negativa, nunca un estado inventado.
+- **La cuarentena no se puede olvidar.** Un resultado fuera de vigencia se escribe
+  estructuralmente afuera del único árbol que el lector de resultados recorre: no hay
+  filtro que alguien pueda olvidarse de aplicar.
+- **La preparación se prueba, no se declara.** El veredicto de un ensayo sale de la
+  evidencia traída, y no hay ningún reloj involucrado en ninguna parte.
+- **Sólo los adaptadores nombran un servicio.** `scripts/adapters/kaggle.py` y
+  `scripts/adapters/colab.py` son los únicos lugares autorizados; hay guardas a
+  nivel de código fuente que verifican que el resto de la skill sea ciego respecto
+  del backend.
+
+**Limitaciones conocidas.**
+
+*El adaptador de Kaggle nunca se probó contra un servicio real.* Está verificado contra
+la fuente del driver —hoy `kagglesdk==0.1.37` con token Bearer, no el camino Basic-auth
+del CLI, que la skill retiró— y contra un binario falso en los tests, pero **ninguna
+prueba de esta skill toca la red ni una cuenta real**. Eso último no es un descuido: un
+test tripwire falla si aparece una llamada de red a nivel de módulo, y se prueba a sí
+mismo contra un módulo envenenado. **Qué significa en
+la práctica:** todo lo que está *arriba* del seam —el registro, el pliegue, la vigencia,
+el clamp, la cuarentena— sí está probado, y esas son las partes cuyo error sería
+silencioso. Lo que no está probado en vivo es el archivo de abajo, cuyos errores son
+ruidosos: un comando mal formado falla y se ve. **Qué puedes hacer:** si algo falla en
+vivo por primera vez, empieza a buscar ahí y no en el seam. **Cómo se arregla:** con un
+ensayo real —para eso existe `submit --smoke`—, que es exactamente el camino más barato
+para descubrirlo antes de gastar una corrida grande.
+
+*Resuelto: los nueve sitios de impresión llevan red.* `status` reventaba con
+`TypeError: Object of type PosixPath is not JSON serializable` en cada invocación, porque
+alguien le agregó un sub-bloque anidado y nadie revisó los sitios de impresión. El arreglo
+—`json.dumps(..., default=str)`— llegó a cuatro de los nueve: **exactamente los cuatro que
+tenían test de regresión**. Los otros cinco quedaron pelados, y tres de ellos se probaron
+crasheables por mutación. Ahora los nueve tienen red y los nueve tienen su test. El
+defecto nunca fue "tres comandos pueden reventar": era **un arreglo aplicado donde había
+cobertura en vez de donde se repite la forma**.
+
+**Diagrama.**
+
+```mermaid
+flowchart TD
+    KA["kaggle-accounts entrega worker + ruta"] --> C
+    B0["proposal-implementation deja la carpeta en tools/"] --> A
+    A["generate-job"] --> B["Carpeta del trabajo: config + cuaderno + metadatos"]
+    B --> C["submit"]
+    C --> D{"¿La ruta pasa la guardia?"}
+    D -- No --> E["Rechazado"]
+    D -- Sí --> F["Digest fresco del fuente"]
+    F --> G["Clamp de capacidad"]
+    G --> H{"¿Otorgado mayor que cero?"}
+    H -- No --> I["No se envía: el worker está al tope"]
+    H -- Sí --> J["El adaptador envía vía el CLI del servicio"]
+    J --> K{"¿El servicio confirmó un id?"}
+    K -- No --> L["Falla cerrado. Nada se anota"]
+    K -- Sí --> M["Anota el envío"]
+    M --> N["ledger.jsonl o smoke.jsonl"]
+    N --> O["status: pliega el registro y reporta"]
+    N --> P["poll: pregunta por una entrega"]
+    P --> Q["fetch"]
+    Q --> R{"¿El resultado sigue vigente?"}
+    R -- No --> S["Cuarentena, fuera del árbol de resultados"]
+    R -- Sí --> T["Materializa en un directorio parcial"]
+    T --> U{"¿Llegó completo?"}
+    U -- No --> V["No se anota nada. Se puede reintentar"]
+    U -- Sí --> W["Renombra atómico al destino"]
+    W --> X["Anota la devolución"]
+    X --> Y["smoke record: veredicto por evidencia"]
+    Y --> Z["readiness: ¿pasó, mismo commit, mismo worker?"]
+    N --> AA["reconcile: registro contra servicio. Lo corre un humano"]
+    N --> AB["proposal-implementation pliega esto en sólo lectura"]
+```
+
+---
+
+---
+
+### 9. `paper-writing` — from the section contracts to the PDF, with nothing assumed
 
 **Para qué está.** Escribir un paper a mano tiene un problema silencioso: una frase
 sobrevive al dato que la sostenía, una cita queda sin resolver, un diagrama se
@@ -2764,7 +2828,59 @@ flowchart TD
 
 ---
 
-### 9. `skill-audit` — el auditor que deriva las dos mitades de un conjunto cerrado, nunca lee ninguna
+### 10. `figure-review` — what a raster can settle, and what it cannot
+
+`render` compiles a diagram source to a PDF and stops. `figure audit` checks that
+PDF's declared manifest against the prose describing it. Between the two, nothing
+looks at the picture, so every visual dimension is reported `unmeasured` —
+honestly, because nothing ever rasterized it. This skill closes that gap and only
+that gap.
+
+**Answerable from pixels alone, with a computed verdict:**
+
+- Whether non-background ink sits inside the outermost pixel row or column — ink
+  running off the canvas.
+- Whether two ink regions' bounding boxes collide, reported by coordinates only
+  and never by a component's name, because a raster carries no names.
+
+**A number worth reporting, with no verdict attached:** how much of the canvas
+each band occupies. A canvas that is a third blank is a fact; deciding whether
+that is too much is a composition judgement this skill does not make.
+
+**Never answerable from pixels, and never claimed to be:** legibility,
+arrow or connection correctness, style, aesthetics, legend quality, and which
+declared component an overlap belongs to. Each stays an announced silence —
+`unmeasured` with a reason naming why — rather than a guess dressed as a
+measurement. A `pass` on any of them would be worse than the silence.
+
+**The front door is a command, not a session claim.**
+
+```bash
+python scripts/review_cli.py probe [--json]
+python scripts/review_cli.py raster --pdf <path/to/example-figure.pdf> [--dpi 150] [--out <dir>]
+```
+
+`probe` names the first tool its fallback chain finds, in order `pdftoppm`,
+`pdftocairo`, `gs`, `sips`, and exits 2 naming all four it probed plus the exact
+`PATH` it searched when none resolves. That refusal is never reported as an
+`unmeasured` dimension: an absent tool is an unreadable invocation, not a
+dimension this skill declined to judge.
+
+`raster` writes a PNG and its provenance — which tool produced it, at what DPI,
+and whether that DPI was requested or derived — beside the figure it rasterized.
+It reads no ledger and writes no ledger, so a full pass leaves `render`'s repair
+budget byte-identical: rasterizing a picture that already exists is not a compile.
+
+**What it never does.** It never invokes a LaTeX toolchain and never opens a
+repair-budget ledger, under any code path including a failed rasterization. It
+never repairs or redraws a figure. It imports no other skill's scripts and no
+other skill imports its own; the two sides meet through a plain-data file on
+disk. It never reports a judgement as a measurement. And `raster.py` is the only
+module in the skill permitted to spawn a process, always as a list of arguments
+never a composed shell string, with the figure path resolved to an absolute path
+before it reaches argv.
+
+### 11. `skill-audit` — the auditor that derives both halves of a closed set, and reads neither
 
 **Para qué está.** Cualquier skill o CLI que declara un conjunto cerrado —los
 subcomandos que acepta, los códigos de error que puede devolver, los archivos
@@ -2941,6 +3057,73 @@ seguimiento que iba a recogerlos nunca se creó, y esa nota apuntaba a la nada;
 este párrafo la reemplaza.
 
 ---
+
+### 12. `upgrade-project` — the upgrade, reachable from inside the workspace
+
+A workspace is not a checkout. `papersmith init` copies a release's skills, renders
+its slash commands and agents for every harness, and records which release the
+workspace received in `.papersmith/version`. None of that is live: when the
+installed distribution moves ahead, the workspace keeps the release it was born
+with until someone upgrades it.
+
+This skill is the in-workspace surface for that upgrade. It exists because the
+work was reachable only from a terminal, so an agent working inside a workspace
+could see that it was stale and could not act on it.
+
+**It performs no upgrade of its own.** Every byte written is written by
+`papersmith upgrade`, and that is deliberate: the upgrade is not a file copy. It is
+a kit copy, a symlink repair, a re-derivation of every projection, an orphan sweep
+over previously baselined dynamic paths, and an ordered run of artifact migrations
+-- with the version marker written last, and only when the artifacts actually
+reached that version. A reimplementation here would be a second answer to all of
+that, and two answers that can disagree are worse than one that can be wrong. So
+the skill decides whether to call the CLI and with which arguments, and reports
+what it said. It also never decides to upgrade on its own: a stale workspace is a
+fact to report, and moving it is the operator's call.
+
+**Preflight, before anything is written.** Two conditions, both of which fail
+better before a write than during one.
+
+- **Is this a workspace?** `.papersmith/manifest.json` must exist. The CLI checks
+  it too, but checking here lets the refusal name the directory the user is
+  actually in. When it is absent, the answer is that this directory was not
+  created by `papersmith init`, and `papersmith init .` is what creates one.
+  Running `init` as a recovery is not offered: initializing a directory somebody
+  believed was already a workspace is how a misunderstanding becomes a tree of
+  files.
+- **Is the CLI reachable?** `papersmith --version`, then
+  `python -m papersmith.cli --version`. The module path matters: it is
+  `papersmith.cli`, not `papersmith`, because the package ships no `__main__.py`,
+  and `python -m papersmith` fails with a message that looks like a broken install
+  and is not one.
+
+**The verbs.** `plan` runs `papersmith upgrade . --plan-migrations` and writes
+nothing. It previews migrations only, and the flag is deliberately not called
+`--dry-run` for that reason: the kit copy, the projections and the orphan sweep are
+not previewed and have no preview at all. `apply` runs `papersmith upgrade .` with
+the flags that matter — `--tools` replaces the active harness set, `--force`
+rewrites kit files whose hashes already match, `--no-migrate` syncs files and leaves
+the version marker where it was, and `--allow-downgrade` installs an older kit over
+a newer workspace and is deliberately separate from `--force`. `status` reports the
+recorded version against the installed one, and is preferred over reading
+`.papersmith/version` directly, because the marker is a claim about artifacts and
+`status` is where that claim is interpreted.
+
+**What is never overwritten.** The upgrade preserves authored work by pattern. Read
+the set from `PRESERVE_PATTERNS` in `src/papersmith/core/manifest.py` rather than
+from a list restated here: a roster copied into prose is a roster that drifts the
+first time the real one changes. When asked whether an upgrade is safe, state the
+limit: there is **no backup and no dry run for files**. A hand-edited file outside
+those patterns is replaced by the release's own copy, so the answer for such edits
+is to commit them first.
+
+**Reading the result.** The report names the workspace, the version and the count
+of changed files, then four warnings rather than failures: a kit file that could
+not be written, an orphan that could not be deleted, a blocked harness `skills`
+symlink, and a recorded version that did not advance. Exit codes are `0` success,
+`1` a user error, `2` a source error, `4` a migration failure. An upgrade that
+printed a migration failure and exited 4 did not succeed, and a summary that calls
+it done is the outcome this skill must never produce.
 
 ## Los comandos del CLI
 
@@ -3491,7 +3674,7 @@ Los targets y los perfiles son los de tu `papersmith.yaml` (ver
 registrada con su target, su perfil y su resultado. Y `papersmith remote
 status` / `pull` es la memoria de lo que se mandó afuera y lo que volvió — el
 detalle de ese contrato vive en la sección de `remote-execution` de la
-[Anatomía](#anatomía-de-cada-skill).
+[Anatomía](#anatomy-of-each-skill).
 
 **Credenciales y backends.** `remote-execution` soporta múltiples backends (`kaggle`, `colab`):
 - **Kaggle**: corre contra el pool de workers configurados. Sus credenciales viven en el store de `kaggle-accounts` (`skills/kaggle-accounts/store/accounts.json`), nunca salen del disco y nunca se imprimen: `materialize` escribe el token de un worker a un archivo de texto y te dice **dónde**, jamás **qué**. `/kaggle-accounts` valida o remueve cuentas, y `papersmith target check kaggle` las prueba de costado. Un subcomando `papersmith accounts` todavía no existe (follow-up registrado): se invoca como `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
