@@ -1847,200 +1847,201 @@ flowchart TD
 
 ### 5. `experimental-deliberation` — discuss the experimental design and publish the plan, never the result
 
-**Para qué está.** Un paper matemático necesita experimentos que sostengan sus afirmaciones,
-y ese diseño tiene su propia tentación: que un modelo escriba "el término adaptado supera al
-baseline" antes de que nadie haya corrido nada, o que invente una URL de repositorio porque
-suena plausible. Esta skill es el **segundo** dominio sobre el mismo motor que
-`proposal-deliberation` — convierte al agente en tutor de diseño experimental y aplica los
-cambios acordados a través del mismo motor determinista, byte-exacto. Comparten el andamio de
-escritura entero: resolver un locus, parchear, previsualizar, reconocer, publicar. Lo que
-**no** comparten es qué hace "suficiente" un cambio. Para la matemática, alcanza con derivarlo
-y cerrarlo adentro del documento — una demostración no vence. Para un experimento, alcanza sólo
-lo que una fuente real y vigente todavía dice — un repositorio se muda, un baseline queda
-superado, un protocolo cambia. Esa diferencia es la razón de ser de esta skill, y por eso su
-etapa central se llama `validated`, no `deliberated` a secas: el sitio donde el motor hermano no
-tiene equivalente en absoluto.
+**What it is for.** A mathematical paper needs experiments that support its claims,
+and that design has a temptation of its own: a model writing "the adapted term beats
+the baseline" before anyone has run anything, or inventing a repository URL because
+it sounds plausible. This skill is the **second** domain on the same engine as
+`proposal-deliberation` — it turns the agent into an experimental-design tutor and
+applies the agreed changes through the same deterministic, byte-exact engine. They
+share the entire writing scaffold: resolve a locus, patch, preview, acknowledge,
+publish. What they do **not** share is what makes a change "sufficient". For
+mathematics, deriving it and closing it inside the document is enough — a proof does
+not expire. For an experiment, only what a real and current source still says is
+enough — a repository moves, a baseline is superseded, a protocol changes. That
+difference is the reason this skill exists, and it is why its central stage is called
+`validated`, not bare `deliberated`: the one place where the sibling engine has no
+equivalent at all.
 
-**De dónde recibe y a quién le entrega.**
+**What it receives and what it hands on.**
 
-*Recibe de tres fuentes, dos obligatorias:*
+*It receives from three sources, two of them required:*
 
-- **`guidance/data-paper`** (obligatoria) — el paper de datos. Es el **techo**: acota qué se
-  puede afirmar, y una afirmación que los datos no sostienen no es un experimento, es un deseo.
-- **`proposals`** (obligatoria) — el directorio gestionado de `proposal-deliberation`, leído aquí
-  y nunca escrito. Pero el motor sólo exige que el directorio **exista**; el contenido nunca
-  entra por el motor, porque los revisiones gestionadas son archivos `.md` sueltos y el cargador
-  sólo desciende un nivel dentro de cada fuente. Las afirmaciones de la propuesta llegan al
-  documento porque **las llevas tú**, en la idea que escribes y en la deliberación que sigue.
+- **`guidance/data-paper`** (required) — the data paper. It is the **ceiling**: it bounds what
+  may be claimed, and a claim the data does not support is not an experiment, it is a wish.
+- **`proposals`** (required) — the managed directory of `proposal-deliberation`, read here and
+  never written. But the engine only requires that the directory **exist**; the content never
+  enters through the engine, because managed revisions are loose `.md` files and the loader
+  descends only one level inside each source. The proposal's claims reach the document because
+  **the author carries them**, in the idea that is written and in the deliberation that follows.
 
-*Le entrega a `experimental-implementation`:* el archivo publicado
-(`experiments/experiments-<slug>-vNN.md`) es, medido, el documento 0 que esa skill lee como su
-"protocolo declarado" — así se llama en su propio perfil (`impl_profile.py`). Ninguna operación
-del motor empuja ese archivo hacia el otro lado; `experimental-implementation` lo va a buscar
-cuando corre.
+*It hands to `experimental-implementation`:* the published file
+(`experiments/experiments-<slug>-vNN.md`) is, measured, the document 0 that skill reads as its
+"declared protocol" — that is what it is called in its own profile (`impl_profile.py`). No engine
+operation pushes that file to the other side; `experimental-implementation` fetches it when it
+runs.
 
-*Le entrega a todo el resto:* la operación `STATUS`, de dónde sale la respuesta a "cuál es la
-revisión vigente". Nadie abre el directorio a simple vista.
+*It hands to everything else:* the `STATUS` operation, which is where the answer to which
+revision is current comes from. Nobody opens the directory by eye.
 
-**Qué necesita antes.** Nada más que Node. El motor es keyless — no llama a ningún modelo ni
-usa `ANTHROPIC_API_KEY` — porque el "modelo" de esta deliberación es el agente ya sentado en la
-conversación.
+**What it needs first.** Nothing but Node. The engine is keyless — it calls no model and uses
+no `ANTHROPIC_API_KEY` — because the "model" of this deliberation is the agent already in the
+conversation.
 
-**Las etapas que declara.** Leídas del campo `objective` de su propio
-`profile.ts`. Este dominio **no** dice el norte de su hermano matemático, y la
-prueba es estructural: tiene una etapa, `validated`, de la que el hermano no
-tiene equivalente ninguno.
+**The stages it declares.** Read from the `objective` field of its own
+`profile.ts`. This domain does **not** state the mathematical sibling's north, and the
+proof is structural: it has a stage, `validated`, of which the sibling has no
+equivalent at all.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | Behind the operator when |
 |---|---|---|
-| `bound` | Cuál revisión es la actual y cuál entrada de ella toca el cambio | `STATUS` nombró la última y el objetivo resolvió a una entrada |
-| `validated` | El protocolo, la métrica, el baseline, el dataset y el esquema están dichos y **salieron de una búsqueda, no de una suposición** | frena esta etapa: una URL sin tag fechado, un baseline sin repositorio o sin año de venue, una línea `**Dataset:**` no dada o dada dos veces, o un esquema que no muestre test, semillas o repeticiones |
-| `deliberated` | El cambio se discutió, no se tipeó | **lo dijiste tú** — nada aquí lo mide, y nada puede |
-| `composed` | El reemplazo existe escrito **como el experimento**, no como una descripción de él | existe un bloque que lleva el experimento y lo que debe cumplir |
-| `published` | La sucesora existe con el marcador del artefacto y es la revisión actual | es la llegada; no está detrás de nadie |
+| `bound` | Which revision is current and which entry of it the change touches | `STATUS` named the latest and the target resolved to an entry |
+| `validated` | The protocol, the metric, the baseline, the dataset and the scheme are stated and **came from a search, not a guess** | a URL with no dated tag, a baseline with no repository or no venue year, a `**Dataset:**` line not given or given twice, or a scheme that shows no test, seeds or repetitions stops this stage |
+| `deliberated` | The change was discussed, not typed | **the user said so** — nothing here measures it, and nothing can |
+| `composed` | The replacement exists written **as the experiment**, not as a description of it | a block exists that carries the experiment and what it must meet |
+| `published` | The successor exists with the artifact marker and is the current revision | it is the arrival; it is behind nobody |
 
-**Llegada:** la revisión sucesora publicada y actual, que es la única forma en la
-que viajan los experimentos.
+**Arrival:** the successor revision published and current, which is the only form in
+which the experiments travel.
 
-**`validated` es la etapa que justifica que esta skill exista aparte.** Un
-protocolo inventado de memoria se lee igual que uno buscado; la diferencia sólo
-aparece cuando alguien pide la fuente. Por eso la validación externa corre
-**antes de cualquier borrador**, no después.
+**`validated` is the stage that justifies this skill existing separately.** A
+protocol invented from memory reads the same as one that was searched for; the
+difference appears only when someone asks for the source. That is why external
+validation runs **before any draft**, not after.
 
-**El flujo.**
+**The flow.**
 
-1. **Arranque.** `STATUS` sobre `experiments/`, de sólo lectura. Nunca se mira el directorio a
-   mano.
-2. **Bifurcación.** Cero revisiones gestionadas → crear v1. Ya hay una → editar.
-3. **Crear v1.** El motor carga las tres fuentes una sola vez, las incluye verbatim bajo
-   `## Reference Sources` (encabezado propio de este dominio; el motor compartido escribía
-   `## Paper Guide Reference` para cualquier dominio hasta que este perfil declaró el suyo,
-   finding L6), y compone el documento a partir de tu idea de texto. **La idea
-   necesita al menos dos oraciones.** El título sale de la primera y el encabezado de sección de
-   la segunda; con una sola oración las dos calculan el mismo texto, `# X` y `## X` quedan
-   byte-idénticos, y cada consulta de locus posterior queda ambigua para siempre.
-   `CREATE_INITIAL_REVISION` rechaza esto de entrada con `INITIAL_IDEA_SINGLE_SENTENCE`, sin
-   escribir nada — no hay reparación posterior, porque el motor no puede escribir un encabezado
-   que el autor no escribió. Y como v1 no tiene esqueleto ni rellena nada, el `**Dataset:**` y el
-   `**Validation scheme:**` que el documento exige ya tienen que estar en la idea o en una fuente
-   requerida, o v1 se rechaza igual, por la misma puerta de forma canónica que corre en cada
-   sucesor — nunca una segunda puerta.
-4. **Validar** (delegado al agente `experimental-validation`). Busca en la web el protocolo
-   estándar del área, las métricas aceptadas, los baselines vigentes con repositorio, venue y
-   año, y el esquema de validación que el área espera. **La búsqueda está acotada a los tres años
-   anteriores a hoy**, calculados desde la fecha de la corrida, nunca de memoria. El acotamiento
-   es sobre lo que se **busca**, no sobre lo que se puede citar: un protocolo fijado antes sigue
-   siendo el que el área usa, siempre que la cita diga qué año lo fijó.
-5. **Deliberar**, en la conversación, nunca en el motor. El agente propone, refuta, exige el
-   baseline que un reviewor va a pedir.
-6. **Ubicar el cambio** con `RESOLVE_TARGET`: palabras distintivas del encabezado, sin
-   puntuación, sin número de sección.
-7. **Vista previa** con `CREATE_SUCCESSOR`. El motor compila el candidato completo, lo valida
-   contra la forma canónica, y devuelve un token de un solo uso junto con qué se perdería
-   (`preservationDelta`) y qué conflicto de fuente detectó (`ACHIEVED_RESULT`, ver **Los
-   seguros**).
-8. **La puerta.** El agente muestra en castellano llano qué desaparece y qué frase leyó como un
-   resultado logrado. Confirmas cada una por nombre.
-9. **Publicar** (delegado al agente `experimental-publish`, que empieza solo después de que
-   aceptaste). Reenvía la misma operación con el token, `acknowledgedRemovals` y
-   `acknowledgedSourceConflicts`. Escribe `experiments-<slug>-vNN+1.md` de forma atómica.
-10. **Auditoría.** Recibo con sha256 antes/después, y una relectura byte a byte de todas las
-    revisiones.
+1. **Start-up.** `STATUS` over `experiments/`, read-only. The directory is never inspected by
+   hand.
+2. **Branch.** Zero managed revisions → create v1. One already exists → edit.
+3. **Create v1.** The engine loads the three sources once, includes them verbatim under
+   `## Reference Sources` (a heading of this domain's own; the shared engine wrote
+   `## Paper Guide Reference` for any domain until this profile declared its own,
+   finding L6), and composes the document from the idea text. **The idea
+   needs at least two sentences.** The title comes from the first and the section heading from
+   the second; with a single sentence the two compute the same text, `# X` and `## X` come out
+   byte-identical, and every later locus query stays ambiguous forever.
+   `CREATE_INITIAL_REVISION` refuses this on the spot with `INITIAL_IDEA_SINGLE_SENTENCE`,
+   writing nothing — there is no later repair, because the engine cannot write a heading the
+   author did not write. And since v1 has no skeleton and fills in nothing, the `**Dataset:**`
+   and the `**Validation scheme:**` lines the document requires must already be in the idea or
+   in a required source, or v1 is refused as well, by the same canonical-form gate that runs on
+   every successor — never a second gate.
+4. **Validate** (delegated to the `experimental-validation` agent). It searches the web for the
+   area's standard protocol, the accepted metrics, the current baselines with repository, venue
+   and year, and the validation scheme the area expects. **The search is bounded to the three
+   years before today**, computed from the run's date, never from memory. The bound is on what is
+   **searched**, not on what may be cited: a protocol fixed earlier is still the one the area
+   uses, as long as the citation says which year fixed it.
+5. **Deliberate**, in the conversation, never in the engine. The agent proposes, refutes, and
+   demands the baseline a reviewer will ask for.
+6. **Locate the change** with `RESOLVE_TARGET`: distinctive words from the heading, without
+   punctuation, without the section number.
+7. **Preview** with `CREATE_SUCCESSOR`. The engine compiles the full candidate, validates it
+   against the canonical form, and returns a single-use token together with what would be lost
+   (`preservationDelta`) and which source conflict it detected (`ACHIEVED_RESULT`, see **The
+   safeguards**).
+8. **The gate.** The agent shows in plain Spanish what disappears and which phrase it read as an
+   achieved result. Each one is acknowledged by name.
+9. **Publish** (delegated to the `experimental-publish` agent, which starts only after the
+   change was accepted). It resends the same operation with the token, `acknowledgedRemovals`
+   and `acknowledgedSourceConflicts`. It writes `experiments-<slug>-vNN+1.md` atomically.
+10. **Audit.** A receipt with sha256 before and after, and a byte-for-byte reread of every
+    revision.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `SKILL.md` | El contrato completo de esta deliberación: north de cinco etapas, qué delega y a quién, la puerta de validación externa, las reglas de forma canónica. Nada de esto vive en el motor compartido. |
-| `references/usage.md` | Ejemplos de request/response y un transcript trabajado. Sostenido por su propio guard de deriva (`tests/experimental-deliberation-usage-doc-drift.test.mjs`): todo enlace `../SKILL.md#ancla` tiene que resolver a un encabezado real, y el ejemplo trabajado se extrae del documento y **se corre de verdad**, comparando la respuesta contra lo que el motor devuelve hoy. |
-| `profile.ts` | El perfil de dominio: directorio `experiments`, rótulo de revisión `v` (no `r`), el detector `ACHIEVED_RESULT`, las tres fuentes con sus obligatoriedades, y el objetivo de cinco etapas (`bound` → `validated` → `deliberated` → `composed` → `published`). El motor bajo `_core/` no ganó ni una línea para admitir este segundo dominio. |
-| `preservation-experimental.ts` | `extractAtoms`/`violations`: los seis átomos que no pueden desaparecer en silencio (tabla, baseline, criterio de éxito, figura, URL, dataset) y las reglas duras de forma — tag de verificación, celda vacía, baseline con URL y año, dataset/scheme declarados exactamente una vez. |
-| `reference-experimental.ts` | `declares`/`cites`: un experimento declara `[exp:E1]`; una afirmación cita `[tests:E1]` o `(Exp. E1)` en prosa. Hace visible, mecánicamente, tanto la afirmación sin experimento como el experimento que no sostiene ninguna. |
-| `cli.mjs` | 13 líneas. Fija `DELIBERATION_DOMAIN_PROFILE` a este `profile.ts` y delega el resto entero — argumentos, modo stdin, códigos de salida — al `cli.mjs` del motor compartido. |
-| `.claude/agents/experimental-validation.md` | El tramo `validated`: busca y verifica, nunca compone. Termina cuando ningún hallazgo depende de la memoria en vez de una búsqueda de esta misma corrida. |
-| `.claude/agents/experimental-publish.md` | El tramo terminal: empieza donde el operador ya aceptó el cambio, termina con el sucesor publicado y vigente. No tiene `Write` ni `Edit` — sólo el motor escribe. |
-| `_core/deliberation/engine/` (~50 archivos TS) | El motor compartido con `proposal-deliberation`, sin cambios para admitir este dominio. Ver el desglose completo en la sección de `proposal-deliberation`; un solo archivo — `revision-lifecycle-store.ts` — todavía escribe el marcador de artefacto como literal, a propósito, para un guard Python de cruce de lenguaje (ver **Limitaciones conocidas**). |
+| `SKILL.md` | The complete contract of this deliberation: a five-stage north, what it delegates and to whom, the external-validation gate, the canonical-form rules. None of this lives in the shared engine. |
+| `references/usage.md` | Request/response examples and a worked transcript. Backed by its own drift guard (`tests/experimental-deliberation-usage-doc-drift.test.mjs`): every `../SKILL.md#anchor` link has to resolve to a real heading, and the worked example is extracted from the document and **actually run**, comparing the response against what the engine returns today. |
+| `profile.ts` | The domain profile: directory `experiments`, revision label `v` (not `r`), the `ACHIEVED_RESULT` detector, the three sources with their requiredness, and the five-stage objective (`bound` → `validated` → `deliberated` → `composed` → `published`). The engine under `_core/` gained not one line to admit this second domain. |
+| `preservation-experimental.ts` | `extractAtoms`/`violations`: the six atoms that may not vanish in silence (table, baseline, success criterion, figure, URL, dataset) and the hard form rules — verification tag, empty cell, baseline with URL and year, dataset/scheme declared exactly once. |
+| `reference-experimental.ts` | `declares`/`cites`: an experiment declares `[exp:E1]`; a claim cites `[tests:E1]` or `(Exp. E1)` in prose. It makes visible, mechanically, both the claim with no experiment and the experiment that supports none. |
+| `cli.mjs` | 13 lines. It sets `DELIBERATION_DOMAIN_PROFILE` to this `profile.ts` and delegates the entire rest — arguments, stdin mode, exit codes — to the shared engine's `cli.mjs`. |
+| `.claude/agents/experimental-validation.md` | The `validated` stretch: it searches and verifies, never composes. It ends when no finding depends on memory instead of a search from this same run. |
+| `.claude/agents/experimental-publish.md` | The terminal stretch: it starts where the operator has already accepted the change and ends with the successor published and current. It has no `Write` or `Edit` — only the engine writes. |
+| `_core/deliberation/engine/` (~50 TS files) | The engine shared with `proposal-deliberation`, with no changes to admit this domain. See the full breakdown in the `proposal-deliberation` section; a single file — `revision-lifecycle-store.ts` — still writes the artifact marker as a literal, on purpose, for a Python cross-language guard (see **Known limitations**). |
 
-**Los seguros.**
+**The safeguards.**
 
-- **El tag de verificación es obligatorio, y su ausencia es la violación.** Toda URL externa
-  lleva `[pending-verification]` o `[verified: YYYY-MM-DD]` inmediatamente después. Los bytes no
-  pueden saber si alguien buscó; por eso el silencio es lo que se rechaza.
-- **Ningún número en una celda de tabla de reporte.** Una tabla de reporte es una promesa sobre
-  una corrida futura; un número ahí es un resultado que nadie midió. Las tablas de baselines
-  están exentas — son referencia, no promesa — y se reconocen sólo porque su primer encabezado
-  dice `Baseline`/`Baselines`.
-- **El detector de resultado logrado es advertencia, no bloqueo duro.** `ACHIEVED_RESULT` busca
-  `outperform`, `beats`, `state-of-the-art`, etc. Bloquea el turno de aceptar, no la vista previa
-  — y existe la salida de reconocer el conflicto por escrito, para cuando el documento
-  legítimamente cita el resultado publicado de otro.
-- **Dataset y esquema de validación, exactamente una vez cada uno.** Cero y dos-o-más se
-  rechazan igual — dos líneas son una ambigüedad sobre qué corre el plan, y el motor no elige por
-  ti.
-- **Una idea de una sola oración no llega a ser v1.** Ver el paso 3 de **El flujo**.
-- **Nunca se inventa un repositorio, una URL, un venue o un año.** Lo que no salió de una
-  búsqueda de esta corrida se marca `[pending-verification]`; una URL plausible es peor que una
-  ausente, porque parece verificada.
+- **The verification tag is required, and its absence is the violation.** Every external URL
+  carries `[pending-verification]` or `[verified: YYYY-MM-DD]` immediately after it. The bytes
+  cannot know whether someone searched; that is why silence is what is refused.
+- **No number in a report-table cell.** A report table is a promise about a future run; a number
+  in it is a result nobody measured. Baselines tables are exempt — they are reference, not
+  promise — and they are recognized only because their first header cell reads
+  `Baseline`/`Baselines`.
+- **The achieved-result detector is a warning, not a hard block.** `ACHIEVED_RESULT` searches for
+  `outperform`, `beats`, `state-of-the-art`, etc. It blocks the accept turn, not the preview —
+  and acknowledging the conflict in writing is available, for when the document legitimately
+  cites somebody else's published result.
+- **Dataset and validation scheme, exactly once each.** Zero and two-or-more are refused alike —
+  two lines are an ambiguity about what the plan runs, and the engine does not choose for the
+  operator.
+- **A single-sentence idea does not become v1.** See step 3 of **The flow**.
+- **A repository, a URL, a venue or a year is never invented.** What did not come from a search
+  in this run is marked `[pending-verification]`; a plausible URL is worse than an absent one,
+  because it looks verified.
 
-**Limitaciones conocidas.** Las tres de abajo estaban abiertas y ya se resolvieron.
+**Known limitations.** The three below were open and have already been resolved.
 
-*Resuelto: el marcador del artefacto ya no está duplicado sin motivo.* `patch-compiler.ts` y
-`draft-materialization.ts` escribían `<!-- proposal-workspace:artifact:v1 -->` como constante
-literal en vez de leerla de `DOMAIN.artifact.marker` — el segundo, además, sin ningún lector: la
-constante estaba muerta. El primero ahora lee `artifact.marker` como los demás sitios del motor;
-el segundo perdió la constante entera. Sólo `revision-lifecycle-store.ts:19` sigue escribiendo el
-literal, y a propósito: un guard Python de cruce de lenguaje lo lee por regex.
+*Resolved: the artifact marker is no longer duplicated without cause.* `patch-compiler.ts` and
+`draft-materialization.ts` wrote `<!-- proposal-workspace:artifact:v1 -->` as a literal constant
+instead of reading it from `DOMAIN.artifact.marker` — the second one, moreover, with no reader
+at all: the constant was dead. The first now reads `artifact.marker` like the other engine
+sites; the second lost the constant entirely. Only `revision-lifecycle-store.ts:19` still writes
+the literal, and on purpose: a Python cross-language guard reads it by regex.
 
-*Resuelto: el cargador del perfil de dominio ya no acepta secciones enteras vacías.*
-`domain-profile.ts` revisaba que `REQUIRED` no tuviera claves de nivel superior `undefined`, y
-volvía a revisar `artifact.*`/`objective.*` explícitamente, pero la misma lección no llegaba a
-`vocabulary`, `preservation`, `references` ni `sources`, y la comprobación de `stages[].establishes`/
-`.behindWhen` sólo probaba `=== undefined` (una cadena vacía la atravesaba). Ahora los ocho campos
-de `vocabulary`, las funciones de `preservation`/`references`, una lista de `sources` no vacía y
-bien formada, y cadenas no vacías en `objective.arrival`/`.purpose`/`.humanStops`/`stages[].*` se
-revisan igual de explícitamente, con el mismo código de error nombrando el campo anidado. Esta
-skill nunca lo sufrió — declara los ocho campos de `vocabulary` llenos — pero el motor ya se lo
-exige a la próxima.
+*Resolved: the domain-profile loader no longer accepts entirely empty sections.*
+`domain-profile.ts` checked that `REQUIRED` had no top-level `undefined` keys, and rechecked
+`artifact.*`/`objective.*` explicitly, but the same lesson did not reach `vocabulary`,
+`preservation`, `references` or `sources`, and the check of `stages[].establishes`/
+`.behindWhen` only tested `=== undefined` (an empty string went through). Now the eight
+`vocabulary` fields, the `preservation`/`references` functions, a `sources` list that is
+non-empty and well formed, and non-empty strings in
+`objective.arrival`/`.purpose`/`.humanStops`/`stages[].*` are checked just as explicitly, with
+the same error code naming the nested field. This skill never suffered from it — it declares
+the eight `vocabulary` fields filled in — but the engine already demands it of the next one.
 
-*Resuelto (decisión tomada): los siete contadores de auto-auditoría que nacían en cero se
-retiraron.* `runtime-metrics.ts` definía `recordScientificMetric`, con cero llamadores de
-producción y cero tests — la única ocurrencia del símbolo era su propia definición. Los siete
-contadores que alimentaba viajaban sin cambiar hasta el bloque `metrics` que devuelve cada
-auto-auditoría, indistinguibles de una medición real. Se retiraron (`scientificMetrics`,
-`recordScientificMetric` y el tipo que los declaraba) en vez de inventarles sitios de llamada:
-decidir DÓNDE instrumentar cada uno es una pregunta de diseño real que este arreglo no puede
-responder por adivinanza, y una colocación equivocada seguiría siendo señal falsa, sólo que ya no
-visiblemente en cero. `recordLifecycleMetric` (dos sitios de llamada reales, dos tests) queda como
-el patrón a seguir si alguna vez se diseñan productores reales para estos siete.
+*Resolved (decision taken): the seven self-audit counters that started at zero were retired.*
+`runtime-metrics.ts` defined `recordScientificMetric`, with zero production callers and zero
+tests — the only occurrence of the symbol was its own definition. The seven counters it fed
+travelled unchanged into the `metrics` block that every self-audit returns, indistinguishable
+from a real measurement. They were retired (`scientificMetrics`, `recordScientificMetric` and
+the type that declared them) instead of inventing call sites for them: deciding WHERE to
+instrument each one is a real design question that this fix cannot answer by guessing, and a
+wrong placement would still be false signal, only no longer visibly at zero.
+`recordLifecycleMetric` (two real call sites, two tests) stands as the pattern to follow if real
+producers for these seven are ever designed.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Agente pide STATUS a experiments/"] --> B{"¿Existe una revisión gestionada?"}
-    B -- No --> C["Pide la idea al usuario"]
-    C --> D{"¿La idea tiene al menos dos oraciones?"}
-    D -- No --> E["Rechazado: INITIAL_IDEA_SINGLE_SENTENCE. Nada escrito"]
+    A["Agent asks experiments/ for STATUS"] --> B{"Does a managed revision exist?"}
+    B -- No --> C["Asks the user for the idea"]
+    C --> D{"Does the idea have at least two sentences?"}
+    D -- No --> E["Refused: INITIAL_IDEA_SINGLE_SENTENCE. Nothing written"]
     E --> C
-    D -- Sí --> F["Compone v1 con las 3 fuentes cargadas una vez"]
-    F --> G{"¿Pasa la forma canónica?<br/>dataset x1, scheme x1, sin números en celdas"}
-    G -- No --> H["Rechazado: INITIAL_REVISION_CANONICAL_FORM_VIOLATION"]
+    D -- Yes --> F["Composes v1 with the 3 sources loaded once"]
+    F --> G{"Does it pass the canonical form?<br/>dataset x1, scheme x1, no numbers in cells"}
+    G -- No --> H["Refused: INITIAL_REVISION_CANONICAL_FORM_VIOLATION"]
     H --> C
-    G -- Sí --> I["Escribe experiments-slug-v01.md"]
-    B -- Sí --> J["Delegado: experimental-validation<br/>busca protocolo, métricas, baselines<br/>ventana: 3 años antes de hoy"]
-    J --> K["Deliberación en la conversación.<br/>El motor no participa"]
-    K --> L["RESOLVE_TARGET: ubicar el locus"]
-    L --> M["CREATE_SUCCESSOR: vista previa"]
-    M --> N{"¿Se pierde algún átomo o<br/>se detecta ACHIEVED_RESULT?"}
-    N -- Sí --> O["El agente muestra qué se pierde<br/>y qué frase lee como resultado logrado"]
-    O --> P{"¿El usuario confirma cada una?"}
-    P -- No --> Q["No se publica"]
-    N -- No --> R["Delegado: experimental-publish"]
-    P -- Sí --> R
-    R --> S["Reenvía con acceptSuccessor + token +<br/>acknowledgedRemovals/SourceConflicts"]
-    S --> T["Escribe experiments-slug-vN+1.md"]
-    T --> U["Recibo + auditoría byte a byte"]
-    I --> V["experimental-implementation lee esta revisión<br/>como su documento 0"]
+    G -- Yes --> I["Writes experiments-slug-v01.md"]
+    B -- Yes --> J["Delegated: experimental-validation<br/>searches protocol, metrics, baselines<br/>window: 3 years before today"]
+    J --> K["Deliberation in the conversation.<br/>The engine takes no part"]
+    K --> L["RESOLVE_TARGET: locate the locus"]
+    L --> M["CREATE_SUCCESSOR: preview"]
+    M --> N{"Is any atom lost, or<br/>is ACHIEVED_RESULT detected?"}
+    N -- Yes --> O["The agent shows what is lost<br/>and which phrase it reads as an achieved result"]
+    O --> P{"Does the user confirm each one?"}
+    P -- No --> Q["Nothing is published"]
+    N -- No --> R["Delegated: experimental-publish"]
+    P -- Yes --> R
+    R --> S["Resends with acceptSuccessor + token +<br/>acknowledgedRemovals/SourceConflicts"]
+    S --> T["Writes experiments-slug-vN+1.md"]
+    T --> U["Receipt + byte-for-byte audit"]
+    I --> V["experimental-implementation reads this revision<br/>as its document 0"]
     U --> V
 ```
 
