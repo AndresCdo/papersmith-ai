@@ -404,7 +404,7 @@ skill](#anatomy-of-each-skill). For the literal contract, each one's
 ## Inside the workspace
 
 `papersmith init` creates a self-contained directory —with no git initialized and
-without touching your checkout— with this shape:
+without touching the framework checkout— with this shape:
 
 ```
 my-paper/
@@ -418,7 +418,7 @@ my-paper/
 │   └── _core/                   #   the two shared engines (deliberation, implementation)
 ├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
 ├── guidance/
-│   ├── reference-papers/        # drop-zone: leave your reference PDFs here
+│   ├── reference-papers/        # drop-zone: reference PDFs go here
 │   ├── paper-guide/             # guiding papers for method and style (optional but recommended)
 │   └── data-paper/              # data paper (mandatory for experimental-deliberation)
 ├── proposals/                   # managed revisions, flat: research-concept-rNN.md
@@ -428,8 +428,8 @@ my-paper/
 ├── kaggle-inbox/                # what comes back from the remote workers
 ├── CLAUDE.md / OPENCODE.md / .agents/AGENTS.md   # harness routing
 ├── .pi/APPEND_SYSTEM.md         # harness routing (Pi appends it to the system prompt)
-├── papersmith.yaml              # workspace configuration (yours, editable)
-├── package.json                 # workspace Node dependencies (jiti, typebox), yours, editable
+├── papersmith.yaml              # workspace configuration (editable)
+├── package.json                 # workspace Node dependencies (jiti, typebox), editable
 ├── requirements.txt
 ├── scripts/setup_env.py         # ingestion runtime provisioning
 └── README.md                    # brief description of the workspace
@@ -468,8 +468,8 @@ paper_ingestion:
 
 The active target and profile live in `.papersmith/config.json`; `papersmith
 target set` changes them. The `paper_ingestion` block is owned by the ingestion
-skill and the orchestrator treats it as opaque (edit it with the skill, not by
-hand).
+skill and the orchestrator treats it as opaque (it is edited with the skill, not
+by hand).
 
 ### What is versioned and what is not
 
@@ -477,7 +477,7 @@ hand).
 `guidance/`, `proposals/`, `paper/`, `experiments/`, `implementations/`,
 `kaggle-inbox/`, `papersmith.yaml`, `package.json`, `README.md`
 nor the `.env*` files. Everything else is framework scaffolding and `upgrade`
-syncs it —with `--force` if needed— leaving your artifacts intact.
+syncs it —with `--force` if needed— leaving the artifacts intact.
 
 In this repository the same rule holds for Git: the scaffolding is versioned,
 the content is not. Research folders travel with their `.gitkeep` and nothing
@@ -486,7 +486,7 @@ Markdown. `sota-pool/` follows the same contract: the folder travels, and
 `candidates.json`, `atlas.json` and `atlas.html` —which inlines the full 3D
 viewer— stay on the machine that produced them.
 
-Preserving, mind you, is not migrating. Not touching an artifact protects it while
+Preserving is not migrating. Not touching an artifact protects it while
 its shape does not change; the day a release changes that shape, something is
 needed to carry it up to it. That is the job of [artifact
 migrations](#artifact-migrations), and it is also the reason
@@ -504,7 +504,7 @@ migrations](#artifact-migrations), and it is also the reason
 - **`migrations.json`** records which version-tied artifact migrations have
   already been applied, so that `upgrade` does not repeat them. Convergence
   ones are never recorded: they never end. If the file gets damaged,
-  `upgrade` refuses and `status` reports it; do not edit it by hand.
+  `upgrade` refuses and `status` reports it; it must not be edited by hand.
 - **`version`** is the version the workspace declares for its **artifacts**,
   not for its files. Of the two markers it is the one that lags behind when
   a migration fails, and that is why `status` can say the workspace has not
