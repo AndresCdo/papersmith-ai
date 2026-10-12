@@ -1444,6 +1444,32 @@ The mathematics does not change — this is a change of backend, not of method �
 invariant test must still hold. Re-run the audit: a remedy established over the numpy
 sweep has not been established over the converted one.
 
+**Declare the backend once converted.** By default `backend` is inferred from
+imports, and any file importing only numpy reads as `mixed`, including a test
+helper that only seeds a generator. State the backend in
+`src/<Package>/__init__.py` instead:
+
+```python
+__backend__ = "torch"   # or "numpy", "jax", "tensorflow"; None = infer from imports
+```
+
+Then the stated value decides (`backend.source: "declared"`, `backend.declared`):
+`tensor` (trainable) when some file under `src/<Package>/` imports it,
+`declared-unmet` when none does, `numpy` for `"numpy"`, and
+`unrecognized-backend` (with `declarationError`) for any other value, which
+fails closed and is never trainable. `numpyFiles`/`tensorFiles` are still
+reported. The kit's `tests/conftest.py` and `tests/sweep.py` import no array
+library (they seed a `random.Random` and expose `SEED`/`configuration_seed`),
+so they never decide the backend; a target scaffolded before 0.14.0 keeps its
+numpy-importing copies, which is exactly the case the declaration settles.
+
+**Torch in the target venv.** PyPI's plain `torch` is the CUDA build on Linux.
+`env --torch cpu` appends `--extra-index-url https://download.pytorch.org/whl/cpu
+torch==<X>+cpu` to `nextCommand`, with `<X>` from `--torch-version` or the one
+exact `torch==X` pin in the target's manifests (no exact release refuses
+`TORCH_VERSION_REQUIRED`); `env --torch gpu` appends `torch` (or `torch==<X>`)
+from the default index. Without `--torch`, `env` installs no torch.
+
 ### `nextStep: "declare-first"` — the benchmark package exists and says nothing yet
 
 `resolve_benchmark_declaration`'s `undeclared` state is what this rung acts
@@ -2939,7 +2965,7 @@ is a fact nobody reads:
 | Fact | What it reports | Gates? |
 | --- | --- | --- |
 | `objective` | Why this skill was invoked and where it has to arrive: the declared `purpose`, the ordered `stages` with what each establishes and how a reader knows it is behind them, the `arrival`, and the `humanStops` that are a person's decision rather than a defect to repair. Reported **above** every measurement beside it, and carried by every refusal this engine raises. Invariant and independent of anything on disk — every other fact here answers *where am I* by reading products; this answers *what is this for*, which no product implies. See the section **The objective flow** and `OBJECTIVE_FLOW` | **Never**, and it is never derived either: a stage computed from products would make the purpose depend on the products, which is the one dependency it exists without. It has to read the same on a repository with nothing in it as on one mid-campaign |
-| `backend` | Whether the implementation can be trained at all, and what it computes with | Yes — `convert` is the answer when it cannot |
+| `backend` | Whether the implementation can be trained at all, and what it computes with: `__backend__` in `src/<Package>/__init__.py` when stated (`source: "declared"`), import inference otherwise (`source: "imports"`) | Yes — `convert` is the answer when it cannot |
 | `baselines` | The prior implementations there are to compare against | Yes — nothing to compare against outranks everything else on the ladder |
 | `comparable` | Whether that list is non-empty, stated once so nobody re-derives it | Reported whatever it says |
 | `coupling` | Which notebook cells reach into the target's internals instead of its declared surface | **Never** — a static fact, reported so somebody can decide about it |
@@ -3151,7 +3177,7 @@ third: where the detail actually lives.
 | Command | What it does | Where its detail lives |
 | --- | --- | --- |
 | `name` | Normalizes a name as the user typed it into the directory/package pair every later command takes as `--name`, and reports it so the agent can show it before writing anything. The only command that takes no `--target`: it runs before a target exists. Refuses `NAME_EMPTY`, `NAME_HAS_NO_WORDS`, `NAME_NOT_ALPHANUMERIC` and `NAME_STARTS_WITH_DIGIT` rather than guessing a spelling | `references/usage.md`, *The name, normalized before the directory exists* |
-| `env` | Adds `.venv/` and `*.egg-info/` to the clone's `.git/info/exclude` (reported as `excluded`) so its own products never dirty the tree, then builds the target's own `.venv` under `implementations/<repo>/`, refusing an interpreter below 3.10 or below the target's own declared `python_requires`, whichever is higher — and refusing outright to run from a forge virtualenv. Reports every LFS pointer as a placeholder with the real file's size, at the one moment a repository full of pointers looks complete | `references/usage.md`, *2. The isolated environment* |
+| `env` | Adds `.venv/` and `*.egg-info/` to the clone's `.git/info/exclude` (reported as `excluded`) so its own products never dirty the tree, then builds the target's own `.venv` under `implementations/<repo>/`; `--torch cpu` or `--torch gpu` (optionally with `--torch-version X`) adds a torch build to `nextCommand` (see `nextStep: "convert"`; `TORCH_VERSION_REQUIRED` when `cpu` has no exact release), refusing an interpreter below 3.10 or below the target's own declared `python_requires`, whichever is higher — and refusing outright to run from a forge virtualenv. Reports every LFS pointer as a placeholder with the real file's size, at the one moment a repository full of pointers looks complete | `references/usage.md`, *2. The isolated environment* |
 | `plan` | Reads the repository and returns the migration it would perform — `renames`, moves, `createDirs`, `referenceUpdates`, `unclassifiedFiles` — and writes nothing. The artefact the user approves; `apply` refuses anything else | `references/usage.md`, *3. Plan the migration (read-only)* |
 | `apply` | Executes exactly the approved plan — and refuses anything else — as one separate `git mv` commit, all-or-nothing: the tree is verified clean first, and a mid-migration failure restores the reviewed starting point rather than leaving a half-migrated repository. A gating command — it refuses `FORGE_DEFECT_OPEN` like the write-verbs above | `references/usage.md`, *4. Apply, as one separate commit* |
 | `verify` | Reports layout, revision fidelity, scaffold/object/harness drift, the audit bridge's state and every executed notebook's interpreter. Reports and never gates: its statuses are their own roster, held to `cmd_verify`'s own returns | `references/usage.md`, *5. Verify* and *Reading `verify`* |

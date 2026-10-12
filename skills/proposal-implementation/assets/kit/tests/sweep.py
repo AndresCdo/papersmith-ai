@@ -10,14 +10,25 @@ and nothing else.
 `configuration` builds one instance of whatever the proposal's objects are.
 Vary what the proposal allows to vary — cardinalities, dispersion, shifts — so
 a claim that only holds for one shape shows up as a rate below the full sweep.
+
+Backend-neutral on purpose: no array library is imported here, so this file
+never decides the implementation's backend (`__backend__` in
+`src/<Package>/__init__.py` does). `configuration_seed(index)` is the seed of
+one configuration; build the backend's own generator from it, e.g.
+`numpy.random.default_rng(configuration_seed(index))` or
+`torch.Generator().manual_seed(configuration_seed(index))`.
 """
 
 from __future__ import annotations
 
-import numpy as np
+import random
 
 SWEEP_SIZE = 200
 SWEEP_BASE = {{SEED}} * 10000
+
+
+def configuration_seed(index: int) -> int:
+    return SWEEP_BASE + index
 
 
 def configuration(index: int) -> dict:
@@ -28,7 +39,7 @@ def configuration(index: int) -> dict:
     needs a generator seeded per `index`, which the fixture's one fixed
     `SEED` does not provide anyway. The two stay separate on purpose.
     """
-    rng = np.random.default_rng(SWEEP_BASE + index)  # noqa: F841
+    rng = random.Random(configuration_seed(index))  # noqa: F841
     raise NotImplementedError
 
 

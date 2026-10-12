@@ -3405,17 +3405,45 @@ def benchmark_unfaithfulness(target: Path, name: str) -> list[dict]:
         modules, declaration, benchmark_reach(target, package, bench_package))
 
 
+#: The package-level literal a target names its array backend with, in
+#: `src/<Package>/__init__.py`: `"numpy"` or one of `TENSOR_BACKENDS`. Absent
+#: or `None` means undeclared, and the backend is then inferred from imports.
+BACKEND_DECLARATION = "__backend__"
+
+
+def _declared_backend(package: Path) -> tuple[str | None, str | None]:
+    """`(backend, error)` from the package's `__backend__` literal."""
+    raw = read_declaration(package / "__init__.py", BACKEND_DECLARATION)
+    if raw is None:
+        return None, None
+    if isinstance(raw, dict) and "__error__" in raw:
+        return None, raw["__error__"]
+    if raw == "numpy" or raw in TENSOR_BACKENDS:
+        return raw, None
+    accepted = ", ".join(["numpy", *TENSOR_BACKENDS])
+    return None, f"{BACKEND_DECLARATION} = {raw!r} names no known backend ({accepted})"
+
+
 def backend_state(target: Path, name: str) -> dict:
     """Which array backend the implementation and its tests actually compute with.
 
     Reported per file, because a half-converted implementation is the dangerous
     state: the modules train and the tests still assert over numpy, so the suite
     passes while measuring something the trained model never touched.
+
+    A target can state its backend instead (`BACKEND_DECLARATION`). Then what
+    it states decides, because a helper importing numpy for a seeded
+    generator is not a computation in numpy; the per-file lists still appear.
+    A stated tensor backend no file of the package imports is
+    `declared-unmet`, and an unknown one is `unrecognized-backend`: neither is
+    trainable. With nothing stated, the import inference below is the
+    reading, unchanged.
     """
     package = target / "src" / package_name(name)
     tests = target / "tests"
     numpy_files: list[str] = []
     tensor_files: list[str] = []
+    package_tensors: set[str] = set()
     for root in (package, tests):
         if not root.is_dir():
             continue
@@ -3424,9 +3452,18 @@ def backend_state(target: Path, name: str) -> dict:
             rel = str(file.relative_to(target))
             if modules & set(TENSOR_BACKENDS):
                 tensor_files.append(rel)
+                if root == package:
+                    package_tensors |= modules & set(TENSOR_BACKENDS)
             elif "numpy" in modules:
                 numpy_files.append(rel)
-    if not numpy_files and not tensor_files:
+    declared, error = _declared_backend(package)
+    if error is not None:
+        state = "unrecognized-backend"
+    elif declared == "numpy":
+        state = "numpy"
+    elif declared is not None:
+        state = "tensor" if declared in package_tensors else "declared-unmet"
+    elif not numpy_files and not tensor_files:
         state = "unknown"
     elif numpy_files and tensor_files:
         state = "mixed"
@@ -3434,13 +3471,18 @@ def backend_state(target: Path, name: str) -> dict:
         state = "tensor"
     else:
         state = "numpy"
-    return {
+    report = {
         "state": state,
+        "declared": declared,
+        "source": "imports" if declared is None and error is None else "declared",
         "numpyFiles": numpy_files,
         "tensorFiles": tensor_files,
         # Only a tensor backend can be trained, so only that state can be benchmarked.
         "trainable": state == "tensor",
     }
+    if error is not None:
+        report["declarationError"] = error
+    return report
 
 
 def previous_implementations(target: Path, name: str) -> list[str]:
@@ -9083,9 +9125,65 @@ def _refuse_if_below_floor(
     )
 
 
+#: The PyTorch index serving CPU-only wheels. PyPI's plain `torch` is the
+#: CUDA build on Linux, so a CPU venv needs this index and an exact `+cpu`
+#: pin; an unpinned `torch` with the extra index is free to resolve to
+#: either build.
+TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
+TORCH_VARIANTS = ("cpu", "gpu")
+_RELEASE = re.compile(r"[0-9]+(?:\.[0-9]+){0,3}")
+_TORCH_PIN = re.compile(r"^\s*[\"']?torch\s*==\s*([0-9]+(?:\.[0-9]+){0,3})(?:\+[A-Za-z0-9.]+)?\s*[\"',]*\s*(?:#.*)?$")
+
+
+def _manifest_torch_pin(target: Path) -> str | None:
+    """The exact `torch==X` release a target manifest pins, if exactly one."""
+    found: set[str] = set()
+    for candidate in ("requirements.txt", "requirements-dev.txt", "pyproject.toml"):
+        path = target / candidate
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for row in text.replace(",", "\n").splitlines():
+            match = _TORCH_PIN.match(row.strip().strip("[]"))
+            if match:
+                found.add(match.group(1))
+    return found.pop() if len(found) == 1 else None
+
+
+def torch_provisioning(target: Path, variant: str | None, version: str | None) -> dict:
+    """The pip arguments `env --torch <variant>` appends to `nextCommand`.
+
+    `cpu`: the CPU index plus `torch==<X>+cpu`, with `<X>` from
+    `--torch-version` or the one exact pin a manifest carries; with neither it
+    refuses `TORCH_VERSION_REQUIRED`. `gpu`: PyPI's default build, pinned when
+    a version is known. No variant: nothing, the pre-existing behaviour.
+    """
+    if variant is None:
+        return {"variant": None, "args": []}
+    if version is not None and not _RELEASE.fullmatch(version):
+        raise Refused("TORCH_VERSION_REQUIRED",
+                      f"--torch-version {version!r} is not a plain release such as 2.4.1.")
+    release = version or _manifest_torch_pin(target)
+    if variant == "cpu":
+        if release is None:
+            raise Refused(
+                "TORCH_VERSION_REQUIRED",
+                "A CPU torch install needs an exact release: the CPU wheels carry a `+cpu` "
+                "label and an unpinned `torch` may resolve to the CUDA build. Pass "
+                "--torch-version X, or pin torch==X in the target's manifest.")
+        requirement = f"torch=={release}+cpu"
+        return {"variant": "cpu", "requirement": requirement, "indexUrl": TORCH_CPU_INDEX,
+                "args": ["--extra-index-url", TORCH_CPU_INDEX, requirement]}
+    requirement = f"torch=={release}" if release else "torch"
+    return {"variant": "gpu", "requirement": requirement, "indexUrl": None,
+            "args": [requirement]}
+
+
 def cmd_env(args: argparse.Namespace) -> dict:
     require_non_forge_interpreter()
     target = resolve_target(args.target)
+    torch = torch_provisioning(target, getattr(args, "torch", None),
+                               getattr(args, "torch_version", None))
     venv_dir = target / ".venv"
     floor, floor_source = _python_floor(target)
     interpreter = target_interpreter(target)
@@ -9141,7 +9239,8 @@ def cmd_env(args: argparse.Namespace) -> dict:
     # target's own pins are what that conflict is reported against.
     manifests = manifest_provisioning(target)
     next_command = [str(pip), "install", "-r",
-                    str(SKILL_ROOT / "assets" / "requirements-dev.txt"), *manifests["args"]]
+                    str(SKILL_ROOT / "assets" / "requirements-dev.txt"), *manifests["args"],
+                    *torch["args"]]
     return {
         "command": "env",
         "target": str(target),
@@ -9152,6 +9251,7 @@ def cmd_env(args: argparse.Namespace) -> dict:
         "nextCommand": " ".join(next_command),
         "manifests": manifests,
         "excluded": excluded,
+        "torch": torch,
         # Reported here because this is the command that runs first after a clone,
         # which is exactly when a repository full of placeholders looks complete.
         "lfs": lfs_state(target),
@@ -18752,7 +18852,7 @@ _DEFAULT_PYPROJECT = (
     'name = "{distribution}"\n'
     'version = "0.1.0"\n'
     'requires-python = ">=3.9"\n'
-    'dependencies = ["numpy>=1.24"]\n\n'
+    'dependencies = []\n\n'
     "[tool.setuptools.packages.find]\n"
     'where = ["src"]\n'
 )
@@ -21137,6 +21237,12 @@ def main(argv: list[str] | None = None) -> int:
                            help="interpreter to build the venv from (default: this one). "
                                 "Refused below 3.10, or the target's own declared "
                                 "python_requires floor, whichever is higher.")
+            p.add_argument("--torch", choices=TORCH_VARIANTS, default=None,
+                           help="also install torch: cpu (CPU index, exact +cpu pin) "
+                                "or gpu (the default index's build)")
+            p.add_argument("--torch-version", default=None,
+                           help="exact torch release for --torch (default: the one "
+                                "torch==X pin in the target's manifests)")
         elif name == "compose":
             # Composition reads the findings and the entry, nothing layout-shaped.
             p.add_argument("--finding", required=True, help="id of the finding to compose")

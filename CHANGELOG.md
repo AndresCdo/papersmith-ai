@@ -406,6 +406,22 @@ number is `0`, breaking changes can still arrive without a major bump.
   `apply` has run) is documented in `proposal-implementation`'s usage guide.
   Shared by `experimental-implementation`.
 
+- **The array backend is declared, not inferred from a helper's imports.**
+  The kit's `tests/conftest.py` and `tests/sweep.py` imported numpy for a
+  seeded generator, so a target whose modules compute in torch read as
+  `mixed` and `probe` routed it to `convert` with no way out. Both kit files
+  are now backend-neutral (`random.Random`, `SEED`, `configuration_seed`),
+  the scaffold `pyproject.toml` (template and default) lists no array
+  backend, and a target may state `__backend__ = "torch"` (or `"numpy"`,
+  `"jax"`, `"tensorflow"`) in `src/<Package>/__init__.py`: `probe`'s
+  `backend` then follows it (`declared-unmet` when no package file imports
+  it; any other value is `unrecognized-backend`, never trainable). With
+  nothing stated, import inference is unchanged. `env --torch cpu|gpu
+  [--torch-version X]` adds the torch build to `nextCommand`: CPU uses the
+  PyTorch CPU index and an exact `torch==X+cpu` pin (refusing
+  `TORCH_VERSION_REQUIRED` without an exact release), GPU the default
+  index's build. Shared by `experimental-implementation`.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -662,6 +678,16 @@ number is `0`, breaking changes can still arrive without a major bump.
   `*.egg-info/`. Existing `.gitignore` files are not rewritten, the scaffold
   gap list is unchanged (so `verify` reads an existing target exactly as
   before), and no receipt or ledger changes; no migration is needed.
+
+- `probe`'s `backend` gains `declared` and `source`, and two states
+  (`declared-unmet`, `unrecognized-backend`) that only a target stating
+  `__backend__` can reach; an existing target states nothing and reads
+  exactly as before. `env` gains `--torch`/`--torch-version` and a `torch`
+  key (`{"variant": null, "args": []}` without the flag). A newly
+  scaffolded target gets the backend-neutral `conftest.py`/`sweep.py` and a
+  `pyproject.toml` with `dependencies = []`; files already in a target are
+  never rewritten and their receipts are untouched, so no migration is
+  needed.
 
 ## 0.13.0
 

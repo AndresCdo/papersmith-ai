@@ -64,6 +64,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B13 — successors flag an inherited link to another revision's companion artifacts (D, writer trigger: naming + orchestrator + projection + types + 3 docs + test)
   - [x] B2 — `papersmith status` stage from engine receipts (D, writer trigger: status.py + test + README + CHANGELOG)
   - [x] B5 — fresh target clean through env/plan/apply/materialize (D, writer trigger: engine + forge harness + 2 SKILL.md + usage + new test file)
+  - [x] B6 — declared array backend, neutral kit helpers, env torch variants (D, writer trigger: engine + 3 kit files + 2 SKILL.md + usage + 2 test files + seals)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -665,3 +666,21 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   (exclude call removed -> 4 red; extras emptied -> 1 red). Domain-lock pins unchanged (prose reworded).
   test:fast 4138 passed, 4 skipped. No migration.
   Commit: `fix(implementation): env leaves a fresh target clean for plan` (the commit carrying this line)
+
+- B6 (real): `backend_state` inferred only from imports, so the kit's numpy-importing `tests/conftest.py`/`sweep.py`
+  made any torch target `mixed` -> `probe` `convert`; the scaffold pyproject (template and `_DEFAULT_PYPROJECT`)
+  listed numpy only; `env` had no torch handling. Fix: `__backend__` literal in `src/<Package>/__init__.py`
+  (`BACKEND_DECLARATION`, read with `read_declaration`): `"numpy"` -> numpy; a `TENSOR_BACKENDS` key -> `tensor` when
+  a package file imports it, else `declared-unmet`; anything else -> `unrecognized-backend` + `declarationError`
+  (fail closed, never trainable); absent/`None` -> legacy import inference unchanged. `backend` gains
+  `declared`/`source`. Kit conftest/sweep use `random.Random` + `SEED`/`configuration_seed` (no array import);
+  pyproject `dependencies = []` with guidance. `env --torch cpu|gpu [--torch-version X]` (`torch_provisioning`):
+  cpu -> `--extra-index-url https://download.pytorch.org/whl/cpu torch==X+cpu`, X from the flag or the single exact
+  manifest pin, else `TORCH_VERSION_REQUIRED` (also for a non-release version string); gpu -> `torch[==X]`; JSON
+  gains `torch`. Not added to the authored package `__init__.py` (optional; keeps scaffold bytes and seals).
+  Tests: `tests/test_implementation_backend_declaration.py` (17 + subtests) RED 20F -> GREEN; mutations (declaration
+  read off -> 6 red; unmet branch off -> 1 red). Re-anchored: `RngFixtureRequestedByTemplateTests.
+  test_the_stub_receives_the_fixture_conftest_actually_seeds` (pinned the numpy generator the neutral conftest no
+  longer yields). Seals: `probe` in both corpora regenerated via the capture scripts (+47 bytes each = the two new
+  keys); experiments `propose` timestamp noise reverted. Domain-lock pins unchanged (prose reworded). No migration.
+  Commit: `fix(implementation): the array backend is declared, not inferred from a helper` (the commit carrying this line)

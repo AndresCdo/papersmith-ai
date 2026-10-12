@@ -11187,8 +11187,10 @@ class RngFixtureRequestedByTemplateTests(unittest.TestCase):
         generator the fixture seeds -- the ordinary, expected case."""
         box = self._box(
             "receives_the_shared_generator",
-            "    expected = np.random.default_rng(SEED)\n"
-            "    assert rng.integers(0, 10**9) == expected.integers(0, 10**9)\n")
+            # B6: the kit's `conftest.py` is backend-neutral, so `rng` is a
+            # seeded standard-library generator rather than numpy's.
+            "    assert type(rng).__module__ == 'random'\n"
+            "    assert rng.random() == type(rng)(SEED).random()\n")
         proc = self._run(box)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 

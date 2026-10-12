@@ -125,6 +125,14 @@ of the target's tracked tree changes. Anything else untracked still refuses
 `DIRTY_WORKTREE`. The tracked `.gitignore` gets the same entries later, from
 `apply` or `materialize --stage scaffold`, so a clone carries them too.
 
+`--torch cpu|gpu` (with optional `--torch-version X`) adds a torch build to
+the same invocation and reports it as `torch`: `cpu` appends
+`--extra-index-url https://download.pytorch.org/whl/cpu torch==X+cpu` (X from
+the flag or the one exact `torch==X` pin a manifest carries, else
+`TORCH_VERSION_REQUIRED`), `gpu` appends `torch` or `torch==X` from the
+default index, whose Linux build is the CUDA one. Without the flag, `torch` is
+`{"variant": null, "args": []}`.
+
 `nextCommand` is one invocation: the forge's own dev requirements first, then
 every manifest the target declares and this flow can honour — `-r
 requirements.txt`, `-r requirements-dev.txt`, `-e .` when a build descriptor

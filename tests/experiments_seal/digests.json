@@ -98,9 +98,9 @@
     "sha256": "f8a8854767c70e20501e7a2c708507f6813d1946215d76453530178110e1d0ec"
   },
   "probe": {
-    "bytes": 9169,
+    "bytes": 9216,
     "exit": 0,
-    "sha256": "0e50891f5dfc8c281ae742911133553d2f45fd891ce43456e27f4b7f40cc3b1f"
+    "sha256": "03bab5f862d319f2d63b0634e62838c5d219e127f0f6f04c37867ba93df95966"
   },
   "propose": {
     "bytes": 405,
