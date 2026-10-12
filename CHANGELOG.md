@@ -523,6 +523,25 @@ number is `0`, breaking changes can still arrive without a major bump.
   module of its own. Targets that already carry `module.py` verify unchanged.
   Documented in `proposal-implementation`'s `SKILL.md` step 9 and
   `references/usage.md`.
+- **Kit placeholders are filled when their value is known, and fail clearly
+  when not.** `materialize` substituted only `{{PKG}}` and `{{SEED}}`, leaving
+  values the engine already held to be filled by hand: the product name, the
+  bound revision (`tests/test_smoke.py`, `tests/admissibility.py`, the
+  verification notebook) and the module name. Unfilled, they failed as
+  `'r01.md' != '{{REVISION}}'`, a remedy refused "against revision
+  '{{REVISION}}'", or a collection `SyntaxError` for `def {{FUNCTION_NAME}}`.
+  The scaffold stage now fills `{{NAME}}`, and `{{REVISION}}` when the target
+  declares one or the approved plan was taken with `plan --revision`. The
+  objects stage fills `{{REVISION}}`, `{{NAME}}` and `{{MODULE}}` in what it
+  writes, and fills the same tokens into every scaffold file still
+  byte-identical to its receipt, re-sealing each entry (listed under an
+  additive `filled` key); a file somebody edited is never touched. Whatever is
+  still unanswered fails naming the step that answers it: `admissibility.py`
+  and `test_smoke.py` say the revision or the module is not known yet, and the
+  kit's `conftest.py` collects a test file whose placeholders keep it from
+  parsing as one failing item naming them. Receipts record each entry's
+  substitutions. Documented in `proposal-implementation`'s `SKILL.md` steps 5
+  and 9 and `references/usage.md`.
 
 ### Added
 
@@ -961,6 +980,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   the two test files. `materialize` accepts `--module`. Targets carrying
   `module.py` and every existing receipt read exactly as before; no migration
   is needed.
+
+- `materialize --stage scaffold` now writes `{{NAME}}` (and `{{REVISION}}`
+  when known) already filled, and `materialize --stage objects` now rewrites
+  scaffold destinations that still carry `{{REVISION}}`/`{{NAME}}`/`{{MODULE}}`
+  and are byte-identical to their receipt, updating those receipt entries'
+  `writtenSha256` and `substitutions`; its result gains an additive `filled`
+  key. Scaffold files of an existing target that were edited, adopted or
+  declared authored are left untouched, and receipts written by 0.13.0 keep
+  verifying unchanged (an executed notebook sealed before 0.14.0 is still read
+  through the same legacy reconstruction). Kit files already on disk are not
+  replaced; the clearer failure messages reach a target scaffolded from this
+  release on. No migration is needed.
 
 
 ## 0.13.0

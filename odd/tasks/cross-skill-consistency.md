@@ -898,3 +898,24 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Verification: focused 7 passed; engine suites `-n 8 --dist loadfile` 2250 passed, 11 failed = seal digests,
   then recaptured: both seal files green.
   Commit: `fix(implementation): the objects stage follows the approved map instead of a fixed module.py` (the commit carrying this line)
+
+- C12 (real): scaffold/objects substituted only `{{PKG}}`/`{{SEED}}` although usage.md's own table already said
+  `{{NAME}}`/`{{REVISION}}` are answered at scaffold. Fix: `kit_substitute_body` (one path, receipt records the
+  mapping); scaffold fills `NAME` + `REVISION` when known (`declared_revision`, else the approved plan's
+  `boundTo.revision`; `_materialize_plan_gate` now returns the plan); objects fills `REVISION`/`NAME`/`MODULE` in
+  its bodies and `_fill_scaffold_tokens` fills them into scaffold entries still byte-identical to their receipt
+  (engine kind, stage scaffold), re-sealing (`writtenSha256`, notebook source digest, merged `substitutions`);
+  result gains additive `filled`. Edited/adopted/authored files untouched (tested). Legacy notebook reconstruction
+  now rebuilds from the recorded substitutions (identical for 0.13.0 receipts, which record only PKG/SEED). Kit:
+  `admissibility.py` refuses clearly while `CURRENT_REVISION` is a placeholder; `test_smoke.py` names the missing
+  module/revision (keeps the `No module named '<Pkg>.'` red FreshScaffoldStaysRed pins); `conftest.py`
+  `pytest_pycollect_makemodule` turns a placeholder-caused unparsable test file into one failing item naming the
+  placeholders. Kit text avoids the harness name (`MaterializeScriptStaysTestOnlyTests`). Existing kit files on
+  disk and their seals untouched. Docs: proposal SKILL.md steps 5 and 9, usage.md (objects stage + token prose).
+  Tests: `tests/test_implementation_kit_tokens.py` (9) RED 6F (2 more RED with only the kit edits stashed) -> GREEN.
+  Pins: `module` 198->199 (the `MODULE` key), `approved` 47->48 (`return approved`); `destinations` 39->36 shrank.
+  The first full run caught `SeedForcedNoneMutationTests` anchoring on the plan gate's local name; the rename was
+  reverted there (amended into this commit).
+  No seal moved. No migration (additive receipt keys; rewrites only engine-sealed untouched bytes).
+  Verification: focused 9 passed; engine suites + upgrade + kit provenance `-n 8 --dist loadfile` 2318 passed.
+  Commit: `fix(implementation): materialize fills the kit placeholders it can answer and names the rest` (the commit carrying this line)

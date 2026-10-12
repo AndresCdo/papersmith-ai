@@ -757,9 +757,12 @@ date. Drift is Flow B's fourth step, not a reason to start over.
    the local layout only when nothing at all was handed over.
 
    `materialize --stage scaffold` substitutes the scaffold-time `{{TOKEN}}`
-   placeholders (`{{PKG}}`, `{{SEED}}`) itself; the step-9 tokens are left
-   standing on purpose — see `references/usage.md` for the full token table
-   and when each one is answered.
+   placeholders (`{{PKG}}`, `{{SEED}}`, `{{NAME}}`, and `{{REVISION}}` once it
+   is known — declared, or bound by `plan --revision`) itself; the step-9
+   tokens are left standing on purpose, and `--stage objects` later fills the
+   revision and the module name into scaffold files still exactly as written —
+   see `references/usage.md` for the full token table and when each one is
+   answered.
 6. **Ask for the name.** Run `name --name "<whatever they typed>"` and show both
    forms it returns — the `<Name>/` directory and the `src/<Package>/` package —
    then **[GATE]** confirm before writing anything with them.
@@ -835,9 +838,13 @@ date. Drift is Flow B's fourth step, not a reason to start over.
    purpose: their tokens — `{{MODULE}}`, `{{FUNCTION_NAME}}`, `{{INVARIANT_ID}}`,
    `{{SECTION}}`, `{{EQUATION}}`, `{{EXPECTATION}}` — are answers to the map step 8
    has just approved, and nothing could have answered them before that.
-   `materialize --stage objects` writes these three exactly as the kit ships them,
-   tokens still standing inside identifiers — unlike the scaffold stage, this write
-   is not gated on the result parsing, because nothing could make it parse yet.
+   `materialize --stage objects` writes these three from the kit with
+   `{{REVISION}}`, `{{NAME}}` and `{{MODULE}}` filled in and step 9's own tokens
+   still standing inside identifiers — unlike the scaffold stage, this write is
+   not gated on the result parsing, because nothing could make it parse yet; a
+   test file still in that state fails as one item naming its placeholders. The
+   same call fills the revision and the module name into the scaffold files
+   that are still byte-identical to their receipt, and re-seals them.
    The agent authors the real module and tests over this scaffolding, then declares
    each path with `materialize --authored <path>` so `verify` stops reading it as
    drift. This is also why `tests/test_smoke.py`, which the scaffold does write,

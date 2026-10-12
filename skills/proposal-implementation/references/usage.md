@@ -474,13 +474,25 @@ literal existed and whose old `src/<Package>_Benchmark/__init__.py` still binds
 them, `OBJECT_MAP_AT_OLD_HOME`, naming both locations (SKILL.md step 8's
 migration procedure). Unlike scaffold, this write is **not** gated on
 the result parsing — `writable_at_scaffold_time`'s `ast.parse` check is scoped
-to the scaffold stage on purpose. All three templates carry tokens
-(`{{FUNCTION_NAME}}`, `{{INVARIANT_ID}}`, `{{EXPECTATION}}`, ...) sitting
-inside Python identifiers that only step 9's own authoring can answer, so this
-stage writes them as scaffolding for the agent to author over, left standing
-exactly like `{{MODULE}}` is in a freshly scaffolded `test_smoke.py`. Author
-the real module and tests, then run `materialize --authored <path>` on each of
-the three so `verify` stops reading them as drift.
+to the scaffold stage on purpose. It fills in what it knows: `{{REVISION}}`
+(the declaration the gate just read), `{{NAME}}`, and `{{MODULE}}` whenever it
+writes the module (the `--module` name, or `module`). The rest
+(`{{FUNCTION_NAME}}`, `{{INVARIANT_ID}}`, `{{EXPECTATION}}`, ...) sit inside
+Python identifiers that only step 9's own authoring can answer, so this stage
+writes them as scaffolding for the agent to author over. Until then the kit's
+`conftest.py` collects a test file that does not parse because of them as one
+failing item naming the placeholders and the step that answers them, instead
+of a collection `SyntaxError`. Author the real module and tests, then run
+`materialize --authored <path>` on each of the three so `verify` stops reading
+them as drift.
+
+The same call fills `{{REVISION}}`, `{{NAME}}` and `{{MODULE}}` into every
+scaffold destination that still carries them **and** is still byte-identical
+to what its receipt sealed (typically `tests/test_smoke.py`,
+`tests/admissibility.py` and the verification notebook, scaffolded before the
+revision was declared), re-sealing each entry with the new bytes; the result
+lists them under `filled` (present only when it filled something). A scaffold
+file somebody edited, adopted or declared authored is never touched.
 
 ## Materialize the harness
 
@@ -546,9 +558,14 @@ would record engine confidence in bytes the engine never saw.
 
 Substitute these placeholders. Every one of them occurs in some template, and
 no template carries any other. `materialize --stage scaffold` substitutes
-`{{PKG}}` and `{{SEED}}` itself; every other token is left standing on
-purpose, and refuses `STAGE_CANNOT_ANSWER` if a scaffold-stage `.py`
-destination still fails to parse after that substitution.
+`{{PKG}}`, `{{SEED}}` and `{{NAME}}` itself, and `{{REVISION}}` when it is
+already known: the target's `__implementation__` declares one, or the approved
+plan was taken with `plan --revision` (its `boundTo`). It never guesses one; an
+unknown revision stays a token, and the kit's `admissibility.py` and
+`test_smoke.py` then fail saying so, until `--stage objects` fills it in after
+step 8. Every other token is left standing on purpose, and the stage refuses
+`STAGE_CANNOT_ANSWER` if a scaffold-stage `.py` destination still fails to
+parse after substitution. The receipt records each entry's substitutions.
 
 `Answered at` says when the value exists, which is not the same as when the file
 carrying the token is written. `tests/test_smoke.py` is placed by the scaffold and

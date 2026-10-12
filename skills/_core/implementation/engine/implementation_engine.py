@@ -5599,6 +5599,28 @@ def scaffold_substitute_body(text: str, name: str, seed: str) -> str:
     return text.replace("{{PKG}}", package_name(name)).replace("{{SEED}}", seed)
 
 
+def kit_substitute_body(text: str, substitutions: dict) -> str:
+    """Every `{{KEY}}` in `substitutions` filled in, and nothing else.
+
+    The writers' one substitution path (`cross-skill-consistency`, C12): a
+    stage fills every token it holds the text for -- the product name
+    always, the bound revision once it is declared, the file step 9 names
+    once it is named -- and the rest stay standing for the step that owns
+    them. The receipt keeps exactly this mapping, so a later reader rebuilds
+    the same bytes from the same input.
+    """
+    for key, given in substitutions.items():
+        text = text.replace("{{" + key + "}}", given)
+    return text
+
+
+def declared_revision(target: Path, name: str) -> str | None:
+    """The revision `__implementation__` binds this host's document to, or
+    `None` while nothing has declared one."""
+    revision = resolve_implementation_declaration(target, name)["contract"].get("revision")
+    return revision if isinstance(revision, str) and revision else None
+
+
 def read_materialization_receipt(target: Path) -> dict:
     path = target / MATERIALIZATION_RECEIPT
     if not path.exists():
@@ -5685,12 +5707,15 @@ def _legacy_notebook_source_sha256(entry: dict, destination: str,
     stage = entry.get("stage")
     try:
         if stage == "scaffold":
-            seed = (entry.get("substitutions") or {}).get("SEED")
+            subs = entry.get("substitutions") or {}
+            seed = subs.get("SEED")
             source = scaffold_kit_source(destination, name)
             if source is None or not isinstance(seed, str):
                 return None
-            body = scaffold_substitute_body(
-                source.read_text(encoding="utf-8"), name, seed)
+            body = kit_substitute_body(
+                source.read_text(encoding="utf-8"),
+                {"PKG": package_name(name),
+                 **{k: v for k, v in subs.items() if isinstance(v, str)}})
         elif stage == "harness":
             source = harness_kit_source(destination, name)
             if source is None:
@@ -18962,7 +18987,7 @@ def _record_engine_defect(args: argparse.Namespace, exc: BaseException) -> None:
     ledger_path = (Path(target_raw).expanduser().resolve() / name_raw
                    / ".implementation" / "position.jsonl")
     impl_position.append_event(ledger_path, event)
-def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> None:
+def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> dict:
     """The exact pattern `cmd_apply` runs: `PLAN_MISMATCH` when the approved
     plan was produced for a different target/name, `PLAN_STALE` when the
     repository's structure has moved since approval. `materialize --stage`
@@ -18986,6 +19011,7 @@ def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> None:
             "(its renames, moves and createDirs), so that plan has stopped describing the tree; "
             "pass `materialize` a plan taken once `apply` has run.",
         )
+    return approved
 
 
 def _materialize_scaffold_destinations(target: Path, name: str) -> list[str]:
@@ -18998,17 +19024,19 @@ def _materialize_scaffold_destinations(target: Path, name: str) -> list[str]:
     return [d for d in scaffold_destinations(name) if not (target / d).exists()]
 
 
-def _stage_scaffold(target: Path, name: str, seed: str) -> dict:
+def _stage_scaffold(target: Path, name: str, seed: str,
+                    revision: str | None = None) -> dict:
     package_init = f"src/{package_name(name)}/__init__.py"
     destinations = _materialize_scaffold_destinations(target, name)
+    substitutions = {"PKG": package_name(name), "SEED": seed, "NAME": name,
+                     **({"REVISION": revision} if revision else {})}
 
     bodies: dict[str, str] = {}
     for destination in destinations:
         if destination == package_init:
             continue
         source = scaffold_kit_source(destination, name)
-        body = scaffold_substitute_body(
-            source.read_text(encoding="utf-8"), name, seed)
+        body = kit_substitute_body(source.read_text(encoding="utf-8"), substitutions)
         if destination.endswith(".py") and not writable_at_scaffold_time(body):
             raise Refused(
                 "STAGE_CANNOT_ANSWER",
@@ -19066,7 +19094,7 @@ def _stage_scaffold(target: Path, name: str, seed: str) -> dict:
                              if source else None),
             "writtenSha256": hashlib.sha256(full.read_bytes()).hexdigest(),
             **notebook_source_fields(destination, full.read_bytes()),
-            "substitutions": {"PKG": package_name(name), "SEED": seed},
+            "substitutions": dict(substitutions),
             "recordedAt": recorded_at,
         })
     for anchor in anchors:
@@ -19181,7 +19209,8 @@ def harness_substitute_body(text: str, name: str) -> str:
 
 
 def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str],
-                     bodies: dict[str, str], kit_source_fn) -> dict:
+                     bodies: dict[str, str], kit_source_fn,
+                     substitutions: dict | None = None) -> dict:
     """The write-conflict-preflight / write-loop / abort / receipt sequence
     shared by the `objects` and `harness` stages — the same shape
     `_stage_scaffold` established for `scaffold`, factored out once a second
@@ -19235,6 +19264,9 @@ def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str
                              if source else None),
             "writtenSha256": hashlib.sha256(full.read_bytes()).hexdigest(),
             **notebook_source_fields(destination, full.read_bytes()),
+            # The tokens this stage filled, when it says: additive, so a
+            # harness entry reads exactly as it always did.
+            **({"substitutions": dict(substitutions)} if substitutions else {}),
             "recordedAt": recorded_at,
         })
     write_materialization_receipt(target, receipt)
@@ -19360,7 +19392,7 @@ def _stage_objects(target: Path, name: str, seed: str,
             "9's authoring, not before that approval is recorded.",
         )
 
-    destinations = _materialize_object_destinations(target, name, stem)
+    owed = _materialize_object_destinations(target, name, stem)
     named = (f"src/{package_name(name)}/{stem}.py" if stem is not None else None)
 
     def kit_source(destination: str, kit_name: str) -> Path | None:
@@ -19370,14 +19402,72 @@ def _stage_objects(target: Path, name: str, seed: str,
             destination = object_destinations(kit_name)[0]
         return object_kit_source(destination, kit_name)
 
+    # Everything this stage can fill: the declared revision (the gate above
+    # guarantees one), the product name, and the stem of the file this call
+    # writes into the package -- the flag's, or the kit's default one.
+    default = object_destinations(name)[0]
+    written_stem = (stem if stem is not None
+                    else Path(default).stem if default in owed else None)
+    known = {"NAME": name, "REVISION": contract["revision"],
+             **({"MODULE": written_stem} if written_stem else {})}
+    substitutions = {"PKG": package_name(name), "SEED": seed, **known}
     bodies = {
-        destination: scaffold_substitute_body(
-            kit_source(destination, name).read_text(encoding="utf-8"),
-            name, seed)
-        for destination in destinations
+        destination: kit_substitute_body(
+            kit_source(destination, name).read_text(encoding="utf-8"), substitutions)
+        for destination in owed
     }
-    return _write_kit_stage(target, name, "objects", destinations, bodies,
-                            kit_source)
+    result = _write_kit_stage(target, name, "objects", owed, bodies,
+                              kit_source, substitutions)
+    filled = _fill_scaffold_tokens(target, name, known)
+    return {**result, **({"filled": filled} if filled else {})}
+
+
+def _fill_scaffold_tokens(target: Path, name: str, known: dict) -> list[str]:
+    """Fill `known` into the scaffold files that still carry their tokens
+    and are still exactly what the scaffold stage wrote, re-sealing each.
+
+    The scaffold runs ahead of step 8, so it usually could not know the
+    revision, and never the file step 9 names; leaving `test_smoke.py`,
+    `admissibility.py` and the verification notebook to be filled by hand
+    is how they came to be filled wrongly, or not at all. Only an engine
+    entry of the scaffold stage with its full bytes still hashing to the
+    sealed `writtenSha256` is touched: a file somebody edited, adopted or
+    declared authored is theirs, and stays byte-identical. The entry keeps
+    its kind, and takes the new bytes and the tokens it now carries.
+    """
+    receipt = read_materialization_receipt(target)
+    filled_paths: list[str] = []
+    for destination in scaffold_destinations(name):
+        entry = receipt_entry(receipt, destination)
+        full = target / destination
+        if (not isinstance(entry, dict) or entry.get("kind") != RECEIPT_KIND_ENGINE
+                or entry.get("stage") != "scaffold" or not full.is_file()):
+            continue
+        current = full.read_bytes()
+        if hashlib.sha256(current).hexdigest() != entry.get("writtenSha256"):
+            continue
+        try:
+            text = current.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        filled = kit_substitute_body(text, known)
+        if filled == text:
+            continue
+        full.write_text(filled, encoding="utf-8")
+        data = full.read_bytes()
+        entry = dict(entry)
+        entry.pop("writtenSourceSha256", None)
+        entry["writtenSha256"] = hashlib.sha256(data).hexdigest()
+        entry.update(notebook_source_fields(destination, data))
+        entry["substitutions"] = {**(entry.get("substitutions") or {}),
+                                  **{key: given for key, given in known.items()
+                                     if "{{" + key + "}}" in text}}
+        entry["recordedAt"] = _now_iso8601()
+        set_receipt_entry(receipt, entry)
+        filled_paths.append(destination)
+    if filled_paths:
+        write_materialization_receipt(target, receipt)
+    return filled_paths
 
 
 def _stage_harness(target: Path, name: str) -> dict:
@@ -19513,7 +19603,7 @@ def cmd_materialize(args: argparse.Namespace) -> dict:
         require_clean_worktree(target)
         if not args.plan:
             raise Refused("PLAN_REQUIRED", "--stage requires --plan <approved plan JSON>.")
-        _materialize_plan_gate(target, name, args.plan)
+        plan_record = _materialize_plan_gate(target, name, args.plan)
         # A domain may ship no kit at all, and one of them says exactly that in
         # its own doctrine. The bytes below were read unguarded, so a property
         # this forge had already written down reached a person as a raw
@@ -19536,7 +19626,13 @@ def cmd_materialize(args: argparse.Namespace) -> dict:
         if args.stage in ("scaffold", "objects") and not args.seed:
             raise Refused("SEED_REQUIRED", f"--stage {args.stage} requires --seed.")
         if args.stage == "scaffold":
-            return _stage_scaffold(target, name, args.seed)
+            # The bound revision, when it is already known: the target's own
+            # `__implementation__` first, the revision the plan was bound to
+            # otherwise. Neither is guessed; unknown stays a token.
+            revision = (declared_revision(target, name)
+                        or (plan_record.get("boundTo") or {}).get("revision"))
+            return _stage_scaffold(target, name, args.seed,
+                                   revision if isinstance(revision, str) else None)
         if args.stage == "objects":
             return _stage_objects(target, name, args.seed, stem)
         return _stage_harness(target, name)
