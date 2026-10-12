@@ -50,7 +50,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] D3 — engine state gitignore decision (D, writer trigger: generators + manifest + upgrade + template + 2 test files + docs)
 - [x] D4 — plausibility metadata cache inside sota-pool (D, writer trigger: paper_cli + paper_resolve + 2 agents + 2 SKILL.md + test)
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
-- [ ] B1–B13
+- [x] B1–B13
   - [x] B1 — section labels in `verify` drift (D, writer trigger: engine + resolver + 2 profiles + convention + 2 test files + 4 docs + seal)
   - [x] B4 + X6 — settle ordering, reverse heading, tick correction path (D, writer trigger: impl_position + engine + 3 test files + 3 docs)
   - [x] B8 — attainedLevel bounded by the aim when nothing leveled ran (D, writer trigger: impl_position + engine + 2 test files + 2 docs)
@@ -67,7 +67,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B6 — declared array backend, neutral kit helpers, env torch variants (D, writer trigger: engine + 3 kit files + 2 SKILL.md + usage + 2 test files + seals)
   - [x] B9 — default run profile resolves the target and its venv (D, writer trigger: executor + template + README + test)
   - [x] X8c — launcher refuses a sibling profile from any skills tree (D, writer trigger: 2 launchers + test + 2 docs)
-- [ ] C1–C14
+- [x] C1–C14
   - [x] C4 — v1 headings drop terminal punctuation; derivation documented (D, writer trigger: renderer + 3 test files + 4 docs)
   - [x] C1 — instruction cap enforced on the CLI, documented, `instructionBudget` (D, writer trigger: workspace + test + 4 docs)
   - [x] C6 — `CREATE_INITIAL_REVISION --dry-run` (D, writer trigger: creation + workspace + cli + test + 4 docs)
@@ -91,7 +91,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] E6a — arXiv/Crossref year (inline: resolver + test + SKILL.md)
   - [x] E9 — inline fallback section in 8 delegating skills (inline: 8 docs + drift test)
   - [x] E10 — `papersmith ingest` non-PDF refusals name the deliberation seeding routes (D, resumed after interruption: ingest.py + test + SKILL.md + README + CHANGELOG)
-- [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
+- [x] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
 
@@ -1364,7 +1364,11 @@ behaviour-change column, "y" means an existing workspace or caller can notice th
 | X15 | fixed | 636400d | tests/deliberation-source-reserved-markers.test.mjs, tests/test_upgrade_v0_13_0_workspace.py | y — sources neutralised (`reservedMarkersRemoved`); legacy v1 repaired by a section-replacing successor; preview refusals carry `repair_candidate` + blocker |
 | X16 | fixed (same on main) | 1c87d53 | tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — `otherLineageModules`; headline can turn `drift` -> `ok` on shared targets |
 | X17 | fixed (pre-existing on main; `settle` too) | e4cfbee | tests/test_proposal_implementation.py | y — a refused `position`/`settle` creates no holder |
-| X18 | fixed (command) | see `git log` (the X18 commit) | tests/test_proposal_implementation.py | y — `settle --under --unwitnessed --reason` places a witness-less line |
+| X18 | fixed (command) | 512b78e | tests/test_proposal_implementation.py | y — `settle --under --unwitnessed --reason` places a witness-less line |
 | C1 note | deferred — v1 creation from an idea near 65,000 characters takes about 35 s | — | — | n |
 
 Other commits on the branch: 8e3f813 (fixture comment), 5969fcf (feature-doc progress).
+
+### Closure after X15–X18
+
+X15 (636400d), X16 (1c87d53), X17 (e4cfbee) and X18 (512b78e) fixed the defects the final verification found. After 512b78e: `npm run test:node` 784/784; `npm run test:py:par` 6201 passed, 13 skipped, 3 failed (the three known `.venv` cases); the experimental v1 E2E step re-run without the `sourceWindowBytes` workaround created v01 and published v02; `tests/test_upgrade_v0_13_0_workspace.py` 9 passed, including the fixture's experiments successor after upgrade. Task F closed.
