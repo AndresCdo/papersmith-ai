@@ -538,7 +538,7 @@ workspace declares, what this table shows. It is the same matrix as
 `HARNESS_CAPABILITIES` in `src/papersmith/generators.py`, and a test
 (`tests/test_harness_parity.py`) verifies that both match. `wired` is what
 gets generated; `unsupported` is what does not get generated; `opt-in` is
-only documented, and you enable it yourself.
+only documented, and it is enabled manually.
 
 <!-- harness-capabilities:start -->
 | Harness | Skills | Comandos | Agentes | Plugins / guards |
@@ -559,7 +559,7 @@ What the table does not promise:
 
 - **Pi:** the agents in `.pi/agents` are only read by the third-party package
   `pi-subagents`; the Pi core has no subagents. Without that package, the
-  files exist but nobody uses them.
+  files exist but remain unused.
 - **Claude Code:** the guard is opt-in. Papersmith never writes or merges
   `.claude/settings.json`; the snippet to enable it is in
   [`docs/guard-hooks.md`](docs/guard-hooks.md).
@@ -574,7 +574,7 @@ What the table does not promise:
 - **Antigravity, documented locations only:** `.antigravity/rules.md` and
   `.antigravity/skills` are no longer generated. Antigravity uses `.agents/skills`,
   `.agents/agents/` and `.agents/AGENTS.md` (plain text, no frontmatter). Existing
-  workspaces are not migrated: run `papersmith init` in a new workspace.
+  workspaces are not migrated: `papersmith init` must be run in a new workspace.
 
 #### Verified support matrix
 
@@ -597,27 +597,27 @@ tool documents, not what Papersmith generates (that is the table above).
   <https://antigravity.google/docs/ide/workflows>).
 - Pi: the tool names `mcp` and `mcpScript` have no source
   (unsupported, no source found).
-- The docs of these tools change fast; re-verify a cell before
-  relying on it after that date.
+- The docs of these tools change fast; a cell should be re-verified before
+  being relied on after that date.
 
 The sources of each cell are in
 [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md).
 
-Inside a generated **workspace**, the story is slightly different and
-worth knowing: the workspace ships the full `skills/` tree and the agent
+Inside a generated **workspace**, the behavior is slightly different:
+the workspace ships the full `skills/` tree and the agent
 tree (`.claude/agents/`), and its routing docs point at the canonical tree
 `skills/*/SKILL.md`. The routing documents are generated projections: the
 real source of each agent is `.claude/agents/*.md` and the source of each skill is its
-`SKILL.md`. Do not edit the projections by hand; they regenerate (and
+`SKILL.md`. The projections must not be edited by hand; they regenerate (and
 `papersmith audit --check-drift` warns if one drifted). `init` and `upgrade` generate one slash command per skill
 in `.claude/commands/`, `.opencode/commands/` and `.pi/prompts/`; Antigravity does not
 receive command files and reads skills through its symlinks. Agents are
 projected from `.claude/agents/` to `.opencode/agents/`, `.pi/agents/` and
-`.agents/agents/`. For your harness to
-list the skills as `/` commands, run `npm run setup:harnesses` inside the
-workspace: it symlinks the shipped tree into `.claude/skills`, `.pi/skills`,
-`.opencode/skills` and `.agents/skills`, just as relative and idempotent as
-in the checkout. In this checkout, the slash command projections
+`.agents/agents/`. For a harness to
+list the skills as `/` commands, `npm run setup:harnesses` must be run inside
+the workspace: it symlinks the shipped tree into `.claude/skills`,
+`.pi/skills`, `.opencode/skills` and `.agents/skills`, just as relative and
+idempotent as in the checkout. In this checkout, the slash command projections
 (`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`), the agent projections
 (`.opencode/agents/`, `.pi/agents/`, `.agents/agents/`) and the OpenCode and Pi guards
 are synced with `python scripts/sync-repo-harness.py` (`--check` for CI; it
