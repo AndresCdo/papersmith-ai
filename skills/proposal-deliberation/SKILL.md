@@ -333,6 +333,8 @@ For more than one independent locus in the same version, use `selectedEntryIds` 
 
 No `ANTHROPIC_API_KEY` and no model configuration are ever required — this call never makes a network or model call. There is no separate `PROPOSAL_DELIBERATION_MODEL` setting anymore, and no per-call cost budget to manage; the environment is only `PROPOSAL_DELIBERATION_PROJECT_ROOT` (defaults to cwd) and `PROPOSAL_DELIBERATION_SESSION_ID`.
 
+**The instruction cap: 65,536 characters.** Every operation's `instruction` — for `CREATE_INITIAL_REVISION`, the whole idea — is at most 65,536 characters (JavaScript string length, UTF-16 code units). A longer one is refused before anything runs, `status: "blocked"`, `code: "INSTRUCTION_TOO_LONG"`, `nextAction: "shorten_instruction"`, nothing written. The successor preview and the first revision's result carry `instructionBudget: { "limit": 65536, "used": <n>, "remaining": <65536 - n> }`, so you can see the room left before you grow an instruction further.
+
 ### 4. Preview, then accept, in the same session
 
 The call above only **previews**: it returns `status: "awaiting_acceptance"`, an `acceptanceToken`, the would-be `targetFilename`, and (once approved decisions are large enough) a non-blocking `growthAdvisory`. Nothing is written yet.
@@ -391,6 +393,7 @@ None of this is negotiable and none of it is something you should work around �
 
 - The paper-guide reference and lite-evidence ingestion discipline used for sourcing new *papers* is a separate concern from this skill; do not import that discipline here or vice versa.
 - `CREATE_INITIAL_REVISION` is the only way to create a managed proposal, and only when none exists yet.
+- An `instruction` longer than 65,536 characters is refused with `INSTRUCTION_TOO_LONG` on every operation; see [the instruction cap](#3-call-the-engine-create_successor--resolveddecisions).
 - If more than one active managed revision resolves, the engine reports `MULTIPLE_ACTIVE_REVISIONS` with the full candidate list — never silently pick one; ask the user for the exact `sourceFilename`.
 - A multi-locus `CREATE_SUCCESSOR` batch may mix `replace`/`insert`/`delete`/`move`/`copy` freely; a conceptual (non-literal, reasoning-bound) revision beyond a single resolved replacement is not supported through this ambient path — treat it as a deliberation to resolve into concrete, resolvable edits first.
 - Use only `node skills/proposal-deliberation/cli.mjs` for execution. Do not modify engine infrastructure, tests, or this skill during normal proposal work.

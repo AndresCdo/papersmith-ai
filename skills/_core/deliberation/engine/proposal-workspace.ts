@@ -5486,6 +5486,21 @@ const CREATE_SUCCESSOR_OPERATION = 'CREATE_SUCCESSOR';
 const CREATE_INITIAL_REVISION_OPERATION = 'CREATE_INITIAL_REVISION';
 
 /**
+ * The longest `instruction` any operation accepts, in characters (UTF-16 code units, what a
+ * JavaScript string's `length` counts). For `CREATE_INITIAL_REVISION` the instruction IS the idea,
+ * so this is also the largest idea a first revision can start from. Declared once: the tool schema
+ * below states it, and `tool.execute` enforces it, because the CLI host calls `execute` directly
+ * and no validating dispatcher ever reads that schema on its path.
+ */
+export const MAX_INSTRUCTION_CHARACTERS = 65_536;
+
+/** How much of the instruction cap a request used, reported on the successor preview and on the first revision's result. `remaining` is negative only on the refusal. */
+export function instructionBudget(instruction:unknown):{limit:number;used:number;remaining:number}{
+ const used=typeof instruction==='string'?instruction.length:0;
+ return {limit:MAX_INSTRUCTION_CHARACTERS,used,remaining:MAX_INSTRUCTION_CHARACTERS-used};
+}
+
+/**
  * The caller-facing projection of a `CREATE_INITIAL_REVISION` refusal: its `nextAction` and its
  * one blocker. Extracted from the nested ternary it replaced because a third refusal code --
  * `INITIAL_REVISION_CANONICAL_FORM_VIOLATION`, raised when the COMPOSED v1 breaks the domain's
@@ -5781,11 +5796,11 @@ export function projectLifecycleV1PublicResult(operation:'WITHDRAW_REVISION'|'RE
  return {status:'blocked',operation,requestId,revisionId:null,withdrawalId:null,lifecycleState:null,activeRevisionId:null,semanticCode,transitionEvidence,auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',modelCalls:0,plannerCalls:0,warnings:[]};
 }
 
-export function projectProposalDeliberationPublicResult(input:{result:any;operation:string;sourceFilename?:string;metricsBefore:any;metricsAfter:any;audit?:any;selfAudit?:any}){
+export function projectProposalDeliberationPublicResult(input:{result:any;operation:string;sourceFilename?:string;instruction?:string;metricsBefore:any;metricsAfter:any;audit?:any;selfAudit?:any}){
  const {result}=input,delta=(key:string)=>Math.max(0,(input.metricsAfter[key]??0)-(input.metricsBefore[key]??0));
  const calls={modelCalls:result.modelCalls??delta('totalModelCalls'),plannerCalls:result.plannerCalls??delta('totalPlannerCalls'),tutorCalls:delta('totalTutorCalls'),reviewerCalls:delta('totalReviewerCalls')};
  const base={operation:input.operation,sourceFilename:result.published?.sourceFilename??result.sourceFilename??input.sourceFilename??null,...calls,mutations:result.mutations??0,warnings:input.audit?.warnings??[]};
- if(result.status==='awaiting_acceptance')return {...base,status:'awaiting_acceptance',targetFilename:result.targetFilename,acceptanceToken:result.acceptanceToken,patchCount:result.patchCount,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'accept_successor',...(result.mathDelta?{mathDelta:result.mathDelta,preservationDelta:result.preservationDelta}:{}),...(result.staleCompanionReferences?{staleCompanionReferences:result.staleCompanionReferences}:{})};
+ if(result.status==='awaiting_acceptance')return {...base,status:'awaiting_acceptance',targetFilename:result.targetFilename,acceptanceToken:result.acceptanceToken,patchCount:result.patchCount,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'accept_successor',...(typeof input.instruction==='string'?{instructionBudget:instructionBudget(input.instruction)}:{}),...(result.mathDelta?{mathDelta:result.mathDelta,preservationDelta:result.preservationDelta}:{}),...(result.staleCompanionReferences?{staleCompanionReferences:result.staleCompanionReferences}:{})};
  if(result.status==='published'){
   const unresolved=input.audit?.status==='FAIL'||input.selfAudit?.status==='FAIL';
   return {...base,status:unresolved?'blocked':'published',...(unresolved?{category:'audit',message:'Terminal audit failed; inspect the receipt before retrying.'}:{}),targetFilename:result.published.targetFilename,targetSha256:result.published.publishedSha256,patchCount:result.published.patchCount,receiptId:`${result.published.targetFilename}:${result.published.targetRevision}`,manifestStatus:result.derived.derivedStateManifest.status,auditStatus:input.audit?.status??'NOT_RUN',selfAuditStatus:input.selfAudit?.status??'NOT_RUN',recoveryStatus:unresolved?'required':'not_required',nextAction:unresolved?'inspect_receipt':null,...(result.staleCompanionReferences?{staleCompanionReferences:result.staleCompanionReferences}:{})};
@@ -5848,7 +5863,7 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
   promptSnippet:'Deliberate conversationally or execute a resolved Proposal Deliberation V2 instruction.',
   promptGuidelines:['Use operation CHAT_DELIBERATION for non-mutating tutor conversation; it is session-local, mode-first, and cannot mint document or task authority. Materialize chat only with draftMaterialization INITIAL_CREATE plus explicit current-turn authorization and an exact validated route or approval of the pending proposed route; UPDATE and REPLACE are forbidden. Use document mutation verbs only for explicit principal-local managed edits, which retain exact target resolution and guarded publication. Use operation CREATE_INITIAL_REVISION, with instruction as the idea, only to explicitly create the first managed proposal (v1); it never runs automatically and is rejected outright whenever a managed proposal already exists. MAINTENANCE is an explicit external-controller handoff only; V2 does not create or resume workers or grant document authority. For managed-revision withdrawal or restore, pass the typed lifecycle operation and an exact sourceFilename or restore withdrawalOperationId; omit withdrawalOperationId for withdrawal because V2 generates it. Supply only user-facing semantic selectors and content; never construct patches, offsets, manifests, receipts, or internal revision mechanics.'],
   parameters:Type.Object({
-   instruction:Type.String({minLength:1,maxLength:65536}),
+   instruction:Type.String({minLength:1,maxLength:MAX_INSTRUCTION_CHARACTERS}),
    operation:Type.Optional(StringEnum(['WITHDRAW_REVISION','RESTORE_WITHDRAWN_REVISION','CREATE_SUCCESSOR','CREATE_INITIAL_REVISION','CHAT_DELIBERATION','CLOSE_DELIBERATION','MAINTENANCE'] as const,{description:'Explicit lifecycle, managed-successor edit, explicit first-managed-version creation, session-local chat, explicit chat close, external-maintenance handoff, or persistent scientific-workflow operation. Omit for existing direct-document classification.'})),
        editIntent:Type.Optional(StringEnum(['MODIFY','CONCEPTUAL_REVISION'] as const,{description:'Required only with CREATE_SUCCESSOR; identifies the bounded inner document edit.'})),
        sectionRange:Type.Optional(Type.String({minLength:5,maxLength:64,pattern:'^(?:sections?\\s+)?\\d+(?:\\.\\d+)*\\s*[–-]\\s*\\d+(?:\\.\\d+)*$',description:'Required only with CREATE_SUCCESSOR. Exact numbered Markdown-heading range, for example sections 1–2.2.'})),
@@ -5878,6 +5893,11 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
        idempotencyKey:Type.Optional(Type.String({minLength:1,maxLength:256})),
   }),
   async execute(_toolCallId,params,_signal,_onUpdate,ctx){
+   // The schema's `maxLength`, enforced on every host: refused before any route runs, nothing written.
+   if(typeof params.instruction==='string'&&params.instruction.length>MAX_INSTRUCTION_CHARACTERS){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'shorten_instruction',instructionBudget:instructionBudget(params.instruction),blockers:[{code:'INSTRUCTION_TOO_LONG',message:`instruction is ${params.instruction.length} characters; every operation accepts at most ${MAX_INSTRUCTION_CHARACTERS}. Nothing was written. Shorten it, or move long reference material into a declared source instead of the instruction.`}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
    const openDeliberation=params.conversationId?chatDeliberation.isOpen(sessionIdentity(ctx),params.conversationId):false;
    const route=resolveGlobalRoute({...params,openDeliberation});
    if(route.stage==='DRAFT_MATERIALIZATION'){
@@ -5967,7 +5987,7 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
     const guideFragments=await loadGuideDirectoryFragments(projectRoot);
     const result=await initialRevisionCreation.execute({idea:params.instruction,...(guideFragments.length?{guideFragments}:{})});
     const publicResult=result.status==='created'
-     ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null}
+     ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null,instructionBudget:instructionBudget(params.instruction)}
      :{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...projectInitialRevisionRefusal(result)};
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
    }
@@ -6004,7 +6024,7 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
      selfAudit=await runProposalDeliberationSelfAudit({projectRoot});
     } catch { audit={status:'FAIL',warnings:[]};selfAudit={status:'FAIL'}; }
    }
-   const projected=lifecycle?projectRevisionLifecyclePublicResult(result):projectProposalDeliberationPublicResult({result,operation,sourceFilename:params.sourceFilename,metricsBefore,metricsAfter:getRuntimeMetrics(),audit,selfAudit});
+   const projected=lifecycle?projectRevisionLifecyclePublicResult(result):projectProposalDeliberationPublicResult({result,operation,sourceFilename:params.sourceFilename,instruction:params.instruction,metricsBefore,metricsAfter:getRuntimeMetrics(),audit,selfAudit});
    const publicResult=route.stage==='DIRECT_DOCUMENT'?{...projected,authority:resolveV2ExecutionAuthority(route.stage)}:projected;
    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
   },

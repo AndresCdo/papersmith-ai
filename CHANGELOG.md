@@ -459,6 +459,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   `SKILL.md` and `references/usage.md` state the derivation; the proposal
   usage example, a single sentence that `INITIAL_IDEA_SINGLE_SENTENCE` refused,
   now has two.
+- **The 65,536-character instruction cap is enforced on the CLI, documented,
+  and reported.** `proposal_deliberation_execute` declared `instruction` as
+  `maxLength: 65536`, but the CLI host calls the tool directly and nothing on
+  that path read the schema, so the cap a Pi session met did not exist for
+  `cli.mjs` and no document stated it. One exported constant
+  (`MAX_INSTRUCTION_CHARACTERS`) now feeds the schema and a check at the top of
+  the tool's `execute`: a longer instruction is refused on every operation and
+  host with `INSTRUCTION_TOO_LONG` (`nextAction: "shorten_instruction"`),
+  nothing written. The `CREATE_SUCCESSOR` preview and the
+  `CREATE_INITIAL_REVISION` result carry
+  `instructionBudget: { limit, used, remaining }`. Both deliberation skills'
+  `SKILL.md` and `references/usage.md` state the cap.
 
 ### Added
 
@@ -746,6 +758,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   revisions are never rewritten and keep their headings; an idea whose two
   sentences differ only in their terminal punctuation is now refused with
   `INITIAL_IDEA_SINGLE_SENTENCE`. No migration is needed.
+
+- Through `cli.mjs`, an `instruction` longer than 65,536 characters (an idea,
+  for `CREATE_INITIAL_REVISION`) is now refused with `INSTRUCTION_TOO_LONG`
+  where 0.13.0 accepted it. The successor preview and the first revision's
+  result gain an additive `instructionBudget` key. Nothing on disk changes; no
+  migration is needed.
 
 ## 0.13.0
 

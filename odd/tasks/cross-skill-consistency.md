@@ -726,3 +726,14 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   test's `SECTION` (`## Then compare the arms.`). test:node 729/729 after re-anchor; test:fast 3262 passed.
   Route: delegated writer (engine + 3 test files + 4 docs). No migration (existing revisions never rewritten).
   Commit: `fix(deliberation): v1 headings drop their sentence's terminal punctuation` (the commit carrying this line)
+
+- C1 (real): the 65,536 cap lived only in the TypeBox schema (`proposal-workspace.ts`), which the CLI host
+  never validates (`cli.mjs` calls `tool.execute` directly), so `cli.mjs` accepted any length and no doc stated a
+  cap. Fix: exported `MAX_INSTRUCTION_CHARACTERS` feeds the schema and a guard at the top of `execute`
+  (`INSTRUCTION_TOO_LONG`, `nextAction: shorten_instruction`, nothing written, both hosts); `instructionBudget`
+  `{limit, used, remaining}` on the successor preview and on v1's `created` result. Docs: both SKILL.md (step /
+  Limits), both usage.md (preview + v1 responses; v1 numbers re-driven). Tests:
+  `tests/deliberation-instruction-budget.test.mjs` (5) RED 4F -> GREEN (at-cap case passes before and after by
+  design). Observed along the way: v1 creation from a ~65k-character idea takes ~35 s (not addressed).
+  test:node 734/734; typecheck clean. No migration.
+  Commit: `fix(deliberation): the instruction cap is enforced on the CLI and reported` (the commit carrying this line)

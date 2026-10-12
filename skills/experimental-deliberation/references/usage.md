@@ -79,7 +79,8 @@ Driven verbatim (2026-10-12), against a fixture carrying both required sources:
   "mutations": 1,
   "receiptId": "experiments-domain-shift-baseline-sweep-v01.md:v01",
   "manifestStatus": "NOT_TRACKED",
-  "nextAction": null
+  "nextAction": null,
+  "instructionBudget": { "limit": 65536, "used": 425, "remaining": 65111 }
 }
 ```
 
@@ -312,10 +313,13 @@ Every `CREATE_SUCCESSOR` above only previews:
   "mutations": 0,
   "manifestStatus": "NOT_PUBLISHED",
   "nextAction": "accept_successor",
+  "instructionBudget": { "limit": 65536, "used": 83, "remaining": 65453 },
   "preservationDelta": { "lost": [], "added": [] },
   "mathDelta": { "lost": [], "added": [] }
 }
 ```
+
+`instructionBudget` is how much of the 65,536-character `instruction` cap this request used (here the 83-character instruction of the replace example above); an instruction over the cap is refused on every operation with `INSTRUCTION_TOO_LONG` and nothing is written. `CREATE_INITIAL_REVISION`'s result carries the same object for the idea.
 
 `patchCount` is **2** for a one-decision batch, and that is not a mistake: on an all-`replace` batch the engine appends its own edit over the `## Changes` block from your `changeSummary`. `modelCalls`/`plannerCalls` are always `1` as a bookkeeping artifact of routing through the ambient-supplied planner — no network or model call is made. `tutorCalls`/`reviewerCalls` are always `0`: those roles are yours, in this conversation.
 

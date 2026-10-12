@@ -234,9 +234,12 @@ Every `CREATE_SUCCESSOR` call above only previews. A real run looks like:
   "acceptanceToken": "…",
   "patchCount": 1,
   "manifestStatus": "NOT_PUBLISHED",
-  "nextAction": "accept_successor"
+  "nextAction": "accept_successor",
+  "instructionBudget": { "limit": 65536, "used": 81, "remaining": 65455 }
 }
 ```
+
+`instructionBudget` is how much of the 65,536-character `instruction` cap this request used (here the 81-character instruction of the replace example above); an instruction over the cap is refused on every operation with `INSTRUCTION_TOO_LONG` and nothing is written. The first revision's `created` result carries the same object for its idea.
 
 (`modelCalls`/`plannerCalls` are always `1` here as a bookkeeping artifact of routing through the ambient-supplied planner — no network or model call is made. `tutorCalls`/`reviewerCalls` are always `0`: those roles are yours, in-conversation, not the engine's.)
 
