@@ -2049,224 +2049,224 @@ flowchart TD
 
 ### 6. `experimental-implementation` — the second host, two documents, one engine left untouched
 
-**Para qué está.** Un protocolo de experimentos publicado (`experiments/experiments-<slug>-vNN.md`)
-también es un documento. Esta skill lo convierte en un repositorio Python que corre, y
-demuestra —no afirma— que ese código hace lo que el protocolo dice y que sus corridas
-completas dejan un registro que concuerda con lo que el protocolo declara. Hasta ahí sería
-un clon de `proposal-implementation`. Lo que la distingue es que **verifica dos documentos
-declarados, cada uno bajo su propio vocabulario de reclamo**: `documents[0]` es
-`experiments/`, con claves `experiments`/`remedy_experiments`; `documents[1]` es
-`proposals/` —la matemática que ese protocolo responde—, con claves `equations`/
-`remedy_equations`, la misma nomenclatura que ya usa el hermano. El propio
-`impl_profile.py` lo deja escrito en su comentario: el documento 1 declara su overlay
-completo (`claim_key`, `locus_key`, `remedy_locus_key`, `notation_keys`,
-`citation_pattern`) **sin heredar nunca** los valores de `experiments` del documento 0.
+**What it is for.** A published experiments protocol (`experiments/experiments-<slug>-vNN.md`)
+is also a document. This skill turns it into a Python repository that runs, and
+proves —does not assert— that this code does what the protocol says and that its complete
+runs leave a record that agrees with what the protocol declares. Up to that point it would be
+a clone of `proposal-implementation`. What distinguishes it is that it **verifies two declared
+documents, each under its own claim vocabulary**: `documents[0]` is
+`experiments/`, with keys `experiments`/`remedy_experiments`; `documents[1]` is
+`proposals/` —the mathematics that protocol answers— with keys `equations`/
+`remedy_equations`, the same nomenclature the sibling already uses. `impl_profile.py`
+itself writes it in its comment: document 1 declares its complete overlay
+(`claim_key`, `locus_key`, `remedy_locus_key`, `notation_keys`,
+`citation_pattern`) **never inheriting** document 0's `experiments` values.
 
-**De dónde recibe y a quién le entrega.** Recibe un protocolo publicado bajo
-`experiments/` y, a través de él, la propuesta matemática que ese protocolo cita. Sobre
-`remote-execution` la costura es idéntica a la del hermano: sólo lectura, dos módulos por
-ruta —registro y puerta de entrada—, nunca el adaptador. Y hacia `experimental-deliberation`
-entrega hallazgos locales por `handoff`, nunca publica ella misma: la corrección vuelve al
-documento por la misma compuerta que cualquier otro cambio.
+**What it receives and what it hands on.** It receives a protocol published under
+`experiments/` and, through it, the mathematical proposal that protocol cites. On
+`remote-execution` the seam is identical to the sibling's: read only, two modules by
+path —the ledger and the entry gate— never the adapter. And toward `experimental-deliberation`
+it hands local findings over by `handoff`, never publishing itself: the correction returns to
+the document through the same gate as any other change.
 
-**Qué necesita antes.** Un protocolo de experimentos publicado, y un repositorio destino
-bajo `implementations/` que ya sea un repositorio git. Nada de entorno virtual propio de
-la forja: el `.venv` es siempre del destino.
+**What it needs first.** A published experiments protocol, and a target repository
+under `implementations/` that is already a git repository. No virtual environment of the
+forge's own: the `.venv` is always the target's.
 
-**Las etapas que declara.** Leídas de `OBJECTIVE_FLOW`, con la misma propiedad
-que el norte de `proposal-implementation`: independientes de lo que haya en
-disco, para que una sesión que chocó con un error se pueda ubicar y reenganchar.
+**The stages it declares.** Read from `OBJECTIVE_FLOW`, with the same property
+as `proposal-implementation`'s north: independent of what is on
+disk, so that a session that hit an error can locate itself and rejoin.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | Behind the operator when |
 |---|---|---|
-| `standing` | Un repositorio armado como esta skill espera, con intérprete propio y **los pasos declarados del protocolo puestos como comandos ejecutables** | `structure` no reporta huecos de andamiaje y el protocolo al que responde la corrida está nombrado y es legible |
-| `binding` | El código que corre dice lo que dice la revisión de experimentos ligada, con cada paso declarado trazado a un comando ejecutable | `fidelity` está limpio contra esa revisión y la suite propia del destino está verde bajo su propio intérprete |
-| `instrumentation` | **Cada medición que el protocolo declara tiene dónde aterrizar** — una métrica, un registro, un chequeo que pueda fallar | cada medición declarada resuelve a algo que se puede correr y volver a leer |
-| `rehearsal` | El flujo declarado corre punta a punta a escala chica, y el registro que deja coincide con el documento que lee una persona | el ensayo está completo y su propio reporte da `ok` |
-| `full-scale` | Cada paso ruteado a donde se decidió que corra, y ejecutado ahí a la escala que declara el protocolo | es la llegada; no está detrás de nadie |
+| `standing` | A repository set up the way this skill expects, with an interpreter of its own and **the protocol's declared steps laid out as runnable commands** | `structure` reports no scaffold gaps and the protocol the run answers to is named and readable |
+| `binding` | The code that runs says what the bound experiments revision says, with every declared step traced to a runnable command | `fidelity` is clean against that revision and the target's own suite is green under its own interpreter |
+| `instrumentation` | **Every measurement the protocol declares has a place to land** — a metric, a record, a check that can fail | every declared measurement resolves to something that can be run and read back |
+| `rehearsal` | The declared flow runs end to end at a small scale, and the record it leaves agrees with the document a person reads | the rehearsal is complete and its own report is `ok` |
+| `full-scale` | Every step routed to where it was decided to run, and executed there at the scale the protocol declares | this is the arrival; it is behind nobody |
 
-**Llegada:** corridas completas a la escala declarada por el protocolo, con un
-registro **contrastable contra la revisión de experimentos**. No una
-verificación verde, no un ensayo que pasó.
+**Arrival:** complete runs at the scale the protocol declares, with a
+record **checkable against the experiments revision**. Not a green
+verification, not a passing rehearsal.
 
-**Cuatro paradas son de una persona, ninguna es un defecto a reparar:**
-autorizar que se escriba código, aprobar el mapa de pasos declarados a comandos
-ejecutables, publicar el commit que un worker clonaría, y autorizar un
-lanzamiento — que son horas de la cuota de alguien.
+**Four stops are a person's, and none is a defect to repair:**
+authorizing that code be written, approving the map from declared steps to runnable
+commands, publishing the commit a worker would clone, and authorizing a
+launch — which is hours of somebody's quota.
 
-**El flujo.** Esta skill **es** casi enteramente el motor compartido en
-`_core/implementation/engine/` —unas 21.000 líneas en 12 archivos, la misma base que
-sostiene a `proposal-implementation`— y lo que agrega son unos 300 bytes propios: un
-perfil de dominio (`impl_profile.py`, 278 líneas), una copia byte-a-byte del lanzador del
-hermano (`scripts/implementation_cli.py`, 24 líneas), este `SKILL.md`, dos agentes y su
-propio corpus sellado bajo `tests/`. Ninguna línea del motor cambió para admitir este
-segundo huésped.
+**The flow.** This skill **is** almost entirely the shared engine under
+`_core/implementation/engine/` —some 21,000 lines across 12 files, the same base that
+holds `proposal-implementation`— and what it adds is about 300 bytes of its own: a
+domain profile (`impl_profile.py`, 278 lines), a byte-for-byte copy of the sibling's
+launcher (`scripts/implementation_cli.py`, 24 lines), this `SKILL.md`, two agents and its
+own sealed corpus under `tests/`. No line of the engine changed to admit this
+second host.
 
-Enruta igual que el hermano: por **existencia**, no por fidelidad. Si `src/` no tiene
-implementación, Flujo A; si ya tiene una, Flujo B, que ahora mide deriva contra **los dos**
-documentos antes de decidir nada.
+It routes the same way as the sibling: by **existence**, not by fidelity. If `src/` has no
+implementation, Flow A; if it already has one, Flow B, which now measures drift against **both**
+documents before deciding anything.
 
-*Flujo A —primera pasada.* Esta skill no envía `assets/kit/`: `materialize --stage
-scaffold` no está disponible, así que el andamio del destino se escribe a mano. El resto
-sigue la forma del hermano: clonar, `env`, pedir el nombre, compuerta de autorización,
-presentar el mapa de objeto a módulo **para ambos documentos** —qué módulo implementa qué
-sección del experimento y qué módulo implementa qué ecuación de la propuesta que ese
-experimento responde—, escribir código con la clave de procedencia que corresponda
-(`experiments`, `equations`, o ambas), y entregar a los dos agentes propios cuando toca.
+*Flow A — first pass.* This skill ships no `assets/kit/`: `materialize --stage
+scaffold` is unavailable, so the target's scaffold is written by hand. The rest
+follows the sibling's shape: clone, `env`, ask for the name, authorization gate,
+present the object-to-module map **for both documents** —which module implements which
+experiment section and which module implements which equation of the proposal that
+experiment answers— write code with the corresponding provenance claim key
+(`experiments`, `equations`, or both), and hand off to its own two agents when the time comes.
 
-*Flujo B —toda pasada posterior.* Lee `src/` y toma la revisión más nueva de **cada**
-documento declarado por separado —nunca un solo nombre asumido para los dos—. Corre la
-suite del destino y después `verify`. Una diferencia de fidelidad **en cualquiera de los
-dos documentos** abre la misma compuerta del hermano ("¿ese cambio lo hiciste tú?"), sin
-esperar a que el otro documento también discrepe. Con los dos limpios, `agree` —disponible
-sólo porque esta skill siempre declara más de un documento— nombra cada citación cruzada
-que un documento hace y el otro no reconoce, en las dos direcciones, y nunca falla un
-veredicto sobre cuál lado debe cambiar. Solo con `agree` sin discrepancias pendientes,
-`handoff` dimensiona los hallazgos abiertos hacia `experimental-deliberation`.
+*Flow B — every later pass.* It reads `src/` and takes the newest revision of **each**
+declared document separately —never a single name assumed for both—. It runs the
+target's suite and then `verify`. A difference in fidelity **in either of the
+two documents** opens the sibling's same gate ("did the user make this change?"), without
+waiting for the other document to disagree as well. With both clean, `agree` —available
+only because this skill always declares more than one document— names every cross-citation
+one document makes and the other does not recognize, in both directions, and never issues a
+verdict on which side should change. Only with `agree` free of pending discrepancies,
+`handoff` sizes the open findings toward `experimental-deliberation`.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `impl_profile.py` | El perfil de dominio entero: dos documentos, cada uno con su propio overlay de vocabulario. Cada ruta se deriva de la ubicación de **este** archivo, nunca de la del motor —así la misma forma que usa el hermano resuelve a este perfil sin una sola línea específica de dominio. |
-| `scripts/implementation_cli.py` | El lanzador, 24 líneas, byte a byte idéntico al del hermano. No hace nada propio: sólo fija `IMPLEMENTATION_DOMAIN_PROFILE` a este perfil antes de entregarle el control al motor compartido. Todo argumento, subcomando y código de salida es del motor. |
-| `SKILL.md` | La doctrina de esta skill: los dos documentos, su vocabulario, el flujo A y B propios, y qué no está disponible (`materialize --stage scaffold`) y por qué. |
-| `tests/test_experimental_implementation.py`, `tests/test_experimental_implementation_mutation.py` | El corpus sellado propio, fuera de esta carpeta (vive en `tests/` del repositorio), que ancla el comportamiento de dos documentos contra el motor compartido. |
+| `impl_profile.py` | The entire domain profile: two documents, each with its own vocabulary overlay. Every path is derived from the location of **this** file, never from the engine's —so the same shape the sibling uses resolves to this profile without a single domain-specific line. |
+| `scripts/implementation_cli.py` | The launcher, 24 lines, byte-for-byte identical to the sibling's. It does nothing of its own: it only sets `IMPLEMENTATION_DOMAIN_PROFILE` to this profile before handing control to the shared engine. Every argument, subcommand and exit code is the engine's. |
+| `SKILL.md` | This skill's doctrine: the two documents, their vocabulary, its own flows A and B, and what is unavailable (`materialize --stage scaffold`) and why. |
+| `tests/test_experimental_implementation.py`, `tests/test_experimental_implementation_mutation.py` | The skill's own sealed corpus, outside this folder (it lives in the repository's `tests/`), which anchors the two-document behavior against the shared engine. |
 
-**Los comandos.** Veintiuno, medidos con `implementation_cli.py -h`: `walk`, `env`,
+**The commands.** Twenty-one, measured with `implementation_cli.py -h`: `walk`, `env`,
 `name`, `plan`, `apply`, `admit`, `handoff`, `compose`, `probe`, `verify`, `position`,
 `discuss`, `propose`, `gate`, `offer`, `close`, `step`, `settle`, `defect`, `materialize`,
-`agree`. El hermano sirve exactamente los mismos veinte y esta skill agrega el vigésimo
-primero, `agree`, habilitado sólo cuando el perfil declara más de un documento —lo que
-esta skill siempre hace y el hermano nunca.
+`agree`. The sibling serves exactly the same twenty and this skill adds the twenty-first,
+`agree`, enabled only when the profile declares more than one document —which
+this skill always does and the sibling never does.
 
-**Los seguros.**
+**The safeguards.**
 
-- **Nunca ejecuta el código del destino** para inspeccionarlo. Todo se lee con `ast`,
-  igual que el hermano —es una propiedad del motor, no de este perfil.
-- **Aislamiento no negociable.** Cada corrida trabaja dentro de `implementations/<repo>/`
-  y usa el `.venv` de ese repositorio, nunca el de la forja ni el sistema.
-- **`Data/` es demandable por producto, no por raíz.** Si la revisión de experimentos
-  declara un `**Dataset:**`, `verify` exige `{Name}/Data` igual que ya exige
-  `Notebooks/`, `Results/` y `Models/` —pero atado al método (`--name`), nunca al
-  repositorio entero, porque el mismo clon puede alojar otro método sin esos datos.
-- **Un hallazgo sin remedio validado no se reporta.** Estructural, compartido con el
-  motor: la auditoría queda `incomplete` mientras algo quede sin medir.
-- **`agree` nunca falla un veredicto.** Nombra las dos direcciones de discrepancia y
-  deja la decisión de qué lado corregir a la conversación, nunca a la máquina.
+- **It never runs the target code** to inspect it. Everything is read with `ast`,
+  exactly as in the sibling —it is a property of the engine, not of this profile.
+- **Non-negotiable isolation.** Every run works inside `implementations/<repo>/`
+  and uses that repository's `.venv`, never the forge's or the system's.
+- **`Data/` is demandable per product, not per root.** If the experiments revision
+  declares a `**Dataset:**`, `verify` demands `{Name}/Data` exactly as it already demands
+  `Notebooks/`, `Results/` and `Models/` —but bound to the method (`--name`), never to the
+  whole repository, because the same clone may host another method without that data.
+- **A finding without a validated remedy is not reported.** Structural, shared with the
+  engine: the audit stays `incomplete` while anything remains unmeasured.
+- **`agree` never issues a verdict.** It names the two directions of discrepancy and
+  leaves the decision of which side to correct to the conversation, never to the machine.
 
-**Limitaciones conocidas.**
+**Known limitations.**
 
-*El vocabulario de dos documentos no llega a cuatro consumidores del motor compartido —
-`cmd_admit`, `finding_impact`, `cmd_handoff` y las filas de auditoría de `verify`.* Estos
-cuatro leían un hallazgo bajo las claves del documento 0 sin importar cuál documento
-nombrara: un hallazgo de `documents[1]` que cita `equations: ['99']` se buscaba bajo
-`experiments`, no encontraba nada, y una ausencia se leía como "sin objeción" —admitiendo
-hallazgos falsos y rechazando hallazgos legítimos con razones inventadas. **Ya está
-corregido**, en tres commits fechados el mismo día que esta sección: `e88afec` extrajo el
-lector correcto (`finding_locus_scopes`/`finding_named_source`) que ya existía en
-`remedy_compatibility` y lo puso a llamar `cmd_admit`; `5e8d277` hizo lo mismo para
-`finding_impact`, con un matiz que el primer intento no tenía —leer la clave propia del
-documento **cuando el hallazgo la declara**, y `remedy_loci` en el caso general—; y el
-mismo par de lectores ahora alimenta `cmd_handoff` y las filas de auditoría de `verify`.
-Se documenta aquí como el mecanismo vigente, no como historia.
+*The two-document vocabulary does not reach four consumers of the shared engine —
+`cmd_admit`, `finding_impact`, `cmd_handoff` and `verify`'s audit rows.* These
+four read a finding under document 0's keys regardless of which document it
+named: a finding from `documents[1]` citing `equations: ['99']` was looked up under
+`experiments`, found nothing, and an absence read as "no objection" —admitting
+false findings and rejecting legitimate ones with invented reasons. **It is already
+fixed**, in three commits dated the same day as this section: `e88afec` extracted the
+correct reader (`finding_locus_scopes`/`finding_named_source`) that already existed in
+`remedy_compatibility` and made `cmd_admit` call it; `5e8d277` did the same for
+`finding_impact`, with a nuance the first attempt lacked —reading the document's own key
+**when the finding declares it**, and `remedy_loci` in the general case—; and the
+same pair of readers now feeds `cmd_handoff` and `verify`'s audit rows.
+It is documented here as the current mechanism, not as history.
 
-*`walk` ya no promete un acto `rehearse` que nada ejecutaba.* Su roster incluía
-`rehearse` entre los actos que "realiza", pero el despacho sólo tenía dos formas de
-comando —una para pasos locales, otra para generar carpetas de trabajo— y la segunda
-nunca pasaba `--regenerate`, así que en el único estado para el que `rehearse` existe
-(la carpeta ya está creada y no está lista para correr) el comando se negaba a sí mismo.
-**Corregido** en `7fdec85`: el acto se movió de "lo que `walk` realiza" a "lo que `walk`
-se detiene a pedir", y el agente `experiments-walk` ya lo describe así —"generar las
-carpetas de trabajo que un paso remoto necesita y detenerse en el ensayo, que ningún acto
-aquí realiza y la doctrina deja en manos de una persona". El ensayo se hace a mano, como
-la doctrina siempre prescribió; lo que cambió es que la herramienta ya no promete
-automatizarlo.
+*`walk` no longer promises a `rehearse` act that nothing executed.* Its roster included
+`rehearse` among the acts it "performs", but dispatch had only two command forms
+—one for local steps, another for generating job folders— and the second never
+passed `--regenerate`, so in the only state `rehearse` exists for
+(the folder is already created and is not ready to run) the command refused itself.
+**Fixed** in `7fdec85`: the act moved from "what `walk` performs" to "what `walk`
+stops to ask for", and the `experiments-walk` agent already describes it that way —"generate
+the job folders a remote step needs and stop at the rehearsal, which no act
+here performs and the doctrine leaves to a person". The rehearsal is done by hand, as
+the doctrine always prescribed; what changed is that the tool no longer promises to
+automate it.
 
-*`-h` ya no se presenta con el nombre del hermano.* El motor lee su propio docstring de
-módulo para construir la ayuda de `argparse`, y ese docstring estaba escrito para
-`proposal-implementation` —así que el frente de esta skill se introducía con el nombre
-equivocado y describía 4 de sus 21 subcomandos. **Corregido** en `8e92d40`: el nombre
-ahora sale de la raíz del perfil cargado (`kit.root`), así que un tercer huésped futuro
-recibe su propio nombre el día que se escriba, sin nada que actualizar a mano; y la lista
-de comandos se retiró en vez de corregirse, porque una copia hecha a mano de un roster que
-`argparse` ya construye solo sólo puede estar bien por accidente.
+*`-h` no longer introduces itself with the sibling's name.* The engine reads its own module
+docstring to build the `argparse` help, and that docstring was written for
+`proposal-implementation` —so this skill's front end introduced itself with the wrong
+name and described 4 of its 21 subcommands. **Fixed** in `8e92d40`: the name
+now comes from the root of the loaded profile (`kit.root`), so a future third host
+receives its own name the day it is written, with nothing to update by hand; and the command
+list was retired rather than corrected, because a hand-made copy of a roster that
+`argparse` already builds on its own can only be right by accident.
 
-*`admit` todavía puede admitir un hallazgo cuya notación citada no aparece en el
-documento que nombra, si esa notación pertenece a otro documento válido.* Medido: el
-motor comparte con `proposal-implementation` la comprobación de que la notación citada
-exista en el texto, pero esa comprobación no distingue el documento correcto del
-incorrecto salvo por las claves ya corregidas arriba; un hallazgo bien formado que cita
-la notación real de un documento distinto al que nombra sigue sin tener una prueba
-cruzada dedicada más allá de las que ya ejercitan la ruta corregida. **Cómo se
-arregla:** un test que fije, con dos documentos reales y distintos, que una cita válida en
-uno y ausente en el otro se rechace nombrando cuál.
+*`admit` can still admit a finding whose cited notation does not appear in the
+document it names, if that notation belongs to another valid document.* Measured: the
+engine shares with `proposal-implementation` the check that the cited notation
+exists in the text, but that check does not distinguish the correct document from the
+incorrect one except by the keys already fixed above; a well-formed finding that cites
+the real notation of a document other than the one it names still has no dedicated
+cross-check beyond the ones that already exercise the fixed path. **How it is
+fixed:** a test that pins down, with two real and distinct documents, that a citation valid in
+one and absent in the other is rejected by naming which one.
 
-*El seguro de "corpus sellado sin tocar" compara contra el índice de git, no contra lo
-escrito en disco.* Igual que en el hermano, las pruebas que protegen `tests/seal/` corren
-`git diff --exit-code`, así que un archivo plantado y nunca agregado al índice, o una
-edición ya puesta en stage, pasan sin marcarse. Como este huésped comparte el mismo motor
-y el mismo patrón de prueba, hereda la misma ventana. **Cómo se arregla:** cambiar la
-comprobación a `git status --porcelain` (o `git diff HEAD` más un chequeo de no
-rastreados), igual que se anota para el hermano.
+*The "sealed corpus untouched" safeguard compares against git's index, not against what is
+written on disk.* As in the sibling, the tests that protect `tests/seal/` run
+`git diff --exit-code`, so a file planted and never added to the index, or an
+edit already staged, passes unmarked. Since this host shares the same engine
+and the same test pattern, it inherits the same window. **How it is fixed:** change the
+check to `git status --porcelain` (or `git diff HEAD` plus an untracked
+check), exactly as is noted for the sibling.
 
-*Resuelto: el guardia de intérprete ajeno ya se puede poner en rojo.*
-`require_non_forge_interpreter` —la doctrina que los dos `SKILL.md` llaman "aislamiento no
-negociable"— tenía una única llamada de producción y ninguna prueba capaz de fallar: se
-podía retargetear su condición, dejando el `raise` intacto en el código fuente para que los
-barridos de roster no lo notaran, y aceptaba en silencio un `sys.prefix` de la forja con
-todas las suites verdes. Ahora hay un test que muta exactamente eso y se pone rojo.
+*Resolved: the foreign-interpreter guard can now be turned red.*
+`require_non_forge_interpreter` —the doctrine both `SKILL.md` files call "Non-negotiable
+isolation"— had a single production call site and no test capable of failing: its
+condition could be retargeted, leaving the `raise` intact in the source code so the
+roster sweeps would not notice, and it silently accepted a forge `sys.prefix` with
+every suite green. There is now a test that mutates exactly that and turns red.
 
-*El módulo de reescritura de referencias puede volverse un no-op y ninguna suite lo
-nota.* `scan_reference_updates`, `scan_stale_references` y el patrón de referencia
-pueden vaciarse simultáneamente sin que ninguna de las suites que ejercitan este huésped
-se ponga en rojo. Bajo esa mutación, `apply` dejaría de reescribir referencias tras un
-renombre y un repositorio migrado conservaría imports rotos en silencio, y
-`structure.staleReferences` de `verify` quedaría permanentemente vacío. Como el módulo
-vive en el motor compartido, este huésped hereda la misma ventana ciega que el hermano.
-**Cómo se arregla:** una prueba que mute cada una de las tres piezas por separado y
-verifique que alguna suite se rompa.
+*The reference-rewriting module can become a no-op and no suite notices.*
+`scan_reference_updates`, `scan_stale_references` and the reference pattern
+can be emptied simultaneously without any of the suites that exercise this host
+turning red. Under that mutation, `apply` would stop rewriting references after a
+rename and a migrated repository would silently keep broken imports, and
+`verify`'s `structure.staleReferences` would stay permanently empty. Since the module
+lives in the shared engine, this host inherits the same blind window as the sibling.
+**How it is fixed:** a test that mutates each of the three pieces separately and
+verifies that some suite breaks.
 
-*Resuelto: ese refusal ahora puede disparar, y lo que arreglaba era peor que publicarlo
-de más.* `NAME_NOT_ALPHANUMERIC` estaba detrás de un patrón que sólo emitía tokens ya
-alfanuméricos, así que no podía alcanzarse. El daño no era el refusal de adorno: los
-caracteres que ningún patrón capturaba **se caían en silencio**, y el nombre salía
-mutilado — `Ñandú` se convertía en `And`, `münchen` en `M-Nchen`, `test@here` en
-`Testhere`. Se hizo alcanzable en vez de retirarlo, porque perder letras sin avisar es
-peor que rechazar el nombre. Con un detalle que sin él no arreglaba nada: `str.isalnum()`
-es Unicode-aware y aceptaba `é`, así que la comprobación necesitó `isascii()` además.
+*Resolved: that refusal can now fire, and what it fixed was worse than publishing it
+in excess.* `NAME_NOT_ALPHANUMERIC` sat behind a pattern that only emitted already
+alphanumeric tokens, so it could not be reached. The damage was not the decorative
+refusal: the characters no pattern captured **fell silently**, and the name came out
+mutilated — `Ñandú` became `And`, `münchen` became `M-Nchen`, `test@here` became
+`Testhere`. It was made reachable instead of being retired, because losing letters without
+warning is worse than rejecting the name. With a detail that without it fixed nothing: `str.isalnum()`
+is Unicode-aware and accepted `é`, so the check needed `isascii()` as well.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Usuario invoca la skill sobre un protocolo de experimentos"] --> B{"¿src/ ya tiene una implementación?"}
-    B -- No --> C["FLUJO A"]
-    B -- Sí --> D["FLUJO B"]
+    A["User invokes the skill on an experiments protocol"] --> B{"Does src/ already have an implementation?"}
+    B -- No --> C["FLOW A"]
+    B -- Yes --> D["FLOW B"]
 
-    C --> C1["Clonar bajo implementations/, env con el intérprete del destino"]
-    C1 --> C2["[GATE] Confirmar name"]
-    C2 --> C3["[GATE] Autorización para implementar"]
-    C3 --> C4["Mapa objeto→módulo para AMBOS documentos:<br/>secciones del experimento y ecuaciones de la propuesta"]
-    C4 --> C5["Escribir módulos con su propia __provenance__<br/>(experiments, equations, o ambas)"]
-    C5 --> C6["Delega a experiments-build hasta instrumentation"]
-    C6 --> C7["Delega a experiments-walk hasta el lanzamiento"]
+    C --> C1["Clone under implementations/, env with the target interpreter"]
+    C1 --> C2["[GATE] Confirm name"]
+    C2 --> C3["[GATE] Authorization to implement"]
+    C3 --> C4["Object→module map for BOTH documents:<br/>experiment sections and equations of the proposal"]
+    C4 --> C5["Write modules with their own __provenance__<br/>(experiments, equations, or both)"]
+    C5 --> C6["Delegates to experiments-build up to instrumentation"]
+    C6 --> C7["Delegates to experiments-walk up to the launch"]
 
-    D --> D1["Leer la revisión más nueva de CADA documento por separado"]
-    D1 --> D2["Correr la suite del destino, luego verify"]
-    D2 --> D3{"¿Fidelidad limpia en los DOS documentos?"}
-    D3 -- No, en cualquiera --> D4["[GATE] ¿Ese cambio lo hiciste tú?"]
-    D4 -- Sí --> D5["El código va adelante; se actualiza la matemática o el protocolo"]
-    D4 -- No --> D6["Corregir y revalidar"]
+    D --> D1["Read the newest revision of EACH document separately"]
+    D1 --> D2["Run the target's suite, then verify"]
+    D2 --> D3{"Is fidelity clean in BOTH documents?"}
+    D3 -- No, in either --> D4["[GATE] Did the user make this change?"]
+    D4 -- Yes --> D5["The code runs ahead; the mathematics or the protocol is updated"]
+    D4 -- No --> D6["Correct and revalidate"]
     D6 --> D2
-    D3 -- Sí --> D7["agree: nombra citaciones cruzadas no reconocidas, en las dos direcciones"]
-    D7 --> D8{"¿Discrepancias sin reconocer?"}
-    D8 -- Sí --> D9["Resolver en conversación con --acknowledge"]
+    D3 -- Yes --> D7["agree: names unrecognized cross-citations, in both directions"]
+    D7 --> D8{"Unrecognized discrepancies?"}
+    D8 -- Yes --> D9["Resolve in conversation with --acknowledge"]
     D9 --> D7
-    D8 -- No --> D10["handoff: dimensiona hallazgos abiertos"]
-    D10 --> D11["settleInline vía compose, o agenda para experimental-deliberation"]
+    D8 -- No --> D10["handoff: sizes open findings"]
+    D10 --> D11["settleInline via compose, or schedule for experimental-deliberation"]
 
-    C7 --> E["remote-execution: probe dice qué sigue"]
+    C7 --> E["remote-execution: probe says what is next"]
     D11 --> E
 ```
 
