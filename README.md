@@ -25,7 +25,7 @@ remote compute, development and troubleshooting.
 7. [The agents](#the-agents)
 8. [Anatomy of each skill](#anatomy-of-each-skill)
 9. [The CLI commands](#the-cli-commands)
-10. [Remote compute, carefully](#cómputo-remoto-con-cuidado)
+10. [Remote compute, carefully](#remote-compute-carefully)
 11. [Architecture](#arquitectura)
 12. [Development and testing](#desarrollo-y-pruebas)
 13. [Troubleshooting](#solución-de-problemas)
@@ -3342,7 +3342,7 @@ repeatable), `--force`, `--resolve`, plus the job-definition flags (`--service`,
 `--run-module`, `--run-function`, `--clone-path`, `--regenerate`). Extra tokens
 are forwarded to `remote_cli.py`. A real submission spends quota: prefer
 `--smoke` and `--dry-run` first (see
-[Remote compute, carefully](#cómputo-remoto-con-cuidado)).
+[Remote compute, carefully](#remote-compute-carefully)).
 
 ### `papersmith target {list,set,check}`
 
@@ -3636,26 +3636,26 @@ The full catalogue of 38 tools (15 read-only and 23 mutating), the
 
 ---
 
-## Cómputo remoto, con cuidado
+## Remote compute, carefully
 
-Antes de que un trabajo toque un worker real, la forja te da una escalera de
-ensayos baratos. Bajala en orden; no la saltees:
+Before a job touches a real worker, the forge offers a ladder of cheap
+rehearsals, worked down in order and not skipped:
 
-1. `papersmith target list` — qué targets hay y cuál está activo.
-2. `papersmith target check [nombre]` — ¿responde ese target?
-3. `papersmith run <perfil> --dry-run` — planifica y registra el comando en el
-   ledger; **no despacha nada**.
-4. `papersmith remote … --smoke` — ensayo real contra el backend, sin gastar
-   campaña.
-5. Solo entonces, la corrida real (`--consent <token>` cuando corresponda).
+1. `papersmith target list` — which targets exist and which one is active.
+2. `papersmith target check [<name>]` — does that target answer?
+3. `papersmith run <profile> --dry-run` — plans and records the command in the
+   ledger; **dispatches nothing**.
+4. `papersmith remote … --smoke` — a real rehearsal against the backend, without
+   spending a campaign.
+5. Only then, the real run (`--consent <token>` where applicable).
 
-Los targets y los perfiles son los de tu `papersmith.yaml` (ver
-[El workspace por dentro](#inside-the-workspace)). El ledger
-`.papersmith/runs_ledger.jsonl` es append-only: cada corrida despachada queda
-registrada con su target, su perfil y su resultado. Y `papersmith remote
-status` / `pull` es la memoria de lo que se mandó afuera y lo que volvió — el
-detalle de ese contrato vive en la sección de `remote-execution` de la
-[Anatomía](#anatomy-of-each-skill).
+The targets and profiles are those of the workspace's `papersmith.yaml` (see
+[Inside the workspace](#inside-the-workspace)). The ledger
+`.papersmith/runs_ledger.jsonl` is append-only: every dispatched run is recorded
+with its target, its profile and its outcome. And `papersmith remote status` /
+`pull` is the memory of what was sent out and what came back — the detail of that
+contract lives in the `remote-execution` section of the
+[Anatomy](#anatomy-of-each-skill).
 
 **Credenciales y backends.** `remote-execution` soporta múltiples backends (`kaggle`, `colab`):
 - **Kaggle**: corre contra el pool de workers configurados. Sus credenciales viven en el store de `kaggle-accounts` (`skills/kaggle-accounts/store/accounts.json`), nunca salen del disco y nunca se imprimen: `materialize` escribe el token de un worker a un archivo de texto y te dice **dónde**, jamás **qué**. `/kaggle-accounts` valida o remueve cuentas, y `papersmith target check kaggle` las prueba de costado. Un subcomando `papersmith accounts` todavía no existe (follow-up registrado): se invoca como `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
