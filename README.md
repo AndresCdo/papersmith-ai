@@ -2274,148 +2274,149 @@ flowchart TD
 
 ### 7. `kaggle-accounts` — the gatekeeper of the credentials
 
-**Para qué está.** Los tokens de Kaggle vencen y rotan sin avisar: una cuenta que
-funcionaba ayer puede fallar hoy a mitad de una corrida. Esta skill responde la única
-pregunta que la máquina puede verificar de verdad —**¿esta credencial todavía
-autentica?**— y mantiene un depósito chico, ignorado por git, con las que pasan.
+**What it is for.** Kaggle tokens expire and rotate without warning: an account that
+worked yesterday can fail today in the middle of a run. This skill answers the one
+question the machine can truly verify —**does this credential still
+authenticate?**— and keeps a small store, ignored by git, with the ones that pass.
 
-**De dónde recibe y a quién le entrega.** Recibe archivos que **dejas** en
-`kaggle-inbox/`: un `kaggle.json`, o un `.txt`/`.md` con una credencial por línea. Le
-entrega a `remote-execution` dos cosas, y sólo dos:
+**What it receives and what it hands on.** It receives files the user leaves in
+`kaggle-inbox/`: a `kaggle.json`, or a `.txt`/`.md` with one credential per line. It
+hands `remote-execution` two things, and only two:
 
-- **Identidad de worker**, por su comando `list`, que devuelve **nada más que
-  usuarios**. El diccionario de salida se reconstruye desde cero con sólo ese campo, así
-  que una clave no puede llegar ahí ni por accidente.
-- **Una ruta a un archivo de token**, nunca el valor. Su comando de entrega escribe el
-  token como archivo suelto con permisos `0600` en un directorio `0700` e imprime **la
-  ruta**.
+- **Worker identity**, through its `list` command, which returns **nothing but
+  usernames**. The output dictionary is rebuilt from scratch with only that field, so
+  a key cannot reach it even by accident.
+- **A path to a token file**, never the value. Its handoff command writes the
+  token as a loose file with `0600` permissions in a `0700` directory and prints **the
+  path**.
 
-Del otro lado, `remote-execution` no abre ese depósito jamás: corre estos dos comandos
-como procesos hijo y lee su salida. Es una costura de una sola dirección y de una sola
-forma.
+On the other side, `remote-execution` never opens that store: it runs these two commands
+as child processes and reads their output. It is a one-directional seam with a single
+shape.
 
-**Qué necesita antes.** Python 3.10+ y red. **Nada más**: no hay entorno virtual, no hay
-`pip install kaggle`. Todo se hace con la biblioteca estándar y una llamada HTTPS cruda.
+**What it needs first.** Python 3.10+ and a network connection. **Nothing else**: there is
+no virtual environment, no `pip install kaggle`. Everything is done with the standard
+library and a raw HTTPS call.
 
-**Las etapas que declara.** Leídas de `OBJECTIVE_FLOW`, que un test mantiene
-igual al `SKILL.md`. `list` contesta *dónde estoy*; esto contesta *para qué es*,
-que ninguna lista implica: una cuenta está en el almacén porque alguien la puso,
-no porque funcione.
+**The stages it declares.** Read from `OBJECTIVE_FLOW`, held equal to `SKILL.md` by a
+test. `list` answers *where am I*; this answers *what is this for*, which no listing
+implies: an account is in the store because somebody put it there, not because it works.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | Behind the operator when |
 |---|---|---|
-| `taken-in` | Lo que entregaste está en el almacén, **de a una fila por vez**, así una fila mala nunca cuesta las de al lado | el inbox soltó todo lo que tenía y se consumió, o quedó porque todavía hay filas adentro |
-| `proven` | Cada cuenta guardada se le preguntó al servicio, bajo cualquiera de los dos esquemas de token que use de verdad | cada cuenta lleva un veredicto **de esta corrida** |
-| `decided` | Qué pasa con las que dejaron de funcionar — que es tu decisión y nunca un efecto secundario de preguntar | es la llegada; no está detrás de nadie |
+| `taken-in` | What the user handed over is in the store, **one row at a time**, so a bad row never costs the ones around it | the inbox gave up everything it held and was consumed, or it stayed because rows are still in it |
+| `proven` | Each stored account was asked of the service, under whichever of the two token schemes it actually uses | every account carries a verdict **from this run** |
+| `decided` | What happens to the ones that stopped working — which is the user's decision and never a side effect of asking | this is the arrival; it is behind nobody |
 
-**Llegada:** cada cuenta con un veredicto **actual**, y las que fallan
-respondidas, no apenas reportadas. Un veredicto se vence: los tokens se rotan y
-expiran, así que *"autenticó una vez"* tampoco es llegada. Una sesión que corre
-`validate`, ve un fallo reportado y para, **no llegó**.
+**Arrival:** every account with a **current** verdict, and the ones that fail
+answered, not merely reported. A verdict expires: tokens are rotated and
+expire, so *"it authenticated once"* is not arrival either. A session that runs
+`validate`, sees a failure reported and stops, **has not arrived**.
 
-**Dos paradas son de una persona:** consentir la validación, porque escribe —
-guarda credenciales y consume el inbox—, y decidir qué pasa con una cuenta que
-dejó de funcionar. Una credencial muerta se reporta y **nunca se borra sola**,
-a propósito: borrarla es tu otra opción, no una consecuencia de preguntar.
+**Two stops are a person's:** consenting to validate at all, because it writes — it
+stores credentials and consumes the inbox — and deciding what happens to an
+account that stopped working. A dead credential is reported and **is never deleted
+on its own**, on purpose: deleting it is the user's other option, not a consequence of
+asking.
 
-**El flujo.** Al activarse corre `list` en silencio para saber qué hay guardado, y
-después hace **una sola pregunta**: validar o eliminar. La opción de eliminar sólo
-aparece si hay algo que eliminar.
+**The flow.** When activated it runs `list` silently to learn what is stored, and
+then asks **a single question**: validate or remove. The remove option appears only
+if there is something to remove.
 
-*Validar:*
+*Validate:*
 
-1. Carga el depósito. Si está corrupto **falla cerrado** y no escribe nada — nunca lo
-   trata como "vacío", porque eso permitiría que una escritura posterior pisara
-   credenciales todavía buenas.
-2. Re-verifica **cada cuenta ya guardada** contra la API real. Cada una da su propia
-   línea de pase o falla.
-3. Decide de dónde salen las nuevas: por defecto, lo que haya en `kaggle-inbox/`.
-4. Parsea cada archivo. Un `kaggle.json` da una credencial; un `.txt` o `.md` da una por
-   línea, y una línea mala se marca sin arruinar las demás.
-5. Valida cada una: primero autenticación básica y, **sólo si vuelve un 401**, reintenta
-   como token bearer. Un timeout de red no reintenta nada: una falla de red no es
-   evidencia sobre la credencial.
-6. La que pasa se guarda o reemplaza su clave; la que falla se reporta por número de
-   línea.
-7. Escribe el depósito de forma atómica, y sólo si el archivo está efectivamente
-   ignorado por git.
-8. Un archivo del inbox se borra **sólo si entró entero**. Si alguna fila quedó afuera,
-   el archivo se conserva y te dice cuántas.
-9. Una cuenta que dejó de autenticar se **reporta, no se borra**. Eliminar es una
-   decisión tuya, aparte.
+1. It loads the store. If it is corrupt it **fails closed** and writes nothing — it never
+   treats it as "empty", because that would let a later write overwrite
+   credentials that are still good.
+2. It re-checks **every stored account** against the real API. Each one gives its own
+   pass or fail line.
+3. It decides where the new ones come from: by default, whatever is in `kaggle-inbox/`.
+4. It parses each file. A `kaggle.json` yields one credential; a `.txt` or `.md` yields one per
+   line, and a bad line is flagged without ruining the others.
+5. It validates each one: basic authentication first and, **only if a 401 comes back**, it
+   retries as a bearer token. A network timeout retries nothing: a network failure is not
+   evidence about the credential.
+6. The one that passes is stored or has its key replaced; the one that fails is reported by
+   line number.
+7. It writes the store atomically, and only if the file is effectively
+   ignored by git.
+8. An inbox file is deleted **only if it went in whole**. If any row was left out, the
+   file is kept and tells the user how many.
+9. An account that stopped authenticating is **reported, not deleted**. Deleting is a
+   separate decision of the user's.
 
-*Eliminar:* se listan las cuentas reales, eliges de una lista —nunca escribes un nombre
-a mano— y si alguna de las elegidas no existe **se rechaza el lote entero**. Un borrado
-parcial por un typo es peor que no borrar nada.
+*Remove:* the real accounts are listed, the user chooses from a list —never typing a name
+by hand— and if any of the chosen ones does not exist **the entire batch is refused**. A
+partial deletion caused by a typo is worse than deleting nothing.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `SKILL.md` | El contrato de conducta: cuándo preguntar, qué no leer nunca, cómo reportar. Sin esto, el agente no tendría motivo para preguntar antes de escribir. |
-| `scripts/accounts_cli.py` | La implementación entera, sin dependencias externas. Subcomandos: `list`, `discover`, `validate`, `remove` y `materialize`. Los cuatro primeros son para una persona; **`materialize` es para código**: escribe la credencial guardada de un worker a un archivo de texto plano y devuelve **dónde**, nunca **qué**. Ese es el contrato que deja que `remote-execution` use un token sin que ninguna skill lo lea ni lo imprima. |
-| `store/accounts.json` | El depósito. Permisos `0600`, escritura atómica. |
-| `store/.gitignore` | Ignora **todo** el contenido de `store/` por regla de contenido, no por nombre — así cubre también el temporal de la escritura atómica y cualquier archivo futuro. Está commiteado para que la regla exista *antes* de que se escriba la primera credencial. |
-| `store/workers/<usuario>/token` | Se crea solo en la primera entrega. Contiene sólo el token, sin envoltorio JSON: es la forma que el cliente de Kaggle espera. |
+| `SKILL.md` | The behavior contract: when to ask, what never to read, how to report. Without this, the agent would have no reason to ask before writing. |
+| `scripts/accounts_cli.py` | The entire implementation, with no external dependencies. Subcommands: `list`, `discover`, `validate`, `remove` and `materialize`. The first four are for a person; **`materialize` is for code**: it writes a worker's stored credential to a plain-text file and returns **where**, never **what**. That is the contract that lets `remote-execution` use a token without any skill reading or printing it. |
+| `store/accounts.json` | The store. Permissions `0600`, atomic writes. |
+| `store/.gitignore` | Ignores **all** the contents of `store/` by rule, not by name — so it also covers the temporary file of an atomic write and any future file. It is committed so that the rule exists *before* the first credential is written. |
+| `store/workers/<username>/token` | Created only on the first handoff. It contains only the token, with no JSON wrapper: it is the shape the Kaggle client expects. |
 
-**Los seguros.**
+**The safeguards.**
 
-- **La credencial nunca cruza como valor.** `list` devuelve sólo usuarios; la entrega
-  devuelve sólo una ruta.
-- **No hay bandera para pasar la clave.** Un secreto como argumento quedaría en la lista
-  de procesos y en el historial del shell. La entrada interactiva usa entrada oculta y
-  **se niega si no hay una terminal real** — que es exactamente cómo detecta a un agente
-  intentando hacerlo por ti.
-- **No escribe si git no lo ignora.** Verifica la regla de ignorado *antes* de crear
-  ningún directorio, así una negativa no deja ni el andamio.
-- **Escritura atómica siempre**, con los permisos puestos antes del primer byte.
-- **Nunca lee el depósito para contestar "qué cuentas hay".** Para eso está `list`.
+- **The credential never crosses as a value.** `list` returns only usernames; the handoff
+  returns only a path.
+- **There is no flag for passing the key.** A secret as an argument would remain in the
+  process list and in the shell history. The interactive input uses hidden input and
+  **refuses if there is no real terminal** — which is exactly how it detects an agent
+  trying to do it on the user's behalf.
+- **It does not write if git does not ignore it.** It verifies the ignore rule *before*
+  creating any directory, so a refusal leaves not even the scaffold.
+- **Atomic writes always**, with permissions set before the first byte.
+- **It never reads the store to answer "which accounts exist".** For that there is `list`.
 
-**Limitaciones conocidas.**
+**Known limitations.**
 
-*El auditor la mira, pero sólo de un lado.* La validación toca la API real, así que lo
-que reporta es evidencia y no inferencia, y el punto flojo de la cadena está del otro lado
-de la costura, en el adaptador de `remote-execution` (ver su apartado). Esta skill ya tiene
-su receta `accepted-operations` en `skill-audit`, que deriva sus cinco operaciones del
-propio rechazo del CLI. Lo que todavía no tiene es la otra mitad: su `SKILL.md` declara ese
-conjunto en prosa y no en una tabla cerrada, así que el auditor responde
-`comparison: not-run` — deriva lo que el código acepta y no puede compararlo contra lo que
-el documento promete. **Cómo se arregla:** una tabla cerrada en el `SKILL.md`, como la que
-`remote-execution` ya tiene.
+*The auditor looks at it, but only from one side.* Validation touches the real API, so what
+it reports is evidence and not inference, and the weak point of the chain is on the other
+side of the seam, in `remote-execution`'s adapter (see its section). This skill already has
+its `accepted-operations` recipe in `skill-audit`, which derives its five operations from
+the CLI's own refusal. What it does not yet have is the other half: its `SKILL.md` declares
+that set in prose and not in a closed table, so the auditor answers
+`comparison: not-run` — it derives what the code accepts and cannot compare it against what
+the document promises. **How it is fixed:** a closed table in `SKILL.md`, like the one
+`remote-execution` already has.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Usuario invoca la skill"] --> B["list en silencio"]
-    B --> C{"¿El depósito está vacío?"}
-    C -- Sí --> D["Pregunta: sólo validar"]
-    C -- No --> E["Pregunta: validar o eliminar"]
+    A["User invokes the skill"] --> B["list silently"]
+    B --> C{"Is the store empty?"}
+    C -- Yes --> D["Question: validate only"]
+    C -- No --> E["Question: validate or remove"]
     D --> F["validate"]
-    E -- validar --> F
-    E -- eliminar --> G["Lista de cuentas para elegir"]
-    G --> H{"¿Todas las elegidas existen?"}
-    H -- No --> I["Rechaza el lote entero"]
-    H -- Sí --> J["Reescribe el depósito y reporta"]
-    F --> K["Re-verifica cada cuenta guardada"]
-    K --> L["Lee kaggle-inbox/"]
-    L --> M["Parsea cada credencial"]
-    M --> N["Autenticación básica contra la API"]
-    N --> O{"¿Devolvió 401?"}
-    O -- Sí --> P["Reintenta como bearer"]
-    O -- "No, otra falla" --> Q{"¿Pasa?"}
+    E -- validate --> F
+    E -- remove --> G["List of accounts to choose from"]
+    G --> H{"Do all the chosen ones exist?"}
+    H -- No --> I["Refuses the entire batch"]
+    H -- Yes --> J["Rewrites the store and reports"]
+    F --> K["Re-checks every stored account"]
+    K --> L["Reads kaggle-inbox/"]
+    L --> M["Parses each credential"]
+    M --> N["Basic authentication against the API"]
+    N --> O{"Did it return 401?"}
+    O -- Yes --> P["Retries as bearer"]
+    O -- "No, another failure" --> Q{"Does it pass?"}
     P --> Q
-    Q -- No --> R["Reporta por número de línea. No guarda"]
-    Q -- Sí --> S{"¿git ignora el depósito?"}
-    S -- No --> T["Se niega a escribir"]
-    S -- Sí --> U["Escritura atómica 0600"]
-    U --> V{"¿El archivo del inbox entró entero?"}
-    V -- Sí --> W["Borra el archivo del inbox"]
-    V -- No --> X["Lo conserva y dice cuántas faltaron"]
-    W --> Y["Reporte final al usuario"]
+    Q -- No --> R["Reports by line number. Does not store"]
+    Q -- Yes --> S{"Does git ignore the store?"}
+    S -- No --> T["Refuses to write"]
+    S -- Yes --> U["Atomic write 0600"]
+    U --> V{"Did the inbox file go in whole?"}
+    V -- Yes --> W["Deletes the inbox file"]
+    V -- No --> X["Keeps it and says how many were missing"]
+    W --> Y["Final report to the user"]
     X --> Y
     R --> Y
-    U --> Z["remote-execution pide un worker:<br/>recibe usuario y ruta, nunca el valor"]
+    U --> Z["remote-execution asks for a worker:<br/>receives username and path, never the value"]
 ```
 
 ---
