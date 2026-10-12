@@ -322,7 +322,9 @@ guidance/reference-papers/computers-13-00176-v2-1/
 Un **PDF suelto** (directamente en una carpeta raíz) está pendiente; un paper
 que ya está dentro de su carpeta se saltea. Para re-ingerir, borrar la carpeta
 del paper (dejando el PDF suelto) y volver a ejecutar la skill. La configuración
-vive en `papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
+vive en `papersmith.yaml` (`source_roots`, `mode`, `strip_references`, `force_ocr`).
+Si las tablas de un PDF salen desordenadas porque su capa de texto es mala, `--force-ocr`
+(o `force_ocr: true`) reconstruye cada página por OCR en vez de leer esa capa.
 
 ### Paso 3 — Deliberar sobre una propuesta (`proposal-deliberation`)
 
@@ -874,7 +876,8 @@ guidance/reference-papers/<nombre>/
 
 Claves que respeta de `papersmith.yaml`, bajo el bloque `paper_ingestion:`: `engine`
 (sólo `marker`), `mode` (`fast` o `balanced`), `strip_references` (bool, por defecto
-`true`), `source_base` (por defecto `guidance`) y `source_roots`.
+`true`), `force_ocr` (bool, por defecto `false`; igual que la bandera `--force-ocr`),
+`source_base` (por defecto `guidance`) y `source_roots`.
 
 **Los seguros.**
 

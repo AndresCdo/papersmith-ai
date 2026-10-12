@@ -642,6 +642,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   `SKILL.md` (where the document is written) and `experimental-implementation`'s
   `SKILL.md` and `references/usage.md`.
 
+- **`paper-ingestion` can OCR every page instead of trusting a poor text
+  layer.** Marker rebuilds digital tables from the PDF's own text layer
+  (`tables_pdftext`) in both `fast` and `balanced` mode, so a text layer that
+  is present but poor produced confidently garbled tables and switching
+  `--mode` could not avoid it. `extract_pdf.py --force-ocr` (or
+  `force_ocr: true` under `paper_ingestion:` in `papersmith.yaml`) hands
+  Marker its `force_ocr` option: no text layer is extracted and every page,
+  tables included, is rebuilt by OCR. Off by default; a non-boolean
+  `force_ocr` is a configuration error reported before any model loads.
+  Documented in the skill's `SKILL.md` ("Tables from a poor text layer") and
+  the manual.
+
 ### Changed
 
 - **Workspace support policy: a live workspace is upgraded, never
@@ -992,6 +1004,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   through the same legacy reconstruction). Kit files already on disk are not
   replaced; the clearer failure messages reach a target scaffolded from this
   release on. No migration is needed.
+
+- `paper-ingestion`'s `extract_pdf.py` accepts a fifth flag, `--force-ocr`,
+  and `papersmith.yaml` an optional `paper_ingestion.force_ocr` boolean.
+  Existing configurations carry no such key and convert exactly as before;
+  the skill-audit roster for `paper-ingestion` moves from 4 to 5 accepted
+  flags. No migration is needed.
 
 
 ## 0.13.0

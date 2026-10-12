@@ -8981,7 +8981,8 @@ class NewlyCoveredSubjectRosterTests(unittest.TestCase):
     #: so a new verb that reached the CLI and not this number would be the
     #: drift this table exists to report, not a stale expectation to relax.
     _CASES = (
-        ("paper-ingestion", 4),
+        # 4 -> 5: `--force-ocr` (0.14.0), measured from the usage line.
+        ("paper-ingestion", 5),
         # 9 -> 10: the adoption operation (0.14.0), the shared host's own
         # widening, measured from its refusal.
         ("experimental-deliberation", 10),

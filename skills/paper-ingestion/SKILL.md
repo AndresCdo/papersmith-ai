@@ -101,7 +101,7 @@ Always invoke through the environment:
 
 ```
 micromamba run -n papersmith python \
-  skills/paper-ingestion/scripts/extract_pdf.py [--list] [<loose-pdf>…]
+  skills/paper-ingestion/scripts/extract_pdf.py [--list] [--mode {fast,balanced}] [--force-ocr] [<loose-pdf>…]
 ```
 
 - `--list`: report the pending loose PDFs and exit. Loads no model, moves no file.
@@ -109,6 +109,9 @@ micromamba run -n papersmith python \
 - `<loose-pdf>…`: ingest exactly those loose PDFs.
 - `--file <pdf> --into <topic>`: file one unfiled PDF into a topic folder under the
   base, creating it when new. Moves one file, converts nothing, loads no model.
+- `--mode {fast,balanced}`: override the configured `mode` for this run.
+- `--force-ocr`: OCR every page instead of reading the PDF's text layer, for this
+  run. See [Tables from a poor text layer](#tables-from-a-poor-text-layer).
 
 ## Confirmation (required)
 
@@ -195,6 +198,7 @@ paper_ingestion:
   engine: marker
   mode: fast              # fast (CPU/MPS) | balanced (highest fidelity, GPU-oriented)
   strip_references: true  # drop the references/bibliography section at the end
+  force_ocr: false        # optional: OCR every page, never read the PDF's text layer
   source_base: guidance   # source roots are discovered under here, every run
   source_roots: []        # optional: extra roots outside source_base
 ```
@@ -232,6 +236,19 @@ wrong (a misread digit, a garbled symbol). The source PDF sits in the same
 folder as the `.md`: verify anything load-bearing against it. Prefer `balanced`
 mode when fidelity matters more than speed.
 
+### Tables from a poor text layer
+
+In **both** modes Marker rebuilds a digital table from the PDF's own text layer
+(`tables_pdftext`) and falls back to OCR only when its reconstruction scores low.
+A text layer that is present but poor — split ligatures, interleaved columns, a
+broken font map — therefore yields a table that is confidently wrong, and
+switching `mode` does not avoid it. `--force-ocr` (or `force_ocr: true` in the
+configuration, for every run) hands Marker its `force_ocr` option: no text layer
+is extracted, and every page, tables included, is rebuilt by OCR. It is slower and
+off by default, because a good text layer is exact and OCR is not. To redo one
+paper this way, delete its folder (leaving the PDF loose) and ingest it again with
+the flag.
+
 ## Decision Gates
 
 | Situation | Action |
@@ -240,7 +257,7 @@ mode when fidelity matters more than speed.
 | `source_base` set to something that is not a folder | Report the error; do nothing |
 | Neither `source_base` nor `source_roots` configured | Report the error; do nothing |
 | A folder under `source_base` with no loose PDF | Not a source root; leave it untouched |
-| Unknown `engine`/`mode`, or a value of the wrong type | Report the error before loading the engine; do nothing |
+| Unknown `engine`/`mode`, or a value of the wrong type (`strip_references`/`force_ocr` not a boolean) | Report the error before loading the engine; do nothing |
 | Loose PDFs present | List them, ask which to ingest, ingest only those |
 | User approves a subset | Ingest exactly the approved paths; leave the rest loose |
 | User approves nothing | Stop; move no file |

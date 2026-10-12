@@ -79,6 +79,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C8 — prose findings via `remedy_in_prose` (D, writer trigger: engine + 2 kit files + test + 3 docs)
   - [x] C10 — remedy control detection follows attributes and helpers (D, writer trigger: engine + test + doc)
   - [x] C14 — `[out-of-scope:<id>]` subtracted from `agree`'s untested (D, writer trigger: engine + resolver + profile + convention + test + 3 docs)
+  - [x] C13 — `paper-ingestion --force-ocr` / `force_ocr` (D, writer trigger: script + 2 test files + SKILL.md + README)
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
@@ -919,3 +920,13 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   No seal moved. No migration (additive receipt keys; rewrites only engine-sealed untouched bytes).
   Verification: focused 9 passed; engine suites + upgrade + kit provenance `-n 8 --dist loadfile` 2318 passed.
   Commit: `fix(implementation): materialize fills the kit placeholders it can answer and names the rest` (the commit carrying this line)
+- C13 (real): `build_converter` handed Marker only `output_format`/`mode`; Marker 2.0.0's `TableProcessor`
+  rebuilds every digital table from the text layer (`tables_pdftext`, `marker/processors/table.py:80-90`) in
+  both modes, falling back to OCR only below its reconstruction score; only `force_ocr` skips text-layer
+  extraction (`marker/providers/pdf.py:110`, so `raw_pdftext_pages` stays empty). Fix: pure
+  `marker_options(mode, force_ocr)`, `--force-ocr` flag, optional boolean `paper_ingestion.force_ocr` (non-bool
+  = `ConfigError`). Confirmed `ConfigParser({...,'force_ocr':True}).generate_config_dict()['force_ocr'] is True`
+  in the gate env. Tests: `ForceOcrTests` (7) RED 6F -> GREEN, no Marker load (build_converter stubbed).
+  Re-anchored: `NewlyCoveredSubjectRosterTests._CASES` paper-ingestion 4->5 (the new flag in the usage line).
+  Docs: SKILL.md (usage, config, "Tables from a poor text layer", gate), README (2 sites). No migration.
+  Commit: `feat(paper-ingestion): force OCR on every page for a poor text layer` (the commit carrying this line)
