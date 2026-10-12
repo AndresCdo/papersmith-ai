@@ -696,6 +696,22 @@ Measured on this repository, one of the four remedy tests had no control: it
 only ever called its own proposal. `audit.status` is `incomplete` while any
 remains.
 
+What counts as exercising the declared formulation is read statically from
+`tests/test_remedies*.py`: a `test_remedy_<id>` must call something bound to
+the target's own package, spelled any of three ways —
+
+- a name imported from it, called bare: `from <Package>.kernel import f` then
+  `f(...)`;
+- an attribute call rooted at a name bound to it: `from <Package> import
+  kernel` then `kernel.f(...)`, `import <Package>.kernel as k` then `k.f(...)`,
+  or `import <Package>` then `<Package>.kernel.f(...)`;
+- a call to a function defined in the same file that does either, followed
+  through any number of such helpers.
+
+Importing the package without calling into it, handing a function along
+without calling it, or calling a method of an unrelated import is still no
+control.
+
 ### Assertions that cannot fail
 
 `validation.trivialAssertions` lists two shapes: asserting a truthy constant,

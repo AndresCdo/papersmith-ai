@@ -77,6 +77,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C5 — `ADOPT_INITIAL_REVISION` rename + record (D, writer trigger: creation + renderer + receipt + workspace + cli + 2 tests + 4 docs)
   - [x] C9 — explicit empty ruling `admit --no-findings` (D, writer trigger: engine + test + 2 docs + 2 re-anchored tests)
   - [x] C8 — prose findings via `remedy_in_prose` (D, writer trigger: engine + 2 kit files + test + 3 docs)
+  - [x] C10 — remedy control detection follows attributes and helpers (D, writer trigger: engine + test + doc)
   - [ ] C14 — out-of-scope declaration for `agree`: verified missing; blocked on edit surface (implementation engine)
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -850,3 +851,15 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Verification: focused 10 passed; domain lock passed; `npm run test:fast` 4179 passed, 4 failed = the uncommitted
   RED files of C10/C14 only.
   Commit: `feat(implementation): a finding may declare a correction that rewrites prose` (the commit carrying this line)
+
+- C10 (real): `remedies_without_control` intersected bare `ast.Name` calls with `from <pkg> import` names only.
+  Fix: `_package_bindings` (from-import names + `import <pkg>[.x] [as m]` roots) and `_called_roots` (bare calls +
+  the root name of attribute-call chains); same-file helpers that reach the package are grown to a fixed point. Not
+  accepted (test-locked): import-without-call, uncalled reference, unrelated-module call, helper that never reaches.
+  Mutation: dropping the attribute half, dropping the helper half, or accepting any rooted call each turns
+  `tests/test_implementation_remedy_control.py` red. Docs: proposal usage.md ("A green result needs a reachable
+  red"). Tests: new file (2 tests over 10 spellings) RED 1F -> GREEN. Domain-lock pin `value` 244->246
+  (`ast.Attribute.value`, code). No shape change: no migration.
+  Verification: focused 2 passed; engine suites (proposal, experimental, both seals, pair) `-n 8 --dist loadfile`
+  2020 passed, 2 skipped.
+  Commit: `fix(implementation): remediesWithoutControl follows attribute calls and same-file helpers` (the commit carrying this line)

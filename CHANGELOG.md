@@ -497,6 +497,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   one whose first header cell merely contains the word (`Parameter count`) or
   carries it in another column. Documented in `experimental-deliberation`'s
   `SKILL.md` and its usage example.
+- **A remedy test's control is recognized however it calls the
+  implementation.** `audit.remediesWithoutControl` accepted a
+  `test_remedy_<id>` only when it called a name imported with `from <Package>
+  import <name>` directly by that bare name, so `kernel.f(...)`,
+  `import <Package>.kernel as k; k.f(...)`, `<Package>.kernel.f(...)` and a
+  same-file helper doing any of those were reported as having no control,
+  holding the audit at `incomplete`. The detection now follows attribute calls
+  to the name they start from and same-file helpers to a fixed point. It still
+  requires a call into the target's own package: importing without calling,
+  passing a function along uncalled, and calling an unrelated import remain no
+  control. Shared by `experimental-implementation`. Documented in
+  `proposal-implementation`'s `references/usage.md`.
 
 ### Added
 
@@ -900,6 +912,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   non-empty `remedy_equations`; to declare a prose finding there, apply the
   kit's two-line change to that file and re-seal it with `materialize
   --authored tests/test_audit.py`. No migration is needed.
+
+- `verify`'s `audit.remediesWithoutControl` may list fewer tests than 0.13.0
+  did: a remedy test that calls the package through a module attribute or a
+  same-file helper is no longer listed, so such a target can move from
+  `audit: incomplete` to its next state. Nothing on disk changes; no migration
+  is needed.
 
 
 ## 0.13.0

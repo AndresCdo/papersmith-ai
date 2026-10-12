@@ -6492,6 +6492,51 @@ def remedy_compatibility(findings: list[dict], revision: str | None,
             "undefinedNotation": undefined_notation, "introducesNotation": introduces}
 
 
+def _package_bindings(tree: ast.AST, package: str) -> tuple[set[str], set[str]]:
+    """The names a test file binds to `package`: `(names, modules)`.
+
+    `names` -- what `from <package>[.x] import y [as z]` binds (a function, a
+    class or a submodule alike: `z`, else `y`). `modules` -- what
+    `import <package>[.x] [as z]` binds: `z`, else `<package>` itself, which
+    is the root every `<package>.x.y(...)` chain starts from. A relative
+    import names no package and binds nothing here.
+    """
+    names: set[str] = set()
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.ImportFrom) and not node.level
+                and (node.module or "").split(".")[0] == package):
+            names.update(alias.asname or alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] != package:
+                    continue
+                modules.add(alias.asname or package)
+    return names, modules
+
+
+def _called_roots(function: ast.AST) -> tuple[set[str], set[str]]:
+    """`(bare, rooted)` for every call inside `function`: `bare` the names
+    called directly (`f(...)`), `rooted` the names an attribute call starts
+    from (`m.f(...)`, `m.x.f(...)` -> `m`). A call on anything else (a
+    subscript, a call's result) roots at no name and counts for neither."""
+    bare: set[str] = set()
+    rooted: set[str] = set()
+    for inner in ast.walk(function):
+        if not isinstance(inner, ast.Call):
+            continue
+        func = inner.func
+        if isinstance(func, ast.Name):
+            bare.add(func.id)
+        elif isinstance(func, ast.Attribute):
+            root = func.value
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name):
+                rooted.add(root.id)
+    return bare, rooted
+
+
 def remedies_without_control(tests_dir: Path, package: str) -> list[str]:
     """Remedy tests that never exercise the implementation they are correcting.
 
@@ -6503,6 +6548,15 @@ def remedies_without_control(tests_dir: Path, package: str) -> list[str]:
     The control is the other pole: the declared form must be shown to fail the
     same criterion the remedy satisfies. Requiring the test to call into the
     package is the machine-checkable part of that.
+
+    "Call into the package" is read the three ways a test spells it: a bare
+    call to a name imported from it (`f(...)`), an attribute call rooted at
+    a name bound to it (`mod.f(...)`, `pkg.mod.f(...)`), or a call to a
+    function defined in the same file that does either, followed to a fixed
+    point (`helper()` -> `other()` -> `mod.f(...)`). What it still never
+    accepts: importing without calling, referring to a function without
+    calling it, or calling a method of an unrelated import -- none of those
+    can reach the implementation from the test.
     """
     missing: list[str] = []
     if not tests_dir.is_dir():
@@ -6512,20 +6566,23 @@ def remedies_without_control(tests_dir: Path, package: str) -> list[str]:
             tree = ast.parse(file.read_text(encoding="utf-8"), filename=str(file))
         except (SyntaxError, UnicodeDecodeError):
             continue
-        declared = {
-            alias.name for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and (node.module or "").split(".")[0] == package
-            for alias in node.names
-        }
+        names, modules = _package_bindings(tree, package)
+        functions = {node.name: _called_roots(node) for node in tree.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        # Same-file functions that reach the package, grown until nothing new
+        # joins: a helper counts once a call in it is already known to.
+        reaching: set[str] = set()
+        while True:
+            grown = {fname for fname, (bare, rooted) in functions.items()
+                     if fname not in reaching
+                     and (bare & (names | reaching) or rooted & (names | modules))}
+            if not grown:
+                break
+            reaching |= grown
         for node in tree.body:
             if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_remedy_"):
                 continue
-            called = {
-                inner.func.id for inner in ast.walk(node)
-                if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
-            }
-            if not called & declared:
+            if node.name not in reaching:
                 missing.append(node.name)
     return missing
 

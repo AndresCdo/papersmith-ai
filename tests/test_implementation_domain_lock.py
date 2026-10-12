@@ -571,6 +571,9 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: `cross-skill-consistency` (C8): `handoff`'s new `deferredBecause` code
 #: `"prose-remedy"` is a published machine value, not prose (`remedy`
 #: 56->57); every comment beside it says "correction" instead.
+#: `cross-skill-consistency` (C10): `_called_roots` walks an attribute
+#: call down to the name it starts from through `ast.Attribute.value`,
+#: twice -- code, not prose (`value` 244->246).
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
@@ -586,7 +589,7 @@ M5_PINNED_RESIDUE: dict[str, int] = {
     "rather": 384, "recorded": 81, "remedy": 57, "remote": 65,
     "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,
     "scaffolded": 12, "sitting": 9, "small": 8, "something": 76,
-    "steps": 139, "sweep": 11, "validated": 10, "value": 244, "whose": 156,
+    "steps": 139, "sweep": 11, "validated": 10, "value": 246, "whose": 156,
     "write": 156, "wrong": 52
 }
 #: Unit 6b (Part B, the transitions): thirteen pins grew from the new
