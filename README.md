@@ -22,7 +22,7 @@ remote compute, development and troubleshooting.
 4. [How it works — the order](#how-it-works--the-order)
 5. [Inside the workspace](#inside-the-workspace)
 6. [Harnesses and skill projection](#harnesses-and-skill-projection)
-7. [The agents](#los-agentes)
+7. [The agents](#the-agents)
 8. [Anatomy of each skill](#anatomía-de-cada-skill)
 9. [The CLI commands](#los-comandos-del-cli)
 10. [Remote compute, carefully](#cómputo-remoto-con-cuidado)
@@ -53,7 +53,7 @@ missing it doesn't invent it: it exits with a rejection code that names what's m
 The full map is in [Use flow](#use-flow--the-short-path); the
 detailed route, in [How it works — the order](#how-it-works--the-order). And if
 you're going to use an AI agent as copilot, the ones already defined are in
-[The agents](#los-agentes).
+[The agents](#the-agents).
 
 ---
 
@@ -606,50 +606,50 @@ repo-only).
 
 ---
 
-## Los agentes
+## The agents
 
-Un workspace trae **diecinueve subagentes** en `.claude/agents/`. No son
-reemplazos del CLI: son tiradas cortas de trabajo que tu harness lanza (por
-ejemplo, con la Task tool) cuando se lo pides. La forma es siempre la
-misma — **una tirada entre dos compuertas del operador**: el agente decide
-nada, pregunta nada, y termina reportando qué encontró y cuánto costó
-establecerlo. Las compuertas las abres y cierras tú.
+A workspace ships **nineteen subagents** in `.claude/agents/`. They are not
+replacements for the CLI: they are short bursts of work your harness launches (for
+example, with the Task tool) when you ask for them. The shape is always the
+same — **one burst between two operator gates**: the agent decides
+nothing, asks nothing, and ends up reporting what it found and how much it cost
+to establish it. You open and close the gates.
 
-| Agente | Para qué entra | Skill que carga |
-|--------|----------------|-----------------|
-| `implementation-build` | Del mapa objeto→módulo aprobado al informe de hallazgos: materializa el scaffolding, escribe un módulo por objeto con su procedencia y sus tests de invariantes, y valida los remedios admitidos. | `proposal-implementation` |
-| `implementation-walk` | Camina el flujo declarado acto por acto, en su orden: corre los pasos locales, registra cada producto y se detiene en el ensayo previo al lanzamiento. No tiene camino para enviar una campaña. | `proposal-implementation` |
-| `deliberation-publish` | Desde que aceptas un cambio hasta que la revisión sucesora queda publicada y vigente — la única forma en que la matemática viaja. La deliberación en sí no está aquí: solo tú la cierras. | `proposal-deliberation` |
-| `experimental-publish` | Lo mismo que `deliberation-publish`, sobre el documento de experimentos. | `experimental-deliberation` |
-| `experimental-validation` | La etapa `validated`: busca el protocolo de evaluación del área —métricas, baselines, dataset, semillas, test de significancia—, verifica cada baseline contra su repo y su venue, y fecha cada URL que usa. | `experimental-deliberation` |
-| `experiments-build` | Del mapa aprobado de pasos del protocolo a comandos ejecutables: materializa lo que haga falta, cablea cada paso e instrumenta cada medición para que se pueda correr y leer. | `experimental-implementation` |
-| `experiments-walk` | La caminata del protocolo, con las mismas compuertas y el mismo alto en el ensayo. | `experimental-implementation` |
-| `paper-ingestion` | Convierte un paper a la forma en que se puede usar de verdad: ecuaciones LaTeX, tablas como tablas, figuras como archivos. Etapas: `filed`, `extracted`, `readable`. No le pregunta nada a nadie. | `paper-ingestion` |
-| `contract-auditor` | Lee los `## Disqualifiers` de un contrato, literales, y juzga un bloque borrador contra cada uno: `fires`/`clear`/`undecidable`, con el pasaje citado en cada `fires`. | `paper-writing` |
-| `redactor` | Redacta el LaTeX de un bloque a partir de exactamente cuatro entradas (la prosa del contrato, su evidence set, su modo y su style set) y devuelve un mapa de binding: de dónde sale cada oración. | `paper-writing` |
-| `style-sampler` | Resuelve el bloque equivalente, completo, en cada carpeta de estilo de `guidance/` y lo devuelve verbatim, nunca recortado. Es la única material que un chequeo de solapamiento puede comparar. | `paper-writing` |
-| `diagram-author` | Escribe un diagrama TikZ standalone (`<id>.tex` + `<id>.diagram.json`) y lo compila en su propio loop, hasta el presupuesto de reparaciones. Nunca dibuja un gráfico a partir de números medidos — eso es el verbo `place`. | `paper-writing` |
-| `figure-auditor` | Compara los componentes declarados en el manifest contra la prosa de la sección y los pasos del pipeline; reporta veredicto estructurado. | `paper-writing` |
-| `insumos-observer` | Lee las cuatro fuentes de entrada declaradas del paper —`proposals/`, `experiments/`, el código del repo destino y sus propias salidas de corrida— y reporta, por cada hecho observable, si se cumple y con qué evidencia. Nunca decide un valor ni corre `declare`. | `paper-writing` |
-| `novelty-screener` | Discute la hipótesis contra los abstracts del pool, califica novedad y plausibilidad con cita exacta —todo provisional— y rankea el top-5 para la ingesta posterior, cerrando con un párrafo de plausibilidad. Diálogo con reporte al final; no publica, no escribe, no ingiere, no delibera. | `plausibility` |
-| `sota-scout` | Rastrea la idea en la literatura abierta —25 referencias con abstracts, cada una en su familia (3 a 5 en el pool)— como `sota-pool/candidates.json`. Termina en el pool; no ingiere ni califica nada final. | `plausibility` |
-| `sota-grapher` | Mapea el pool a su constelación —un sistema solar por paper agrupado por familia, 20 planetas máximo, aristas entre sistemas hermanos— como `atlas.json` más el `atlas.html` único, corriendo checker y renderer hasta el verde. | `plausibility` |
-| `audit-report` | Audita un sujeto que enumera un conjunto cerrado —operaciones, subcomandos, códigos, assets— buscando la brecha entre lo que su código acepta y lo que su documentación promete. Reporta; nunca repara. | `skill-audit` |
+| Agent | What it is for | Skill it loads |
+|-------|----------------|----------------|
+| `implementation-build` | From the approved object→module map to the findings report: materializes the scaffolding, writes one module per object with its provenance and its invariant tests, and validates the admitted remedies. | `proposal-implementation` |
+| `implementation-walk` | Walks the declared flow act by act, in order: runs the local steps, records each product and stops at the rehearsal before launch. It has no path to submit a campaign. | `proposal-implementation` |
+| `deliberation-publish` | From the moment you accept a change until the successor revision is published and in force — the only way the mathematics travels. The deliberation itself is not here: only you close it. | `proposal-deliberation` |
+| `experimental-publish` | The same as `deliberation-publish`, over the experiments document. | `experimental-deliberation` |
+| `experimental-validation` | The `validated` stage: it looks for the area's evaluation protocol —metrics, baselines, dataset, seeds, significance test—, verifies each baseline against its repo and its venue, and dates every URL it uses. | `experimental-deliberation` |
+| `experiments-build` | From the approved map of protocol steps to executable commands: materializes whatever is needed, wires each step and instruments each measurement so that it can be run and read. | `experimental-implementation` |
+| `experiments-walk` | The walk of the protocol, with the same gates and the same stop at the rehearsal. | `experimental-implementation` |
+| `paper-ingestion` | Turns a paper into the form in which it can really be used: LaTeX equations, tables as tables, figures as files. Stages: `filed`, `extracted`, `readable`. It asks nobody anything. | `paper-ingestion` |
+| `contract-auditor` | Reads the `## Disqualifiers` of a contract, literally, and judges a draft block against each one: `fires`/`clear`/`undecidable`, with the passage quoted in each `fires`. | `paper-writing` |
+| `redactor` | Writes the LaTeX of a block from exactly four inputs (the contract's prose, its evidence set, its mode and its style set) and returns a binding map: where each sentence comes from. | `paper-writing` |
+| `style-sampler` | Resolves the equivalent block, complete, in each style folder of `guidance/` and returns it verbatim, never trimmed. It is the only material an overlap check can compare. | `paper-writing` |
+| `diagram-author` | Writes a standalone TikZ diagram (`<id>.tex` + `<id>.diagram.json`) and compiles it in its own loop, up to the repair budget. It never draws a chart from measured numbers — that is the `place` verb. | `paper-writing` |
+| `figure-auditor` | Compares the components declared in the manifest against the section's prose and the pipeline steps; reports a structured verdict. | `paper-writing` |
+| `insumos-observer` | Reads the paper's four declared input sources —`proposals/`, `experiments/`, the destination repo's code and its own run outputs— and reports, for each observable fact, whether it holds and with what evidence. It never decides a value nor runs `declare`. | `paper-writing` |
+| `novelty-screener` | Discusses the hypothesis against the pool's abstracts, grades novelty and plausibility with an exact citation —all provisional— and ranks the top-5 for later ingestion, closing with a plausibility paragraph. Dialogue with a report at the end; it does not publish, does not write, does not ingest, does not deliberate. | `plausibility` |
+| `sota-scout` | Tracks the idea across the open literature —25 references with abstracts, each in its family (3 to 5 in the pool)— as `sota-pool/candidates.json`. It ends in the pool; it does not ingest nor finally grade anything. | `plausibility` |
+| `sota-grapher` | Maps the pool to its constellation —one solar system per paper grouped by family, 20 planets maximum, edges between sibling systems— as `atlas.json` plus the single `atlas.html`, running checker and renderer until green. | `plausibility` |
+| `audit-report` | Audits a subject that enumerates a closed set —operations, subcommands, codes, assets— looking for the gap between what its code accepts and what its documentation promises. It reports; it never repairs. | `skill-audit` |
 
-Tres reglas que ordenan todo lo demás:
+Three rules that order everything else:
 
-- **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
-  harness (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
-  `.agents/AGENTS.md`) listan
-  a los diecinueve enteros, y se generan: si quieres cambiar un agente, se cambia
-  ahí, no en la proyección.
-- **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa
-  atadura se verifica: un agente que apunte a una skill que el workspace no
-  embarca no llega.
-- **Algunos agentes no son invocados por ningún camino de código**
-  (`contract-auditor`, `redactor`, `style-sampler`): los lanzas tú, y es el
-  verbo `write` el que juzga lo que devuelven — nunca confía en tu relato ni en
-  el borrador por sí solos.
+- **The source of truth is `.claude/agents/`.** Each harness's routing docs
+  (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
+  `.agents/AGENTS.md`) list
+  all nineteen, and they are generated: if you want to change an agent, you change it
+  there, not in the projection.
+- **Each agent declares the skill it loads** (`skills/<name>/SKILL.md`), and that
+  binding is verified: an agent that points at a skill the workspace does not
+  ship does not get there.
+- **Some agents are not invoked by any code path**
+  (`contract-auditor`, `redactor`, `style-sampler`): you launch them, and it is the
+  `write` verb that judges what they return — it never trusts your account nor the
+  draft on their own.
 
 ---
 
