@@ -25,6 +25,7 @@ import argparse
 import ast
 import calendar
 import fnmatch
+import functools
 import hashlib
 import importlib.util
 import json
@@ -51,7 +52,7 @@ from pathlib import Path
 # This engine now lives INSIDE `_core/implementation/` (the `engine/` subdirectory), so
 # the shared core is simply its own parent directory -- no longer host-supplied.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from impl_domain_profile import PROFILE  # noqa: E402
+from impl_domain_profile import PROFILE, declared_holder_filenames  # noqa: E402
 # `LFS_POINTER_PREFIX` is re-exported on purpose: nothing in here uses it, but
 # `tests/test_proposal_implementation.py` reads it as `impl.LFS_POINTER_PREFIX`.
 # Reaching a name through this namespace is a consumer, and a search for uses
@@ -187,6 +188,22 @@ DOCUMENTS_LABEL = DOCUMENTS[0]["label"]  # S9
 HOLDER_FILENAME = PROFILE["holder"]["filename"]
 HOLDER_HEADINGS = tuple(PROFILE["holder"]["headings"])
 HOLDER_SCAFFOLD = PROFILE["holder"]["scaffold"]
+
+
+@functools.cache
+def sibling_holder_filenames() -> frozenset[str]:
+    """The holder filenames every OTHER profile sharing this engine copy
+    declares -- `impl_domain_profile.declared_holder_filenames` over the
+    skills root this engine file sits under (`<root>/_core/implementation/
+    engine/`), minus this skill's own `HOLDER_FILENAME`.
+
+    Derived from the sibling profiles themselves, never a hand-kept list,
+    and read lazily, once per process, by `holder_resolution` alone. A
+    sibling profile that cannot be read contributes nothing, so its file
+    stays an ordinary by-shape candidate and still refuses (fail-closed).
+    """
+    skills_root = Path(__file__).resolve().parents[3]
+    return declared_holder_filenames(skills_root) - {HOLDER_FILENAME}
 
 SUBJECT_SINGULAR = PROFILE["vocabulary"]["subject_singular"]  # S10.1
 SUBJECT_PLURAL = PROFILE["vocabulary"]["subject_plural"]  # S10.2
@@ -544,17 +561,24 @@ def holder_resolution(target: Path, name: str) -> dict:
     is what a READ falls back to when the declared name is absent; that
     function's code is not touched by this one at all.
 
-    Five outcomes, decided in this order:
-      declared file exists                          -> "declared"
-      declared absent, byShape == 0, product is_dir  -> "create"
-      declared absent, byShape == 0, not is_dir      -> "absent"
-      declared absent, byShape == 1                  -> "undeclared"
-      declared absent, byShape > 1                   -> "ambiguous"
+    A sibling skill's declared holder is never a candidate. Every filename
+    another profile sharing this engine declares (`sibling_holder_
+    filenames`) is set aside ahead of the count below -- listed under
+    `siblings`, never hidden, and never offered as a file to rename or
+    adopt: that file is the sibling's, exactly as `HOLDER_FILENAME` is this
+    skill's. `candidates` is `byShape` minus `siblings`.
 
-    `read`: the declared path when found; else the single by-shape
-    candidate when there is exactly one; else `None` -- there is nothing a
-    caller may read without a human choosing (`undeclared` needs a rename
-    or a declaration; `ambiguous` needs a human pick).
+    Five outcomes, decided in this order:
+      declared file exists                              -> "declared"
+      declared absent, candidates == 0, product is_dir  -> "create"
+      declared absent, candidates == 0, not is_dir      -> "absent"
+      declared absent, candidates == 1                  -> "undeclared"
+      declared absent, candidates > 1                   -> "ambiguous"
+
+    `read`: the declared path when found; else the single candidate when
+    there is exactly one; else `None` -- there is nothing a caller may read
+    without a human choosing (`undeclared` needs a rename or a declaration;
+    `ambiguous` needs a human pick).
 
     `write`: the declared path, present or not -- the file a caller may
     write into, or create. `None` for every action a write must instead
@@ -568,12 +592,15 @@ def holder_resolution(target: Path, name: str) -> dict:
     declared_path = product / HOLDER_FILENAME
     declared_is_file = declared_path.is_file()
     by_shape = agreements_state(target, name)["holders"]
+    sibling_names = sibling_holder_filenames()
+    siblings = [path for path in by_shape if Path(path).name in sibling_names]
+    candidates = [path for path in by_shape if path not in siblings]
 
     if declared_is_file:
         action = "declared"
-    elif not by_shape:
+    elif not candidates:
         action = "create" if product.is_dir() else "absent"
-    elif len(by_shape) == 1:
+    elif len(candidates) == 1:
         action = "undeclared"
     else:
         action = "ambiguous"
@@ -583,7 +610,7 @@ def holder_resolution(target: Path, name: str) -> dict:
     elif action == "create":
         read, write = None, declared_path
     elif action == "undeclared":
-        read, write = target / by_shape[0], None
+        read, write = target / candidates[0], None
     else:  # "absent" or "ambiguous"
         read, write = None, None
 
@@ -591,6 +618,8 @@ def holder_resolution(target: Path, name: str) -> dict:
         "declared": HOLDER_FILENAME,
         "path": declared_path if declared_is_file else None,
         "byShape": by_shape,
+        "siblings": siblings,
+        "candidates": candidates,
         "read": read,
         "write": write,
         "create": action == "create",
@@ -12096,6 +12125,19 @@ def _create_declared_holder(write: Path) -> None:
         expect_digest=impl_position.digest_bytes(b""))
 
 
+def _sibling_holders_note(resolution: dict) -> str:
+    """The tail every `HOLDER_UNDECLARED` detail carries when a sibling
+    skill's declared holder sits next to the candidate(s): named, so a
+    reader sees it was recognized, and explicitly left alone -- a refusal
+    never proposes renaming, removing or adopting another skill's holder.
+    `""` when there is none."""
+    siblings = resolution.get("siblings") or []
+    if not siblings:
+        return ""
+    return (" Sibling skills' own declared holders are recognized and left "
+            f"alone: {', '.join(siblings)}.")
+
+
 def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     """Which markdown file receives a FRESH block, dispatched off
     `holder_resolution`'s own `action` (`the-holder-each-skill-declares`,
@@ -12113,7 +12155,9 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     block splice ever runs against it -- never a bare position block with
     no heading at all.
     `"undeclared"` -- the D3 middle row, a candidate found by shape but not
-    by name -- refuses the new `HOLDER_UNDECLARED`, naming both exits.
+    by name, and not a sibling skill's declared holder either -- refuses
+    the new `HOLDER_UNDECLARED`, naming both exits and, when present, the
+    sibling holder(s) it recognized and left alone.
     `"absent"` narrows `POSITION_HOLDER_ABSENT` to "no product folder"
     only (D9; `require_named_product_dir` does not itself refuse a merely
     absent `<name>/`). `"ambiguous"` keeps `POSITION_HOLDER_AMBIGUOUS`
@@ -12130,14 +12174,17 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     if action == "undeclared":
         raise Refused(
             "HOLDER_UNDECLARED",
-            f"{resolution['byShape'][0]} holds checklist items under "
+            f"{resolution['candidates'][0]} holds checklist items under "
             f"{product.relative_to(target)}/, but this skill declares its "
-            f"own holder as {resolution['declared']}; rename "
-            f"{resolution['byShape'][0]} to {resolution['declared']} in the "
+            f"own holder as {resolution['declared']} and no skill sharing "
+            "this engine declares "
+            f"{Path(resolution['candidates'][0]).name!r}; rename "
+            f"{resolution['candidates'][0]} to {resolution['declared']} in the "
             "target repository, or declare "
-            f"{Path(resolution['byShape'][0]).name!r} in this skill's own "
+            f"{Path(resolution['candidates'][0]).name!r} in this skill's own "
             "PROFILE[\"holder\"][\"filename\"] if that name should become "
-            "this skill's convention for every target.")
+            "this skill's convention for every target."
+            + _sibling_holders_note(resolution))
     if action == "absent":
         raise Refused(
             "POSITION_HOLDER_ABSENT",
@@ -14734,7 +14781,10 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         create path still needs a folder to create the file in);
         `HOLDER_UNDECLARED` is new, for a checklist found by shape but not
         by the declared name -- the same doctrine `_chosen_holder` already
-        states for a fresh position block. Also raised, same code, when
+        states for a fresh position block. A sibling skill's own declared
+        holder is never such a checklist (`holder_resolution`'s
+        `siblings`): it is set aside, and is never named as a file to
+        rename, remove or adopt. Also raised, same code, when
         MORE than one such shape-matching candidate exists (Phase 3 review
         finding): the detail differs, because the remedy differs -- one
         candidate names a rename-or-declare choice, more than one names
@@ -14991,15 +15041,17 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         # The D3 middle row: exactly one shape-matching candidate, not the
         # declared name. Both exits fork nothing -- renaming or declaring
         # the SAME file leaves a single holder standing.
-        candidate = resolution["byShape"][0]
+        candidate = resolution["candidates"][0]
         raise Refused(
             "HOLDER_UNDECLARED",
             f"{candidate!r} holds checklist items under {name}/, but this "
-            f"skill declares its own holder as {resolution['declared']}; "
+            f"skill declares its own holder as {resolution['declared']} and "
+            "no skill sharing this engine declares that name; "
             f"rename it to {resolution['declared']} in the target "
             "repository, or declare its own name in this skill's own "
             "PROFILE[\"holder\"][\"filename\"] if that name should become "
-            "this skill's convention for every target.")
+            "this skill's convention for every target."
+            + _sibling_holders_note(resolution))
     elif resolution["action"] == "ambiguous":
         # A defect found reviewing Phase 2: this used to share the
         # undeclared branch's message verbatim, which names "create the
@@ -15008,16 +15060,18 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         # to remove or rename all but one, never to create a third file.
         # Same code as "undeclared" (no new refusal code -- the pinned
         # reachable-refusal count does not move for this), distinct detail.
-        candidates = resolution["byShape"]
+        candidates = resolution["candidates"]
         listed = ", ".join(repr(candidate) for candidate in candidates)
         raise Refused(
             "HOLDER_UNDECLARED",
             f"{len(candidates)} markdown files under {name}/ hold "
             f"checklist items ({listed}) and none is this skill's declared "
-            f"holder {resolution['declared']}; remove or rename all but "
+            f"holder {resolution['declared']} or any sibling skill's; "
+            "remove or rename all but "
             "one of them so a single holder remains under this name -- "
             "creating another declared holder would not decide which "
-            "existing file this skill should write into.")
+            "existing file this skill should write into."
+            + _sibling_holders_note(resolution))
     # action == "declared" or "create": `resolution["write"]` exists on
     # disk (the "create" branch above just put it there).
     holders = [str(resolution["write"].relative_to(target))]
@@ -20075,13 +20129,16 @@ _WORK_STATE_RESOLUTIONS = {
     # them.
     "HOLDER_UNDECLARED": lambda args: _refusal_question(
         args, "an existing checklist under this product holds items but is "
-              "not named what this skill declares as its own holder (the "
-              "refusal detail names both the found file and the declared "
-              "name); rename the found file to the declared name in the "
+              "not named what this skill declares as its own holder, and no "
+              "sibling skill sharing this engine declares its name either "
+              "(the refusal detail names the found file, the declared name, "
+              "and any sibling skill's holder it recognized and left "
+              "alone); rename the found file to the declared name in the "
               "target repository, or declare the found file's own name in "
               "this skill's PROFILE[\"holder\"][\"filename\"] if that name "
               "should become this skill's convention for every target, and "
-              "why?"),
+              "why? A sibling skill's own holder is never the file to "
+              "rename."),
     "DIRTY_WORKTREE": _resolve_dirty_worktree,
     "GIT_FAILED": lambda args: _refusal_question(
         args, "git itself refused the command this skill ran, and the refusal "

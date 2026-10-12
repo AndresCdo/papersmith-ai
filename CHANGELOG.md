@@ -35,6 +35,20 @@ number is `0`, breaking changes can still arrive without a major bump.
   same engine. The sealed CLI corpora already carried an adopted finding and
   had characterized the defect (ruled inadmissible, listed as unvalidated);
   their `verify` and `admit` goldens move accordingly.
+- **Sibling implementation skills no longer collide on each other's
+  checklist holder.** Once `proposal-implementation` had settled items into
+  its declared `<Name>/AGREED.md`, `experimental-implementation` (declared
+  holder `Experimental_AGREED.md`) refused every `position`/`settle` write on
+  the same target with `HOLDER_UNDECLARED`, and both exits it offered —
+  rename the sibling's file, or adopt its name — were destructive to the
+  sibling. The same held in the other direction. `holder_resolution` now sets
+  aside every holder filename a profile sharing the engine declares, derived
+  from each `impl_profile.py` next to the loaded one (reading only
+  `PROFILE["holder"]["filename"]`; a profile that cannot be read contributes
+  nothing, so its file still refuses). A target holding only the sibling's
+  holder resolves create-on-absent and the skill writes its own holder beside
+  it. A checklist no skill declares still refuses, and the refusal and its
+  question never name a sibling's holder as a file to rename.
 
 ### Behaviour changes
 
@@ -50,6 +64,14 @@ number is `0`, breaking changes can still arrive without a major bump.
 - Under a profile declaring more than one document, adoption is read from the
   document(s) a finding names, the same text `admit` already checked the
   marker against, instead of always from document 0.
+- A target holding the other implementation skill's declared holder (and no
+  holder of this skill's own) no longer refuses `HOLDER_UNDECLARED` on
+  `position --sequence`, `position --reconcile` or `settle`: the write creates
+  this skill's declared holder with its scaffold and leaves the sibling's file
+  byte-identical. `holder_resolution` gains `siblings` and `candidates` keys.
+  Workspaces that already created their own holder by hand keep resolving it
+  as declared; no migration is needed. Reads are unchanged: `verify`'s
+  agreement count still reads every checklist under `<Name>/` by shape.
 
 ## 0.13.0
 

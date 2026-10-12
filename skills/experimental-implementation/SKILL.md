@@ -277,9 +277,10 @@ This skill declares its own checklist holder in `impl_profile.py`'s
 distinct from the sibling's own `AGREED.md` -- the two skills share the same
 engine and the same per-product-folder shape, so a fixed shared name would
 let one skill's write land inside the other's checklist. See
-`references/usage.md` for the create-on-absent behavior and for what
-`position`/`settle` refuse (`HOLDER_UNDECLARED`, naming both exits) when a
-checklist already exists under some other name.
+`references/usage.md` for the create-on-absent behavior, for why the
+sibling's own `AGREED.md` beside it is set aside rather than refused, and for
+what `position`/`settle` refuse (`HOLDER_UNDECLARED`, naming both exits) when a
+checklist already exists under a name no skill sharing the engine declares.
 
 ## What this skill has not written down
 

@@ -38,7 +38,8 @@ always has. Only a WRITE — `position`'s fresh install/reconcile, or any of
 ## Create-on-absent
 
 When `Experimental_AGREED.md` does not exist and no other markdown file
-under `<Name>/` holds checklist items yet, a write (`position --sequence`,
+under `<Name>/` holds checklist items yet (a sibling skill's own declared
+holder does not count, see below), a write (`position --sequence`,
 `position --reconcile`, or `settle`'s create path) writes the declared
 scaffold to `<Name>/Experimental_AGREED.md` **before** anything else runs:
 
@@ -60,10 +61,32 @@ Once created, the file carries both declared headings
 (`# Agreed`, `## Ladder`), so the very next `settle --under "## Ladder"`
 places its line without also having to fix a missing heading.
 
+## The sibling's holder is set aside, never refused
+
+A target the sibling `proposal-implementation` already worked on usually holds
+its declared `<Name>/AGREED.md`, with settled items in it. That file is the
+sibling's, exactly as `Experimental_AGREED.md` is this skill's, so it is never
+a candidate here: every holder filename a profile sharing this engine declares
+(each `impl_profile.py` beside this skill's own, read for
+`PROFILE["holder"]["filename"]` alone) is set aside before the candidate count.
+With `Experimental_AGREED.md` absent and only the sibling's holder present, a
+write resolves create-on-absent and the sibling's bytes are never touched.
+The same rule runs in the other direction: the sibling sets this skill's
+`Experimental_AGREED.md` aside.
+
+The set is derived, never a hand-kept list, and fails closed: a sibling profile
+that cannot be read contributes nothing, so its holder stays an ordinary
+candidate and the refusal below still fires. A workspace that already created
+`Experimental_AGREED.md` by hand beside the sibling's holder keeps resolving
+it as this skill's declared holder.
+
+Reading is unchanged: `verify`'s agreement count still reads every checklist
+under `<Name>/` by shape, the sibling's included.
+
 ## Write-refusal into an undeclared holder: `HOLDER_UNDECLARED`
 
-When some other markdown file under `<Name>/` — one this skill did not
-declare — already holds checklist items, and `Experimental_AGREED.md`
+When some other markdown file under `<Name>/` — one no skill sharing this
+engine declares — already holds checklist items, and `Experimental_AGREED.md`
 itself does not exist, a WRITE refuses `HOLDER_UNDECLARED` rather than
 silently adopting that file or silently creating a second one beside it:
 
@@ -71,9 +94,14 @@ silently adopting that file or silently creating a second one beside it:
 {
   "status": "refused",
   "code": "HOLDER_UNDECLARED",
-  "detail": "Method/TASKS.md holds checklist items under Method/, but this skill declares its own holder as Experimental_AGREED.md; rename Method/TASKS.md to Experimental_AGREED.md in the target repository, or declare 'TASKS.md' in this skill's own PROFILE[\"holder\"][\"filename\"] if that name should become this skill's convention for every target."
+  "detail": "Method/TASKS.md holds checklist items under Method/, but this skill declares its own holder as Experimental_AGREED.md and no skill sharing this engine declares 'TASKS.md'; rename Method/TASKS.md to Experimental_AGREED.md in the target repository, or declare 'TASKS.md' in this skill's own PROFILE[\"holder\"][\"filename\"] if that name should become this skill's convention for every target. Sibling skills' own declared holders are recognized and left alone: Method/AGREED.md."
 }
 ```
+
+That detail is the one a target holding both `Method/TASKS.md` and the
+sibling's `Method/AGREED.md` produces; the last sentence appears only when a
+sibling's holder sits beside the candidate. The sibling's file is never one
+of the exits.
 
 Both exits are named in the refusal and neither is chosen for you:
 

@@ -210,6 +210,58 @@ def _load_profile_module(path: Path, configured: str):
     return module
 
 
+def _is_one_safe_component(holder_filename: Any) -> bool:
+    """Exactly one path component -- non-empty, no separator, not `.`/`..`,
+    no NUL, no newline, and `Path(f).name == f` as a general safety net over
+    any other separator this platform might honor. Shared by `_resolve`'s
+    own holder check and `declared_holder_filenames`, so a sibling's name
+    is accepted under exactly the rule this skill's own is."""
+    return (
+        isinstance(holder_filename, str)
+        and bool(holder_filename)
+        and "/" not in holder_filename
+        and "\\" not in holder_filename
+        and holder_filename not in (".", "..")
+        and "\x00" not in holder_filename
+        and "\n" not in holder_filename
+        and Path(holder_filename).name == holder_filename
+    )
+
+
+def declared_holder_filenames(skills_root: Path) -> frozenset[str]:
+    """Every checklist holder filename declared by a profile under
+    `skills_root/*/impl_profile.py` -- the profiles that share one engine
+    copy, because each skill's launcher points that engine at its own
+    `impl_profile.py` beside it.
+
+    Derived, never a hand-kept list: a new sibling skill is recognized by
+    shipping its own profile, with no edit here or in the engine.
+
+    Fails closed by contributing nothing: a profile that cannot be loaded,
+    exports no `PROFILE` mapping, or declares a holder filename that is not
+    one safe `.md` path component is skipped. The engine only ever uses
+    this set to stop treating a sibling's declared holder as an undeclared
+    candidate, so a skipped sibling leaves its file a candidate, and the
+    refusal that guards an unknown checklist still fires for it.
+    """
+    names: set[str] = set()
+    try:
+        candidates = sorted(skills_root.glob("*/impl_profile.py"))
+    except OSError:
+        return frozenset()
+    for path in candidates:
+        try:
+            module = _load_profile_module(path, str(path))
+            profile = getattr(module, "PROFILE", None)
+            holder = profile.get("holder") if isinstance(profile, Mapping) else None
+            filename = holder.get("filename") if isinstance(holder, Mapping) else None
+        except Exception:  # an unreadable sibling contributes nothing
+            continue
+        if _is_one_safe_component(filename) and filename.endswith(".md"):
+            names.add(filename)
+    return frozenset(names)
+
+
 def _resolve() -> Mapping[str, Any]:
     configured = os.environ.get(_ENV_VAR)
     if not configured:
@@ -361,16 +413,7 @@ def _resolve() -> Mapping[str, Any]:
     # (1) exactly one path component -- non-empty, no separator, not
     # `.`/`..`, no NUL, no newline, and `Path(f).name == f` as a general
     # safety net over any other separator this platform might honor.
-    if (
-        not isinstance(holder_filename, str)
-        or not holder_filename
-        or "/" in holder_filename
-        or "\\" in holder_filename
-        or holder_filename in (".", "..")
-        or "\x00" in holder_filename
-        or "\n" in holder_filename
-        or Path(holder_filename).name != holder_filename
-    ):
+    if not _is_one_safe_component(holder_filename):
         raise ImplementationProfileError(
             f"IMPLEMENTATION_DOMAIN_PROFILE_INVALID_HOLDER: {configured} "
             f"declares holder.filename={holder_filename!r}, which is not "

@@ -1976,13 +1976,16 @@ class HolderCollisionTests(unittest.TestCase):
         engine = self._load_engine()
         self.assertEqual(engine.HOLDER_FILENAME, "Experimental_AGREED.md")
 
-    def test_a_target_holding_the_proposals_declared_holder_is_undeclared_here(self):
-        """The measured collision, closed: a target already holding an
-        item-holding `AGREED.md` (the proposal's own declared name, not
-        this skill's) resolves `"undeclared"` under the experimental
-        profile -- `_chosen_holder` refuses `HOLDER_UNDECLARED` rather
-        than writing a fresh block (and, eventually, a `documents=`
-        group) straight into it."""
+    def test_a_target_holding_the_proposals_declared_holder_creates_this_skills_own(self):
+        """The sibling's declared holder is not an undeclared checklist.
+
+        Before 0.14.0 a target already holding an item-holding `AGREED.md`
+        (the proposal skill's own declared name) resolved `"undeclared"`
+        here, and `HOLDER_UNDECLARED` proposed renaming the sibling's file
+        or adopting its name -- both destructive to the sibling. Every
+        filename a profile sharing this engine declares is excluded from
+        the by-shape candidates, so the resolution is `"create"` and this
+        skill writes its own holder beside the sibling's, untouched."""
         engine = self._load_engine()
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -1991,16 +1994,60 @@ class HolderCollisionTests(unittest.TestCase):
                 "- [ ] an agreement the proposal skill settled here\n",
                 encoding="utf-8")
             resolution = engine.holder_resolution(root, "Method")
-            self.assertEqual(resolution["action"], "undeclared")
+            self.assertEqual(resolution["action"], "create")
+            # `byShape` stays `agreements_state`'s verbatim read; the
+            # exclusion is reported, never hidden.
             self.assertEqual(resolution["byShape"], ["Method/AGREED.md"])
-            with self.assertRaises(engine.Refused) as caught:
-                engine._chosen_holder(root, "Method", root / "Method")
-            self.assertEqual(caught.exception.code, "HOLDER_UNDECLARED")
-            # No `documents=` group -- no write at all -- lands in the
-            # proposal's own file.
+            self.assertEqual(resolution["siblings"], ["Method/AGREED.md"])
+            chosen = engine._chosen_holder(root, "Method", root / "Method")
+            self.assertEqual(chosen, root / "Method" / "Experimental_AGREED.md")
+            self.assertEqual(chosen.read_text(encoding="utf-8"),
+                             engine.HOLDER_SCAFFOLD)
             self.assertEqual(
                 (root / "Method" / "AGREED.md").read_text(encoding="utf-8"),
                 "- [ ] an agreement the proposal skill settled here\n")
+
+    def test_a_hand_created_holder_beside_the_siblings_stays_declared(self):
+        """A workspace that already worked around the collision by hand --
+        `Experimental_AGREED.md` carrying exactly the scaffold, beside the
+        sibling's item-holding `AGREED.md` -- keeps resolving `"declared"`."""
+        engine = self._load_engine()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "AGREED.md").write_text(
+                "- [x] an agreement the proposal skill settled here\n",
+                encoding="utf-8")
+            own = root / "Method" / "Experimental_AGREED.md"
+            own.write_text(engine.HOLDER_SCAFFOLD, encoding="utf-8")
+            resolution = engine.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "declared")
+            self.assertEqual(resolution["write"], own)
+            self.assertEqual(engine._chosen_holder(root, "Method", root / "Method"), own)
+
+    def test_an_unknown_candidate_beside_the_siblings_holder_still_refuses(self):
+        """Fail-closed stays: a checklist no skill declares is still the
+        D3 middle row, and the refusal names only that file -- never the
+        sibling's, which it recognizes and leaves alone."""
+        engine = self._load_engine()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "AGREED.md").write_text(
+                "- [ ] the sibling's agreement\n", encoding="utf-8")
+            (root / "Method" / "TASKS.md").write_text(
+                "- [ ] a checklist nobody declares\n", encoding="utf-8")
+            resolution = engine.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "undeclared")
+            self.assertEqual(resolution["read"], root / "Method" / "TASKS.md")
+            with self.assertRaises(engine.Refused) as caught:
+                engine._chosen_holder(root, "Method", root / "Method")
+            self.assertEqual(caught.exception.code, "HOLDER_UNDECLARED")
+            detail = str(caught.exception)
+            self.assertIn("rename Method/TASKS.md", detail)
+            self.assertNotIn("rename Method/AGREED.md", detail)
+            self.assertIn("left alone: Method/AGREED.md", detail)
+            self.assertFalse((root / "Method" / "Experimental_AGREED.md").exists())
 
     def _box(self, suffix: str = "") -> Path:
         box = FORGE / "implementations" / f"_holder_collision_{os.getpid()}_{id(self)}{suffix}"
@@ -2165,24 +2212,28 @@ class HolderCollisionTests(unittest.TestCase):
         reconcile = subprocess.run(
             [sys.executable, str(LAUNCHER), "position",
              "--target", str(box), "--name", "Method", "--revision", "r1.md",
-             "--session", "s1", "--reconcile"],
+             "--session", "s1", "--target-level", "final", "--reconcile"],
             capture_output=True, text=True, cwd=FORGE, env=env)
 
-        self.assertEqual(reconcile.returncode, 2,
+        # 0.14.0: the sibling's declared holder is no longer a candidate,
+        # so this skill creates its own holder -- the sibling's bytes stay
+        # exactly as written (no merge, no `documents=` group).
+        self.assertEqual(reconcile.returncode, 0,
                          reconcile.stdout + reconcile.stderr)
         payload = json.loads(reconcile.stdout)
-        self.assertEqual(payload["code"], "HOLDER_UNDECLARED")
-        self.assertIn("AGREED.md", payload["detail"])
+        self.assertEqual(payload["holder"], "Method/Experimental_AGREED.md")
         self.assertEqual((box / "Method" / "AGREED.md").read_bytes(), before)
-        self.assertFalse((box / "Method" / "Experimental_AGREED.md").exists())
+        self.assertTrue((box / "Method" / "Experimental_AGREED.md").exists())
 
     def test_sequence_replace_never_overwrites_the_siblings_declared_holder(self):
         """The same collision through `--sequence --replace`: the exit
         `POSITION_BLOCK_EXISTS` itself names ("pass --replace to
         overwrite it") is precisely the remedy that would destroy the
         sibling's own position history if a caller followed it here --
-        `HOLDER_UNDECLARED` must refuse before `--replace` is ever
-        consulted, and nothing may be written."""
+        before 0.14.0 `HOLDER_UNDECLARED` refused here; now the sibling's
+        declared holder is excluded from the candidates, `--replace` finds
+        no block of this skill's own to overwrite, and the install lands in
+        this skill's own holder -- the sibling's bytes never change."""
         box = self._box()
         proposals_root = self._tmp_dir("collision-seq-proposals-")
         (proposals_root / "r1.md").write_text("## 1\ntexto\n", encoding="utf-8")
@@ -2204,12 +2255,12 @@ class HolderCollisionTests(unittest.TestCase):
              "--sequence", "-", "--replace"],
             input=fresh_sequence, capture_output=True, text=True, cwd=FORGE, env=env)
 
-        self.assertEqual(install_experimental.returncode, 2,
+        self.assertEqual(install_experimental.returncode, 0,
                          install_experimental.stdout + install_experimental.stderr)
-        payload = json.loads(install_experimental.stdout)
-        self.assertEqual(payload["code"], "HOLDER_UNDECLARED")
         self.assertEqual((box / "Method" / "AGREED.md").read_bytes(), before)
-        self.assertFalse((box / "Method" / "Experimental_AGREED.md").exists())
+        own = (box / "Method" / "Experimental_AGREED.md").read_bytes()
+        self.assertIn(b"an experimental agreement", own)
+        self.assertNotIn(b"an agreement the sibling settled", own)
 
     def test_gate_never_authorizes_a_launch_against_the_siblings_position(self):
         """The READ face of the same CRITICAL defect (`sdd/the-holder-

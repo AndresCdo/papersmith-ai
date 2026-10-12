@@ -37,7 +37,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] T0 — Exploration (D, mapping trigger): two explorers. All A1–A8 and D1–D5 confirmed real in code.
   Key map: engine `skills/_core/implementation/engine/implementation_engine.py` (E); migrations `src/papersmith/core/migrations.py` REGISTRY; no populated old-workspace fixture exists yet; full py suite ~20 min.
 - [x] A1 — adopted finding terminal state (D, writer trigger: engine + tests + docs + goldens)
-- [ ] A2 — sibling holder collision
+- [x] A2 — sibling holder collision (D, writer trigger: engine + profile loader + tests + docs)
 - [ ] A3 — probe pilot ladder with in-package baselines
 - [ ] A4 — scaffold seal file provenance exemption
 - [ ] A5 — close for proposal-only targets / witness-less agreements
@@ -66,7 +66,23 @@ Route legend: D = delegated writer, I = inline.
   (seal: admit-e1, verify-a, verify-b; experiments_seal: verify-a, verify-b, plus unsealed
   `propose` timestamp noise). Domain-lock pins unchanged. Version 0.14.0 + CHANGELOG.
   Commit: `fix(implementation): an adopted finding reaches a terminal state` (the commit carrying this line)
+- A2 (real): `holder_resolution` set the sibling skill's declared holder against this skill as an
+  undeclared candidate (both directions). Fix: `impl_domain_profile.declared_holder_filenames`
+  derives every holder filename declared by `<skills root>/*/impl_profile.py` (only
+  `PROFILE["holder"]["filename"]`; unreadable/malformed contributes nothing = fail-closed); the
+  engine's `sibling_holder_filenames()` subtracts its own name, and `holder_resolution` excludes
+  those from the candidate count (`byShape` stays verbatim; new `siblings`/`candidates` keys).
+  `HOLDER_UNDECLARED` detail/question never offer a sibling's holder for renaming and name any
+  recognized sibling holder as left alone. `agreements_state` read untouched.
+  Tests: `DeclaredHolderFilenamesTests` (3, new file), HolderCollisionTests +2 new, 3 rewritten
+  (they encoded the defect: `..._is_undeclared_here`, `test_reconcile_never_writes_into_the_
+  siblings_declared_holder`, `test_sequence_replace_never_overwrites_...` -- sibling bytes still
+  asserted unchanged), HolderResolutionTests +2 (inverse direction). RED 9F -> GREEN; mutation
+  (exclusion disabled -> 6 red; shape filter loosened -> 1 red). Seals unchanged; domain-lock pins
+  unchanged (comments reworded). Open sibling of this class, out of scope: `agreements_state` and
+  `position_state`'s by-shape fallback (outside `gate`) still read a sibling's holder.
+  Commit: `fix(implementation): sibling skills never collide on a checklist holder` (the commit carrying this line)
 
 ## Next step
 
-A1 (delegated writer). Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+A3 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

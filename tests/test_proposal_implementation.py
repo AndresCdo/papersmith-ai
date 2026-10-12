@@ -2918,6 +2918,45 @@ class HolderResolutionTests(unittest.TestCase):
             self.assertIsNone(resolution["read"])
             self.assertIsNone(resolution["write"])
 
+    def test_a_sibling_skills_declared_holder_is_not_a_candidate(self):
+        """The inverse of `HolderCollisionTests` in the experimental suite:
+        a target whose only checklist is the experimental sibling's own
+        declared holder resolves `"create"` here, never `"undeclared"` --
+        renaming or adopting another skill's holder is never an exit."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            sibling = root / "Method" / "Experimental_AGREED.md"
+            sibling.write_text("# Agreed\n\n## Ladder\n\n- [ ] ajeno\n",
+                               encoding="utf-8")
+            resolution = impl.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "create")
+            self.assertEqual(resolution["byShape"], ["Method/Experimental_AGREED.md"])
+            self.assertEqual(resolution["siblings"], ["Method/Experimental_AGREED.md"])
+            self.assertEqual(resolution["write"], root / "Method" / "AGREED.md")
+
+            chosen = impl._chosen_holder(root, "Method", root / "Method")
+
+            self.assertEqual(chosen, root / "Method" / "AGREED.md")
+            self.assertEqual(sibling.read_text(encoding="utf-8"),
+                             "# Agreed\n\n## Ladder\n\n- [ ] ajeno\n")
+
+    def test_a_sibling_holder_beside_one_unknown_candidate_is_undeclared(self):
+        """Two by-shape files, one of them the sibling's: only the unknown
+        one is a candidate, so the resolution is `"undeclared"` (one
+        candidate), not `"ambiguous"` -- and it still refuses."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                "- [ ] ajeno\n", encoding="utf-8")
+            (root / "Method" / "TASKS.md").write_text(
+                "- [ ] otro\n", encoding="utf-8")
+            resolution = impl.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "undeclared")
+            self.assertEqual(resolution["read"], root / "Method" / "TASKS.md")
+            self.assertIsNone(resolution["write"])
+
 
 class CreateOnAbsentTests(unittest.TestCase):
     """`the-holder-each-skill-declares` (design.md D5, tasks.md 3.1/3.2):
