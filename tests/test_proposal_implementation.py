@@ -39097,3 +39097,79 @@ class AttainedLevelNeverOverstatesTests(unittest.TestCase):
         position = json.loads(proc.stdout)["position"]
         self.assertEqual(position["targetLevel"], "pilot")
         self.assertEqual(position["attainedLevel"], "pilot")
+
+
+class ProseSkipsEngineWritesTests(unittest.TestCase):
+    """B10 (`cross-skill-consistency`): `verify`'s `prose` check no longer
+    reports what the engine itself wrote into a checklist holder: the
+    position block's marker lines (its header names the revision it was
+    derived against), the `` `test_<id>` `` witness token `settle` writes on
+    an agreement line, and the append-only `## Reversed` history. The
+    exclusion is structural, never a whole-file skip: user prose in the same
+    holder -- an agreement's own text, a paragraph outside those sections --
+    is still checked."""
+
+    HOLDER = (
+        "# Agreed\n\n"
+        "Notes: the plan in draft-1.md still names `stale_helper_name`.\n\n"
+        "## Ladder\n\n"
+        "<!-- position revision=draft-1.md sha256=" + "a" * 64
+        + " derivedAt=2026-01-01T00:00:00Z session=s1 target=local -->\n"
+        "- [ ] 1. Rehearse the job. `@rehearsal job1`\n"
+        "<!-- /position -->\n\n"
+        "- [x] the seed is seven `test_seed_is_seven`\n"
+        "- [ ] the helper `another_missing_name` is kept\n\n"
+        "## Reversed\n\n"
+        '**"bound to draft-1.md with `old_reversed_name`"** Turned over at draft-2.md.\n'
+    )
+
+    def _prose(self, holder_name="AGREED.md"):
+        proposals = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        (proposals / "draft-1.md").write_text("## 1\ntext\n", encoding="utf-8")
+        (proposals / "draft-2.md").write_text("## 1\ntext changed\n", encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_prose_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__implementation__ = {'revision': 'draft-2.md'}\n", encoding="utf-8")
+        (box / "Method" / holder_name).write_text(self.HOLDER, encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box), "--name", "Method"],
+            capture_output=True, text=True, cwd=FORGE,
+            env=dict(os.environ, IMPLEMENTATION_PROPOSALS=str(proposals)))
+        return json.loads(proc.stdout)["prose"]
+
+    def test_engine_writes_are_not_reported_and_user_prose_still_is(self):
+        prose = self._prose()
+        stale = [(e["line"], e["named"]) for e in prose["staleRevisions"]]
+        symbols = sorted(e["symbol"] for e in prose["unresolvedSymbols"])
+        # Line 3 is user prose outside every engine-written structure.
+        self.assertEqual(stale, [(3, "draft-1.md")])
+        self.assertEqual(symbols, ["another_missing_name", "stale_helper_name"])
+
+    def test_a_sibling_skills_holder_is_read_the_same_way(self):
+        prose = self._prose("Experimental_AGREED.md")
+        self.assertEqual([(e["line"], e["named"]) for e in prose["staleRevisions"]],
+                         [(3, "draft-1.md")])
+        self.assertEqual(sorted(e["symbol"] for e in prose["unresolvedSymbols"]),
+                         ["another_missing_name", "stale_helper_name"])
+
+    def test_the_same_lines_outside_a_holder_are_still_reported(self):
+        """Not a filename rule alone: the identical bytes in an ordinary
+        document of the target are user prose and are all reported."""
+        proposals = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        (proposals / "draft-2.md").write_text("## 1\ntext\n", encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_prose_doc_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "tests", "docs"):
+            (box / directory).mkdir(parents=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "docs/notes.md").write_text(self.HOLDER, encoding="utf-8")
+        prose = impl.prose_state(box, "draft-2.md")
+        self.assertIn("test_seed_is_seven",
+                      [e["symbol"] for e in prose["unresolvedSymbols"]])
+        self.assertGreater(len(prose["staleRevisions"]), 1)

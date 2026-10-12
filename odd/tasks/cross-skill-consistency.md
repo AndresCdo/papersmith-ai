@@ -54,6 +54,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B1 — section labels in `verify` drift (D, writer trigger: engine + resolver + 2 profiles + convention + 2 test files + 4 docs + seal)
   - [x] B4 + X6 — settle ordering, reverse heading, tick correction path (D, writer trigger: impl_position + engine + 3 test files + 3 docs)
   - [x] B8 — attainedLevel bounded by the aim when nothing leveled ran (D, writer trigger: impl_position + engine + 2 test files + 2 docs)
+  - [x] B10 — prose check skips engine-written holder structures (D, writer trigger: engine + test + doc)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -73,6 +74,12 @@ Route legend: D = delegated writer, I = inline.
   0.13.0 and on the current engine (found in F-prep; engine `skills/_core/implementation`). Fixed with B4.
 - X7 — 0.13.0 only (fixed by A2): with `AGREED.md` holding a plain item, the experimental skill refused
   `position` with `HOLDER_UNDECLARED`; the fixture creates both holders before settling for that reason.
+- X8 — test-order leak, pre-existing on 445756a (found in B1-B10 verification): running
+  `tests/test_implementation_profile.py` before `tests/test_upgrade_v0_13_0_workspace.py` in one process
+  fails `test_each_implementation_skill_still_reads_its_own_holder[experimental-implementation]` (it reads
+  `AGREED.md`): a profile test leaves `IMPLEMENTATION_DOMAIN_PROFILE` in `os.environ`, the fixture test passes
+  `os.environ` to the experimental CLI, and the launcher only `setdefault`s it. Each file passes alone; the
+  change-selected `npm run test:fast` tier hits it. Not fixed (outside B1/B4/B8/B10).
 
 ## Progress / evidence
 
@@ -396,6 +403,21 @@ Route legend: D = delegated writer, I = inline.
   `position_state` supplies it), `LaunchAvailableTests.test_vacuous_attainment_at_the_top_rung_is_sufficient`
   (docstring only). Domain-lock pins unchanged. Seals unchanged. No migration.
   Commit: `fix(implementation): attainedLevel never exceeds the aim when nothing leveled ran` (the commit carrying this line)
+
+- B10 (real; witness-token hit reproduced end to end: position -> discuss -> settle -> `settle --attach
+  --witness test_seed_is_seven` -> successor + re-bind -> `verify` `prose.unresolvedSymbols` names
+  `test_seed_is_seven` in `Method/AGREED.md`). The engine writes three structures into a holder: the
+  position block (its opener names the derived-from revision, which is the stale-revision hit when the
+  block was not refreshed), the trailing witness token (`AGREEMENT_LINE`'s `witness` group) and `## Reversed`
+  entries. `prose_of` read every `.md` line. Fix: `holder_prose(path)` for `.md` files named by
+  `HOLDER_FILENAME` or `sibling_holder_filenames()`: skips the block opener/closer lines, strips the witness
+  group from agreement lines (their text still read), skips the `## Reversed` section (to the next `## `
+  heading, `_SECTION_BODY`'s boundary). Other files unchanged.
+  Tests: `ProseSkipsEngineWritesTests` (3: own holder, sibling holder, identical bytes in `docs/notes.md`
+  all reported). RED 2F -> GREEN. Mutations: Reversed skip off -> 2 red; marker skip off -> 2 red; witness
+  strip off -> 2 red; blanket file skip -> 2 red (user prose test). Domain-lock pins unchanged (reworded).
+  Seals unchanged. No migration (report-only keys).
+  Commit: `fix(implementation): the prose check skips what the engine wrote into a holder` (the commit carrying this line)
 
 ## Next step
 

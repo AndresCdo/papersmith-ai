@@ -292,7 +292,11 @@ proposal itself — that is `proposal-deliberation`.
   in prose that is not the current one — the pattern derived from the revision
   handed in, never from a naming convention this skill would have to know — and
   `unresolvedSymbols`, a token shaped like a symbol that resolves to nothing under
-  `src/`.
+  `src/`. In a checklist holder (this skill's and every sibling skill's declared
+  filename) neither check reads what the engine wrote: the position block's
+  opener and closer lines, the `` `test_<id>` `` witness token `settle` puts at the
+  end of an agreement line, and the append-only `## Reversed` section. An
+  agreement's own text and every other line of the holder are still read.
 
   **Both are reported and neither drifts a status.** A historical mention is
   legitimate and common: *"the bound r16 adopted"* is a fact about when, not a

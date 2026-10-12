@@ -255,6 +255,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   full` with no full-scale run behind it. With nothing leveled, attainment is
   now the rung the position aims at (`targetLevel`), and `null` when the aim
   is not on the ladder. Sequences with leveled witnesses read as before.
+- **`verify`'s `prose` check no longer reports the engine's own writes.**
+  After re-binding to a successor revision, `prose.staleRevisions` named the
+  position block header in `<Name>/AGREED.md`, which records the revision it
+  was derived from, and `prose.unresolvedSymbols` named the
+  `` `test_<id>` `` witness token that `settle --attach` had written. In a
+  checklist holder (this skill's declared filename or a sibling skill's), the
+  check now skips the position block's opener and closer lines, the witness
+  token at the end of an agreement line, and the append-only `## Reversed`
+  section. The rest of the holder is still checked, including an
+  agreement's own text, and the same lines in any other document are still
+  reported.
 
 ### Added
 
@@ -452,6 +463,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   `position --target-level <rung>` is the exit, which the rung-skip rule
   allows for such a sequence. Sealing is otherwise unchanged. Nothing stored
   changes shape and no migration is needed.
+- `verify`'s `prose.staleRevisions` and `prose.unresolvedSymbols` list fewer
+  entries for targets whose holders carry a position block, witness tokens or
+  a `## Reversed` section. Both keys were report-only and never moved a
+  status. This changes the reading only: no migration is needed.
 
 ## 0.13.0
 

@@ -1299,6 +1299,40 @@ def prose_of(path: Path) -> list[tuple[int, str]]:
     return found
 
 
+def holder_prose(path: Path) -> list[tuple[int, str]]:
+    """A checklist holder's prose, minus what this engine wrote into it.
+
+    Three structures in a holder are the engine's, not an author's, and
+    reading them as prose reports the engine on its own writes
+    (`cross-skill-consistency`, B10): the position block's opener and
+    closer lines (the opener names the revision the block was derived
+    derived from, which `position` reports on its own terms), the
+    `` `test_<id>` `` witness token `settle` writes at the end of an
+    agreement line, and the append-only `## Reversed` section, which keeps
+    what was turned over exactly as it was and is history by construction.
+    Everything else stays prose -- an agreement's own text, and any line
+    outside those sections -- so a stale mention or a renamed symbol an
+    author wrote in the same file is still read.
+    """
+    found: list[tuple[int, str]] = []
+    in_reversed = False
+    for number, line in enumerate(
+            path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        stripped = line.strip()
+        if re.match(r"^##[ \t]", stripped):
+            in_reversed = stripped[2:].strip() == "Reversed"
+        if in_reversed:
+            continue
+        if (re.match(r"<!--\s*position\b", stripped)
+                or impl_position.BLOCK_CLOSE.decode("ascii") in stripped):
+            continue
+        agreement = AGREEMENT_LINE.match(line)
+        if agreement and agreement.group("witness"):
+            line = line[:agreement.start("witness") - 1].rstrip()
+        found.append((number, line))
+    return found
+
+
 def prose_state(target: Path, revision: str | None,
                 source_root: Path | None = None) -> dict:
     """Claims in prose that stopped being true, where nothing else would notice.
@@ -1361,6 +1395,10 @@ def prose_state(target: Path, revision: str | None,
             elif isinstance(node, ast.arg):
                 known.add(node.arg)
 
+    # The holder names every skill sharing this engine declares: each writes
+    # its own holder into the same product folder.
+    holder_names = {HOLDER_FILENAME} | set(sibling_holder_filenames())
+
     pattern = None
     if revision:
         stem = re.sub(r"\d+", r"\\d+", re.escape(Path(revision).name))
@@ -1378,7 +1416,10 @@ def prose_state(target: Path, revision: str | None,
                 or "__pycache__" in inside.parts):
             continue
         relative = str(inside)
-        for number, line in prose_of(file):
+        lines = (holder_prose(file)
+                 if file.suffix == ".md" and file.name in holder_names
+                 else prose_of(file))
+        for number, line in lines:
             if pattern:
                 for named in pattern.findall(line):
                     if named != Path(revision).name:
