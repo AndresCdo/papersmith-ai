@@ -391,6 +391,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   when no committed receipt exists. The legacy folders are still read first,
   so an old workspace keeps its stage.
 
+- **A fresh target walks `env` -> `plan` -> `apply` -> `materialize` without
+  a hand commit in between.** `env` built `.venv/` before anything ignored
+  it, so the `plan` that follows refused `DIRTY_WORKTREE` on a `git init`
+  target, and the `pip install -e .` that `env` prints left an untracked
+  `src/<dist>.egg-info/` that refused the next clean-requiring step again.
+  `env` now appends `.venv/` and `*.egg-info/` to the clone's own
+  `.git/info/exclude` before it builds anything (reported as `excluded`), so
+  no tracked file changes and anything else untracked still refuses. The
+  `.gitignore` block `apply` and `materialize --stage scaffold` author also
+  carries `*.egg-info/` (not a scaffold gap on its own). The plan approved
+  before `apply` stays `PLAN_STALE` for `materialize` (apply carried out its
+  `createDirs`); the refusal now says so and the lifecycle (re-plan once
+  `apply` has run) is documented in `proposal-implementation`'s usage guide.
+  Shared by `experimental-implementation`.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -640,6 +655,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   `proposal` object gains a `receipt` key (`null`, or `operation` and
   `document_matches`). Nothing on disk is read differently or rewritten; no
   migration is needed.
+
+- `env` appends `.venv/` and `*.egg-info/` to the target clone's
+  `.git/info/exclude` (once; its JSON gains `excluded`), and a `.gitignore`
+  block authored by `apply` or `materialize --stage scaffold` gains
+  `*.egg-info/`. Existing `.gitignore` files are not rewritten, the scaffold
+  gap list is unchanged (so `verify` reads an existing target exactly as
+  before), and no receipt or ledger changes; no migration is needed.
 
 ## 0.13.0
 

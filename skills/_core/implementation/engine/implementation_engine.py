@@ -4964,6 +4964,49 @@ def read_findings(target: Path) -> list[dict]:
 IGNORE_ENTRIES = (".venv/", "__pycache__/", ".ipynb_checkpoints/",
                   ".implementation/")
 
+#: The two things `env` brings into a target: the virtualenv, and the
+#: metadata directory its printed editable install (`pip install -e`) creates
+#: under `src/`. `env` keeps both out of `git status` through the clone's own
+#: `.git/info/exclude`, so the next clean-requiring step (`plan`) is not
+#: refused over files this skill created, and no file of the target's
+#: tracked tree changes.
+ENV_PRODUCT_IGNORES = (".venv/", "*.egg-info/")
+
+#: Carried by every ignore block this skill authors for the target
+#: (`apply`, `materialize --stage scaffold`), so a clone that installs the
+#: package editable stays clean too. Not a scaffold gap: a target with a
+#: `.gitignore` lacking it still has every scaffold entry, since `env` excludes it anyway.
+AUTHORED_IGNORE_EXTRAS = ("*.egg-info/",)
+
+
+def authored_ignore_lines(target: Path, missing: list[str]) -> list[str]:
+    """`missing` plus each extra the target's `.gitignore` does not carry yet."""
+    path = target / ".gitignore"
+    text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+    present = {line.strip() for line in text.splitlines()}
+    return [*missing, *(extra for extra in AUTHORED_IGNORE_EXTRAS
+                        if extra not in present and extra not in missing)]
+
+
+def exclude_env_products(target: Path) -> list[str]:
+    """Append `ENV_PRODUCT_IGNORES` to the clone's `.git/info/exclude`.
+
+    Returns the lines added (none on a rerun). The file belongs to the clone,
+    not to its history, so nothing here can dirty the tree; a worktree or a
+    `.git` file is resolved through `git rev-parse --git-path`.
+    """
+    raw = git(target, "rev-parse", "--git-path", "info/exclude").strip()
+    exclude = Path(raw) if Path(raw).is_absolute() else target / raw
+    text = exclude.read_text(encoding="utf-8", errors="replace") if exclude.exists() else ""
+    present = {line.strip() for line in text.splitlines()}
+    added = [entry for entry in ENV_PRODUCT_IGNORES if entry not in present]
+    if added:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "" if not text or text.endswith("\n") else "\n"
+        exclude.write_text(text + prefix + "".join(f"{entry}\n" for entry in added),
+                           encoding="utf-8")
+    return added
+
 
 def ignore_gaps(target: Path) -> list[str]:
     """Entries the target's own .gitignore must carry.
@@ -9048,6 +9091,8 @@ def cmd_env(args: argparse.Namespace) -> dict:
     interpreter = target_interpreter(target)
     pip = interpreter.parent / ("pip.exe" if os.name == "nt" else "pip")
     created = False
+    # First, so the virtualenv is never visible to `git status` at all.
+    excluded = exclude_env_products(target)
     if not (venv_dir / "pyvenv.cfg").exists():
         # Check site 1: BEFORE spending the work of building a venv from an
         # under-floor interpreter, which the reuse-path check below could
@@ -9106,6 +9151,7 @@ def cmd_env(args: argparse.Namespace) -> dict:
         "pip": str(pip),
         "nextCommand": " ".join(next_command),
         "manifests": manifests,
+        "excluded": excluded,
         # Reported here because this is the command that runs first after a clone,
         # which is exactly when a repository full of placeholders looks complete.
         "lfs": lfs_state(target),
@@ -9219,7 +9265,7 @@ def migrate(target: Path, current: dict) -> None:
         ignore_file.write_text(
             existing + prefix
             + "\n# Created by proposal-implementation: the target's own environment\n"
-            + "\n".join(missing_ignores) + "\n",
+            + "\n".join(authored_ignore_lines(target, missing_ignores)) + "\n",
             encoding="utf-8",
         )
 
@@ -18591,7 +18637,10 @@ def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> None:
            for key in ("renames", "moves", "createDirs", "referenceUpdates")):
         raise Refused(
             "PLAN_STALE",
-            "The repository changed since the plan was approved. Re-run `plan` and get approval again.",
+            "The repository changed since the plan was approved. Re-run `plan` and get approval again. "
+            "Expected once `apply` has run: `apply` carries out the plan it was given "
+            "(its renames, moves and createDirs), so that plan has stopped describing the tree; "
+            "pass `materialize` a plan taken once `apply` has run.",
         )
 
 
@@ -18723,12 +18772,13 @@ def _materialize_scaffold_anchors(target: Path, name: str) -> list[dict]:
         ignore_file = target / ".gitignore"
         existing = ignore_file.read_text(encoding="utf-8") if ignore_file.exists() else ""
         prefix = "" if not existing or existing.endswith("\n") else "\n"
+        lines = authored_ignore_lines(target, missing_ignores)
         ignore_file.write_text(
-            existing + prefix + "".join(f"{entry}\n" for entry in missing_ignores),
+            existing + prefix + "".join(f"{entry}\n" for entry in lines),
             encoding="utf-8",
         )
         entries.append({"path": ".gitignore", "kind": "anchor", "stage": "scaffold",
-                        "added": missing_ignores, "recordedAt": recorded_at})
+                        "added": lines, "recordedAt": recorded_at})
 
     if pytest_anchor_missing(target):
         pyproject = target / "pyproject.toml"

@@ -664,6 +664,8 @@ date. Drift is Flow B's fourth step, not a reason to start over.
 2. **Ask for the repository URL** and clone it:
    `GIT_LFS_SKIP_SMUDGE=1 git clone <url> implementations/<repo>` (or `git init`), pin the
    LFS skip in the clone's local config (see `references/usage.md`), then `env`.
+   `env` adds `.venv/` and `*.egg-info/` to the clone's `.git/info/exclude`
+   first, so its own products never leave the tree dirty for `plan`.
 3. Install dev dependencies with the printed target `pip`, never the forge's.
 4. **Is there prior work, and does its layout already comply?** Run `plan`. If
    `status` is `compliant`, go to step 6. Otherwise present every rename, move and
@@ -683,7 +685,10 @@ date. Drift is Flow B's fourth step, not a reason to start over.
      Say so, and hand the user a self-contained prompt that performs exactly this
      reorganization in a separate session. Then continue without it.
 5. **Fill every scaffold gap.** Run `materialize --stage scaffold --plan <path
-   to the approved plan> --seed <the suite's fixed seed>`. `plan`'s
+   to the current plan> --seed <the suite's fixed seed>`. If step 4 ran `apply`,
+   run `plan` again first and pass that new plan: `apply` carried out the old
+   one (its moves and `createDirs`), so the old one is `PLAN_STALE` here by
+   design (`references/usage.md`, "The plan, apply and materialize lifecycle"). `plan`'s
    `scaffoldFiles` and `verify`'s `structure.scaffoldGaps` report the same
    destinations — the table below, plus the two merge anchors
    (`.gitignore`, `pyproject.toml [tool.pytest.ini_options]`) when either is
@@ -706,7 +711,7 @@ date. Drift is Flow B's fourth step, not a reason to start over.
 
    | Gap `plan` and `verify` report | Written from |
    | --- | --- |
-   | `.gitignore (.venv/, __pycache__/, .ipynb_checkpoints/)` | authored: the entries a virtualenv inside the target needs kept out of the index |
+   | `.gitignore (.venv/, __pycache__/, .ipynb_checkpoints/)` | authored: the entries a virtualenv inside the target needs kept out of the index, plus `*.egg-info/` (never a gap on its own) |
    | `pyproject.toml [tool.pytest.ini_options] pythonpath` | `assets/pyproject.template.toml`, or the anchor appended to the existing file |
    | `src/<Package>/__init__.py` | authored: exports the target's own modules (none yet), plus `__implementation__`/`__levels__`/`__steps__`/`__records__` prefilled empty, with guidance comments, awaiting step 8/9 |
    | `src/<Package>/report_digest.py` | `assets/kit/nb/report_digest.py` |
@@ -3146,7 +3151,7 @@ third: where the detail actually lives.
 | Command | What it does | Where its detail lives |
 | --- | --- | --- |
 | `name` | Normalizes a name as the user typed it into the directory/package pair every later command takes as `--name`, and reports it so the agent can show it before writing anything. The only command that takes no `--target`: it runs before a target exists. Refuses `NAME_EMPTY`, `NAME_HAS_NO_WORDS`, `NAME_NOT_ALPHANUMERIC` and `NAME_STARTS_WITH_DIGIT` rather than guessing a spelling | `references/usage.md`, *The name, normalized before the directory exists* |
-| `env` | Builds the target's own `.venv` under `implementations/<repo>/`, refusing an interpreter below 3.10 or below the target's own declared `python_requires`, whichever is higher — and refusing outright to run from a forge virtualenv. Reports every LFS pointer as a placeholder with the real file's size, at the one moment a repository full of pointers looks complete | `references/usage.md`, *2. The isolated environment* |
+| `env` | Adds `.venv/` and `*.egg-info/` to the clone's `.git/info/exclude` (reported as `excluded`) so its own products never dirty the tree, then builds the target's own `.venv` under `implementations/<repo>/`, refusing an interpreter below 3.10 or below the target's own declared `python_requires`, whichever is higher — and refusing outright to run from a forge virtualenv. Reports every LFS pointer as a placeholder with the real file's size, at the one moment a repository full of pointers looks complete | `references/usage.md`, *2. The isolated environment* |
 | `plan` | Reads the repository and returns the migration it would perform — `renames`, moves, `createDirs`, `referenceUpdates`, `unclassifiedFiles` — and writes nothing. The artefact the user approves; `apply` refuses anything else | `references/usage.md`, *3. Plan the migration (read-only)* |
 | `apply` | Executes exactly the approved plan — and refuses anything else — as one separate `git mv` commit, all-or-nothing: the tree is verified clean first, and a mid-migration failure restores the reviewed starting point rather than leaving a half-migrated repository. A gating command — it refuses `FORGE_DEFECT_OPEN` like the write-verbs above | `references/usage.md`, *4. Apply, as one separate commit* |
 | `verify` | Reports layout, revision fidelity, scaffold/object/harness drift, the audit bridge's state and every executed notebook's interpreter. Reports and never gates: its statuses are their own roster, held to `cmd_verify`'s own returns | `references/usage.md`, *5. Verify* and *Reading `verify`* |

@@ -63,6 +63,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B3 — `RESOLVE_TARGET` matches whole heading tokens; level marks name an outer section (D, writer trigger: resolver + gate + CLI + 2 SKILL.md + 2 usage.md + 3 test files)
   - [x] B13 — successors flag an inherited link to another revision's companion artifacts (D, writer trigger: naming + orchestrator + projection + types + 3 docs + test)
   - [x] B2 — `papersmith status` stage from engine receipts (D, writer trigger: status.py + test + README + CHANGELOG)
+  - [x] B5 — fresh target clean through env/plan/apply/materialize (D, writer trigger: engine + forge harness + 2 SKILL.md + usage + new test file)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -647,3 +648,20 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Tests: `ProposalStageFromEngineStateTests` (7) RED 4F -> GREEN; mutations (COMMITTED check off -> 1 red; legacy
   fallback off -> 2 red). test:fast 195 passed. No migration (reader-side only).
   Commit: `fix(status): a proposal's stage comes from its publication receipt` (the commit carrying this line)
+
+- B5 (real, reproduced on a `git init` target via the CLI): `env` -> `plan` refused `DIRTY_WORKTREE` (`?? .venv/`);
+  `pip install -e .` leaves `src/<dist>.egg-info/` untracked; `plan` A -> `apply` -> `materialize --plan A` refused
+  `PLAN_STALE` (apply carried out A's `createDirs`). Decision: the coordinator's "scaffold `.gitignore` exists before
+  `env`" cannot hold literally, since writing a tracked `.gitignore` is itself an untracked file that dirties the
+  tree before `plan` (and the scaffold only lands at `materialize`, after `plan`). Fix: `env` appends
+  `ENV_PRODUCT_IGNORES` (`.venv/`, `*.egg-info/`) to the clone's `.git/info/exclude` (resolved via
+  `git rev-parse --git-path`) before building anything; JSON gains `excluded`. `DIRTY_WORKTREE` unchanged (a
+  stray untracked file still refuses, tested). `apply`/`materialize --stage scaffold` `.gitignore` blocks (and
+  the forge harness `scripts/materialize.py`) also carry `*.egg-info/` via `authored_ignore_lines`; not added to
+  `IGNORE_ENTRIES`, so existing targets' scaffold gaps/`verify` are unchanged. `PLAN_STALE` kept; `materialize`'s
+  refusal detail now says it is expected once `apply` has run; lifecycle documented (usage.md "The plan, apply and
+  materialize lifecycle", SKILL.md Flow A steps 2 and 5, env row; experimental SKILL.md step 1).
+  Tests: `tests/test_implementation_fresh_target_lifecycle.py` (8, CLI end to end) RED 6F -> GREEN; mutations
+  (exclude call removed -> 4 red; extras emptied -> 1 red). Domain-lock pins unchanged (prose reworded).
+  test:fast 4138 passed, 4 skipped. No migration.
+  Commit: `fix(implementation): env leaves a fresh target clean for plan` (the commit carrying this line)

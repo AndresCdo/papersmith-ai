@@ -111,9 +111,19 @@ Check `pythonVersion` in the response: the templates declare `requires-python
     "absentNote": "…"
   },
   "lfs": {"status": "none", "patterns": []},
+  "excluded": [".venv/", "*.egg-info/"],
   "note": "Run every target command through this interpreter. Never the forge's."
 }
 ```
+
+Before it builds anything, `env` appends `.venv/` and `*.egg-info/` to the
+clone's own `.git/info/exclude` (`excluded` lists what it added; `[]` on a
+rerun). Those are the two things `env` brings into the target — the virtualenv
+and the metadata the printed `pip install -e .` creates under `src/` — so a
+fresh `git init` target is still clean for the `plan` that follows, and no file
+of the target's tracked tree changes. Anything else untracked still refuses
+`DIRTY_WORKTREE`. The tracked `.gitignore` gets the same entries later, from
+`apply` or `materialize --stage scaffold`, so a clone carries them too.
 
 `nextCommand` is one invocation: the forge's own dev requirements first, then
 every manifest the target declares and this flow can honour — `-r
@@ -261,6 +271,24 @@ that edits nothing but a file's *contents* leaves all three identical, and
 without that check `apply` would rewrite a file that was never on the list the
 user approved. On success everything lands in one commit — `git revert <commit>`
 undoes the whole migration.
+
+### The plan, apply and materialize lifecycle
+
+A plan describes the tree it was taken from. `apply` carries out its renames,
+moves and `createDirs` (on a fresh `git init` target, `createDirs` is the whole
+plan), so once `apply` has run that plan is `PLAN_STALE` for `materialize` by
+design: the gate cannot tell "applied" from "moved by somebody else", and it
+must refuse the second. Re-plan once `apply` has run, and pass the new plan to
+`materialize`:
+
+```text
+env -> plan (A) -> [GATE] apply --plan A -> plan (B) -> materialize --stage scaffold --plan B
+```
+
+Plan B normally lists nothing to move (`decisionCount: 0`), so it needs no
+second reorganization approval; it is what binds `materialize` to the tree
+that `apply` left. When `plan` A was already `compliant` and nothing was
+applied, A itself is current and `materialize` takes it.
 
 ## Adopt an external folder (survey, then apply)
 

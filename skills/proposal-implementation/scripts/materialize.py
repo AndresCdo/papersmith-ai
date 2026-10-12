@@ -33,6 +33,7 @@ os.environ.setdefault("IMPLEMENTATION_DOMAIN_PROFILE",
 sys.path.insert(0, str(_HERE.parents[2] / "_core" / "implementation" / "engine"))
 from implementation_engine import (  # noqa: E402
     IGNORE_ENTRIES,
+    authored_ignore_lines,
     SKILL_ROOT,
     authored_package_init,
     package_name,
@@ -133,7 +134,8 @@ def main(target: str, name: str, seed: str, kit: str | None = None) -> int:
     if missing:
         if ignored and not ignored.endswith("\n"):
             ignored += "\n"
-        ignore.write_text(ignored + "".join(f"{entry}\n" for entry in missing))
+        ignore.write_text(ignored + "".join(
+            f"{entry}\n" for entry in authored_ignore_lines(root, missing)))
 
     print(f"materialized {pkg} into {root} (seed {seed})")
     return 0

@@ -213,6 +213,9 @@ narrowed to what this domain actually has:
 
 1. Clone the target repository under `implementations/<repo>/`, then `env`
    to build its own venv from its own interpreter -- never the forge's.
+   `env` first adds `.venv/` and `*.egg-info/` to the clone's
+   `.git/info/exclude`, so neither leaves the tree dirty for a later
+   clean-requiring command.
 2. **Ask for the name.** Run `name --name "<whatever they typed>"`, confirm
    both forms it returns, then **[GATE]** before writing anything with them.
 3. **[GATE] Ask for authorization to implement.** Nothing below writes code
