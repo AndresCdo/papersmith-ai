@@ -85,6 +85,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] E5 — `status`/`audit` collect projection notes; `--verbose` prints them (D, writer trigger: 3 src files + new test file + README)
   - [ ] E6 — partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
   - [x] E2 — holder name in proposal-implementation docs (inline: 2 doc files + drift test)
+  - [x] E3 — sealed set documented + refusal lists it (inline: engine + 2 docs + test)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -976,3 +977,13 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `skills/*/references/*.md` must be a holder some `impl_profile.py` declares) RED 4F -> GREEN (2 passed, 60
   subtests). `npm run test:fast`: 188 passed. No migration.
   Commit: `docs(implementation): name the declared checklist holder, not AGREEMENTS.md` (the commit carrying this line)
+- E3 (real): `_materialize_authored` accepts `all_kit_destinations` + `recorded_object_modules`; `_materialize_adopt`
+  accepts `all_kit_destinations` only; the refusal named neither and no doc listed the paths. Fix: both refusal
+  details list the accepted paths (engine, variable `allowed`; domain lock unchanged); usage.md "#### The sealed set"
+  lists the paths with their stage + the `--module` and merge-anchor/`wiring.py` notes; SKILL.md `materialize` row
+  points at it; `NOT_A_KIT_DESTINATION` refusal-table row updated. No count written in prose
+  (`DerivedScaffoldCountSweepTests` forbids it; it caught my first draft's "seventeen"). Test:
+  `tests/test_materialize_sealed_set_doc.py` (doc list == engine list via subprocess; refusal names every path for
+  both modes) RED 3F -> GREEN (2 passed, 2 subtests). `npm run test:fast`: 3379 passed, 1 failed (the count sweep,
+  fixed) -> sweep 3 passed. No migration.
+  Commit: `fix(implementation): materialize names the sealed set it accepts` (the commit carrying this line)

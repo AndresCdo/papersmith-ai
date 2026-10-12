@@ -562,6 +562,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   every `*AGREE*.md` a skill's docs spell is a holder some implementation
   profile declares.
 
+- **`materialize --authored`/`--adopt` say which paths they accept.** Naming
+  any other path refused `NOT_A_KIT_DESTINATION` with "is not one of this
+  stage's kit destinations" and nothing else, and no doc listed the set. The
+  refusal detail now lists every accepted path (for `--authored`, including a
+  file the objects stage recorded under a `--module` name), and
+  `proposal-implementation`'s `references/usage.md` lists the set under "The
+  sealed set", kept equal to the engine's `all_kit_destinations` by a test.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**

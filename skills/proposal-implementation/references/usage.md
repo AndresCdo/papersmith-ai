@@ -397,7 +397,7 @@ in one commit, exactly as `apply` performs it; the scaffold stage writes
 (`--seed` substitutes `{{SEED}}`, default `7`); each surveyed file is
 recorded through the unchanged per-file adopt, which keeps its own refusals
 intact — `ALREADY_RECORDED` on a path the receipt already carries,
-`NOT_A_KIT_DESTINATION` outside the seventeen, `MATERIALIZE_PATH_ABSENT`
+`NOT_A_KIT_DESTINATION` outside the sealed set (listed under "The sealed set" below), `MATERIALIZE_PATH_ABSENT`
 with no bytes on disk. The run closes with the `verify` report, read-only.
 The migration commit reverts as one; the scaffold writes and the adoptions
 stay uncommitted for review, then commit.
@@ -555,6 +555,39 @@ from the kit. For an adopted destination the guarantee is "the record names
 who wrote them," not "the engine owns the bytes." Adopt one path at a time,
 deliberately — there is no batch or automatic adopt, because auto-adopting
 would record engine confidence in bytes the engine never saw.
+
+#### The sealed set
+
+`--authored` and `--adopt` accept exactly these paths — the scaffold, objects
+and harness destination lists, in that order (`all_kit_destinations`). Any
+other path refuses `NOT_A_KIT_DESTINATION`, and the refusal lists the paths it
+would have accepted. `<Name>` is the product folder (`--name`), `<Package>` its
+importable form (hyphens become underscores).
+
+- `src/<Package>/__init__.py` (scaffold)
+- `src/<Package>/report_digest.py` (scaffold)
+- `tests/test_smoke.py` (scaffold)
+- `tests/findings.py` (scaffold)
+- `tests/conftest.py` (scaffold)
+- `tests/sweep.py` (scaffold)
+- `tests/admissibility.py` (scaffold)
+- `tests/test_audit.py` (scaffold)
+- `tests/test_remedies.py` (scaffold)
+- `<Name>/Notebooks/verification.ipynb` (scaffold)
+- `src/<Package>/module.py` (objects)
+- `tests/test_invariants.py` (objects)
+- `tests/test_synthetic.py` (objects)
+- `src/<Package>_Benchmark/__init__.py` (harness)
+- `src/<Package>_Benchmark/benchmark.py` (harness)
+- `src/<Package>_Benchmark/verdict.py` (harness)
+- `<Name>/Notebooks/probe.ipynb` (harness)
+
+`--authored` also accepts a file `materialize --stage objects --module <stem>`
+wrote under its own name (`src/<Package>/<stem>.py`), because its receipt entry
+already names it; `--adopt` does not, since such a file was never unrecorded.
+`.gitignore` and `pyproject.toml` are merge anchors, not destinations, and
+`src/<Package>_Benchmark/wiring.py` is authored by hand and never sealed: none
+of the three is accepted by either mode.
 
 Substitute these placeholders. Every one of them occurs in some template, and
 no template carries any other. `materialize --stage scaffold` substitutes
@@ -2772,7 +2805,7 @@ state, alongside the scenarios — not verified by hand once.
 | `OBJECT_MAP_AT_OLD_HOME` | `materialize --stage objects` ran on a target scaffolded before this change: `src/<Package>_Benchmark/__init__.py` still binds `revision`/`premises` there, and `src/<Package>/__init__.py`'s `__implementation__` is blank. Distinct from `OBJECT_MAP_NOT_APPROVED` — this target once declared, at the old home — and names both locations. Follow SKILL.md step 8's migration procedure: scaffold, hand-move the literals (including any this skill has no reader for), `materialize --authored`, delete the orphaned seal copy, re-execute notebooks. |
 | `SCAFFOLD_DRIFT` | (`verify`, reported in `structure.scaffoldDrift`, never raised) A receipt-recorded scaffold destination's on-disk bytes no longer match its `writtenSha256`. For a notebook (`.ipynb`), its source content (each cell's type and source, in order) is compared as well, against the entry's `writtenSourceSha256`: executing it in place, which rewrites outputs, execution counts and kernel metadata, is not drift, and a changed cell source or cell type is. An entry written by an earlier release has no `writtenSourceSha256`; for an engine-written entry the source content is rebuilt from the kit and trusted only when it hashes to `writtenSha256`, and any other entry is compared on full bytes alone until its next `--authored`. Release the seal with `materialize --authored <path>` after declaring the edit. `objects`/`harness` destinations get the identical check under `structure.objectDrift`/`structure.harnessDrift`. |
 | `UNRECORDED_SCAFFOLD` | (`verify`, reported in `structure.unrecordedScaffold`, never raised) A scaffold destination exists on disk with no receipt entry — most often because the target was scaffolded before this command existed. Remedy: `materialize --adopt <path>`, one path at a time, deliberately. **This degrades the guarantee**: adoption records who is responsible for the bytes, never that they came from the kit — the record names who wrote them, not that the engine owns them. `objects`/`harness` destinations get the identical check under `structure.unrecordedObjects`/`structure.unrecordedHarness`. |
-| `NOT_A_KIT_DESTINATION` | `materialize --authored`/`--adopt` named a path outside `all_kit_destinations` — the scaffold, objects and harness destination lists, concatenated. The receipt is not a general-purpose ledger. |
+| `NOT_A_KIT_DESTINATION` | `materialize --authored`/`--adopt` named a path outside `all_kit_destinations` — the scaffold, objects and harness destination lists, concatenated (the paths listed under "The sealed set"); `--authored` also accepts a file the objects stage recorded under a `--module` name. The detail lists every accepted path. The receipt is not a general-purpose ledger. |
 | `MATERIALIZE_PATH_ABSENT` | `materialize --authored`/`--adopt` named a path with no bytes on disk. |
 | `NO_RECEIPT_ENTRY` | `materialize --authored <path>` named a path the engine never wrote. There is no seal to release; use `--adopt`. |
 | `ALREADY_RECORDED` | `materialize --adopt <path>` named a path the receipt already carries. Adoption is not a re-seal; use `--authored`. |

@@ -19503,10 +19503,11 @@ def _kit_destination_stage(path: str, name: str) -> str | None:
 
 
 def _materialize_authored(target: Path, name: str, path: str) -> dict:
-    if (path not in all_kit_destinations(name)
-            and path not in recorded_object_modules(target, name)):
+    allowed = [*all_kit_destinations(name), *recorded_object_modules(target, name)]
+    if path not in allowed:
         raise Refused("NOT_A_KIT_DESTINATION",
-                      f"{path} is not one of this stage's kit destinations.")
+                      f"{path} is not one of this stage's kit destinations: "
+                      f"{allowed}.")
     full = target / path
     if not full.exists():
         raise Refused("MATERIALIZE_PATH_ABSENT",
@@ -19539,7 +19540,8 @@ def _materialize_authored(target: Path, name: str, path: str) -> dict:
 def _materialize_adopt(target: Path, name: str, path: str) -> dict:
     if path not in all_kit_destinations(name):
         raise Refused("NOT_A_KIT_DESTINATION",
-                      f"{path} is not one of this stage's kit destinations.")
+                      f"{path} is not one of this stage's kit destinations: "
+                      f"{all_kit_destinations(name)}.")
     full = target / path
     if not full.exists():
         raise Refused("MATERIALIZE_PATH_ABSENT",
