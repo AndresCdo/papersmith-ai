@@ -113,6 +113,23 @@ number is `0`, breaking changes can still arrive without a major bump.
   function `derive_successor` runs before writing) and v1 runs the guarded
   first write's (`initialCandidateRefusal`). Both deliberation skills share
   the engine.
+- **The two experimental skills agree on what an experiment heading is.**
+  `experimental-deliberation` writes and validates an experiment as a heading
+  carrying its `[exp:<id>]` declaration (cited as `[tests:<id>]` or `(Exp.
+  <id>)`), while `experimental-implementation` located experiments only by a
+  bare `## N` heading and counted only digit prose citations (`Exp. 3`). A
+  document written the deliberation's way declared no experiment to the
+  implementation skill, so every finding locus read as unknown and `compose`
+  refused every replacement; documents had to carry both forms (`## N` wrapping a `###
+  Experiment [exp:EN]` heading). The convention now lives in one file,
+  `skills/_core/conventions/experiments.json` (identifier class, declaration
+  and citation markers, prose form), read by both skills: the deliberation's
+  `reference-experimental.ts`/`profile.ts` through `experiment-convention.ts`,
+  and the implementation's `impl_profile.py`. The implementation skill now
+  locates an experiment by a heading of any level carrying `[exp:<id>]`, its
+  block running to the next heading of the same or a higher level, and counts
+  `(Exp. <id>)` citations. `[claims:N]` crossings into the proposal are
+  unchanged.
 
 ### Behaviour changes
 
@@ -184,6 +201,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   three points. Existing managed revisions, receipts and ledgers are not
   re-validated and keep reading; a 0.13.0 v1 that carries an inline-code
   `## ` becomes able to publish successors. No migration is needed.
+- `experimental-implementation` reads experiments documents in three forms:
+  the canonical heading carrying `[exp:<id>]`, and both legacy forms (a bare
+  `## N`, and `## N` wrapping an `[exp:<id>]` heading). Managed revisions are
+  never rewritten: a 0.13.0 experiments document keeps every id it declared
+  (`N`), and a legacy dual block also declares its nested `<id>`, so findings,
+  `__provenance__` claims and `admissibility.json` rulings that cite `N` keep
+  reading, and new ones may cite `<id>`. Inside one legacy block both ids name
+  the same experiment: `compose` accepts a replacement carrying both (a new,
+  optional `block_locator.block_aliases` profile leaf, off unless declared;
+  `proposal-implementation` does not declare it and is unchanged). The
+  migration is a compatibility read; no workspace artefact changes shape and
+  no `upgrade` migration is needed.
 
 ## 0.13.0
 

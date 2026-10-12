@@ -53,7 +53,7 @@ its own single document, this skill reads its own words for document 0, and
 | `claim_key` / `locus_key` | `experiments` | `equations` |
 | `remedy_locus_key` | `remedy_experiments` | `remedy_equations` |
 | `notation_keys.locus` / `.remedyLocus` / `.unknown` | `experiments` / `remedyExperiments` / `unknownExperiments` | `equations` / `remedyEquations` / `unknownEquations` |
-| `citation_pattern` | `Exps?`/`Experiment`/`Experimentos?` syntax | `Ecs?`/`Eq`/`Ecuaciones?` syntax |
+| `citation_pattern` | `(Exp. <id>)` / `(Experiment. <id>)` from the shared convention, plus the legacy digit forms `Exps?`/`Experiment`/`Experimentos?` | `Ecs?`/`Eq`/`Ecuaciones?` syntax |
 | `documents[N].directory` / `.label` | `experiments/` / `experiments` | `proposals/` / `proposal` |
 
 The top-level `vocabulary.*` leaves below stay document 0's own -- they are
@@ -71,6 +71,32 @@ document's claim key it implements (`"experiments"` for document 0,
 `"equations"` for document 1) -- a module may declare both -- and every
 invariant listed there needs a matching test under `tests/`, exactly as the
 sibling's own doctrine requires for its own claim key.
+
+## How an experiment is located: one convention, shared
+
+`experimental-deliberation` writes the experiments document, and this skill
+reads it, so both read the same convention from one file:
+`skills/_core/conventions/experiments.json` (the identifier class, the
+declaration marker `exp`, the citation marker `tests`, and the prose form
+`(Exp. <id>)`). Edit it there, never in either skill.
+
+- **Canonical form.** An experiment is a heading of any level carrying its
+  declaration, `## Experiment [exp:E1] — labelled-budget sweep`. Its block runs
+  to the next heading of the same or a higher level, so `### Protocol` under
+  it belongs to it. A finding names it as `"experiments": ["E1"]`; `compose`
+  replaces exactly that block.
+- **Legacy forms, still read.** Before 0.14.0 this skill knew only a bare
+  `## N` heading, so published revisions carry either `## N` alone or `## N`
+  wrapping a `### Experiment [exp:EN]` heading. Both keep reading; no managed
+  revision is rewritten. A legacy `## N` block declares `N` and every
+  `[exp:<id>]` nested in it, and the two ids name the same experiment
+  (`block_locator.block_aliases`): a finding citing `1` and one citing `E1`
+  reach the same block, and `compose` accepts a replacement carrying both. A
+  replacement carrying two separate experiments still refuses
+  `AMBIGUOUS_REMEDY_TAG`.
+- **Crossings into the proposal are a separate form.** `[claims:N]` cites
+  the proposal's `\tag{N}` and is resolved by `agree`'s crossing check
+  against the proposal, never against this document's own experiments.
 
 ## `Data/` is demandable, per product folder
 

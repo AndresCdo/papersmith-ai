@@ -140,7 +140,7 @@ Write the query as **distinctive words from the target heading**, not a sentence
 
 If `blocked` is `true`, the query matched more than one candidate — **remove the terms the question names, never add more**. Adding words to "narrow" a query widens it. If the reason is `SUCCESSOR_TARGET_NOT_FOUND`, no heading matched: you described the section's content instead of its title.
 
-An experiment whose heading carries its own `[exp:E1]` declaration resolves from a query of just `E1` (measured), so keep the declaration in the heading rather than in the body.
+An experiment whose heading carries its own `[exp:E1]` declaration resolves from a query of just `E1` (measured), so keep the declaration in the heading rather than in the body. `experimental-implementation` reads the same convention (`skills/_core/conventions/experiments.json`) and locates an experiment only by such a heading, its block running to the next heading of the same or a higher level; one heading per experiment is all either skill needs (no wrapping `## N`).
 
 Several loci in one call:
 

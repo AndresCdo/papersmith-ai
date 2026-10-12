@@ -1,4 +1,7 @@
 import { proseReference } from "../_core/deliberation/engine/domain-profile.js";
+import { EXPERIMENT_CONVENTION, IDENTIFIER } from "./experiment-convention.js";
+
+export { EXPERIMENT_CONVENTION };
 
 /**
  * This domain's reference-integrity vocabulary, wired through `profile.ts` as
@@ -26,20 +29,19 @@ import { proseReference } from "../_core/deliberation/engine/domain-profile.js";
  * profile load still in progress.
  */
 
-/** An experiment identifier: alphanumeric, and hyphens, dots or underscores after the first character. */
-const IDENTIFIER = "[A-Za-z0-9][A-Za-z0-9._-]*";
+const escape = (literal: string) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Every declaration this domain's documents make: an experiment naming itself `[exp:E1]`. */
 export function declares(source: string): readonly { kind: string; value: string }[] {
 	const out: { kind: string; value: string }[] = [];
-	for (const [, value] of source.matchAll(new RegExp(`\\[exp:(${IDENTIFIER})\\]`, "g"))) out.push({ kind: "tag", value });
+	for (const [, value] of source.matchAll(new RegExp(`\\[${escape(EXPERIMENT_CONVENTION.declares)}:(${IDENTIFIER})\\]`, "g"))) out.push({ kind: "tag", value });
 	return out;
 }
 
 /** Every citation this domain's documents make: an explicit `[tests:E1]` claim reference, or the prose form this domain declares. */
 export function cites(source: string): readonly { kind: string; value: string }[] {
 	const out: { kind: string; value: string }[] = [];
-	for (const [, value] of source.matchAll(new RegExp(`\\[tests:(${IDENTIFIER})\\]`, "g"))) out.push({ kind: "ref", value });
+	for (const [, value] of source.matchAll(new RegExp(`\\[${escape(EXPERIMENT_CONVENTION.cites)}:(${IDENTIFIER})\\]`, "g"))) out.push({ kind: "ref", value });
 	for (const [, value] of source.matchAll(proseReference("g"))) out.push({ kind: "prose", value });
 	return out;
 }

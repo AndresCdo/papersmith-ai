@@ -230,7 +230,11 @@ Before you acknowledge anything, tell the user in plain language what is leaving
 
 ## Reference integrity: an experiment declares, a claim cites
 
-From `reference-experimental.ts`:
+From `reference-experimental.ts`, whose markers, identifier class and prose
+form are read from `skills/_core/conventions/experiments.json` (through
+`experiment-convention.ts`). `experimental-implementation` reads the same file
+to locate experiments, so what this skill validates is exactly what that skill
+finds; change the convention there, never here:
 
 - An experiment **declares** its identifier as `[exp:E1]`. Identifiers are alphanumeric, with hyphens, dots or underscores after the first character. They are deliberately **not** positional ordinals: experiments get added, split and retired, and a positional number would silently re-point every citation the first time one is removed.
 - A claim **cites** an experiment as `[tests:E1]`, or in prose as `(Exp. E1)` / `(Experiment. E1)`.
@@ -242,7 +246,7 @@ That single pair makes both failure directions visible, which is exactly the tut
 
 Two experiments declaring the same identifier are a duplicate and fail the uniqueness check. A document that declares and cites nothing reports *not applicable*, never a vacuous pass.
 
-Put the declaration in the experiment's own heading. An experiment headed `## Experiment [exp:E1] — …` resolves from a `RESOLVE_TARGET` query of `E1` (measured), which makes the identifier a usable locus handle as well as a citation target. `reference-experimental.ts` declares under the core's own `tag` kind rather than a domain word for the same reason: that is the half of the core's label/tag split that feeds the resolver's aliases and lets a citation resolve instead of reporting as dangling.
+Put the declaration in the experiment's own heading. `experimental-implementation` locates an experiment only by a heading carrying the declaration, and takes its block to run to the next heading of the same or a higher level; a declaration placed in body text resolves citations here but is no locus there. An experiment headed `## Experiment [exp:E1] — …` resolves from a `RESOLVE_TARGET` query of `E1` (measured), which makes the identifier a usable locus handle as well as a citation target. `reference-experimental.ts` declares under the core's own `tag` kind rather than a domain word for the same reason: that is the half of the core's label/tag split that feeds the resolver's aliases and lets a citation resolve instead of reporting as dangling.
 
 ### A second, unrelated citation form: `[claims:N]`
 

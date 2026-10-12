@@ -2660,5 +2660,263 @@ class SettleDoneUnwitnessedSiblingTests(unittest.TestCase):
         self.assertEqual(witness["handTicked"], ["a deferred item"])
 
 
+CONVENTION_FILE = FORGE / "skills" / "_core" / "conventions" / "experiments.json"
+
+
+class SharedExperimentConventionTests(unittest.TestCase):
+    """A7 (`cross-skill-consistency`): ONE experiment convention, read by
+    both experimental skills from `skills/_core/conventions/experiments.json`.
+
+    The canonical form is the one `experimental-deliberation` produces and
+    validates: an experiment declares `[exp:<id>]` in its own heading, and
+    its block runs to the next heading of the same or a higher level.
+    Before 0.14.0 this skill located experiments only by a bare `## N`
+    heading, so a document written the deliberation's way read as declaring
+    no experiment at all; documents had to carry both forms. The legacy
+    `## N` form (with or without a nested `[exp:<id>]` heading) still reads
+    -- managed revisions are immutable -- and inside one legacy block both
+    ids name the same experiment.
+    """
+
+    CANONICAL = (
+        "# Experiments\n\n"
+        "## Experiment [exp:E1] — first sweep\n\n"
+        "Sustains claim C1 [tests:E1], citing [claims:9].\n\n"
+        "### Protocol\n\nFive seeds.\n\n"
+        "## Experiment [exp:E2] — second sweep\n\n"
+        "Sustains claim C2 [tests:E2].\n\n"
+        "## Reporting\n\nTables.\n"
+    )
+
+    LEGACY_DUAL = (
+        "# Experiments\n\n"
+        "## 1\n\n### Experiment [exp:E1] — first sweep\n\nOld text one.\n\n"
+        "## 2\n\n### Experiment [exp:E2] — second sweep\n\nOld text two.\n"
+    )
+
+    LEGACY_BARE = "## 1\n\nOld text one.\n\n## 2\n\nOld text two.\n"
+
+    def _tmp_dir(self, prefix: str) -> Path:
+        tmp_dir = Path(tempfile.mkdtemp(prefix=prefix))
+        self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+        return tmp_dir
+
+    def _engine(self, doc0_text: str | None = None, doc1_text: str | None = None):
+        module, _ = _engine_with_documents(_real_profile()["documents"])
+        doc0_dir = self._tmp_dir("convention-doc0-")
+        doc1_dir = self._tmp_dir("convention-doc1-")
+        if doc0_text is not None:
+            (doc0_dir / "e1.md").write_text(doc0_text, encoding="utf-8")
+        if doc1_text is not None:
+            (doc1_dir / "p1.md").write_text(doc1_text, encoding="utf-8")
+        saved = {key: os.environ.get(key)
+                 for key in ("IMPLEMENTATION_PROPOSALS", "IMPLEMENTATION_PROPOSALS_1")}
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(doc0_dir)
+        os.environ["IMPLEMENTATION_PROPOSALS_1"] = str(doc1_dir)
+
+        def _restore():
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore)
+        return module
+
+    def _compose(self, module, remedy_block: str, locus: str, entry: str) -> dict:
+        box = FORGE / "implementations" / f"_convention_{os.getpid()}_{id(self)}_{next(_counter)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        finding = {"id": "f1", "document": "experiments", "experiments": [locus],
+                   "remedy_experiments": [locus], "remedy": "rewrite it",
+                   "remedy_block": remedy_block}
+        (box / "tests" / "findings.py").write_text(
+            f"FINDINGS = [{finding!r}]\n", encoding="utf-8")
+        return module.cmd_compose(argparse.Namespace(
+            target=str(box), finding="f1", entry_text=entry))
+
+    # -- the canonical form, with no `## N` heading anywhere -------------
+
+    def test_a_canonical_document_declares_its_experiments(self):
+        module = self._engine()
+        locator = module.document_block_locator(0)
+        self.assertEqual(locator["pattern"].findall(self.CANONICAL), ["E1", "E2"])
+
+    def test_a_canonical_locus_is_not_unknown_to_the_compatibility_audit(self):
+        module = self._engine(self.CANONICAL, "$$a = b \\tag{9}$$\n")
+        finding = {"id": "f1", "document": "experiments", "experiments": ["E2"],
+                   "remedy_experiments": ["E2"], "uses": [], "introduces": []}
+        result = module.remedy_compatibility(
+            [finding], "e1.md", {"experiments": self.CANONICAL,
+                                 "proposal": "$$a = b \\tag{9}$$\n"})
+        self.assertEqual(result["unknownExperiments"], [], result)
+
+    def test_a_canonical_document_still_crosses_into_the_proposal(self):
+        module = self._engine(self.CANONICAL, "$$a = b \\tag{9}$$ $$c \\tag{4}$$\n")
+        self.assertEqual(module.crossing_state(0, "e1.md"),
+                         {"crossed": ["9"], "declared": ["4", "9"],
+                          "absent": [], "untested": ["4"]})
+
+    def test_compose_replaces_one_canonical_block_and_keeps_its_neighbours(self):
+        module = self._engine()
+        remedy = "## Experiment [exp:E1] — first sweep\n\nNew text one.\n"
+        composed = self._compose(module, remedy, "E1", self.CANONICAL)
+        self.assertEqual(composed["experiment"], "E1")
+        text = composed["replacementText"]
+        self.assertIn("New text one.", text)
+        # The nested `### Protocol` belonged to E1's block and went with it;
+        # E2 and the same-level `## Reporting` are untouched.
+        self.assertNotIn("Five seeds.", text)
+        self.assertIn("## Experiment [exp:E2] — second sweep\n\nSustains claim C2", text)
+        self.assertTrue(text.endswith("## Reporting\n\nTables.\n"), text)
+
+    def test_canonical_prose_citations_are_counted(self):
+        pattern = re.compile(_real_profile()["findings"]["citation_pattern"])
+        found = [next(g for g in m.groups() if g)
+                 for m in pattern.finditer("As (Exp. E1) and (Experiment. run-2.b) show.")]
+        self.assertEqual(found, ["E1", "run-2.b"])
+
+    # -- the legacy forms keep reading -----------------------------------
+
+    def test_legacy_prose_citations_still_count(self):
+        pattern = re.compile(_real_profile()["findings"]["citation_pattern"])
+        found = [next(g for g in m.groups() if g)
+                 for m in pattern.finditer("Exp. 3, Exps. (4), Experiment 5, Experimentos (6)")]
+        self.assertEqual(found, ["3", "4", "5", "6"])
+
+    def test_the_legacy_bare_heading_still_declares(self):
+        module = self._engine()
+        self.assertEqual(
+            module.document_block_locator(0)["pattern"].findall(self.LEGACY_BARE),
+            ["1", "2"])
+
+    def test_the_legacy_dual_form_declares_both_ids(self):
+        module = self._engine()
+        self.assertEqual(
+            module.document_block_locator(0)["pattern"].findall(self.LEGACY_DUAL),
+            ["1", "E1", "2", "E2"])
+
+    def test_a_legacy_remedy_carrying_both_ids_composes_as_one_experiment(self):
+        module = self._engine()
+        remedy = "## 1\n\n### Experiment [exp:E1] — first sweep\n\nNew text one."
+        composed = self._compose(module, remedy, "1", self.LEGACY_DUAL)
+        self.assertEqual(
+            composed["replacementText"],
+            "# Experiments\n\n" + remedy + "\n## 2\n\n"
+            "### Experiment [exp:E2] — second sweep\n\nOld text two.\n")
+
+    def test_a_canonical_id_reaches_its_legacy_block(self):
+        module = self._engine()
+        remedy = "### Experiment [exp:E2] — second sweep\n\nNew text two.\n"
+        composed = self._compose(module, remedy, "E2", self.LEGACY_DUAL)
+        self.assertEqual(
+            composed["replacementText"],
+            "# Experiments\n\n## 1\n\n### Experiment [exp:E1] — first sweep\n\n"
+            "Old text one.\n\n" + remedy)
+
+    def test_a_legacy_bare_remedy_composes_exactly_as_before(self):
+        module = self._engine()
+        composed = self._compose(module, "## 2\n\nNew text two.\n", "2",
+                                 self.LEGACY_BARE)
+        self.assertEqual(composed["replacementText"],
+                         "## 1\n\nOld text one.\n\n## 2\n\nNew text two.\n")
+
+    def test_two_separate_experiments_in_one_remedy_stay_ambiguous(self):
+        module = self._engine()
+        remedy = ("## Experiment [exp:E1] — a\n\none\n\n"
+                  "## Experiment [exp:E2] — b\n\ntwo\n")
+        with self.assertRaises(module.Refused) as caught:
+            self._compose(module, remedy, "E1", self.CANONICAL)
+        self.assertEqual(caught.exception.code, "AMBIGUOUS_REMEDY_TAG")
+
+    def test_one_id_declared_by_two_blocks_of_a_remedy_stays_ambiguous(self):
+        module = self._engine()
+        remedy = ("## 1\n\n### Experiment [exp:E1] — a\n\none\n\n"
+                  "## Experiment [exp:E1] — again\n\ntwo\n")
+        with self.assertRaises(module.Refused) as caught:
+            self._compose(module, remedy, "1", self.LEGACY_DUAL)
+        self.assertEqual(caught.exception.code, "AMBIGUOUS_REMEDY_TAG")
+
+    def test_without_block_aliases_several_ids_stay_ambiguous(self):
+        """Aliasing is the document's own declaration, off by default: the
+        same legacy remedy refuses under a locator that does not opt in."""
+        documents = copy.deepcopy(_real_profile()["documents"])
+        del documents[0]["block_locator"]["block_aliases"]
+        module, tmp_dir = _engine_with_documents(documents)
+        self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+        remedy = "## 1\n\n### Experiment [exp:E1] — first sweep\n\nNew text one."
+        with self.assertRaises(module.Refused) as caught:
+            self._compose(module, remedy, "1", self.LEGACY_DUAL)
+        self.assertEqual(caught.exception.code, "AMBIGUOUS_REMEDY_TAG")
+
+    def test_a_non_boolean_block_aliases_is_refused_by_the_resolver(self):
+        profile = copy.deepcopy(dict(_real_profile()))
+        profile["documents"][0]["block_locator"]["block_aliases"] = "yes"
+        tmp_dir = self._tmp_dir("convention-aliases-")
+        profile_file = tmp_dir / "impl_profile.py"
+        profile_file.write_text(
+            "from pathlib import Path\n" f"PROFILE = {_to_source(profile)}\n",
+            encoding="utf-8")
+        with self.assertRaises(RuntimeError) as ctx:
+            _resolve_with(profile_file)
+        self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_INVALID_BLOCK_LOCATOR",
+                      str(ctx.exception))
+        self.assertIn("block_aliases", str(ctx.exception))
+
+    # -- one shared file drives both readers -----------------------------
+
+    def _relocated_profile(self, convention: dict):
+        """This skill's real profile file, placed in a scratch tree whose
+        `_core/conventions/experiments.json` says something else."""
+        root = self._tmp_dir("convention-tree-")
+        skill = root / "skills" / "experimental-implementation"
+        skill.mkdir(parents=True)
+        shutil.copy(PROFILE_FILE, skill / "impl_profile.py")
+        conventions = root / "skills" / "_core" / "conventions"
+        conventions.mkdir(parents=True)
+        (conventions / "experiments.json").write_text(
+            json.dumps(convention), encoding="utf-8")
+        return _load_module(skill / "impl_profile.py", "relocated_profile").PROFILE
+
+    def test_the_profile_reads_the_shared_file(self):
+        convention = json.loads(CONVENTION_FILE.read_text(encoding="utf-8"))
+        convention["declares"] = "trial"
+        convention["proseReference"] = "\\(Trial\\s+({identifier})\\)"
+        profile = self._relocated_profile(convention)
+        locator = re.compile(profile["documents"][0]["block_locator"]["pattern"])
+        self.assertEqual(locator.findall("## Trial [trial:T7]\n## X [exp:E1]\n"), ["T7"])
+        prose = re.compile(profile["findings"]["citation_pattern"])
+        self.assertEqual([next(g for g in m.groups() if g)
+                          for m in prose.finditer("see (Trial T7)")], ["T7"])
+
+    def test_both_languages_load_the_same_convention(self):
+        """The deliberation's TypeScript reader and this profile read the
+        identical values: declaration, citation and prose patterns."""
+        harness = (
+            "import path from 'node:path';\n"
+            "import { pathToFileURL } from 'node:url';\n"
+            f"const piRoot = {json.dumps(str(FORGE))};\n"
+            "const { createJiti } = await import(pathToFileURL(path.join(piRoot, "
+            "'node_modules/jiti/lib/jiti.mjs')).href);\n"
+            "const jiti = createJiti(import.meta.url);\n"
+            "const m = await jiti.import(path.join(piRoot, "
+            "'skills/experimental-deliberation/reference-experimental.ts'));\n"
+            "console.log(JSON.stringify(m.EXPERIMENT_CONVENTION));\n")
+        scratch = self._tmp_dir("convention-node-")
+        (scratch / "harness.mjs").write_text(harness, encoding="utf-8")
+        env = dict(os.environ)
+        env["DELIBERATION_DOMAIN_PROFILE"] = str(
+            FORGE / "skills" / "experimental-deliberation" / "profile.ts")
+        proc = subprocess.run(["node", str(scratch / "harness.mjs")], env=env,
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        from_ts = json.loads(proc.stdout.strip().splitlines()[-1])
+        profile_module = _load_module(PROFILE_FILE, "convention_probe")
+        self.assertEqual(from_ts, profile_module.EXPERIMENT_CONVENTION)
+        self.assertEqual(from_ts, json.loads(CONVENTION_FILE.read_text(encoding="utf-8")))
+
+
 if __name__ == "__main__":
     unittest.main()

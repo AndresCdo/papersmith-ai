@@ -42,7 +42,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A4 — scaffold seal file provenance exemption (D, writer trigger: engine + 2 test files + docs)
 - [x] A5 — close for proposal-only targets / witness-less agreements (D, writer trigger: engine + 2 test files + 4 docs + seals)
 - [x] A6 — deliberation validation parity (code spans) (D, writer trigger: 3 engine files + 5 test files + 4 docs)
-- [ ] A7 — shared experiment heading convention
+- [x] A7 — shared experiment heading convention (D, writer trigger: 2 profiles + engine + resolver + 2 TS + 3 test files + 4 docs)
 - [ ] A8 — per-lineage `__implementation__` binding (verify)
 - [ ] D1 — kit provenance record + dirty-kit guard
 - [ ] D2 — migration support policy
@@ -53,6 +53,13 @@ Route legend: D = delegated writer, I = inline.
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
+
+## Found along the way (to resolve before F)
+
+- X1 — `derive_successor` refuses deleting a document's first section (single newline after artifact marker); pre-existing, now visible at preview (found in A6).
+- X2 — `skills/experimental-deliberation/references/usage.md` says `## Paper Guide Reference`; renderer writes `## Reference Sources` (found in A6).
+- X3 — `tests/test_implementation_pair.py` mutates the real engine file in place; flaky under parallel runs (found in A2).
+- X4 — unguarded legacy deliberation `write` action publishes without candidate validation (found in A6; not a deliberation entry point).
 
 ## Progress / evidence
 
@@ -162,7 +169,25 @@ Route legend: D = delegated writer, I = inline.
   specifiers, recorded in the test. No migration; no seal change.
   Checks: typecheck clean; test:node 702/702; test:fast 3241 passed.
   Commit: `fix(deliberation): one validation verdict at v1, preview and accept; code spans are not headings` (the commit carrying this line)
+- A7 (real): experimental-implementation located experiments only by `^## (\d+)$` and counted only
+  digit prose citations; experimental-deliberation writes `## Experiment [exp:E1]` and `(Exp. E1)`.
+  Fix: one convention file `skills/_core/conventions/experiments.json` (identifier, `declares`,
+  `cites`, `proseReference`), read by `experimental-deliberation/experiment-convention.ts` (own
+  module: reading it inside `reference-experimental.ts` raced the profile load through
+  `domain-profile.ts`) and by `experimental-implementation/impl_profile.py`
+  (`EXPERIMENT_CONVENTION`). Locator: any heading carrying `[exp:<id>]`, block to the next heading
+  of same/higher level; legacy `## N` (bare, or wrapping `[exp:EN]`) still read. New optional
+  `block_locator.block_aliases` (resolver: bool when declared; off by default -> proposal unchanged):
+  ids one block declares together are one locus in `compose`. Citation pattern group 1 = shared
+  prose form, groups 2-3 = legacy digits. `[claims:N]` crossings unchanged. Migration: reader-side
+  compatibility only (no revision/artefact shape change; provenance ids are echoed, never checked).
+  Tests: `SharedExperimentConventionTests` (17; RED 7F -> GREEN), node shared-file test (mutations:
+  hardcoded marker / hardcoded prose -> red). Mutations: aliases off -> 1 red. Re-anchored (approved):
+  `tests/test_experimental_implementation_mutation.py` `MUTATIONS["findings.citation_pattern"]`
+  (pinned the old literal). Domain-lock pins unchanged (two comments reworded). Seals unchanged.
+  Checks: typecheck clean; test:node 703/703; test:fast 3262 passed.
+  Commit: `fix(experimental): one experiment heading convention shared by both experimental skills` (the commit carrying this line)
 
 ## Next step
 
-A7 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+A8 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

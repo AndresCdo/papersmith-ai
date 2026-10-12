@@ -541,6 +541,15 @@ def _resolve() -> Mapping[str, Any]:
                 f"{configured} declares documents[{index}].block_locator."
                 f"identity with field(s) {identity_fields}; exactly one "
                 "field named 'value' is required.")
+        # Optional: absent means off. When declared it must be a real
+        # boolean -- a truthy string would turn aliasing on by accident.
+        if ("block_aliases" in locator
+                and not isinstance(locator["block_aliases"], bool)):
+            raise ImplementationProfileError(
+                f"IMPLEMENTATION_DOMAIN_PROFILE_INVALID_BLOCK_LOCATOR: "
+                f"{configured} declares documents[{index}].block_locator."
+                f"block_aliases as {locator['block_aliases']!r}; it must be "
+                "true or false when declared.")
 
     # `the-agreement-nothing-computes` (Slice D, design.md D5): every
     # `documents[N].cross_citation`'s own shape, validated at resolve

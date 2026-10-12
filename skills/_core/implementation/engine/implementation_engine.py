@@ -5934,6 +5934,9 @@ _BLOCK_LOCATORS: tuple[dict, ...] = tuple(
         "pattern": re.compile(DOCUMENTS[index]["block_locator"]["pattern"]),
         "block_pattern": re.compile(DOCUMENTS[index]["block_locator"]["block_pattern"]),
         "identity": DOCUMENTS[index]["block_locator"]["identity"],
+        # Optional, default off: ids one block declares together are
+        # aliases of that one locus (see `cmd_compose`).
+        "block_aliases": DOCUMENTS[index]["block_locator"].get("block_aliases", False),
     }
     for index in range(len(DOCUMENTS))
 )
@@ -9390,6 +9393,18 @@ def cmd_handoff(args: argparse.Namespace) -> dict:
 DISPLAY_BLOCK_RE = document_block_locator(0)["block_pattern"]
 
 
+def _one_aliased_block(locator: dict, text: str, named: set) -> bool:
+    """Whether several ids in `text` are aliases of ONE locus: the document
+    declares `block_aliases`, `text` holds exactly one block, and that block
+    declares every one of them. Off by default, so a document that does not
+    opt in keeps refusing a replacement with more than one id."""
+    if not locator.get("block_aliases") or len(named) < 2:
+        return False
+    blocks = list(locator["block_pattern"].finditer(text))
+    return (len(blocks) == 1
+            and set(locator["pattern"].findall(blocks[0].group(0))) == named)
+
+
 def cmd_compose(args: argparse.Namespace) -> dict:
     """Rewrite one resolved entry so a finding's remedy takes its place.
 
@@ -9427,14 +9442,17 @@ def cmd_compose(args: argparse.Namespace) -> dict:
     # `DISPLAY_BLOCK_RE`'s own re-derivation -- byte-unchanged.
     locator = document_block_locator(_single_named_document_index(finding))
     tags = locator["pattern"].findall(block)
-    if len(set(tags)) != 1:
+    named = set(tags)
+    if len(named) != 1 and not _one_aliased_block(locator, block, named):
         raise Refused("AMBIGUOUS_REMEDY_TAG",
                       f"remedy_block must carry exactly one {SUBJECT_SINGULAR} tag, "
                       f"found {tags}.")
     tag = tags[0]
 
+    # Every id the replacement carries must be declared by the one entry block it
+    # replaces -- under a single id, exactly the membership test it always was.
     matches = [m for m in locator["block_pattern"].finditer(entry)
-              if tag in locator["pattern"].findall(m.group(0))]
+              if named <= set(locator["pattern"].findall(m.group(0)))]
     if len(matches) != 1:
         raise Refused("TAG_NOT_UNIQUE_IN_ENTRY",
                       f"{SUBJECT_SINGULAR} ({tag}) appears in {len(matches)} display "
