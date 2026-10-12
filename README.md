@@ -3107,6 +3107,14 @@ papersmith status --json
 Incluye la procedencia del kit que el workspace registró (`Kit source:`; ver
 [Procedencia del kit](#procedencia-del-kit)).
 
+La etapa de la propuesta (`Proposal: <archivo> (<etapa>)`) se deriva del estado
+del motor para la última revisión gestionada: `published` cuando su recibo de
+publicación (`.proposal-deliberation/receipts/<archivo>.json`) está confirmado y
+su `documentShaAfter` es el digest actual del documento,
+`edited-after-publication` cuando los bytes cambiaron después, y `draft` cuando
+no hay recibo confirmado. Las carpetas antiguas `proposals/deliberated/` y
+`proposals/accepted/` se siguen leyendo primero, para workspaces viejos.
+
 Reporta los archivos desviados por nombre; el exit code queda en `0` mientras
 hay drift reportado (que sea no-cero es un gap conocido, registrado como
 follow-up).

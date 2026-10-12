@@ -380,6 +380,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   `sealed: false`, `sourcesMatch: null`, listed under `unsealed`, and the
   notebooks verdict reads `drift`, so it never passes for a sealed report.
 
+- **`papersmith status` reads a proposal's stage from the engine's own
+  state.** It probed only the legacy `proposals/deliberated/` and
+  `proposals/accepted/` folders, which nothing writes any more, so every
+  current proposal printed as `(draft)`. The latest managed revision's stage
+  now comes from its publication receipt
+  (`.proposal-deliberation/receipts/<file>.json`): `published` when the
+  receipt is committed and its `documentShaAfter` is the document's current
+  digest, `edited-after-publication` when the bytes changed since, `draft`
+  when no committed receipt exists. The legacy folders are still read first,
+  so an old workspace keeps its stage.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -623,6 +634,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   yields a `verify`/`probe` payload (the notebook `unreadable`, listed under
   `unsealed`, notebooks verdict `drift`) where 0.13.0 exited 1 with a
   traceback. Nothing on disk is read differently; no migration is needed.
+
+- `papersmith status` prints `published` (or `edited-after-publication`)
+  where it printed `draft` for a revision the engine published, and its JSON
+  `proposal` object gains a `receipt` key (`null`, or `operation` and
+  `document_matches`). Nothing on disk is read differently or rewritten; no
+  migration is needed.
 
 ## 0.13.0
 

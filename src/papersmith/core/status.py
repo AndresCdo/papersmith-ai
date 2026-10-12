@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -60,24 +61,76 @@ def _read_ledger(root: Path) -> list[dict[str, Any]]:
     return entries
 
 
+# The deliberation profile's artifact layout (`skills/proposal-deliberation/
+# profile.ts`: `artifact.directory`, `artifact.sidecarRoot`); a test holds the
+# two literals to the profile so they cannot drift apart silently.
+PROPOSAL_DIRECTORY = "proposals"
+PROPOSAL_SIDECAR_ROOT = ".proposal-deliberation"
+
+
+def _publication_receipt(root: Path, filename: str) -> dict[str, Any] | None:
+    """The engine's publication receipt for ``filename``, or None.
+
+    The engine writes it beside the derived state when it publishes a
+    revision (`artifact-naming.ts` `receiptPath`). Only a receipt naming this
+    file with a committed derived state counts; an unreadable or foreign one
+    is reported as absent, never as a crash.
+    """
+    text = fs.read_text(root / PROPOSAL_SIDECAR_ROOT / "receipts" / f"{filename}.json")
+    if text is None:
+        return None
+    try:
+        receipt = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if (not isinstance(receipt, dict) or receipt.get("targetFilename") != filename
+            or receipt.get("derivedStateStatus") != "COMMITTED"
+            or not isinstance(receipt.get("documentShaAfter"), str)):
+        return None
+    return receipt
+
+
+def _revision_stage(root: Path, latest: str) -> tuple[str, dict[str, Any] | None]:
+    """Stage of the latest managed revision, derived from engine state.
+
+    ``published``: its committed receipt's ``documentShaAfter`` is the
+    document's current digest. ``edited-after-publication``: a receipt exists
+    but the bytes changed since. ``draft``: no committed receipt. Workspaces
+    from before the managed lifecycle filed revisions under
+    ``proposals/deliberated/`` or ``proposals/accepted/``; those folders are
+    still read first so an old workspace keeps its stage.
+    """
+    directory = root / PROPOSAL_DIRECTORY
+    for legacy in ("deliberated", "accepted"):
+        if fs.is_regular_file(directory / legacy / latest):
+            return legacy, None
+    receipt = _publication_receipt(root, latest)
+    if receipt is None:
+        return "draft", None
+    try:
+        digest = hashlib.sha256((directory / latest).read_bytes()).hexdigest()
+    except OSError:
+        digest = None
+    matches = digest == receipt["documentShaAfter"]
+    detail = {"operation": receipt.get("operation"), "document_matches": matches}
+    return ("published" if matches else "edited-after-publication"), detail
+
+
 def _proposal_status(root: Path) -> dict[str, Any]:
     try:
         ensure_node_engine(root)
         response = call_engine(root, [{"operation": "STATUS"}], timeout=30)[0]
         latest = response.get("latest")
         stage = "none"
-        if isinstance(latest, str):
-            # ``latest`` comes from the engine, so it is data, not a trusted
-            # path: gate the probes instead of letting a damaged tree abort.
-            if fs.is_regular_file(root / "proposals" / "deliberated" / latest):
-                stage = "deliberated"
-            elif fs.is_regular_file(root / "proposals" / "accepted" / latest):
-                stage = "accepted"
-            else:
-                stage = "draft"
+        receipt = None
+        # ``latest`` comes from the engine, so it is data, not a trusted path:
+        # only a bare filename is probed, so a damaged answer cannot steer a read.
+        if isinstance(latest, str) and latest and Path(latest).name == latest:
+            stage, receipt = _revision_stage(root, latest)
         return {
             "revision_id": latest,
             "lifecycle_stage": stage,
+            "receipt": receipt,
             "managed_revisions": response.get("managedRevisions", []),
             "multiple_active": response.get("multipleActive", False),
             "non_managed_files": response.get("nonManagedFiles", []),

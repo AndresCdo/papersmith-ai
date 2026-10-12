@@ -62,6 +62,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B12 — cost forecasts state the parallelism of their duration (D, writer trigger: engine + test + 2 docs)
   - [x] B3 — `RESOLVE_TARGET` matches whole heading tokens; level marks name an outer section (D, writer trigger: resolver + gate + CLI + 2 SKILL.md + 2 usage.md + 3 test files)
   - [x] B13 — successors flag an inherited link to another revision's companion artifacts (D, writer trigger: naming + orchestrator + projection + types + 3 docs + test)
+  - [x] B2 — `papersmith status` stage from engine receipts (D, writer trigger: status.py + test + README + CHANGELOG)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -634,3 +635,15 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `test_cli_paper_e2e` wiring smoke); `git status skills implementations` clean after each run. Route: delegated
   writer (this one). Test-only; no CHANGELOG entry, no migration.
   Commit: `test(implementation): each test file runs in its own scratch paths under parallel runs` (the commit carrying this line)
+
+- B2 (real, reproduced): `_proposal_status` probed only `proposals/deliberated/` and `proposals/accepted/`, which no
+  current code writes, so every engine-published revision printed `(draft)`. Fix: `_revision_stage` reads the
+  latest revision's publication receipt (`.proposal-deliberation/receipts/<file>.json`, the engine's
+  `receiptPath`): committed and `documentShaAfter` == sha256 of the document -> `published`; receipt but different
+  bytes -> `edited-after-publication`; none/uncommitted/unreadable/foreign -> `draft`. Legacy folders read first
+  (fallback for old workspaces). JSON gains `proposal.receipt`. Engine `latest` is probed only when it is a bare
+  filename. A test pins `PROPOSAL_DIRECTORY`/`PROPOSAL_SIDECAR_ROOT` to `profile.ts`. Real run on the extracted
+  0.13.0 fixture (repo `node_modules` linked): `Proposal: ...-r02.md (published)`.
+  Tests: `ProposalStageFromEngineStateTests` (7) RED 4F -> GREEN; mutations (COMMITTED check off -> 1 red; legacy
+  fallback off -> 2 red). test:fast 195 passed. No migration (reader-side only).
+  Commit: `fix(status): a proposal's stage comes from its publication receipt` (the commit carrying this line)
