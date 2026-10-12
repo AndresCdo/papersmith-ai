@@ -26,7 +26,7 @@ remote compute, development and troubleshooting.
 8. [Anatomy of each skill](#anatomy-of-each-skill)
 9. [The CLI commands](#the-cli-commands)
 10. [Remote compute, carefully](#remote-compute-carefully)
-11. [Architecture](#arquitectura)
+11. [Architecture](#architecture)
 12. [Development and testing](#desarrollo-y-pruebas)
 13. [Troubleshooting](#solución-de-problemas)
 14. [Related documentation](#documentación-relacionada)
@@ -3667,40 +3667,40 @@ rehearsed; what is left after that is a decision for the operator.
 
 ---
 
-## Arquitectura
+## Architecture
 
 ```
 papersmith-ai/
-├── docs/                       # documentación complementaria (MCP server)
-├── src/papersmith/             # el CLI orquestador (Python) y sus bridges de runtime
+├── docs/                       # supporting documentation (MCP server)
+├── src/papersmith/             # the orchestrator CLI (Python) and its runtime bridges
 │   ├── core/                   # init, status, ingest, upgrade, executor, ledger
-│   ├── bridges/                # Node, Python, deliberación, ejecución remota
-│   └── mcp/                    # servidor stdio Model Context Protocol
-├── skills/                     # árbol canónico de skills, proyectado a los harnesses
-│   ├── _core/                  # motores compartidos de deliberación e implementación
+│   ├── bridges/                # Node, Python, deliberation, remote execution
+│   └── mcp/                    # stdio Model Context Protocol server
+├── skills/                     # canonical skill tree, projected to the harnesses
+│   ├── _core/                  # shared deliberation and implementation engines
 │   ├── paper-ingestion/        # Marker + Surya OCR + llama-server
-│   ├── proposal-deliberation/  # motor TypeScript: verificación por AST y máquina de estados
-│   ├── proposal-implementation/# generación de código reproducible y sus tests
-│   ├── experimental-deliberation/   # segundo dominio; mismo motor, otro norte
-│   ├── experimental-implementation/ # segundo huésped de implementación; dos documentos, un motor
-│   ├── paper-writing/          # contratos de sección → PDF, sin asumir nada
-│   ├── remote-execution/       # despacho a cómputo distribuido (Kaggle T4/P100 / local)
-│   ├── kaggle-accounts/        # guardián de credenciales: identidades, nunca valores
-│   └── skill-audit/            # meta-auditor de superficies y promesas
-├── guidance/                   # papers de referencia y lineamientos de dominio
-├── tests/                      # suites Node.js + pytest (meta-auditorías incluidas)
-└── scripts/                    # provisión de entorno y setup de harnesses
+│   ├── proposal-deliberation/  # TypeScript engine: AST verification and state machine
+│   ├── proposal-implementation/# reproducible code generation and its tests
+│   ├── experimental-deliberation/   # second domain; same engine, a different aim
+│   ├── experimental-implementation/ # second implementation host; two documents, one engine
+│   ├── paper-writing/          # section contracts → PDF, assuming nothing
+│   ├── remote-execution/       # dispatch to distributed compute (Kaggle T4/P100 / local)
+│   ├── kaggle-accounts/        # credentials gatekeeper: identities, never values
+│   └── skill-audit/            # meta-auditor of surfaces and promises
+├── guidance/                   # reference papers and domain guidelines
+├── tests/                      # Node.js + pytest suites (meta-audits included)
+└── scripts/                    # environment provisioning and harness setup
 ```
 
-### Garantías de ingeniería
+### Engineering guarantees
 
-- **Invariantes de AST y fronteras**: las ecuaciones y secciones se siguen por
-  IDs estables y cadenas de revisión inmutables. No hay borrados, reubicaciones
-  ni fusiones de frontera no autorizadas.
-- **Keyless y local-first**: la ingesta corre completamente offline y local, con
-  Marker y `llama.cpp`.
-- **Proyección agnóstica de harness**: el árbol canónico `skills/` se proyecta a
-  `.claude/skills`, `.pi/skills`, `.opencode/skills` y
+- **AST invariants and boundaries**: equations and sections are tracked by stable
+  IDs and immutable revision chains. There are no unauthorized deletions,
+  relocations or boundary merges.
+- **Keyless and local-first**: ingestion runs fully offline and locally, with
+  Marker and `llama.cpp`.
+- **Harness-agnostic projection**: the canonical `skills/` tree is projected to
+  `.claude/skills`, `.pi/skills`, `.opencode/skills` and
   `.agents/skills`.
 
 ---
