@@ -1,0 +1,157 @@
+# The manual and the artifacts speak English
+
+Objective: the repository's presentation, flows, generated artifacts and prose are
+English, while the conversation with the operator may be Spanish and the skills and
+commands stay invocable in Spanish.
+
+Operator decisions, taken explicitly:
+- "flujo 1 y 2" means steps 1 and 2 of the numbered flow in the manual
+  (`/paper-ingestion`, `/plausibility`). The gates they asked for are a **separate
+  cycle**, after this one.
+- The paper's **content** is written in English even when the conversation is in
+  Spanish. This is a product decision, not a formatting one: it means a paper cannot be
+  produced in Spanish. The operator accepted that consequence knowingly.
+- Order: language first, gates second.
+
+## Why this is a cycle and not a commit
+
+`src/`, `skills/` and `scripts/` are shipped roots. The repository's own rule (see
+`docs/releasing.md`) is that once a tag exists, any change under them forces a version
+move. So this work has two halves with different consequences:
+
+| Half | Touches | Forces a version move? |
+| --- | --- | --- |
+| The manual | `README.md`, `README.es.md` | **No** — documentation is not a shipped root |
+| The artifacts | `src/papersmith/templates/`, `skills/*/SKILL.md`, diagram locales | **Yes** — 0.14.0 and a release |
+
+**This cycle does the manual first**, which needs no version move, and then the artifacts.
+
+## Translation brief
+
+Every unit is translated by a separate pass and committed on its own, so the diff stays
+readable and `git blame` keeps its granularity.
+
+### Glossary
+
+Use the vocabulary the repository already writes in English — `CHANGELOG.md`,
+`docs/releasing.md` and the skills are the authority, not this table.
+
+| Spanish | English |
+| --- | --- |
+| forja | forge |
+| el kit, la copia del kit | the kit, the kit copy |
+| andamiaje, andamio | scaffolding, scaffold |
+| compuerta | gate |
+| deriva | drift |
+| proyección (de skills) | projection |
+| revisión gestionada | managed revision |
+| constelación | constellation |
+| huérfano (barrido) | orphan (sweep) |
+| migración de artefactos | artifact migration |
+| plantilla | template |
+| marcador | marker |
+| caminata (agente `*-walk`) | the walk |
+| ingestión | ingestion |
+| deliberación | deliberation |
+| propuesta | proposal |
+| figura | figure |
+| almacén (`store/`) | store |
+
+**Never translate:** paths, directory names (`guidance/`, `sota-pool/`, `proposals/`,
+`paper/`, `sections/`, `implementations/`, `experiments/`, `store/`), command names,
+CLI flags, file names, agent names (`sota-scout`, `redactor`, `insumos-observer`), code,
+command output, or the `<!-- harness-capabilities:start -->` markers and their table.
+
+### Rules
+
+1. **Same content, same arguments, same caveats.** Translate the voice, not the shape:
+   no claim added, removed, softened or sharpened. Where the Spanish is opinionated
+   ("no es un descuido: es una decisión"), the English stays opinionated.
+2. **Keep the em-dash density and the explanatory parentheses.** The manual's register is
+   deliberate and must survive.
+3. **Every question ends with `?`.** The Spanish used `¿…?`; English uses only `?`. A
+   question broken across two lines must still close.
+4. **Shell comments are prose and get translated.** The commands themselves never do.
+5. **Tables keep their columns.** Translate the cell prose, not the structure.
+6. **Mermaid blocks:** translate node and edge *labels*; never the node IDs.
+7. **Relative links and the image `src` stay byte-identical.**
+8. **Placeholders become English.** The original mixes `<dir>`, `<repo>`, `<id>`, `<slug>`,
+   `<path>` and `<token>` with `<nombre>`, `<puerto>`, `<destino>`, `<trabajo>`,
+   `<servicio>` and `<carpeta>`. In an English manual the second group becomes `<name>`,
+   `<port>`, `<destination>`, `<job>`, `<service>` and `<folder>`. This applies only where
+   the token stands for something the user types — never to a real path, directory or
+   file name. A tree example that shows a workspace called `mi-paper/` keeps that name
+   until the unit that owns it is translated, and then it moves with it.
+9. **Neutral register. This rule supersedes "same register" in rule 1.** The operator
+   asked for a neutral tone across the whole manual, and that is a deliberate change of
+   voice, not a mistranslation to avoid. The Spanish original is opinionated — em-dash
+   asides, emphatic negations, second-person address, rhetorical questions — and the
+   English must not be. Concretely:
+   - State what is true. Do not editorialize about it: no "the interesting part is",
+     no "worth knowing before the first run", no "that is the point".
+   - Drop the asides and the stage directions. A paragraph that tells the reader how to
+     feel about the next paragraph loses that sentence.
+   - Keep every claim, every number, every caveat and every refusal code. Neutral is a
+     register, never a reduction: cutting a caveat, a limitation or a warning is a
+     defect, and so is softening a refusal into a preference.
+   - Prefer the plain declarative over the emphatic construction, and the impersonal
+     over the direct address, without turning the text into passive bureaucracy.
+   - The existing opinionated translations of U0-U8 are revised under this rule, one
+     unit per commit, in the same order they were translated.
+
+## Units
+
+Line ranges are from the Spanish original at `0d128f9`. Each unit is one commit.
+
+| # | Unit | Lines |
+| --- | --- | --- |
+| U0 | Front matter — title, badges, mascot, intro | 1-16 |
+| U1 | Índice → Contents | 17-34 |
+| U2 | Si es tu primera vez → If this is your first time | 35-59 |
+| U3 | Flujo de uso — el camino corto → Use flow — the short path | 60-118 |
+| U4 | Puesta en marcha → Getting started | 119-277 |
+| U5 | Cómo funciona — el orden → How it works — the order | 278-383 |
+| U6 | El workspace por dentro → Inside the workspace | 384-495 |
+| U7 | Harnesses y proyección de skills → Harnesses and skill projection | 496-610 |
+| U8 | Los agentes → The agents | 611-657 |
+| U9 | Anatomía de cada skill → Anatomy of each skill | 658-2922 |
+| U10 | Los comandos del CLI → The CLI commands | 2923-3452 |
+| U11 | Cómputo remoto, con cuidado → Remote compute, carefully | 3453-3483 |
+| U12 | Arquitectura → Architecture | 3484-3521 |
+| U13 | Desarrollo y pruebas → Development and testing | 3522-3597 |
+| U14 | Solución de problemas → Troubleshooting | 3598-3637 |
+| U15 | Documentación relacionada → Related documentation | 3638-3654 |
+| U16 | Licencia → License | 3655-3657 |
+
+**U9 is 2,264 lines — 62% of the manual.** It is one `##` section but it holds one
+`###` block per skill, so it is committed one skill at a time rather than as a single
+unreviewable slab.
+
+## Measured before starting
+
+```
+total            3.657 líneas
+  prosa          2.210  (60%)
+  tablas/marcas    364
+  código           477
+  bloques          45
+preguntas sin cerrar: 0
+```
+
+The `?` check is a real check, not an assumption: it walks each `¿` forward across line
+breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
+
+## Tasks
+
+- [x] T1 — Branch `docs/readme-english`
+- [x] T2 — Pilot: U0-U3, reviewed for voice before scaling
+- [x] T3 — U4-U8
+- [x] T4 — The flow reordered: plausibility before ingestion
+- [ ] T5 — U9, one commit per skill, in neutral register
+- [ ] T6 — U10-U16, in neutral register
+- [ ] T7 — The neutral-register revision of U0-U8, one commit per unit
+- [ ] T8 — `README.es.md` stops claiming the manual is Spanish
+- [ ] T9 — Guards, then merge
+- [ ] T10 — The artifacts half: templates, skills and diagram locales in English (0.14.0)
+- [ ] T11 — Regenerate the diagram once the manual stops moving, re-pointing every
+      `sources` citation at once and advancing `meta.repository.revision`
