@@ -98,6 +98,17 @@ with a kitless install on the user's first command. `test_pypi_publishing.py`
 asks the built archive whether the kit is inside it, because a manifest that
 promises the kit and a tree where it is absent read identically.
 
+### The kit records which commit it was built from
+
+`scripts/build-kit.py` writes the commit and the dirty flag of the tree it
+copied into `kit-manifest.json` (`commit`, `dirty`). A workspace initialized or
+upgraded from that bundled kit records them in `.papersmith/kit-source.json`,
+and a kit whose `dirty` is `true` makes `init` and `upgrade` refuse for every
+user until they pass `--allow-dirty-kit`. So build release artifacts from a
+clean checkout of the tagged commit. `publish.yml` does: it builds the kit in a
+fresh checkout, and its final step initializes a workspace from the built
+wheel, which would refuse if the kit had been built dirty.
+
 ### Rehearse first
 
 The whole path can be run without touching the index, and it costs nothing to

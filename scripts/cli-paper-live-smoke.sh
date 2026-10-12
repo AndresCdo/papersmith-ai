@@ -36,7 +36,9 @@ export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 PS=("$PY" -m papersmith.cli)
 
 echo "== live smoke: init (real npm install)"
-"${PS[@]}" init "$WS" --title "Live Smoke" --topic "live smoke" --remote local
+# `--allow-dirty-kit`: the kit is this checkout, which may carry uncommitted
+# edits; the smoke exercises the working tree, not a release.
+"${PS[@]}" init "$WS" --title "Live Smoke" --topic "live smoke" --remote local --allow-dirty-kit
 
 if [[ ! -d "$WS/node_modules/jiti" ]]; then
   echo "live smoke failed: npm install did not complete; deliberate legs cannot run" >&2
@@ -49,7 +51,7 @@ echo "== live smoke: status / target / run / audit / upgrade"
 "${PS[@]}" target check local-workstation "$WS"
 "${PS[@]}" run smoke_and_invariants --dry-run "$WS"
 "${PS[@]}" audit "$WS" --check-drift
-"${PS[@]}" upgrade "$WS"
+"${PS[@]}" upgrade "$WS" --allow-dirty-kit
 "${PS[@]}" status "$WS" --json > /dev/null
 
 echo "== live smoke: deliberate (real engine, keyless)"

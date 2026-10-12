@@ -44,7 +44,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A6 — deliberation validation parity (code spans) (D, writer trigger: 3 engine files + 5 test files + 4 docs)
 - [x] A7 — shared experiment heading convention (D, writer trigger: 2 profiles + engine + resolver + 2 TS + 3 test files + 4 docs)
 - [x] A8 — per-lineage `__implementation__` binding (verify) (D, writer trigger: engine + 2 test files + 2 docs)
-- [ ] D1 — kit provenance record + dirty-kit guard
+- [x] D1 — kit provenance record + dirty-kit guard (D, writer trigger: 7 src files + build-kit + 4 scripts + tests + 4 docs)
 - [ ] D2 — migration support policy
 - [ ] D3 — engine state gitignore decision
 - [ ] D4 — plausibility metadata cache inside sota-pool
@@ -205,6 +205,30 @@ Route legend: D = delegated writer, I = inline.
   Checks: related suites 2047 passed; test:fast 3268 passed.
   Commit: `fix(implementation): each skill binds its own document lineage in __implementation__` (the commit carrying this line)
 
+- D1 (real): `kit.resolve_kit_origin` names the branch (`override`/`checkout`/`bundled`); new
+  `core/provenance.py`: `describe` (built kit -> `kit-manifest.json` `commit`/`dirty`; source tree ->
+  `git rev-parse HEAD` + `git status --porcelain --untracked-files=all` over KIT_ENTRIES +
+  `src/papersmith`), `require_admissible` (dirty -> refuse; unknown source tree -> refuse; built kit
+  without provenance admitted, commit null), `write_record`/`read_record`. `init` decides before
+  creating the destination; `upgrade` before the downgrade guard (`--plan-migrations` exempt, writes
+  nothing). Record `.papersmith/kit-source.json` written after the manifest on every init/upgrade;
+  `status` `framework.kit_source` + `Kit source:` line; legacy -> "unknown (recorded before 0.14.0)",
+  upgrade writes it (no migration). `--allow-dirty-kit` on init/upgrade, MCP `allow_dirty_kit` on
+  both tools, env `PAPERSMITH_ALLOW_DIRTY_KIT=1` (set in tests/conftest.py; Node harnesses pass the
+  flag). `build-kit.py` embeds commit/dirty. Maintainer scripts that build from the working tree pass
+  the flag (user-approved surface): sync-repo-harness.py, cli-paper-smoke.sh,
+  cli-paper-wiring-smoke.sh, cli-paper-live-smoke.sh. CI: test.yml runs pytest (conftest override);
+  publish.yml builds the kit from a fresh checkout and inits from the wheel (bundled, clean) -- no
+  caller there hits the refusal.
+  Tests: `tests/test_kit_provenance.py` (24; RED = ImportError, module absent -> GREEN). Mutations:
+  dirty refusal off -> 8 red; unknown refusal off -> 3 red; untracked ignored -> 1 red; env override
+  off -> 1 red. Re-anchored: `test_papersmith_upgrade.py:236`, `test_upgrade_migrations.py:79`
+  (`upgrade_module.resolve_and_validate` -> `kit_module.resolve_and_validate`; upgrade no longer
+  imports it). Checks: related files 322 passed; test:fast 2103 passed; node harness files 17/17,
+  0 skipped; `sync-repo-harness --check` clean; wiring + offline smokes rc=0 on the dirty checkout
+  without the env var (temporary `.venv` link, removed).
+  Commit: `fix(init): record which kit a workspace came from and refuse a dirty one` (the commit carrying this line)
+
 ## Next step
 
-D1 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+D5 next, then D2. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

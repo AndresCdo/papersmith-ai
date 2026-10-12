@@ -2957,6 +2957,7 @@ papersmith init ~/papers/sparse-ae \
 | `--no-env` | Saltea el aprovisionamiento del entorno Python del workspace; `papersmith ui` se niega hasta que corras `python3 scripts/setup_env.py install` |
 | `--progress` | Fuerza un log de progreso en texto plano, con estimación del tiempo restante; útil en CI, donde la barra es ruido pero el log es lo importante |
 | `--no-progress` | No dibuja progreso aunque la salida sea un terminal |
+| `--allow-dirty-kit` | Inicializa aunque el kit tenga cambios sin commitear en sus rutas distribuidas, o aunque su estado git no se pueda leer; el workspace registra que vino de un kit así (ver [Procedencia del kit](#procedencia-del-kit)) |
 
 El paso que domina el tiempo es el aprovisionamiento del entorno, y hasta la
 0.9.0 corría con la salida capturada: varios minutos sin ninguna señal. Ahora
@@ -2985,12 +2986,40 @@ papersmith upgrade ~/papers/sparse-ae
 | `--allow-downgrade` | Permite instalar una versión del framework anterior a la que registra el workspace |
 | `--no-migrate` | Sincroniza los archivos del framework sin migrar artefactos; la versión registrada no avanza |
 | `--plan-migrations` | Informa las migraciones de artefactos pendientes y termina sin escribir nada |
+| `--allow-dirty-kit` | Sincroniza aunque el kit tenga cambios sin commitear o un estado git ilegible; el workspace lo registra |
 
 Sólo toca archivos gestionados por el framework — jamás `guidance/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
 `papersmith.yaml`, `package.json`, `README.md` ni los `.env*`.
 Contra un checkout del kit sin reinstalar:
 `PAPERSMITH_KIT_ROOT=/ruta/al/papersmith-ai papersmith upgrade <dir>`.
+
+#### Procedencia del kit
+
+Desde la 0.14.0, `init` y cada `upgrade` escriben
+`.papersmith/kit-source.json`: la versión del framework, el commit del que
+salió el kit, si tenía cambios sin commitear (`dirty`) y de dónde lo resolvió
+el CLI (`checkout`, `bundled` u `override`). `papersmith status` lo muestra en
+la línea `Kit source:`. Un workspace creado antes de la 0.14.0 no lo tiene y
+`status` dice `unknown (recorded before 0.14.0)`; el siguiente `upgrade` lo
+escribe, así que no hace falta ninguna migración.
+
+Con una instalación editable (`pipx install -e`) el kit es el checkout en
+vivo, con sus ediciones sin commitear incluidas. Por eso `init` y `upgrade` se
+niegan, antes de escribir un byte, cuando las rutas que el kit distribuye
+(`skills/`, `sections/`, `.claude/agents/`, los scripts de aprovisionamiento,
+`requirements.txt` y `src/papersmith/`) tienen cambios o archivos sin
+seguimiento, y también cuando el estado git del kit no se puede determinar
+(no hay `git`, el árbol no es un repositorio): desconocido se trata como sucio,
+no como limpio. Commitea o guarda los cambios, o repite con `--allow-dirty-kit`;
+el registro queda con `allowedDirty: true`. El kit empaquetado de una
+instalación desde wheel registra el commit que `scripts/build-kit.py` capturó
+al construirlo; un kit construido desde un árbol sucio también se niega. Si
+ese kit no trae procedencia (se construyó antes de la 0.14.0 o sin git), se
+admite con el commit desconocido, porque sus bytes son una copia congelada,
+no ediciones en vivo. La variable `PAPERSMITH_ALLOW_DIRTY_KIT=1` equivale al
+flag; existe para la suite de tests, que corre desde un checkout casi siempre
+sucio.
 
 #### Migraciones de artefactos
 
@@ -3059,6 +3088,9 @@ papersmith status --json
 | Flag | Efecto |
 |------|--------|
 | `--json` | Snapshot legible por máquina (versiones, propuestas, corridas, inbox) |
+
+Incluye la procedencia del kit que el workspace registró (`Kit source:`; ver
+[Procedencia del kit](#procedencia-del-kit)).
 
 Reporta los archivos desviados por nombre; el exit code queda en `0` mientras
 hay drift reportado (que sea no-cero es un gap conocido, registrado como

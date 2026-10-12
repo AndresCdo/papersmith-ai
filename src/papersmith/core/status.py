@@ -13,7 +13,7 @@ from ..bridges.python import run_script
 from ..errors import PapersmithError, UserError
 from ..generators import read_workspace_version
 from ..kit import resolve_and_validate
-from . import config, fs, manifest, migrations
+from . import config, fs, manifest, migrations, provenance
 
 
 def _migration_status(root: Path, kit_version: str) -> dict[str, Any]:
@@ -206,6 +206,7 @@ def status(workspace: str | Path = ".") -> dict[str, Any]:
             "version_match": workspace_version == kit_version,
             "drifted_files": drifted,
             "migrations": _migration_status(root, kit_version),
+            "kit_source": provenance.read_record(root),
         },
         "runtimes": _runtime_status(root),
         "proposal": _proposal_status(root),
@@ -235,6 +236,8 @@ def print_human(snapshot: dict[str, Any]) -> None:
         f"Framework: kit {framework['kit_version']}; workspace {framework['workspace_version']}; "
         f"CLI {framework['installed_cli_version']}"
     )
+    if "kit_source" in framework:
+        print(f"Kit source: {provenance.describe_record(framework['kit_source'])}")
     print("Framework drift: " + (", ".join(framework["drifted_files"]) if framework["drifted_files"] else "none"))
     pending = framework["migrations"]["pending"]
     print("Pending artifact migrations: " + (", ".join(pending) if pending else "none"))

@@ -306,13 +306,24 @@ def load_manifest(workspace: Path) -> dict | None:
     return data
 
 
-def write_manifest(dest_root: Path, version: str, files: dict[str, str], *, kind: str) -> None:
+def write_manifest(dest_root: Path, version: str, files: dict[str, str], *, kind: str,
+                   build: dict | None = None) -> None:
+    """Write a workspace or kit manifest.
+
+    ``build`` (kit manifests only) carries the build provenance -- ``commit``
+    and ``dirty`` of the tree the kit was copied from -- that
+    :mod:`papersmith.core.provenance` reads back for a bundled kit.
+    """
     payload = {
         "schema": MANIFEST_SCHEMA,
         "kind": kind,
         "version": version,
         "files": dict(sorted(files.items())),
     }
+    if build is not None:
+        if kind != "kit":
+            raise ValueError("build provenance belongs to a kit manifest only")
+        payload.update({"commit": build.get("commit"), "dirty": build.get("dirty")})
     if kind == "workspace":
         payload["updated_at"] = _timestamp()
         path = dest_root / ".papersmith" / "manifest.json"

@@ -114,6 +114,13 @@ Flags worth knowing, with what each actually changes:
   separate from `--force`. Never add it to recover from a refusal without
   saying what it does first; a refusal here is usually a sign that the wrong
   distribution is installed.
+- `--allow-dirty-kit` — upgrade even though the kit source carries uncommitted
+  changes under its shipped paths, or its git state cannot be determined.
+  Without it the CLI refuses before writing anything (exit 1), because a
+  workspace built from uncommitted kit edits carries bytes no commit names.
+  The usual cause is an editable install whose checkout has local edits. Never
+  add the flag to get past the refusal without telling the user what it
+  records: the workspace's kit-source record then says `allowedDirty: true`.
 
 ### `status` — how far behind is this workspace
 
@@ -124,6 +131,13 @@ papersmith status
 Reports the recorded version against the installed one. Prefer this over
 reading `.papersmith/version` directly: the marker is a claim about artifacts,
 and `status` is where that claim is interpreted.
+
+It also reports which framework build the workspace came from, on the
+`Kit source:` line: version, commit, whether the kit was dirty, and whether it
+was a checkout, the bundled kit or a `PAPERSMITH_KIT_ROOT` override. Every
+`init` and `upgrade` writes this to `.papersmith/kit-source.json`. A workspace
+created before 0.14.0 reads `unknown (recorded before 0.14.0)` until its next
+upgrade writes the record; no migration is involved.
 
 ## What is never overwritten
 
@@ -158,7 +172,8 @@ then four things that are warnings rather than failures:
   failed.
 
 Exit codes: `0` success; `1` a user error (not a workspace, corrupt manifest or
-ledger, refused downgrade, unknown tool name); `2` a source error (the installed
+ledger, refused downgrade, refused dirty or unknown kit source, unknown tool
+name); `2` a source error (the installed
 distribution carries no kit); `4` a migration failed.
 
 Report a non-zero exit as a failure with its message. An upgrade that printed a

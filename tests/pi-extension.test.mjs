@@ -36,7 +36,9 @@ function generateWorkspace() {
   // environment by default, and a test that performed a multi-gigabyte
   // network install per run would leak it into the temp dir and make the
   // Node half depend on the network.
-  const args = ["init", destination, "--remote", "local", "--no-npm", "--no-env"];
+  // `--allow-dirty-kit`: the kit is this checkout, which may carry uncommitted
+  // edits; without it `init` refuses and every test here would skip.
+  const args = ["init", destination, "--remote", "local", "--no-npm", "--no-env", "--allow-dirty-kit"];
   let result;
   if (fs.existsSync(consoleScript)) {
     result = spawnSync(consoleScript, args, { cwd: REPO_ROOT, encoding: "utf8" });

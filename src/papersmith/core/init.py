@@ -16,11 +16,11 @@ from ..generators import (
     apply_generated,
     context_for_workspace,
 )
-from ..kit import resolve_and_validate
+from ..kit import resolve_and_validate_origin
 from ..render import render_package_template
 from ..schema import REMOTE_CHOICES, REMOTE_TARGETS, validate_tools
 from . import config, fs
-from . import manifest, progress, wiring
+from . import manifest, progress, provenance, wiring
 
 DEFAULT_AGENT_MODELS = {
     "paper-ingestion": "sonnet",
@@ -219,7 +219,8 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                tools: Sequence[str] = ALL_TOOLS, topic: str = "unspecified",
                remote: str = "kaggle", run_npm: bool = True,
                run_env: bool = True,
-               report: progress.Reporter | None = None) -> dict:
+               report: progress.Reporter | None = None,
+               allow_dirty_kit: bool = False) -> dict:
     """Create a workspace and return a machine-readable operation summary.
 
     ``report`` is where the bar, the child's log and the estimate go. It
@@ -235,6 +236,14 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
         raise UserError("title must be a non-empty string")
     if not isinstance(topic, str) or not topic.strip():
         raise UserError("topic must be a non-empty string")
+
+    # Decided before the destination is created: a kit carrying uncommitted
+    # edits (or one whose git state cannot be read) refuses here, while nothing
+    # has been written, unless the caller allowed it explicitly.
+    kit_root, kit_origin = resolve_and_validate_origin()
+    kit_source = provenance.describe(kit_root, kit_origin)
+    allowed_dirty = provenance.require_admissible(kit_source, verb="init",
+                                                  allow_dirty=allow_dirty_kit)
 
     root = Path(destination).expanduser().resolve()
     if fs.exists(root):
@@ -268,7 +277,6 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     report.plan(plan)
 
     with report.step("kit"):
-        kit_root = resolve_and_validate()
         version = manifest.kit_version(kit_root) or __version__
         target = REMOTE_TARGETS[remote]
         name = root.name
@@ -325,6 +333,11 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
             if relpath not in framework_files:
                 framework_files[relpath] = UNSYNCHRONIZED
         manifest.write_manifest(root, version, framework_files, kind="workspace")
+        source_record, written = provenance.write_record(root, kit_source,
+                                                         allowed_dirty=allowed_dirty)
+        if not written:
+            warnings.append(f"could not write {provenance.KIT_SOURCE_RECORD}; "
+                            "`status` will report this workspace's kit source as unknown")
     return {
         "workspace": str(root),
         "name": name,
@@ -335,6 +348,7 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
         "copied_files": copied,
         "generated_files": generated,
         "warnings": warnings,
+        "kit_source": source_record,
         "wiring": wiring.summarize(root, tools, link_report, unsynchronized),
     }
 
@@ -352,6 +366,11 @@ def register(subparsers) -> None:
         help=("skip provisioning this workspace's Python environment; the "
               "command center needs it, so `papersmith ui` will refuse until "
               "`python3 scripts/setup_env.py install` has run"))
+    parser.add_argument(
+        "--allow-dirty-kit", action="store_true",
+        help=("initialize even when the kit source has uncommitted changes under its "
+              "shipped paths, or its git state cannot be determined; the workspace "
+              "records that it was built from such a kit"))
     parser.set_defaults(handler=run_cli)
     progress_flags = parser.add_mutually_exclusive_group()
     progress_flags.add_argument(
@@ -379,10 +398,12 @@ def run_cli(args) -> int:
         run_npm=not args.no_npm,
         run_env=not args.no_env,
         report=report,
+        allow_dirty_kit=args.allow_dirty_kit,
     )
     report.finish()
     print(f"Initialized papersmith workspace: {result['workspace']}")
     print(f"Framework version: {result['version']}; default target: {result['default_target']}")
+    print(f"Kit source: {provenance.describe_record({'recorded': True, **result['kit_source']})}")
     print("Harness wiring:")
     for line in wiring.format_summary(result["wiring"]):
         print(f"  {line}")

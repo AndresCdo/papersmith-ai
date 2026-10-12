@@ -32,14 +32,20 @@ def resolve_kit_root(start_file: str | Path | None = None) -> Path:
     ``start_file`` defaults to this module's ``__file__``; tests pass an
     explicit path so resolution does not depend on the test machine's layout.
     """
+    return resolve_kit_origin(start_file)[0]
+
+
+def resolve_kit_origin(start_file: str | Path | None = None) -> tuple[Path, str]:
+    """The kit root and the branch that found it: ``override``, ``checkout``
+    or ``bundled`` -- the ``source`` a workspace's kit-source record names."""
     start = Path(start_file).resolve() if start_file else Path(__file__).resolve()
     env = os.environ.get("PAPERSMITH_KIT_ROOT")
     if env:
-        return Path(env).expanduser().resolve()
+        return Path(env).expanduser().resolve(), "override"
     dev = _dev_checkout(start)
     if dev is not None:
-        return dev
-    return start.parent / KIT_DIR_NAME
+        return dev, "checkout"
+    return start.parent / KIT_DIR_NAME, "bundled"
 
 
 def _dev_checkout(start_file: Path) -> Path | None:
@@ -70,3 +76,8 @@ def validate_kit_root(root: Path) -> Path:
 
 def resolve_and_validate(start_file: str | Path | None = None) -> Path:
     return validate_kit_root(resolve_kit_root(start_file))
+
+
+def resolve_and_validate_origin(start_file: str | Path | None = None) -> tuple[Path, str]:
+    root, source = resolve_kit_origin(start_file)
+    return validate_kit_root(root), source

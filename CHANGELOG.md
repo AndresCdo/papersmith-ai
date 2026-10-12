@@ -143,6 +143,26 @@ number is `0`, breaking changes can still arrive without a major bump.
   label. The scaffold template's comment named `proposals/` under both skills;
   it now names the loading skill's own document directory and label.
 
+- **`init` and `upgrade` no longer copy unreleased framework code silently.**
+  From an editable install the kit is the live checkout, and both commands
+  copied it uncommitted edits included, with nothing recording which commit a
+  workspace came from. Every `init` and every `upgrade` now writes
+  `.papersmith/kit-source.json` (`version`, `commit`, `dirty`, `source`:
+  `checkout`, `bundled` or `override`, `recordedAt`), and `papersmith status`
+  reports it on a `Kit source:` line and under `framework.kit_source` in
+  `--json`. A kit source tree with uncommitted or untracked changes under its
+  shipped paths (`skills/`, `sections/`, `.claude/agents/`, the provisioning
+  scripts, `requirements.txt`, `src/papersmith/`) refuses before anything is
+  written, and so does one whose git state cannot be determined (unknown is
+  treated as dirty). `--allow-dirty-kit` proceeds and records
+  `allowedDirty: true`; the MCP `workspace_init` and `workspace_upgrade` tools
+  forward it as `allow_dirty_kit`. `scripts/build-kit.py` now embeds the
+  commit and dirty flag of the tree it copied into `kit-manifest.json`, so a
+  wheel install records the commit it was built from; a bundled kit built
+  dirty refuses too, and one built without provenance is admitted with the
+  commit unknown. `upgrade --plan-migrations` writes nothing and does not
+  refuse.
+
 ### Behaviour changes
 
 - `admit` returns a new `adopted` map (present only when some finding is
@@ -238,6 +258,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   `revisionByDocument`. Declarations live in target repositories under
   `implementations/`, not in the workspace kit, so no `upgrade` migration
   applies.
+- `papersmith init` and `papersmith upgrade` refuse (exit 1) when the kit
+  they resolve is a checkout or `PAPERSMITH_KIT_ROOT` tree with uncommitted
+  changes under its shipped paths, or whose git state cannot be read. Users of
+  an editable install with local edits will meet this; commit the edits, or
+  pass `--allow-dirty-kit` (`PAPERSMITH_ALLOW_DIRTY_KIT=1` is the same
+  override, used by the test suite). Wheel installs are unaffected unless the
+  wheel was built from a dirty tree.
+- A workspace created by 0.13.0 or earlier has no kit-source record:
+  `status` reports `Kit source: unknown (recorded before 0.14.0)` until the
+  next `upgrade`, which writes it. Nothing else changes shape and no migration
+  is needed; the record is not a framework-managed file, so `audit
+  --check-drift` and `status`'s drift list do not report it.
 
 ## 0.13.0
 
