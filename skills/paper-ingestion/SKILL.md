@@ -12,6 +12,14 @@ images`. Figures are separate image files the `.md` references (loaded on demand
 not embedded), and the references/bibliography section is dropped. Runs locally
 with no API keys.
 
+**PDFs only.** Neither this skill nor `papersmith ingest` (its workspace
+bridge) reads Markdown, text or HTML; `papersmith ingest` refuses any other
+source and names the two routes that do. Material that is already text goes
+through `proposal-deliberation` instead: Markdown a new proposal should be
+seeded from goes under `guidance/paper-guide/` (`CREATE_INITIAL_REVISION`
+reads it), and an existing draft that should become v1 as written goes into
+`proposals/` and is adopted with `ADOPT_INITIAL_REVISION`.
+
 ## The objective flow
 
 **Why this skill was invoked, and where it has to arrive.** Declared here and in

@@ -80,7 +80,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C10 — remedy control detection follows attributes and helpers (D, writer trigger: engine + test + doc)
   - [x] C14 — `[out-of-scope:<id>]` subtracted from `agree`'s untested (D, writer trigger: engine + resolver + profile + convention + test + 3 docs)
   - [x] C13 — `paper-ingestion --force-ocr` / `force_ocr` (D, writer trigger: script + 2 test files + SKILL.md + README)
-- [ ] E1–E10
+- [x] E1–E10
   - [x] E4 — `walk --commit-template` (D, writer trigger: engine + new test file + 3 docs)
   - [x] E5 — `status`/`audit` collect projection notes; `--verbose` prints them (D, writer trigger: 3 src files + new test file + README)
   - [x] E6 — (completed by E6a/E6b below) partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
@@ -90,6 +90,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] E6b — grapher agent runs check_atlas with --pool (inline: agent + projections + test)
   - [x] E6a — arXiv/Crossref year (inline: resolver + test + SKILL.md)
   - [x] E9 — inline fallback section in 8 delegating skills (inline: 8 docs + drift test)
+  - [x] E10 — `papersmith ingest` non-PDF refusals name the deliberation seeding routes (D, resumed after interruption: ingest.py + test + SKILL.md + README + CHANGELOG)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -1034,3 +1035,12 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `tests/test_agent_inline_fallback_doc.py` (binding derived from each agent's `Skill:` line) RED 8 subtests ->
   GREEN (2 passed, 8 subtests). `npm run test:node`: 776 pass, 0 fail. `npm run test:fast`: 188 passed.
   Commit: `docs(skills): every delegating skill names its inline fallback` (the commit carrying this line)
+- E10 (real): `classify_source` refused a non-PDF path ("must be a PDF path") or URL with no way forward.
+  Both refusals now append `NON_PDF_ROUTES`, naming `guidance/paper-guide/` (read by
+  `CREATE_INITIAL_REVISION`, proposal-deliberation SKILL.md :230) and `proposals/` + `ADOPT_INITIAL_REVISION`
+  (`sourceFilename` an unmanaged `.md` in `proposals/`, SKILL.md :402); old prefixes kept. Test:
+  `test_a_non_pdf_refusal_names_the_deliberation_seeding_routes` (`notes.md`, `draft.txt`, landing URL) RED 3
+  subtests with only the ingest.py hunk reverted -> GREEN (7 passed). Docs: paper-ingestion SKILL.md, README
+  `ingest` reference, CHANGELOG Fixed + Behaviour changes. `npm run test:fast`: 225 passed, 1 failed (expected
+  `.venv` wiring-smoke). No migration.
+  Commit: `fix(ingest): non-PDF refusals name where text material goes` (the commit carrying this line)

@@ -617,6 +617,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   inline audit is not independent of the draft). A test derives the
   agent-to-skill binding from each agent's `Skill:` line.
 
+- **`papersmith ingest` says it takes PDFs only, and where other material
+  goes.** A non-PDF path or URL was refused with "must be a PDF path" and no
+  way forward. Both refusals now name the two `proposal-deliberation` routes
+  for material that is already text: `guidance/paper-guide/` to seed a new
+  proposal (`CREATE_INITIAL_REVISION`), and `proposals/` +
+  `ADOPT_INITIAL_REVISION` for a draft that should become v1 as written.
+  Documented in `paper-ingestion`'s `SKILL.md` and the manual's `ingest`
+  reference.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1139,6 +1148,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   reading one more field does not change, and `bib` checks only that key.
   Re-resolving the same identifier rewrites the same cache file with the
   year filled, and the next `refs.bib` rebuild gains a `year` field.
+
+- `papersmith ingest` refuses exactly the sources it refused before; only the
+  refusal text is longer (it keeps its old prefix, then names
+  `guidance/paper-guide/` and `ADOPT_INITIAL_REVISION`). Exit code unchanged.
 
 
 ## 0.13.0

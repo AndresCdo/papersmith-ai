@@ -3145,6 +3145,13 @@ archivos de figuras (una carpeta por paper) y refresca el índice. La primera
 corrida descarga ~1.5 GB de pesos de Surya si el entorno no quedó
 pre-provisionado.
 
+Sólo acepta PDFs (un `.pdf` local o una URL de arXiv/OpenReview/PDF); cualquier
+otra fuente se rechaza y el mensaje nombra las dos rutas para material que ya es
+texto, ambas de `proposal-deliberation`: Markdown con el que sembrar una
+propuesta nueva va en `guidance/paper-guide/` (lo lee `CREATE_INITIAL_REVISION`),
+y un borrador existente que debe ser la v1 tal cual va en `proposals/` y se
+adopta con `ADOPT_INITIAL_REVISION`.
+
 ### `papersmith deliberate [<dir>]`
 
 ```bash
