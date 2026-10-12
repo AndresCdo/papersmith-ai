@@ -27,7 +27,7 @@ remote compute, development and troubleshooting.
 9. [The CLI commands](#the-cli-commands)
 10. [Remote compute, carefully](#remote-compute-carefully)
 11. [Architecture](#architecture)
-12. [Development and testing](#desarrollo-y-pruebas)
+12. [Development and testing](#development-and-testing)
 13. [Troubleshooting](#solución-de-problemas)
 14. [Related documentation](#documentación-relacionada)
 15. [License](#licencia)
@@ -3705,79 +3705,78 @@ papersmith-ai/
 
 ---
 
-## Desarrollo y pruebas
+## Development and testing
 
-Son **dos suites**, no una. Correr una sola y dar un veredicto es un error que
-este repositorio ya cometió, así que las dos van aquí con su invocación exacta:
+There are **two suites**, not one. Running a single one and giving a verdict is a
+mistake this repository has already made, so both are here with their exact
+invocation:
 
 ```bash
-npm test                                  # motor compartido de deliberación
-.venv/bin/python -m pytest                # todo lo demás
-npm run test:all                          # las dos, en orden
+npm test                                  # shared deliberation engine
+.venv/bin/python -m pytest                # everything else
+npm run test:all                          # both, in order
 ```
 
-**Bucle rápido, no compuerta.** `npm run test:fast` (`python3 scripts/fast_tests.py`)
-corre los tests que tocan tu trabajo sin commitear (staged, unstaged y
-untracked; los archivos no-código como `.md` o `.json` no seleccionan nada) más
-un conjunto fijo de guardas. Las guardas solas tardan unos 40 segundos y la
-selección se suma a eso. Tres tests lentos medidos se deseleccionan por defecto
-(`--with-slow` los incluye; la compuerta completa siempre los corre).
-`--since REF` suma lo ya commiteado desde REF, `--list` muestra la selección, su
-base y por qué, y `--guards-only` corre solo las guardas. Es una heurística
-textual que puede perder tests que ejercitan un módulo de forma indirecta:
-**no reemplaza** a `npm run test:all`, que sigue siendo lo que se corre antes de
-integrar.
+**A fast loop, not a gate.** `npm run test:fast` (`python3 scripts/fast_tests.py`)
+runs the tests that touch the uncommitted work (staged, unstaged and untracked;
+non-code files such as `.md` or `.json` select nothing) plus a fixed set of
+guards. The guards alone take about 40 seconds and the selection adds to that.
+Three measured slow tests are deselected by default (`--with-slow` includes them;
+the full gate always runs them). `--since REF` adds what is already committed
+since REF, `--list` shows the selection, its base and why, and `--guards-only`
+runs the guards alone. It is a textual heuristic that can miss tests exercising a
+module indirectly: it does **not replace** `npm run test:all`, which remains what
+is run before integrating.
 
-**Python en paralelo.** `npm run test:py:par` corre la misma suite con
-`pytest -n 8 --dist loadfile` (necesita `pytest-xdist`, que `setup_env.py` ya
-provisiona). Medido el 2026-10-01: **5455 passed** en 5 min 9 s contra 10 min 17 s
-en serie. Solo `loadfile` es seguro: `load` y `loadscope` compiten por el
-directorio compartido `implementations/`. Un único test (esperar a un proceso
-matado, 120 s) fija el piso de tiempo.
+**Python in parallel.** `npm run test:py:par` runs the same suite with
+`pytest -n 8 --dist loadfile` (it needs `pytest-xdist`, which `setup_env.py`
+already provisions). Measured on 2026-10-01: **5455 passed** in 5 min 9 s against
+10 min 17 s in series. Only `loadfile` is safe: `load` and `loadscope` compete for
+the shared `implementations/` directory. A single test (waiting for a killed
+process, 120 s) sets the time floor.
 
-`npm run typecheck` corre `tsc` sobre el motor de deliberación y sale limpio.
+`npm run typecheck` runs `tsc` over the deliberation engine and comes out clean.
 
-**Dos trampas que parecen defectos del repositorio y no lo son.**
+**Two traps that look like repository defects and are not.**
 
-*El script de npm fija el perfil de dominio.* `npm test` exporta
-`DELIBERATION_DOMAIN_PROFILE` antes de invocar `node --test`. Llamar `node
---test` a secas falla cerrado, porque el motor no sirve ningún dominio propio y
-se niega a arrancar sin uno. Es la invocación la que está mal, no el motor. Lo
-mismo vale del lado Python: los motores de implementación exigen
-`IMPLEMENTATION_DOMAIN_PROFILE`, y por eso el CLI que los lanza lo fija — y por
-eso `tests/domain_profile.py` lo siembra y lo restaura por import.
+*The npm script sets the domain profile.* `npm test` exports
+`DELIBERATION_DOMAIN_PROFILE` before invoking `node --test`. Calling bare `node
+--test` fails closed, because the engine serves no domain of its own and refuses
+to start without one. It is the invocation that is wrong, not the engine. The same
+holds on the Python side: the implementation engines require
+`IMPLEMENTATION_DOMAIN_PROFILE`, which is why the CLI that launches them sets it —
+and why `tests/domain_profile.py` seeds and restores it by import.
 
-*`tests/` no tiene `__init__.py`.* La forma que uno escribiría de memoria,
-`discover -s tests -t .`, muere con `ImportError: Start directory is not
-importable`. La forma que funciona es la de arriba, sin `-t .`.
+*`tests/` has no `__init__.py`.* The form one would write from memory,
+`discover -s tests -t .`, dies with `ImportError: Start directory is not
+importable`. The form that works is the one above, without `-t .`.
 
-**Qué prueba cada cosa.** `tests/` cubre **el tooling de la forja**: los dos
-motores compartidos, los doce `SKILL.md` y sus scripts, la atadura entre cada
-skill y sus agentes en las dos direcciones, y una serie *from-scratch* que
-genera un workspace con el CLI y recorre cada comando, cada skill embarcada y
-cada subagente dentro de él (`tests/test_workspace_{commands,skills,agents}_e2e.py`).
-Los tests de una implementación materializada viven en su repositorio destino y
-en ningún otro lado; borrarlo borra sus tests.
+**What tests what.** `tests/` covers **the forge's tooling**: the two shared
+engines, the twelve `SKILL.md` files and their scripts, the tie between each skill
+and its agents in both directions, and a *from-scratch* series that generates a
+workspace with the CLI and walks every command, every embedded skill and every
+subagent inside it (`tests/test_workspace_{commands,skills,agents}_e2e.py`).
+The tests of a materialized implementation live in its destination repository and
+nowhere else; deleting it deletes its tests.
 
-**Un ensayo live, opt-in.** Todo lo de arriba es hermético. Para probar los
-motores reales —`npm install`, provisión de entorno, una ingesta y un agente—
-está `scripts/cli-paper-live-smoke.sh`, que se niega a correr sin
-`PAPERSMITH_LIVE=1` (y acepta `PAPERSMITH_LIVE_INGEST=<pdf>` y
-`PAPERSMITH_LIVE_AGENT=<nombre>` para extender el recorrido).
+**One live rehearsal, opt-in.** Everything above is hermetic. To exercise the real
+engines — `npm install`, environment provisioning, an ingestion and an agent —
+there is `scripts/cli-paper-live-smoke.sh`, which refuses to run without
+`PAPERSMITH_LIVE=1` (and accepts `PAPERSMITH_LIVE_INGEST=<pdf>` and
+`PAPERSMITH_LIVE_AGENT=<name>` to extend the walk).
 
-**Dos corpus sellados.** `tests/seal/` y `tests/experiments_seal/` guardan la
-salida exacta de una batería de comandos como digests dorados. No son tests de
-unidad: existen para que un cambio en el motor compartido no altere en silencio
-lo que cada host produce. Valen lo que cuestan — durante el último arreglo,
-cuatro digests se movieron y dijeron que la corrección era equivocada, en una
-dirección que ningún test de unidad veía.
+**Two sealed corpora.** `tests/seal/` and `tests/experiments_seal/` keep the exact
+output of a battery of commands as golden digests. They are not unit tests: they
+exist so that a change in the shared engine cannot silently alter what each host
+produces. They are worth what they cost — during the last fix, four digests moved
+and said the correction was wrong, in a direction no unit test was seeing.
 
-`proposal-implementation` se validó además con un arnés de escenarios propio
-—las situaciones en las que puede caer un clon, más el ciclo completo hasta
-publicar la revisión que produce un hallazgo— construido para cerrar la v1.5 y
-retirado al cerrarla. Era andamiaje, no parte de la forja. Queda en la historia:
-el commit que lo saca lo dice, y `git revert` lo trae de vuelta si alguna vez
-hay que volver a correrlo.
+`proposal-implementation` was also validated with its own scenario harness — the
+situations a clone can fall into, plus the full cycle up to publishing the
+revision that produces a finding — built to close v1.5 and retired when it closed.
+It was scaffolding, not part of the forge. It stays in the history: the commit
+that removes it says so, and `git revert` brings it back if it ever has to run
+again.
 
 ---
 
