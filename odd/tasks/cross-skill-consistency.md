@@ -88,7 +88,14 @@ Route legend: D = delegated writer, I = inline.
 - X10 — `tests/test_implementation_core.py` and `tests/test_proposal_implementation.py` run together under
   `-n 8 --dist loadfile` interfere: `WorkspaceGuardTests.setUp`'s `implementations/_core_guard_*` directory
   vanishes (`FileNotFoundError`), and one such run errored 1801 proposal tests at setup. Reproduced with the
-  B12 changes stashed (found in B12). Each file passes alone. Not investigated further.
+  B12 changes stashed (found in B12). Each file passes alone. Same family under `-n 8 --dist loadfile`
+  with `test_proposal_implementation.py` in the run: `test_experiments_seal.py`'s `verify-a` case
+  intermittently prints nothing (`HolderRenameDeclaredDeltaTests`) or a different digest
+  (`ThreatMatrixTests::test_a_stray_parent_env_var_produces_an_identical_digest`); the file passes alone
+  (29 passed). Its scratch target also lives under `implementations/`. Not investigated further.
+- Fixture script: `scripts/build-v0_13_0-fixture.py`'s `--under "# Agreed"` comment now says it keeps the
+  0.13.0 heading on purpose and that X6/B4 fixed `## Ladder` in 0.14.0 (comment only; fixture not
+  regenerated). Commit: `docs(fixture): the 0.13.0 settle workaround comment names the 0.14.0 fix`.
 - X9 — `verify` crashes (traceback, exit 1) when a file under `<Name>/Notebooks/` is not valid JSON:
   `notebooks_state` calls `notebook_seals(json.loads(...))` unguarded (found in B7). Not fixed.
 

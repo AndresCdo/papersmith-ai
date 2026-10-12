@@ -206,12 +206,13 @@ def _implement(ws: Path, env: dict[str, str], scratch: Path) -> None:
         _json([*_cli(skill), "discuss", *target, "--about", "1", "--question", question,
                "--answer", "A fixed window of five observations."],
               cwd=ws, env=env, expect=("answered",))
-        # `--under "# Agreed"`, not the holder's `## Ladder`: the position
-        # block sits directly under `## Ladder`, and `settle` inserts at the
-        # first non-blank line after its heading -- inside the block, which
-        # then no longer parses (`POSITION_ITEM_MALFORMED` on `verify`, in
-        # 0.13.0 and still on 0.14.0 at the time of writing). A fixture built
-        # on that would test a holder no engine can read.
+        # `--under "# Agreed"`, not the holder's `## Ladder`: this script runs
+        # the 0.13.0 kit, where `settle` inserts at the first non-blank line
+        # after its heading. Under `## Ladder` that is inside the position
+        # block, which then no longer parses (`POSITION_ITEM_MALFORMED` on
+        # `verify`). 0.14.0 fixed that (X6, with B4: `settle` appends after
+        # the block), but the fixture records what a 0.13.0 workspace could
+        # actually hold, so it keeps the heading 0.13.0 handled correctly.
         _json([*_cli(skill), "settle", *target, "--session", SESSION, "--about", "1",
                "--text", f"the first pass uses a fixed window of five observations ({skill})",
                "--under", "# Agreed"], cwd=ws, env=env, expect=("written",))
