@@ -100,7 +100,7 @@ If a managed revision already exists, it blocks with `MANAGED_PROPOSAL_ALREADY_E
 
 ### v1 is checked before it is written
 
-**v1 is checked, not exempt.** Source fragments are pasted in verbatim under a `## Paper Guide Reference` heading, one `### <path>` per fragment — but `CREATE_INITIAL_REVISION` runs the composed candidate through the identical `violations()` gate `CREATE_SUCCESSOR` runs, before any write (see [SKILL.md](../SKILL.md#creating-v1-checked-by-the-same-gate-as-every-successor)). If a pasted fragment carries a filled report-table cell, or a URL with no verification tag, v1 is refused outright:
+**v1 is checked, not exempt.** Source fragments are pasted in verbatim under a `## Reference Sources` heading (this profile's `sourceReferenceHeading`), one `### <path>` per fragment — but `CREATE_INITIAL_REVISION` runs the composed candidate through the identical `violations()` gate `CREATE_SUCCESSOR` runs, before any write (see [SKILL.md](../SKILL.md#creating-v1-checked-by-the-same-gate-as-every-successor)). If a pasted fragment carries a filled report-table cell, or a URL with no verification tag, v1 is refused outright:
 
 ```json
 {

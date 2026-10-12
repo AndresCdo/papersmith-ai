@@ -69,7 +69,7 @@ Route legend: D = delegated writer, I = inline.
 ## Found along the way (to resolve before F)
 
 - [x] X1 — `derive_successor` refuses deleting a document's first section (single newline after artifact marker); pre-existing, now visible at preview (found in A6). Fixed; see Progress.
-- X2 — `skills/experimental-deliberation/references/usage.md` says `## Paper Guide Reference`; renderer writes `## Reference Sources` (found in A6).
+- [x] X2 — `skills/experimental-deliberation/references/usage.md` says `## Paper Guide Reference`; renderer writes `## Reference Sources` (found in A6). Fixed; see Progress.
 - X3 — `tests/test_implementation_pair.py` mutates the real engine file in place; flaky under parallel runs (found in A2).
 - X4 — unguarded legacy deliberation `write` action publishes without candidate validation (found in A6; not a deliberation entry point).
 - X5 — one `upgrade` across a release left the routing docs naming the old version (rendered before the
@@ -521,7 +521,8 @@ Route legend: D = delegated writer, I = inline.
   `_core/conventions`, as the kit ships it). `npm run test:node`: 716 passed. `npm run test:fast`: 3237
   passed, 1 failed (`test_upgrade_v0_13_0_workspace.py::...reads_its_own_holder[experimental-implementation]`
   reads `AGREED.md`: an implementation-profile leak between files in that run; the file passes alone, 8
-  passed, and with each implementation test file in turn; unrelated to the deliberation engine). No
+  passed, and with each implementation test file in turn; the identical 23-file selection on the base
+  8e3f813 fails the same subtest, so it predates B3/B13/X1/X2). No
   migration (resolution only; a blocked result gains an additive key).
   Commit: `fix(deliberation): a locus query matches whole heading words and can name an outer section` (the commit carrying this line)
 
@@ -552,6 +553,17 @@ Route legend: D = delegated writer, I = inline.
   any left side ending in `\n`) -> 1 red. Docs: both usage.md Delete sections. `npm run test:node`: 723
   passed. No migration.
   Commit: `fix(deliberation): a successor can delete the document's first section` (the commit carrying this line)
+
+- X2 (real): `usage.md:103` named `## Paper Guide Reference`; `initial-revision-renderer.ts` writes
+  `DOMAIN.artifact.sourceReferenceHeading`, which the experimental profile declares as `Reference Sources`
+  (SKILL.md already agreed). No other heading in usage.md drifted (only the engine-written `## Changes`,
+  which matches the profile's change header). The drift test can catch this class, so it was extended:
+  `experimental-deliberation-usage-doc-drift.test.mjs` keeps the v1 the worked example renders and checks
+  every prose ``"`## X` heading"`` / ``"`## X` block"`` claim in usage.md and SKILL.md against that v1's
+  heading lines and the profile's `changeHeader` (placeholders such as `### <path>` skipped). RED on the old
+  doc (names `## Paper Guide Reference`) -> GREEN after the doc fix; mutation (`## Changes` block renamed in
+  the doc) -> red. No code change, no migration.
+  Commit: `docs(experimental-deliberation): the usage guide names the heading v1 writes` (the commit carrying this line)
 
 ## Next step
 

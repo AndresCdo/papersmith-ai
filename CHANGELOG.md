@@ -362,6 +362,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   can fuse into, so a removal whose left side is exactly the marker is now a
   clean join; every other single-newline join is still refused.
 
+- **`experimental-deliberation`'s usage guide names the heading v1 really
+  writes.** It said source fragments are pasted under `## Paper Guide
+  Reference`; the renderer writes this profile's `sourceReferenceHeading`,
+  `## Reference Sources`, as `SKILL.md` already said. The usage-doc drift test
+  now holds every heading the guide and `SKILL.md` say the engine writes
+  ("under a `## X` heading", "the `## X` block") against the v1 the worked
+  example actually renders and the profile's change header.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
