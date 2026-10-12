@@ -298,9 +298,17 @@ skills/experimental-implementation/scripts/implementation_cli.py name --name Tri
 
 The launcher is a byte-for-byte copy of `proposal-implementation`'s own launcher
 (design.md D4): every value inside it is derived from its own location, so the
-same 24 bytes, placed under this skill's own `scripts/`, resolve to THIS
+same bytes, placed under this skill's own `scripts/`, resolve to THIS
 skill's own profile without a single domain-specific line. Every argument,
 subcommand and exit code is the shared engine's; nothing here re-documents them.
+
+The launcher sets `IMPLEMENTATION_DOMAIN_PROFILE` only when the environment
+does not already carry it, so an explicit fixture profile wins. One inherited
+value is refused instead: another skill's own `impl_profile.py` (for example
+`proposal-implementation`'s, left exported by a shell or an earlier process),
+under which this skill would read the other skill's documents and holder. The
+launcher exits `2` with `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` before the
+engine loads, naming both profiles; unset the variable and run again.
 
 ## Which commands are not available yet, and why
 

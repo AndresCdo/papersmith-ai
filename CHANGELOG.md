@@ -266,6 +266,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   section. The rest of the holder is still checked, including an
   agreement's own text, and the same lines in any other document are still
   reported.
+- **An implementation skill no longer runs under the other skill's profile
+  inherited from the environment.** Each launcher `setdefault`s its own
+  `IMPLEMENTATION_DOMAIN_PROFILE`, so an explicit value wins. A shell, or an
+  earlier process that ran the other skill, could leave the other skill's
+  `impl_profile.py` exported, and this skill then read the other skill's
+  documents and holder (for example `AGREED.md` from
+  `experimental-implementation`) without saying so. Both launchers now refuse
+  `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` (exit `2`, before the engine loads)
+  when the inherited value resolves to another skill's own profile, naming
+  both profiles. Any other explicit value, such as a test fixture profile,
+  still wins. The test that leaked this skill's profile into later tests of
+  the same process now restores the environment.
 
 ### Added
 
@@ -467,6 +479,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   entries for targets whose holders carry a position block, witness tokens or
   a `## Reversed` section. Both keys were report-only and never moved a
   status. This changes the reading only: no migration is needed.
+- Running either implementation launcher with `IMPLEMENTATION_DOMAIN_PROFILE`
+  set to the other implementation skill's `impl_profile.py` now refuses
+  `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` instead of running under that
+  profile. Unset the variable. Nothing stored changes and no migration is
+  needed.
 
 ## 0.13.0
 

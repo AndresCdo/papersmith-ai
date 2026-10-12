@@ -9,7 +9,7 @@ Every value here is computed from THIS file's own location, mirroring
 from `Path(__file__).resolve().parent`), never from the engine's location.
 The launcher (`scripts/implementation_cli.py`) is a byte-identical copy of
 the sibling's own launcher (design.md D4/M4): every path in it is
-self-anchored off `Path(__file__).resolve()`, so the same 24 bytes placed
+self-anchored off `Path(__file__).resolve()`, so the same launcher bytes placed
 here resolve to THIS skill's own profile, never the sibling's.
 
 **Scope, Slice A (design.md, proposal.md): change A only.** A single

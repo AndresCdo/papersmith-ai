@@ -55,6 +55,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B4 + X6 — settle ordering, reverse heading, tick correction path (D, writer trigger: impl_position + engine + 3 test files + 3 docs)
   - [x] B8 — attainedLevel bounded by the aim when nothing leveled ran (D, writer trigger: impl_position + engine + 2 test files + 2 docs)
   - [x] B10 — prose check skips engine-written holder structures (D, writer trigger: engine + test + doc)
+  - [x] X8 — launchers refuse a sibling's inherited profile; profile test stops leaking it (D, writer trigger: 2 launchers + test + 3 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -418,6 +419,19 @@ Route legend: D = delegated writer, I = inline.
   strip off -> 2 red; blanket file skip -> 2 red (user prose test). Domain-lock pins unchanged (reworded).
   Seals unchanged. No migration (report-only keys).
   Commit: `fix(implementation): the prose check skips what the engine wrote into a holder` (the commit carrying this line)
+
+- X8 (real; reproduced: `pytest tests/test_implementation_profile.py tests/test_upgrade_v0_13_0_workspace.py
+  -p no:randomly` -> 1 failed, the experimental skill reading `AGREED.md`). Leak source:
+  `LauncherExposesNoEngineAttributeTests._launcher_module` exec'd the launcher in-process, whose `setdefault`
+  stayed in `os.environ`. Fix: (1) both byte-identical launchers refuse `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`
+  (exit 2, stderr, before the engine loads) when the inherited value resolves to `<skills root>/<other>/
+  impl_profile.py`; any other explicit value (fixture profile) still wins; (2) the test loads the launcher
+  under `seeded_profile`, which restores the variable.
+  Tests: `InheritedSiblingProfileTests` (5; sibling pairs derived from `skills/*/scripts/implementation_cli.py`)
+  and `test_loading_the_launcher_leaves_the_environment_as_it_found_it`. RED 4F -> GREEN; the ordered pair
+  run is green (80 passed). Docs: proposal usage.md, experimental SKILL.md, profile docstring ("24 bytes"
+  removed). Out of surface, stale: README.md:2412 calls the launcher "24 líneas". No migration.
+  Commit: `fix(implementation): a launcher refuses the other skill's inherited profile` (the commit carrying this line)
 
 ## Next step
 

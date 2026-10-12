@@ -17,6 +17,15 @@ and `materialize` until somebody closes it. Check with `python3 --version` befor
 first command; this is not the same thing as `env`'s `--python` floor for the TARGET's
 venv, which is enforced and refuses `PYTHON_BELOW_FLOOR`.
 
+The launcher sets `IMPLEMENTATION_DOMAIN_PROFILE` to this skill's own
+`impl_profile.py` only when the environment does not already carry the
+variable, so an explicit fixture profile wins. When the inherited value is
+another skill's own `impl_profile.py` (for example `experimental-implementation`'s,
+left exported by a shell or an earlier process), the launcher refuses
+`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` with exit `2` before the engine loads,
+naming both profiles, instead of reading the other skill's documents and
+holder. Unset the variable and run the command again.
+
 ## 0. Bind the revision
 
 ```bash
