@@ -152,9 +152,17 @@ breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
       last three, which landed together; the deviation is declared in the commit
       that carries it. The manual is English end to end and `scripts/check_manual.py`
       reports 0 errors over it.
-- [ ] T7 — The neutral-register revision of U0-U8, one commit per unit
-- [ ] T8 — `README.es.md` stops claiming the manual is Spanish
-- [ ] T9 — Guards, then merge
+- [x] T7 — The neutral-register revision of U0-U8, one commit per unit. Eight
+      commits, one per unit that needed one: `bfae53c` U0 · `7e12cf8` U2 ·
+      `2fe02ef` U3 · `e18cd1b` U4 · `2bb2304` U5 · `a9f4b0d` U6 · `7818557` U7 ·
+      `07df58e` U8. U1, the Contents, needed none and got no empty commit. The
+      pass covers **running prose**: headings and table cells were frozen, and
+      the second person left inside them is named in L10.
+- [x] T8 — `README.es.md` stops claiming the manual is Spanish. It stays Spanish
+      (L12); what changed is the claim and one stale count.
+- [x] T9 — Guards, then merge. The merge landed earlier than the task: the
+      branch went into `main` at `94512a4`, and the units after it were committed
+      on `main` directly. The guards were run at the end of the pass (L13).
 - [x] T10 — The artifacts half. **Measured, not assumed, on 2026-10-12 and already
       satisfied:** the twelve `skills/*/SKILL.md` (9,603 lines) and the thirteen
       `src/papersmith/templates/*.tpl` (786 lines) are English on the tree; the
@@ -252,3 +260,40 @@ remove.
   translated. And the two warnings left standing are a `Content-Security-Policy`
   value split across two lines, which the identity check cannot recognize as code;
   that limitation now sits in the script rather than waiting to be rediscovered.
+- **L9** — T7 was run as a pilot first, the way the translation was. U0 to U3
+  landed as three commits, and the operator confirmed the level of intervention
+  before the pass scaled to the remaining 559 lines. The answer was to keep it,
+  over the two alternatives offered: a lighter pass, which would have left the
+  direct address where it was, and a deeper one, which would also have rewritten
+  procedure steps and table cells.
+- **L10** — T7 closes with a boundary stated rather than implied, because it is
+  the part of this rule a reviewer is most likely to disagree with: **the pass
+  covers running prose.** Headings cannot be renamed -- the Contents and the
+  cross-references point at them -- and table cells were frozen, so the address
+  that lives inside them survives. The writers named four of them: the five
+  imperative `### Step N` headings, `### papersmith.yaml — the configuration you
+  will actually touch`, the flow table's `You invoke` column, and three cells of
+  the agent table. A second pass over headings and tables is a decision, not an
+  oversight.
+- **L11** — One finding the pass surfaced and deliberately did not fix, following
+  the rule this cycle already set for U9: a correction needs its own commit with
+  its own evidence. U8 says a workspace ships **nineteen** subagents and that the
+  routing docs "list all nineteen"; `.claude/agents/` does hold 19 files, and the
+  table standing right beside that sentence lists **18**:
+  `section-grounding-auditor` is the one it does not have. Both the count and the
+  table were frozen by this pass, so neither moved.
+- **L12** — T8 rests on the repo's own precedent, which is explicit: a previous
+  count fix records that "Spanish stays Spanish per this file's target-context
+  language", and `README.es.md` exists only so that old links resolve. So the
+  file stays Spanish and what changes is its false claim: the manual no longer
+  lives there "en español", it lives in `README.md` in English, and the notice
+  now says which date that happened. Its `once skills` was one behind the tree
+  and became `doce`; the twelve CLI commands and the nineteen agents it already
+  stated were re-measured against the tree and hold.
+- **L13** — T9's guards, on 2026-10-12 at the end of the pass, over `README.md`
+  (3,838 lines): `scripts/check_manual.py` reports 0 errors and the same 2 known
+  warnings, and `tests/test_check_manual.py`, `tests/test_harness_parity.py` and
+  `tests/test_version_sources.py` report 47 passed with 32 subtests. The merge
+  this task names had already happened in `94512a4`, and what is left of the
+  cycle is T11: the diagram was blocked on the manual moving, which is exactly
+  what this pass finished doing.
