@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..bridges.python import mapped_returncode
+from ..bridges.python import mapped_returncode, script_environment
 from ..core.exit_codes import EXECUTION_ERROR, SUCCESS, USER_ERROR
 from ..errors import ExecutionError, UserError
 from . import config, ledger
@@ -65,8 +65,7 @@ def _profile_jobs(root: Path, profile_name: str, target_name: str, profile: dict
 
 
 def _local_job(root: Path, profile_name: str, job_id: str, job: dict[str, Any], profile: dict) -> int:
-    environment = os.environ.copy()
-    environment.update(job["env"])
+    environment = script_environment(job["env"])
     environment.update({
         "PAPERSMITH_PROFILE": profile_name,
         "PAPERSMITH_JOB_ID": job_id,
@@ -154,7 +153,11 @@ def run_profile(workspace: str | Path, profile_name: str, *, target_override: st
                 code = SUCCESS
             else:
                 try:
-                    child = subprocess.run(command, cwd=root, check=False)
+                    # remote_cli.py is a kit script under the workspace's skills/.
+                    # The ssh branch below needs no such environment: ssh does
+                    # not forward it, and nothing runs locally but ssh itself.
+                    child = subprocess.run(command, cwd=root, env=script_environment(),
+                                           check=False)
                     code = mapped_returncode(child)
                 except OSError:
                     code = EXECUTION_ERROR

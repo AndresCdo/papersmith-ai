@@ -163,6 +163,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   commit unknown. `upgrade --plan-migrations` writes nothing and does not
   refuse.
 
+- **Scripts the CLI launches no longer write bytecode into the workspace.**
+  `run_script` (every bridged skill script, from `audit` to `target check`)
+  and `papersmith run`'s local job and Kaggle submission children inherited
+  the parent environment unchanged, so a skill script importing a sibling
+  module left `__pycache__/` inside the workspace's `skills/` kit copy. They
+  now run with `PYTHONDONTWRITEBYTECODE=1` (one helper,
+  `bridges.python.script_environment`; an explicit caller value still wins),
+  the rule the MCP bridge and the dashboard child already followed.
+
 ### Behaviour changes
 
 - `admit` returns a new `adopted` map (present only when some finding is
@@ -270,6 +279,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   next `upgrade`, which writes it. Nothing else changes shape and no migration
   is needed; the record is not a framework-managed file, so `audit
   --check-drift` and `status`'s drift list do not report it.
+- `papersmith run` on a `local` target now runs the profile's command with
+  `PYTHONDONTWRITEBYTECODE=1`, so the job writes no `.pyc` files (into the
+  workspace or the target it imports); imports are recompiled on each run.
+  No stored artefact changes; no migration is needed.
 
 ## 0.13.0
 

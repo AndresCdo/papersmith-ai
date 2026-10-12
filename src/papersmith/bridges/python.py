@@ -28,6 +28,22 @@ def interpreter_for(workspace: Path, *, prefer_micromamba: bool = False) -> list
     return [sys.executable]
 
 
+def script_environment(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """The environment of a Python child the CLI launches for a workspace.
+
+    Carries ``PYTHONDONTWRITEBYTECODE=1``: a script in the workspace's kit copy
+    (``skills/``) that imports a sibling module would otherwise leave
+    ``__pycache__`` inside files ``upgrade`` synchronizes and ``status`` hashes.
+    The MCP bridge and the dashboard child already follow the same rule.
+    ``extra`` is applied last, so an explicit caller value still wins.
+    """
+    environment = os.environ.copy()
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    if extra:
+        environment.update(extra)
+    return environment
+
+
 def run_script(workspace: Path, script: str | Path, args: Sequence[str] = (), *,
                prefer_micromamba: bool = False, timeout: float | None = None,
                env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -40,9 +56,7 @@ def run_script(workspace: Path, script: str | Path, args: Sequence[str] = (), *,
         raise SourceError(f"missing skill script: {script_path}")
     command = interpreter_for(root, prefer_micromamba=prefer_micromamba)
     command.extend([str(script_path), *(str(item) for item in args)])
-    child_env = os.environ.copy()
-    if env:
-        child_env.update(env)
+    child_env = script_environment(env)
     try:
         return subprocess.run(
             command,

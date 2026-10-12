@@ -48,7 +48,7 @@ Route legend: D = delegated writer, I = inline.
 - [ ] D2 — migration support policy
 - [ ] D3 — engine state gitignore decision
 - [ ] D4 — plausibility metadata cache inside sota-pool
-- [ ] D5 — no bytecode in kit copy
+- [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
 - [ ] B1–B13
 - [ ] C1–C14
 - [ ] E1–E10
@@ -229,6 +229,16 @@ Route legend: D = delegated writer, I = inline.
   without the env var (temporary `.venv` link, removed).
   Commit: `fix(init): record which kit a workspace came from and refuse a dirty one` (the commit carrying this line)
 
+- D5 (real): `bridges.python.run_script` and `core.executor` (`_local_job`, the Kaggle submit
+  child) inherited `os.environ` unchanged; a bridged script importing a sibling left
+  `skills/<skill>/scripts/__pycache__/` in the workspace. New `script_environment(extra)` sets
+  `PYTHONDONTWRITEBYTECODE=1` (caller `extra` applied last) and backs all three sites; the ssh
+  branch is left alone (ssh forwards no environment). MCP bridge and UI child already set it.
+  Tests: `tests/test_no_bytecode_in_workspace.py` (4) RED 4F (child saw `None`/`False`; env key
+  missing) -> GREEN, including a real bridged run asserting no `__pycache__` anywhere under the
+  workspace. No migration.
+  Commit: `fix(bridges): scripts the CLI launches write no bytecode into the workspace` (the commit carrying this line)
+
 ## Next step
 
-D5 next, then D2. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+D2 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

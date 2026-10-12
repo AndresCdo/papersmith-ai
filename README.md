@@ -3163,7 +3163,10 @@ papersmith run sweep_training --target kaggle-gpu-pool --consent <token>
 | `--consent TOKEN` | Token de consentimiento para envío remoto (se reenvía, se hace cumplir aguas abajo) |
 
 Despacha según el provider (subproceso local / submit a Kaggle / `sbatch` por
-ssh) y agrega cada trabajo a `.papersmith/runs_ledger.jsonl`.
+ssh) y agrega cada trabajo a `.papersmith/runs_ledger.jsonl`. Los procesos
+Python que lanza en la máquina local (el trabajo local y el submit a Kaggle)
+corren con `PYTHONDONTWRITEBYTECODE=1`, igual que los scripts de skills que el
+CLI invoca: no dejan `__pycache__` dentro del workspace.
 
 ### `papersmith remote {pack,push,status,pull,sync} [<dir>]`
 
