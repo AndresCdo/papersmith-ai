@@ -7,11 +7,11 @@
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 <p align="center">
-  <img src="https://i.redd.it/jtiaurw1gknf1.gif" alt="Agent Smith, The Matrix" width="320">
+  <img src="docs/assets/agent-smith-anime.jpg" alt="Agent Smith en clave anime, con un paper holográfico y agentes de IA orbitando a su alrededor" width="560">
 </p>
 
 Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los doce comandos del CLI, las once skills, los diecinueve agentes,
+dentro, los doce comandos del CLI, las doce skills, los diecinueve agentes,
 cómputo remoto, desarrollo y solución de problemas.
 
 ## Índice
@@ -59,7 +59,7 @@ vas a usar un agente de IA como copiloto, los que ya vienen definidos están en
 
 ## Flujo de uso — el camino corto
 
-Once skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
+Doce skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
 castellano (*"ingiere los papers"*). **No hace falta usarlas todas ni en este orden**: cada
 una declara qué necesita antes y se niega si falta, así que si empiezas por el medio te
 lo va a decir ella.
@@ -79,6 +79,7 @@ El camino completo, de un PDF a un paper compilado:
 | 9 | `/paper-writing` | Escribe el paper bloque por bloque, con cada afirmación atada a su evidencia | `paper/` |
 | 10 | `/figure-review` | Mira el render: rasteriza cada `Figures/<id>.pdf` y mide lo que un raster puede sostener (tinta fuera del canvas, colisiones) | un informe visual, nunca un cambio |
 | 11 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
+| 12 | `/upgrade-project` | Lleva el workspace a la versión del CLI que tienes instalado: sincroniza los archivos del kit y migra los artefactos, delegando todo en `papersmith upgrade` | el workspace mismo |
 
 **Lo mínimo para empezar.** Si sólo quieres probar la forja, empieza por el paso 2
 con tu idea en dos oraciones: `/plausibility` rastrea el SOTA y te devuelve la
@@ -151,10 +152,12 @@ falta para extraer PDFs con OCR.
 ### 1. Instala el CLI y prepara el entorno
 
 ```bash
-# 1a. El CLI, siempre desde la última versión de la rama `main`
-pipx install git+https://github.com/LIAUNAL/papersmith-ai.git
+# 1a. El CLI, desde la última versión publicada en PyPI
+pipx install papersmith-ai
 #     lo mismo con pip, si no usas pipx
-pip install "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai.git"
+pip install papersmith-ai
+#     o la punta de `main`, sin esperar a que salga una release
+pipx install git+https://github.com/LIAUNAL/papersmith-ai.git
 
 # 1b. O desde un clon de `main` (si vas a desarrollar el framework)
 git clone https://github.com/LIAUNAL/papersmith-ai.git && cd papersmith-ai
@@ -162,7 +165,7 @@ pipx install .            # con pip: pip install .
 
 # 1c. Actualizar el CLI cuando sale una release nueva
 pipx upgrade papersmith-ai
-#     si `upgrade` no ve el cambio, fuerza la reinstalación
+#     si lo instalaste desde una URL de git, `upgrade` no lo ve: reinstala
 pipx install --force git+https://github.com/LIAUNAL/papersmith-ai.git
 #     con pip, `--upgrade` sobre una URL de git no siempre vuelve a clonar
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai.git"
@@ -180,20 +183,19 @@ npm install
 npm run setup:harnesses
 ```
 
-**El paquete ya está publicado en PyPI.** `pipx install papersmith-ai` trae la
-última versión publicada; las URLs de git de arriba traen la punta de `main`, que
-es lo que conviene si vas a desarrollar el framework. Y cuidado con el nombre
-vecino: `papersmith` —sin el `-ai`— también está en PyPI, pero es **otro
-proyecto** (generación de documentos Word), así que `pip install papersmith` no
-instala esta forja.
+**El paquete está publicado en PyPI.** `pipx install papersmith-ai` trae la
+última release, y es lo que `pipx upgrade papersmith-ai` del **1c** actualiza. La
+URL de git del **1a**, en cambio, trae la punta de `main`, que es lo que conviene
+si vas a desarrollar el framework. Y cuidado con el nombre vecino: `papersmith`
+—sin el `-ai`— también está en PyPI, pero es **otro proyecto** (generación de
+documentos Word), así que `pip install papersmith` no instala esta forja.
 
-Instala siempre desde `main`: es la única rama que se mantiene. La forma 1a
-recibe exactamente lo que `main` tiene hoy; la 1b toma el clon tal como está,
-incluidos cambios sin commitear, así que para reproducir un build usa 1a. Cada
-release queda además con su tag, así que si necesitas congelar un build exacto
-fíjalo en la URL — por ejemplo
+`main` es la única rama que se mantiene, y cada release queda además con su tag,
+así que si necesitas congelar un build exacto fíjalo en la URL — por ejemplo
 `pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.13.0"`.
-El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
+La **1b** toma el clon tal como está, incluidos cambios sin commitear, así que
+para reproducir un build usa la **1a** o un tag. El historial de cambios está en
+[CHANGELOG.md](CHANGELOG.md).
 
 Actualizar son dos pasos y son dos objetos distintos. El **1c** reinstala el
 CLI desde `main`; confirma qué quedó con `papersmith --version`. El **1d**
@@ -392,7 +394,7 @@ mi-paper/
 │   ├── runs_ledger.jsonl        #   cada corrida despachada, en orden
 │   └── version                  #   versión del framework que lo creó
 ├── .claude/agents/              # los diecinueve subagentes (fuente única de verdad)
-├── skills/                      # la copia del kit: las once skills + _core
+├── skills/                      # la copia del kit: las doce skills + _core
 │   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
 ├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
 ├── guidance/
@@ -675,7 +677,7 @@ verifica**. El agente propone un cambio; el motor comprueba que ese cambio no
 rompió nada y, si lo rompió, se niega. Un agente puede equivocarse. Un motor
 determinista no cambia de opinión.
 
-**Y cómo se encadenan.** Las once no son islas: cada una recibe algo concreto de
+**Y cómo se encadenan.** Las doce no son islas: cada una recibe algo concreto de
 otra y le entrega algo concreto a la siguiente. Este es el mapa; cada skill explica
 su propia costura en detalle, en su apartado. Las flechas dicen **qué** pasa por la
 costura, no sólo que existe — y cada una de las etiquetas de abajo está leída de la
@@ -3564,7 +3566,7 @@ eso `tests/domain_profile.py` lo siembra y lo restaura por import.
 importable`. La forma que funciona es la de arriba, sin `-t .`.
 
 **Qué prueba cada cosa.** `tests/` cubre **el tooling de la forja**: los dos
-motores compartidos, los once `SKILL.md` y sus scripts, la atadura entre cada
+motores compartidos, los doce `SKILL.md` y sus scripts, la atadura entre cada
 skill y sus agentes en las dos direcciones, y una serie *from-scratch* que
 genera un workspace con el CLI y recorre cada comando, cada skill embarcada y
 cada subagente dentro de él (`tests/test_workspace_{commands,skills,agents}_e2e.py`).
