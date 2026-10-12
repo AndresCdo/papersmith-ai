@@ -814,3 +814,9 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `skills/experimental-deliberation/SKILL.md`, `tests/test_experimental_implementation_*.py` (new test), CHANGELOG.md.
   Proposed shape: an `outOfScope` marker in the convention (e.g. `[out-of-scope:N]`) read from the experiments
   document and subtracted from `untested` (absent = today's behaviour); watch `tests/test_implementation_domain_lock.py`.
+
+- C5 follow-up: the full parallel run showed two skill-audit tests pinning the deliberation host's refusal roster at 9
+  (`RefusalProbeTests::test_the_refusal_yields_the_accepted_set`, `NewlyCoveredSubjectRosterTests` experimental case);
+  both re-anchored to 10 with the reason (the adoption operation), without spelling the operation name (the file
+  forbids operation literals). `tests/test_skill_audit.py`: 385 passed, 2 failed = the known `.venv` cases.
+  Commit: `test(skill-audit): the deliberation roster counts the adoption operation` (the commit carrying this line)
