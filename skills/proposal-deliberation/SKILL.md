@@ -68,6 +68,18 @@ its own proposal.
 What moves is execution, never doctrine: every rule stays here, and the agent's
 first instruction is to load this file.
 
+## When a delegated agent cannot be spawned
+
+The stretch this skill delegates is defined in full by its agent file:
+`.claude/agents/deliberation-publish.md`. When that agent cannot be spawned —
+the harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read the
+definition file and follow it as written, from the beginning it states to the
+end it states, holding any gate this skill sets before the stretch, and returning the
+report shape it specifies. Its `tools:` line still bounds the stretch: an act
+that would need a tool outside that list is a stop, not a workaround. Say in
+the reply that the stretch ran inline and why the agent could not be spawned.
+
 ## The graph: the proposal inside the SOTA sky
 
 This skill's artifact travels with a picture, and the picture is the SOTA

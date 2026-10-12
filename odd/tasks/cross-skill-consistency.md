@@ -89,6 +89,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] E1, E7, E8 — implement bridge coverage + alias note; absolute profile; session ids (inline/serial: bridge + test + 4 docs)
   - [x] E6b — grapher agent runs check_atlas with --pool (inline: agent + projections + test)
   - [x] E6a — arXiv/Crossref year (inline: resolver + test + SKILL.md)
+  - [x] E9 — inline fallback section in 8 delegating skills (inline: 8 docs + drift test)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -1025,3 +1026,11 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Crossref 10 cases incl. `[[null]]`, strings, bools; cache key == raw digest and a legacy `year: null` blob reads
   back unchanged) RED 6F -> GREEN; resolver/evidence/writing/cache files 768 passed. Doc: plausibility SKILL.md.
   Commit: `fix(paper-writing): resolve reads the year arXiv and Crossref send` (the commit carrying this line)
+- E9 (real): only proposal-implementation (:152) and paper-writing (5 stretch paragraphs) covered a harness with no
+  Task tool, and none said to follow the agent file. Added "## When a delegated agent cannot be spawned" to the 8
+  bound skills (skill-audit, paper-writing, proposal-deliberation, experimental-deliberation,
+  experimental-implementation, proposal-implementation, plausibility, paper-ingestion), naming each bound
+  `.claude/agents/<name>.md`; paper-writing notes inline audits are not independent. Test:
+  `tests/test_agent_inline_fallback_doc.py` (binding derived from each agent's `Skill:` line) RED 8 subtests ->
+  GREEN (2 passed, 8 subtests). `npm run test:node`: 776 pass, 0 fail. `npm run test:fast`: 188 passed.
+  Commit: `docs(skills): every delegating skill names its inline fallback` (the commit carrying this line)

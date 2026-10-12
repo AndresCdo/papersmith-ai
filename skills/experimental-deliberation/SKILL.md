@@ -71,6 +71,20 @@ approving its own document.
 What moves is execution, never doctrine: every rule stays here, and each
 agent's first instruction is to load this file.
 
+## When a delegated agent cannot be spawned
+
+Each stretch this skill delegates is defined in full by its own agent file:
+`.claude/agents/experimental-publish.md`,
+`.claude/agents/experimental-validation.md`. When an agent cannot be spawned —
+the harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read that
+agent's definition file and follow it as written, from the beginning it states
+to the end it states, holding any gate this skill sets before the stretch, and
+returning the report shape it specifies. Its `tools:` line still bounds the
+stretch: an act that would need a tool outside that list is a stop, not a
+workaround. Say in the reply that the stretch ran inline and why the agent
+could not be spawned.
+
 ## The question that governs every turn
 
 **Does this experiment sustain the proposal's claim, and would it survive a reviewer?**

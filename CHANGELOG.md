@@ -607,6 +607,16 @@ number is `0`, breaking changes can still arrive without a major bump.
   `published`'s. A missing, `null` or non-integer date still reports `null`.
   Documented in `plausibility`'s `SKILL.md`.
 
+- **Every skill that delegates to a generated agent says what to do when the
+  agent cannot be spawned.** Only `proposal-implementation` and
+  `paper-writing` covered a harness without sub-agents, and none said to
+  follow the agent's own definition. Each of the eight skills an agent binds
+  to now carries "When a delegated agent cannot be spawned": perform the
+  stretch inline by following `.claude/agents/<name>.md` as written, within
+  its `tools:` line, and say so in the reply (`paper-writing` adds that an
+  inline audit is not independent of the draft). A test derives the
+  agent-to-skill binding from each agent's `Skill:` line.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
