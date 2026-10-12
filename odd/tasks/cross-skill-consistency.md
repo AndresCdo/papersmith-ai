@@ -89,14 +89,14 @@ Route legend: D = delegated writer, I = inline.
   change-selected `npm run test:fast` tier hits it. Not fixed (outside B1/B4/B8/B10).
 - [x] X8b — the change-selected tier (`fast_tests.py --since 8e3f813`, 23 files, one process) still failed
   `test_each_implementation_skill_still_reads_its_own_holder[experimental-implementation]` after X8. Fixed; see Progress.
-- X10 — `tests/test_implementation_core.py` and `tests/test_proposal_implementation.py` run together under
+- [x] X10 — `tests/test_implementation_core.py` and `tests/test_proposal_implementation.py` run together under
   `-n 8 --dist loadfile` interfere: `WorkspaceGuardTests.setUp`'s `implementations/_core_guard_*` directory
   vanishes (`FileNotFoundError`), and one such run errored 1801 proposal tests at setup. Reproduced with the
   B12 changes stashed (found in B12). Each file passes alone. Same family under `-n 8 --dist loadfile`
   with `test_proposal_implementation.py` in the run: `test_experiments_seal.py`'s `verify-a` case
   intermittently prints nothing (`HolderRenameDeclaredDeltaTests`) or a different digest
   (`ThreatMatrixTests::test_a_stray_parent_env_var_produces_an_identical_digest`); the file passes alone
-  (29 passed). Its scratch target also lives under `implementations/`. Not investigated further.
+  (29 passed). Its scratch target also lives under `implementations/`. Fixed; see Progress.
 - Fixture script: `scripts/build-v0_13_0-fixture.py`'s `--under "# Agreed"` comment now says it keeps the
   0.13.0 heading on purpose and that X6/B4 fixed `## Ladder` in 0.14.0 (comment only; fixture not
   regenerated). Commit: `docs(fixture): the 0.13.0 settle workaround comment names the 0.14.0 fix`.
@@ -605,3 +605,32 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Verification: `fast_tests.py --since 8e3f813` (now 28 files): 3364 passed, 3 skipped; the original 23-file
   list, one process: 3239 passed, 3 skipped, 0 failed. Route: inline. Test-only; no CHANGELOG entry, no migration.
   Commit: `test(implementation): no test file leaves process state for the next` (the commit carrying this line)
+
+- X10 (real; three shared-path root causes, found by reading every write the colliding files make outside
+  their own scratch roots and by a scratch deletion-watch plugin on a `-n 8 --dist loadfile` run):
+  (1) five mutation tests still wrote a broken engine into the shipped
+  `skills/_core/implementation/engine/implementation_engine.py` and restored it in a cleanup -- X3 had moved only
+  one: `tests/test_implementation_pair.py` `CitationPatternMutationTests` (Y9), `DriftControlFoldMutationTests`
+  (Y4-Y7), `LocalReachRevertMutationTests` (Z9), and `tests/test_proposal_implementation.py`
+  `SettleHeadingAbsentMutationTests`. A concurrent reader saw a truncated or mutated engine: the experiments seal's
+  `verify-a` printing nothing or a different digest. (2) `tests/orphan_sweep.py` (run by
+  `test_proposal_implementation.py`'s `setUpModule`) listed `implementations/_*` and then stat'ed each entry; a
+  sibling's own cleanup removing `_core_guard_*` in between raised `FileNotFoundError` in `setUpModule`, erroring
+  every test of the file (the 1801). (3) three tests dropped modules into the shipped
+  `skills/remote-execution/scripts/` (`TwoDocumentLifecycleTests`' capacity adapter, `BackendResolutionTests`'
+  fixture backend and escape marker); measured in the first full parallel run of this task as
+  `WorkspaceToolsResolverTests` reading a kit manifest that named `adapters/pairlifecycle<pid>.py` after it was
+  removed. Fixes: new `tests/scratch_forge.py` (`build`: copies `_core/implementation` with the real nesting, the
+  launcher, links or copies `remote-execution`, own `implementations/`); X3's setUp, the five mutation tests and the
+  lifecycle class run there; `BackendResolutionTests` points the loaded `remote_cli.__file__` at a scratch
+  `scripts/` copy; the sweep skips an entry that vanished. Guards: `assert_real_engine_untouched` in each mutation
+  test and an equivalent assertion in the settle test (RED 7/7 on the in-place mechanism -> GREEN, engine diff
+  empty); `tests/test_shipped_engine_is_never_written.py` (AST scan of every test module for
+  `ENGINE.write_text/write_bytes`; finds 6 sites in HEAD's pair file and 1 in the proposal file);
+  `test_a_fixture_its_owner_removes_mid_sweep_is_not_an_error` (RED FileNotFoundError -> GREEN). Every mutation
+  test still asserts its mutated behaviour, so each still proves the scratch engine ran the mutation.
+  Verification: `npm run test:py:par` twice: 3 failed, 6048 passed, 13 skipped (both runs), the 3 being exactly the
+  known `.venv` environmental failures (`test_skill_audit` inversion test + its usage subtest,
+  `test_cli_paper_e2e` wiring smoke); `git status skills implementations` clean after each run. Route: delegated
+  writer (this one). Test-only; no CHANGELOG entry, no migration.
+  Commit: `test(implementation): each test file runs in its own scratch paths under parallel runs` (the commit carrying this line)

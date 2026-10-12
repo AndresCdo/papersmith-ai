@@ -48,6 +48,7 @@ from domain_profile import seeded_profile  # noqa: E402  (path set above)
 with seeded_profile(FORGE / "skills/proposal-implementation/impl_profile.py"):
     from seal import harness as seal_harness  # noqa: E402  (path set above)
     from pair import corpus as pair_corpus  # noqa: E402  (path set above)
+    import scratch_forge  # noqa: E402  (path set above)
     import impl_position  # noqa: E402  (path set by seal_harness's own import)
 
 #: Cut 3 corrective apply (verify FAIL, CRITICAL finding): the real CLI
@@ -755,6 +756,16 @@ ENGINE = FORGE / "skills/_core/implementation/engine/implementation_engine.py"
 #: Read once at import, before any test of this module runs.
 _REAL_ENGINE_SHA256 = hashlib.sha256(ENGINE.read_bytes()).hexdigest()
 
+
+def assert_real_engine_untouched(case: unittest.TestCase) -> None:
+    """X10: a mutation test must leave the shipped engine byte-identical
+    WHILE it runs, not only after its cleanup. Every other test file in a
+    parallel run reads that file; a mutation written there, even for a
+    second, is a wrong result in a test that never asked for one."""
+    case.assertEqual(
+        hashlib.sha256(ENGINE.read_bytes()).hexdigest(), _REAL_ENGINE_SHA256,
+        "the shipped engine was rewritten during a mutation test")
+
 #: design.md D5: the mutation a WEAKER lock survives, so it is the one that
 #: proves the refusal is reachable rather than merely present in source.
 #: Deleting the `raise` entirely, or falling back to document 0's name,
@@ -808,30 +819,14 @@ class AmbiguousFamilyMutationProvesReachabilityTests(unittest.TestCase):
         self.assertEqual(mutated.count(_AMBIGUITY_MUTATED), 1)
 
         # X3: the mutation is written into a scratch forge, never into the
-        # shipped engine. The scratch copy keeps the real nesting
-        # (`impl_layout.FORGE_ROOT` is `parents[4]` of the engine, and a
-        # target must live under `<forge>/implementations`), carries the
-        # whole `_core/implementation` tree and the launcher this suite
-        # runs, and links `remote-execution`, which the engine path-imports
-        # read-only from `<forge>/skills`.
-        self.scratch_forge = Path(tempfile.mkdtemp(prefix="pair-d5-forge-"))
-        self.addCleanup(shutil.rmtree, self.scratch_forge, ignore_errors=True)
-        core = ENGINE.parents[1]
-        scratch_core = (self.scratch_forge
-                        / core.relative_to(FORGE))
-        shutil.copytree(core, scratch_core,
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        self.scratch_engine = scratch_core / ENGINE.relative_to(core)
-        self.scratch_engine.write_text(mutated, encoding="utf-8")
+        # shipped engine (`scratch_forge.build`, shared with the X10
+        # mutation classes below).
+        self.scratch_forge, self.scratch_cli = scratch_forge.build(
+            self, mutated, CLI, prefix="pair-d5-forge-")
+        self.scratch_engine = self.scratch_forge / ENGINE.relative_to(FORGE)
         self.assertEqual(
             self.scratch_engine.read_text(encoding="utf-8").count(
                 _AMBIGUITY_MUTATED), 1)
-        self.scratch_cli = self.scratch_forge / CLI.relative_to(FORGE)
-        self.scratch_cli.parent.mkdir(parents=True)
-        shutil.copy2(CLI, self.scratch_cli)
-        remote = FORGE / "skills" / "remote-execution"
-        (self.scratch_forge / "skills" / remote.name).symlink_to(
-            remote, target_is_directory=True)
 
         # A fresh two-document profile and a genuinely ambiguous document
         # 1 (the identical corpus shape `TwoDocumentAmbiguousFamilyRefuses
@@ -956,8 +951,11 @@ class TwoDocumentLifecycleTests(unittest.TestCase):
     several real calls against the SAME target.
 
     The launch-capacity registration below drops a real, pid-scoped module
-    into `remote-execution/scripts/adapters/` -- the identical, already-
-    sanctioned mechanism `test_remote_execution.py::AdapterEnvironmentTests
+    into `remote-execution/scripts/adapters/` of a scratch forge
+    (`scratch_forge.build`, X10: writing it into the shipped skill put a
+    stray file in front of every other worker that enumerates `skills/`,
+    measured as a kit manifest naming a file that had just been removed)
+    -- the identical, already-sanctioned mechanism `test_remote_execution.py::AdapterEnvironmentTests
     .test_dropping_a_module_into_adapters_becomes_reachable_by_backend_name`
     establishes (a module dropped there becomes reachable by `--backend`/
     a job folder's own declared `service`, with no change to `remote_cli.py`
@@ -994,6 +992,9 @@ class TwoDocumentLifecycleTests(unittest.TestCase):
             "at DOCUMENTS[1]'s own directory, never document 0's copy.\n",
             encoding="utf-8")
 
+        self.forge, self.cli = scratch_forge.build(
+            self, None, CLI, prefix="pair-lifecycle-forge-",
+            copied_skills=("remote-execution",))
         self._register_capacity_adapter()
         self.box, self.commit = self._build_box()
 
@@ -1008,12 +1009,12 @@ class TwoDocumentLifecycleTests(unittest.TestCase):
         return env
 
     def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE,
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge,
                               env=self._child_env())
 
     def _register_capacity_adapter(self):
-        adapters_dir = (FORGE / "skills" / "remote-execution"
+        adapters_dir = (self.forge / "skills" / "remote-execution"
                         / "scripts" / "adapters")
         fixture_path = adapters_dir / f"{self.SERVICE}.py"
         fixture_path.write_text(
@@ -1035,12 +1036,10 @@ class TwoDocumentLifecycleTests(unittest.TestCase):
             "ADAPTER = _load_adapter_seam()\n"
             f"ADAPTER.register_declared_capacity({self.SERVICE!r}, lambda: (1, 1))\n",
             encoding="utf-8")
-        self.addCleanup(fixture_path.unlink)
-        self.addCleanup(
-            lambda: shutil.rmtree(adapters_dir / "__pycache__", ignore_errors=True))
+        # Removed with the scratch forge; nothing in the shipped tree to undo.
 
     def _build_box(self):
-        box = FORGE / "implementations" / f"_pair_lifecycle_{os.getpid()}_{id(self)}"
+        box = self.forge / "implementations" / f"_pair_lifecycle_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         box.mkdir(parents=True)
         env = dict(os.environ)
@@ -1566,6 +1565,11 @@ class PerDocumentCitationImpactClassTests(unittest.TestCase):
     `TwoDocumentLifecycleTests` already proves this call site with,
     isolated here to a single, minimal, purpose-built fixture."""
 
+    #: The forge and launcher this case runs; a mutation test points both
+    #: at a scratch forge (X10) before `setUp`.
+    forge = FORGE
+    cli = CLI
+
     REVISION = "pair-citation-r01.md"
     REVISION_1 = "pair-citation-plan-v01.md"
     PACKAGE = "CitationImpact"
@@ -1595,7 +1599,7 @@ class PerDocumentCitationImpactClassTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.doc1, ignore_errors=True)
         (self.doc1 / self.REVISION_1).write_text(self.REVISION_1_TEXT, encoding="utf-8")
 
-        self.box = FORGE / "implementations" / f"_pair_citation_{os.getpid()}_{id(self)}"
+        self.box = self.forge / "implementations" / f"_pair_citation_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, self.box, ignore_errors=True)
         self.box.mkdir(parents=True)
         env = dict(os.environ)
@@ -1632,8 +1636,8 @@ class PerDocumentCitationImpactClassTests(unittest.TestCase):
         env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.profile_roots.profile_path)
         env["IMPLEMENTATION_PROPOSALS"] = str(self.doc0)
         env["IMPLEMENTATION_PROPOSALS_1"] = str(self.doc1)
-        return subprocess.run([sys.executable, str(CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE, env=env)
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge, env=env)
 
     def test_each_named_documents_citations_are_matched_by_its_own_pattern(self):
         admit = self.run_cli(
@@ -1661,7 +1665,8 @@ class CitationPatternMutationTests(unittest.TestCase):
     """Y9 (design.md Mutation Plan): `_impact_class` ignores its own
     passed pattern and matches with the shared, module-level `CITATION_RE`
     regardless of index -- confirms `PerDocumentCitationImpactClassTests`'
-    own case goes red, on the REAL engine file, restored byte-identical."""
+    own case goes red, on a scratch-forge copy of the real engine source
+    (X10: the shipped file is never written)."""
 
     def test_ignoring_the_passed_pattern_reddens_the_per_document_case(self):
         original = ENGINE.read_text(encoding="utf-8")
@@ -1676,18 +1681,11 @@ class CitationPatternMutationTests(unittest.TestCase):
         mutated = original.replace(_Y9_OLD, _Y9_MUTATED, 1)
         self.assertEqual(mutated.count(_Y9_OLD), 0)
         self.assertEqual(mutated.count(_Y9_MUTATED), 1)
-        ENGINE.write_text(mutated, encoding="utf-8")
+        forge, cli = scratch_forge.build(self, mutated, CLI, prefix="pair-y9-forge-")
 
-        def restore():
-            ENGINE.write_text(original, encoding="utf-8")
-            restored = ENGINE.read_text(encoding="utf-8")
-            self.assertEqual(restored, original,
-                             "the engine file was not restored byte-identical")
-            self.assertEqual(restored.count(_Y9_OLD), 1)
-            self.assertEqual(restored.count(_Y9_MUTATED), 0)
-        self.addCleanup(restore)
-
+        assert_real_engine_untouched(self)
         case = PerDocumentCitationImpactClassTests()
+        case.forge, case.cli = forge, cli
         case.setUp()
         try:
             admit = case.run_cli(
@@ -1710,10 +1708,10 @@ class CitationPatternMutationTests(unittest.TestCase):
             case.doCleanups()
 
 
-#: Y4-Y7 (design.md Mutation Plan): each mutates the REAL engine file in
-#: place, anchor discipline first (old count exactly 1, new count 0,
-#: before; the reverse after), a real subprocess exercises the mutation,
-#: `addCleanup` restores byte-identical -- the same mechanism
+#: Y4-Y7 (design.md Mutation Plan): each mutates a scratch-forge copy of
+#: the real engine source (X10: the shipped file is never written), anchor
+#: discipline first (old count exactly 1, new count 0, before; the reverse
+#: after), and a real subprocess exercises the mutation -- the same mechanism
 #: `AmbiguousFamilyMutationProvesReachabilityTests` above already
 #: establishes for D5, reused here for D4/D5's own fold arithmetic. Never
 #: the scratch-profile mechanism (`_write_scratch_profile`): these
@@ -1744,11 +1742,16 @@ _Y7_MUTATED = (
 
 class DriftControlFoldMutationTests(unittest.TestCase):
     """Y4-Y7 (design.md Mutation Plan): each breaks one specific piece of
-    the per-document fold, on the REAL `implementation_engine.py`, and
+    the per-document fold, on a scratch copy of the real
+    `implementation_engine.py` source (X10), and
     confirms exactly the row's own "must go red" column -- never merely
     that SOMETHING reddens."""
 
     PACKAGE = "DriftControl"
+    #: Replaced by `_apply_mutation` with a scratch forge running the
+    #: mutated engine (X10); the shipped tree is only read.
+    forge = FORGE
+    cli = CLI
     DOC0_REVISION = "pair-drift-r01.md"
     DOC1_OLD_REVISION = "pair-drift-plan-v00.md"
     DOC1_NEW_REVISION = "pair-drift-plan-v01.md"
@@ -1779,7 +1782,7 @@ class DriftControlFoldMutationTests(unittest.TestCase):
 
     def _build_box(self, *, doc0_revision: str, doc1_revision: str,
                    omit_provenance: bool = False, suffix: str = ""):
-        box = FORGE / "implementations" / f"_pair_drift_mut_{os.getpid()}_{id(self)}{suffix}"
+        box = self.forge / "implementations" / f"_pair_drift_mut_{os.getpid()}_{id(self)}{suffix}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         box.mkdir(parents=True)
         env = dict(os.environ)
@@ -1816,9 +1819,9 @@ class DriftControlFoldMutationTests(unittest.TestCase):
 
     def _verify(self, box: Path) -> dict:
         proc = subprocess.run(
-            [sys.executable, str(CLI), "verify", "--target", str(box),
+            [sys.executable, str(self.cli), "verify", "--target", str(box),
              "--name", self.PACKAGE, "--revision", self.DOC0_REVISION],
-            capture_output=True, text=True, cwd=FORGE, env=self._child_env())
+            capture_output=True, text=True, cwd=self.forge, env=self._child_env())
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         return json.loads(proc.stdout)
 
@@ -1838,16 +1841,9 @@ class DriftControlFoldMutationTests(unittest.TestCase):
         new_source = original.replace(old, mutated, 1)
         self.assertEqual(new_source.count(old), 0)
         self.assertEqual(new_source.count(mutated), 1)
-        ENGINE.write_text(new_source, encoding="utf-8")
-
-        def restore():
-            ENGINE.write_text(original, encoding="utf-8")
-            restored = ENGINE.read_text(encoding="utf-8")
-            self.assertEqual(restored, original,
-                             "the engine file was not restored byte-identical")
-            self.assertEqual(restored.count(old), 1)
-            self.assertEqual(restored.count(mutated), 0)
-        self.addCleanup(restore)
+        self.forge, self.cli = scratch_forge.build(
+            self, new_source, CLI, prefix="pair-drift-forge-")
+        assert_real_engine_untouched(self)
 
     def test_y4_bare_claim_key_breaks_both_directions_seal_survives(self):
         """`claim_key(index)` -> the bare `CLAIM_KEY` scalar: every index's
@@ -1985,6 +1981,10 @@ class HandoffLocalReachTests(unittest.TestCase):
     REVISION = "handoff-consumer-r01.md"
     REVISION_1 = "handoff-consumer-plan-v01.md"
     PACKAGE = "HandoffConsumer"
+    #: The forge and launcher this case runs; a mutation test points both
+    #: at a scratch forge (X10) before `setUp`.
+    forge = FORGE
+    cli = CLI
 
     #: Document 0's own text -- carries neither citation syntax at all for
     #: locus "11"/"22" (0 citations under document 0's own "Ec."/"Eq."
@@ -2131,7 +2131,7 @@ class HandoffLocalReachTests(unittest.TestCase):
         (self.doc1 / self.REVISION_1).write_text(self.REVISION_1_TEXT, encoding="utf-8")
 
     def _build_box(self, findings_source: str, suffix: str) -> Path:
-        box = FORGE / "implementations" / f"_handoff_consumer_{os.getpid()}_{id(self)}{suffix}"
+        box = self.forge / "implementations" / f"_handoff_consumer_{os.getpid()}_{id(self)}{suffix}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         box.mkdir(parents=True)
         env = dict(os.environ)
@@ -2152,8 +2152,8 @@ class HandoffLocalReachTests(unittest.TestCase):
         env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.profile_roots.profile_path)
         env["IMPLEMENTATION_PROPOSALS"] = str(self.doc0)
         env["IMPLEMENTATION_PROPOSALS_1"] = str(doc1_dir if doc1_dir is not None else self.doc1)
-        return subprocess.run([sys.executable, str(CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE, env=env)
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge, env=env)
 
     def test_a_single_document_local_finding_still_settles_inline(self):
         """5.1/5.2: `mono-local-settle` names only `proposal`. Once
@@ -2294,8 +2294,8 @@ class LocalReachRevertMutationTests(unittest.TestCase):
     """Z9 (design.md Mutation Plan, tasks.md 5.7/5.8): revert `local_reach`
     to the bare `impact["class"] == "local"` comparison at all FOUR sites
     (three `local_reach(impact)` call sites in `cmd_handoff`, plus
-    `cmd_verify`'s own `local_reach(finding_impact(...))`) -- on the REAL
-    engine file, restored byte-identical. Confirms the two-document
+    `cmd_verify`'s own `local_reach(finding_impact(...))`) -- on a
+    scratch-forge copy of the real engine source (X10). Confirms the two-document
     handoff routing case (5.3) dies under the mutation, and that a
     single-document profile is unaffected (there, `impact["class"]` is
     always a plain string, so the bare comparison and `local_reach` agree
@@ -2324,16 +2324,7 @@ class LocalReachRevertMutationTests(unittest.TestCase):
         self.assertEqual(mutated.count(_Z9_MUTATED), original_bare_total + 3)
         self.assertEqual(mutated.count(_Z9_VERIFY_OLD), 0)
         self.assertEqual(mutated.count(_Z9_VERIFY_MUTATED), 1)
-        ENGINE.write_text(mutated, encoding="utf-8")
-
-        def restore():
-            ENGINE.write_text(original, encoding="utf-8")
-            restored = ENGINE.read_text(encoding="utf-8")
-            self.assertEqual(restored, original,
-                             "the engine file was not restored byte-identical")
-            self.assertEqual(restored.count(_Z9_OLD), 3)
-            self.assertEqual(restored.count(_Z9_VERIFY_OLD), 1)
-        self.addCleanup(restore)
+        forge, cli = scratch_forge.build(self, mutated, CLI, prefix="pair-z9-forge-")
 
         # The two-document routing case (5.3) dies: `both-local-ambiguous`
         # names both documents, each resolving `local` via the mapping --
@@ -2342,7 +2333,9 @@ class LocalReachRevertMutationTests(unittest.TestCase):
         # silently falls to `deferToOwnSession` again (`deferredBecause:
         # "structural-reach"`), never reaching `_single_named_document_
         # index` at all -- `COMPOSE_AMBIGUOUS_DOCUMENT` does NOT fire.
+        assert_real_engine_untouched(self)
         case = HandoffLocalReachTests()
+        case.forge, case.cli = forge, cli
         case.setUp()
         try:
             box = case._build_box(case.BOTH_FINDINGS_SOURCE, "_z9")

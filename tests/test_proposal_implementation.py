@@ -41,6 +41,7 @@ CLI = FORGE / "skills/proposal-implementation/scripts/implementation_cli.py"
 ENGINE = FORGE / "skills/_core/implementation/engine/implementation_engine.py"
 sys.path.insert(0, str(ENGINE.parent))
 from domain_profile import seeded_profile  # noqa: E402  (path set above)
+import scratch_forge  # noqa: E402  (path set above)
 with seeded_profile(FORGE / "skills/proposal-implementation/impl_profile.py"):
     import implementation_engine as impl  # noqa: E402  (path set above)
 # `implementation_engine`'s own import of `impl_layout` etc. already put
@@ -26282,13 +26283,20 @@ class CreateOnAbsentMutationTests(unittest.TestCase):
             self.assertFalse((root / "Method").exists())
 
 
+#: The shipped engine's bytes at import, before any test ran (X10).
+_REAL_ENGINE_SHA256 = hashlib.sha256(ENGINE.read_bytes()).hexdigest()
+
+
 class SettleHeadingAbsentMutationTests(unittest.TestCase):
     """`implementation-declared-holder` spec, "`SETTLE_HEADING_ABSENT` Still
     Fires For A Heading The Declaration Does Not Carry" -- reachability
-    proof (tasks.md 3.8b). The shipped engine file is mutated in place and
-    restored via `addCleanup` (the accepted "single-file git stash" shape),
-    because `cmd_settle` calls `resolve_target`, which requires the real
-    `WORKSPACE`/`FORGE_ROOT` -- a scratch-copied tree computes a bogus one.
+    proof (tasks.md 3.8b). The mutation runs in a scratch forge
+    (`scratch_forge.build`): `cmd_settle` calls `resolve_target`, which
+    derives `WORKSPACE`/`FORGE_ROOT` from the engine's own path, so the copy
+    keeps the real nesting and the target lives under its
+    `implementations/`. It used to be written into the shipped engine and
+    restored by a cleanup, which every other test file in a parallel run
+    then read mid-mutation (X10).
     """
 
     ENGINE = (FORGE / "skills" / "_core" / "implementation" / "engine"
@@ -26296,17 +26304,19 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
     CLI = (FORGE / "skills" / "proposal-implementation" / "scripts"
            / "implementation_cli.py")
 
-    def _mutate_shipped_engine(self, mutate) -> None:
+    PROFILE = FORGE / "skills" / "proposal-implementation" / "impl_profile.py"
+
+    def _mutate_engine_in_scratch_forge(self, mutate) -> None:
         original = self.ENGINE.read_text(encoding="utf-8")
         mutated = mutate(original)
         self.assertNotEqual(mutated, original,
                             "the mutation string was not found -- the anchor "
                             "drifted from the shipped source")
-        self.ENGINE.write_text(mutated, encoding="utf-8")
-        self.addCleanup(self.ENGINE.write_text, original, encoding="utf-8")
+        self.forge, self.cli = scratch_forge.build(
+            self, mutated, self.CLI, prefix="settle-heading-forge-")
 
     def _box(self):
-        box = FORGE / "implementations" / f"_e2e_heading_mutation_{os.getpid()}_{id(self)}"
+        box = self.forge / "implementations" / f"_e2e_heading_mutation_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
         (box / "src" / "Method_Benchmark").mkdir(parents=True)
@@ -26318,8 +26328,13 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
         return box
 
     def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(self.CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE)
+        # The scratch launcher has no profile beside it; this skill's own
+        # profile is named explicitly, as the launcher would default to it.
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.PROFILE)
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge,
+                              env=env)
 
     def test_inverting_the_settle_heading_absent_guard_lets_the_write_proceed(self):
         def mutate(source: str) -> str:
@@ -26339,7 +26354,12 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
                 '"end": len(holder_data)})]\n')
             return source.replace(anchor, replacement, 1)
 
-        self._mutate_shipped_engine(mutate)
+        self._mutate_engine_in_scratch_forge(mutate)
+        # X10: every other test file in a parallel run reads the shipped
+        # engine, so the mutation must never be written there.
+        self.assertEqual(hashlib.sha256(self.ENGINE.read_bytes()).hexdigest(),
+                         _REAL_ENGINE_SHA256,
+                         "the shipped engine was rewritten during a mutation test")
         box = self._box()
         discuss_proc = self.run_cli(
             "discuss", "--target", str(box), "--name", "Method",

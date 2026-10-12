@@ -20133,6 +20133,28 @@ class BackendResolutionTests(unittest.TestCase):
         self.assertIn("known-fixture-for-message-test", message)
         self.assertIn("available", message)
 
+    def _scratch_scripts_dir(self) -> Path:
+        """A scratch copy of the skill's `scripts/` layout, which
+        `_load_backend_module` reads for the rest of this test.
+
+        That function locates `adapters/` beside its own `__file__`, so the
+        loaded module's `__file__` is pointed at a copy of `remote_cli.py`
+        here; the path logic under test runs unchanged on it. `adapter.py`
+        is copied beside it for a dropped module that loads its seam by
+        relative path (this process already holds the seam, so it reuses it).
+        """
+        root = Path(tempfile.mkdtemp(prefix="remote-adapters-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        scripts = root / "scripts"
+        (scripts / "adapters").mkdir(parents=True)
+        shutil.copy2(REMOTE_CLI_SCRIPT, scripts / REMOTE_CLI_SCRIPT.name)
+        shutil.copy2(ADAPTER_SCRIPT, scripts / ADAPTER_SCRIPT.name)
+        patcher = unittest.mock.patch.object(
+            REMOTE_CLI, "__file__", str(scripts / REMOTE_CLI_SCRIPT.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return scripts
+
     def test_hostile_backend_value_cannot_escape_adapters_directory(self) -> None:
         """`--backend`'s value is used to locate a module, so it is
         constrained BEFORE it ever touches the filesystem: a bare
@@ -20149,21 +20171,18 @@ class BackendResolutionTests(unittest.TestCase):
         is the proof nothing outside `adapters/` was ever read, let alone
         executed.
         """
-        adapters_dir = REMOTE_CLI_SCRIPT.parent / "adapters"
-        # The pid, because this marker is planted in the shipped skill's own
-        # `scripts/` directory -- one shared location, not a per-process
-        # sandbox. Under a fixed name a second copy of this suite writes the
-        # same path, and the first runner's `unlink` below then removes the
-        # second's file, whose own cleanup dies on `FileNotFoundError`. The
-        # name is load-bearing only in that the traversal attempts below have
-        # to spell it, so they are derived from it rather than repeated.
+        adapters_dir = self._scratch_scripts_dir() / "adapters"
+        # The marker sits beside `adapters/` in this test's own scratch
+        # `scripts/` directory (X10), never in the shipped skill's, where
+        # every other worker enumerating `skills/` would meet it. The name
+        # is load-bearing only in that the traversal attempts below have to
+        # spell it, so they are derived from it rather than repeated.
         marker_name = f"zz_escape_marker_for_test_{os.getpid()}"
         marker = adapters_dir.parent / f"{marker_name}.py"
         marker.write_text(
             "raise RuntimeError('a hostile --backend value executed this')\n",
             encoding="utf-8",
         )
-        self.addCleanup(marker.unlink)
 
         hostile_values = (
             f"../{marker_name}",
@@ -20189,18 +20208,15 @@ class BackendResolutionTests(unittest.TestCase):
         of its own registrations (`ADAPTER.register` AND
         `ADAPTER.register_metadata`) take effect, not only the first.
 
-        The module's name carries this run's pid. `adapters/` is the shipped
-        skill's own directory, shared by every process on this machine, and
-        the fixture used to be written there under a fixed name with an
-        `unlink` cleanup that removed whatever sat at that path rather than
-        what this run put there. Measured, before the pid, on two concurrent
-        copies of this one test looped twenty-five times: nine and five
-        `FileNotFoundError`s raised out of the cleanup, on a test whose
-        subject had done nothing wrong. The name is otherwise free -- the
-        whole point is that `remote_cli.py` never names it -- so scoping it
-        costs the assertion nothing.
+        The module is dropped into a scratch copy of `scripts/adapters/`
+        (X10), never the shipped skill's own directory: that one is shared
+        by every process on this machine, and a module appearing and
+        vanishing there was read by any concurrent test that enumerates
+        `skills/` (measured: a kit manifest naming a file that had just been
+        removed). The name still carries this run's pid -- it is otherwise
+        free, the whole point being that `remote_cli.py` never names it.
         """
-        adapters_dir = REMOTE_CLI_SCRIPT.parent / "adapters"
+        adapters_dir = self._scratch_scripts_dir() / "adapters"
         fixture_name = f"zz_fixture_backend_for_test_{os.getpid()}"
         fixture_path = adapters_dir / f"{fixture_name}.py"
         fixture_path.write_text(
@@ -20241,10 +20257,6 @@ class BackendResolutionTests(unittest.TestCase):
             "    lambda run_config: ('fixture-metadata.json', '{}'),\n"
             ")\n",
             encoding="utf-8",
-        )
-        self.addCleanup(fixture_path.unlink)
-        self.addCleanup(
-            lambda: shutil.rmtree(adapters_dir / "__pycache__", ignore_errors=True)
         )
 
         with self.assertRaises(KeyError):
