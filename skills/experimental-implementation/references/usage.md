@@ -40,8 +40,12 @@ sibling skill's own declared holder, which is never this skill's (see below). On
 When `Experimental_AGREED.md` does not exist and no other markdown file
 under `<Name>/` holds checklist items yet (a sibling skill's own declared
 holder does not count, see below), a write (`position --sequence`,
-`position --reconcile`, or `settle`'s create path) writes the declared
-scaffold to `<Name>/Experimental_AGREED.md` **before** anything else runs:
+`position --reconcile`, or `settle`'s create path) starts from the declared
+scaffold of `<Name>/Experimental_AGREED.md`, and that file reaches the disk
+together with the write itself. A call refused on the way (a missing
+`--target-level`, an unknown rung, a heading the scaffold does not carry, a
+`--text` that matches nothing) writes no holder at all; before 0.14.0 it left
+the empty scaffold behind:
 
 ```
 # Agreed

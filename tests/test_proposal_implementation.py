@@ -3249,9 +3249,11 @@ class HolderUndeclaredMutationTests(unittest.TestCase):
         `git diff --stat`.
         """
         def mutate(source: str) -> str:
+            # X17: `cmd_settle` no longer writes the scaffold at this site;
+            # the anchor is its resolution line, still the one repointed site.
             anchor = (
                 '    resolution = holder_resolution(target, name)\n'
-                '    if resolution["action"] == "create":\n')
+                '    # Design D5 (Phase 3): the declared holder does not exist yet, but its\n')
             self.assertIn(anchor, source)
             replacement = (
                 '    holders = agreements_state(target, name)["holders"]\n'
@@ -3259,7 +3261,7 @@ class HolderUndeclaredMutationTests(unittest.TestCase):
                 '        "action": "declared" if holders else "absent",\n'
                 '        "write": Path(target) / holders[0] if holders else None,\n'
                 "    }\n"
-                '    if resolution["action"] == "create":\n')
+                '    # Design D5 (Phase 3): the declared holder does not exist yet, but its\n')
             return source.replace(anchor, replacement, 1)
 
         engine_dir = self._scratch_engine(mutate)
@@ -24924,14 +24926,18 @@ class SettleCommandTests(unittest.TestCase):
         a holder this call itself just created. Design D5: creation is a
         SEPARATE write from the item placement -- the scaffold lands on
         disk (with zero items) even though this call's own placement then
-        refuses; nothing this refusal leaves behind is a checklist item."""
+        refuses; nothing this refusal leaves behind is a checklist item.
+
+        Re-anchored by X17 (`cross-skill-consistency`): the heading is now
+        searched in the scaffold's bytes before the scaffold is written, so
+        this refusal leaves no holder at all -- a refused command writes
+        nothing."""
         box = self._box()
         self._discuss(box, "record", answer="Yes.")
         proc = self._settle(box, text="first agreement", under="## Nope")
         self.assertEqual(proc.returncode, 2, proc.stdout)
         self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_HEADING_ABSENT")
-        data = (box / "Method" / "AGREED.md").read_bytes()
-        self.assertEqual(data, impl.HOLDER_SCAFFOLD.encode("utf-8"))
+        self.assertFalse((box / "Method" / "AGREED.md").exists())
 
     def test_settle_refuses_heading_ambiguous(self):
         box = self._box()
@@ -26350,7 +26356,7 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
             replacement = (
                 '        if not candidates:\n'
                 "            holder_path = target / holders[0]\n"
-                "            holder_data = holder_path.read_bytes()\n"
+                "            holder_data = read_holder(holder_path)\n"
                 "            candidates = [(holder_path, holder_data,\n"
                 '                          {"start": len(holder_data), '
                 '"end": len(holder_data)})]\n')
@@ -39624,3 +39630,77 @@ class OtherLineageModuleTests(unittest.TestCase):
         self.assertEqual(fidelity["otherLineageModules"], [])
         self.assertEqual(fidelity["status"], "drift")
 
+
+class PositionRefusalWritesNothingTests(unittest.TestCase):
+    """X17 (`cross-skill-consistency`, pre-existing on main): `position` on a
+    product folder with no holder yet created the declared holder's scaffold
+    while choosing where the fresh block goes, and only then checked the rung.
+    A call refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2) therefore left an
+    empty holder behind, and so did every later refusal of the same command
+    (`POSITION_TARGET_LEVEL_UNKNOWN`, `POSITION_LEVELS_UNDECLARED`, ...). The
+    scaffold is now written only once the block itself is about to be."""
+
+    _proposals = PositionCommandTests._proposals
+    run_cli = PositionCommandTests.run_cli
+    PROPOSAL_TEXT = PositionCommandTests.PROPOSAL_TEXT
+    STEP = json.dumps([{"text": "Rehearse the job.",
+                        "witness": {"kind": "rehearsal", "operand": "job1"}}])
+    LEVELED = json.dumps([{"text": "Reach the record.",
+                           "witness": {"kind": "record", "operand": "main", "twostate": False}}])
+
+    def _box(self, init: str = "") -> Path:
+        box = PositionCommandTests._box(self)
+        (box / "src" / "Method" / "__init__.py").write_text(init, encoding="utf-8")
+        return box
+
+    def _tree(self, box: Path) -> dict[str, bytes]:
+        return {str(p.relative_to(box)): p.read_bytes() for p in sorted(box.rglob("*"))
+                if p.is_file() and ".git" not in p.relative_to(box).parts}
+
+    def _refused(self, box: Path, code: str, *extra: str, stdin: str | None = None) -> None:
+        before = self._tree(box)
+        proc = self.run_cli("position", "--target", str(box), "--name", "Method",
+                            "--revision", "r1.md", "--session", "s1", *extra,
+                            stdin=stdin, proposals=self._proposals())
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["code"], code, proc.stdout)
+        self.assertEqual(self._tree(box), before, "a refused position wrote something")
+
+    def test_a_missing_target_level_writes_no_holder(self):
+        self._refused(self._box(), "POSITION_TARGET_LEVEL_REQUIRED", "--sequence", "-", stdin=self.STEP)
+
+    def test_a_missing_target_level_on_reconcile_writes_no_holder(self):
+        self._refused(self._box(), "POSITION_TARGET_LEVEL_REQUIRED", "--reconcile")
+
+    def test_an_unknown_target_level_writes_no_holder(self):
+        self._refused(self._box("__levels__ = ['floor', 'top']\n"), "POSITION_TARGET_LEVEL_UNKNOWN",
+                      "--sequence", "-", "--target-level", "middle", stdin=self.STEP)
+
+    def test_a_leveled_witness_without_a_ladder_writes_no_holder(self):
+        self._refused(self._box(), "POSITION_LEVELS_UNDECLARED",
+                      "--sequence", "-", "--target-level", "floor", stdin=self.LEVELED)
+
+    def test_a_refused_settle_writes_no_holder_either(self):
+        """The same shape one command over: `settle` created the declared
+        holder before matching `--text`, so a refused `--done` left it behind."""
+        box = self._box()
+        before = self._tree(box)
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--text", "Scope is one dataset.",
+                            "--done", "--unwitnessed", "--reason", "a scoping decision",
+                            proposals=self._proposals())
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_TEXT_ABSENT", proc.stdout)
+        self.assertEqual(self._tree(box), before, "a refused settle wrote something")
+
+    def test_an_accepted_install_still_creates_the_declared_holder(self):
+        box = self._box()
+        proc = self.run_cli("position", "--target", str(box), "--name", "Method",
+                            "--revision", "r1.md", "--session", "s1", "--sequence", "-",
+                            "--target-level", "final", stdin=self.STEP, proposals=self._proposals())
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        holder = box / json.loads(proc.stdout)["holder"]
+        text = holder.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith(impl.HOLDER_SCAFFOLD.rstrip("\n").splitlines()[0]), text)
+        self.assertIn("<!-- position ", text)
+        self.assertIn("Rehearse the job.", text)

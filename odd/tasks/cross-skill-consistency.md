@@ -176,10 +176,24 @@ Route legend: D = delegated writer, I = inline.
   sibling), `tests/test_experimental_implementation.py::PerLineageImplementationBindingTests::test_the_siblings_module_does_not_drift_this_skills_headline`
   (RED: `['src/Method/estimator.py'] != []`). Seals regenerated (`verify-*` +31 bytes each, the new empty key;
   nondeterministic `propose` restored). Domain-lock count kept at its pins (one `module` comment reworded).
+  Commit: 1c87d53. On a copy of the F workspace with this engine: both skills `staleModules: []`, each listing the
+  other's module in `otherLineageModules`; remaining `drift` is `missingProvenance: [steps.py]` only, as in
+  `fidelityByDocument`.
   Re-anchored: `NonRevisionSha256ScalarsAreDocumentCountInvariantTests` (its C6 anchor names the staleness line,
   now `bound["stale"] = (... and not foreign)`; the site still reads no `DOCUMENTS`).
-- X17 — (found in F, pre-existing on main, verified) a `position` refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2)
+- [x] X17 — (found in F, pre-existing on main, verified) a `position` refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2)
   still creates the empty holder skeleton (`# Agreed` / `## Ladder`).
+  Fix (route I, inline; engine + tests + 2 docs): `_chosen_holder(..., create=False)` names the path; `cmd_position`
+  writes the scaffold right before its splice (pre-image read fresh). Same shape found in `cmd_settle` (scaffold
+  written before ~20 refusals): it now reads `HOLDER_SCAFFOLD` in memory and writes scaffold+line in one
+  compare-and-swap against the absent file. Tests: `tests/test_proposal_implementation.py::PositionRefusalWritesNothingTests`
+  (6; RED at HEAD: 5 failed, each refusal left `Method/AGREED.md`; accepted install still creates the scaffold).
+  Re-anchored: `SettleCommandTests::test_settle_still_refuses_heading_absent_for_an_undeclared_heading_after_create`
+  (pinned the old "scaffold lands even though the placement refuses"; now asserts no holder),
+  `HolderUndeclaredMutationTests::test_deleting_the_declared_lookup_at_one_site_reddens_a_cross_site_comparison` and
+  `SettleHeadingAbsentMutationTests::test_inverting_the_settle_heading_absent_guard_lets_the_write_proceed` (their
+  mutation anchors named the removed early-creation lines). Domain-lock pins shrunk deliberately: `before` 263->261,
+  `empty` 132->131, `write` 156->154 (the duplicated early-creation comment is gone).
 - X18 — (found in F) `settle --done --unwitnessed` needs the line to exist already, and placing a new line needs
   `--about` (a discussion). A scoping decision with no position sequence therefore has no command route to its
   line, which has to be written by hand at the gate. Not a refusal defect; a documentation gap to triage.

@@ -13030,7 +13030,7 @@ def _sibling_holders_note(resolution: dict) -> str:
             f"alone: {', '.join(siblings)}.")
 
 
-def _chosen_holder(target: Path, name: str, product: Path) -> Path:
+def _chosen_holder(target: Path, name: str, product: Path, *, create: bool = True) -> Path:
     """Which markdown file receives a FRESH block, dispatched off
     `holder_resolution`'s own `action` (`the-holder-each-skill-declares`,
     design D2/D9) — never a fixed filename, and never a guess between two
@@ -13059,7 +13059,11 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     resolution = holder_resolution(target, name)
     action = resolution["action"]
     if action == "create":
-        _create_declared_holder(resolution["write"])
+        # `create=False` (X17): `cmd_position` names the path now and writes
+        # the scaffold only once every refusal it can still raise has had its
+        # chance -- a refused call writes nothing.
+        if create:
+            _create_declared_holder(resolution["write"])
         return resolution["write"]
     if action == "declared":
         return resolution["write"]
@@ -13612,6 +13616,11 @@ def cmd_position(args: argparse.Namespace) -> dict:
               "derivedAt": _now_iso8601(), "session": args.session,
               "target": "__pending__"}
     structure_changed = False
+    # Whether the declared holder still has to be created (design D5's
+    # scaffold) before the block is spliced into it. Deferred to the write
+    # itself (X17): every refusal below runs first, so a refused call writes
+    # no holder.
+    scaffold_pending = False
 
     if args.sequence is not None:
         if existing_block is not None and not args.replace:
@@ -13651,19 +13660,9 @@ def cmd_position(args: argparse.Namespace) -> dict:
         rendered = impl_position.render(header, items)
         items = impl_position.parse_items(
             impl_position.locate_block(rendered.encode("utf-8"))["body"])
-        target_path = existing_path or _chosen_holder(target, name, product)
-        if target_path not in holder_digests:
-            # `_chosen_holder` may have just run design D5's creation write
-            # (`the-holder-each-skill-declares`, `action == "create"`) --
-            # `holder_digests` was built from the glob ABOVE, before that
-            # write could have happened, so a freshly created file is not a
-            # key in it yet. The empty-digest fallback this dict lookup
-            # otherwise carries (`write_spliced`'s own absent-path rule) is
-            # only ever correct for a path that is STILL absent; reading the
-            # pre-image fresh, right now, is what keeps this splice's own
-            # compare-and-swap honest about bytes this same call just wrote.
-            holder_digests[target_path] = impl_position.digest_bytes(
-                target_path.read_bytes() if target_path.exists() else b"")
+        target_path = existing_path or _chosen_holder(
+            target, name, product, create=False)
+        scaffold_pending = not target_path.exists()
     elif args.reconcile:
         existing = (impl_position.parse_items(existing_block["body"])
                    if existing_block else [])
@@ -13681,19 +13680,9 @@ def cmd_position(args: argparse.Namespace) -> dict:
         items = existing + appended
         for ordinal, item in enumerate(items, start=1):
             item["ordinal"] = ordinal
-        target_path = existing_path or _chosen_holder(target, name, product)
-        if target_path not in holder_digests:
-            # `_chosen_holder` may have just run design D5's creation write
-            # (`the-holder-each-skill-declares`, `action == "create"`) --
-            # `holder_digests` was built from the glob ABOVE, before that
-            # write could have happened, so a freshly created file is not a
-            # key in it yet. The empty-digest fallback this dict lookup
-            # otherwise carries (`write_spliced`'s own absent-path rule) is
-            # only ever correct for a path that is STILL absent; reading the
-            # pre-image fresh, right now, is what keeps this splice's own
-            # compare-and-swap honest about bytes this same call just wrote.
-            holder_digests[target_path] = impl_position.digest_bytes(
-                target_path.read_bytes() if target_path.exists() else b"")
+        target_path = existing_path or _chosen_holder(
+            target, name, product, create=False)
+        scaffold_pending = not target_path.exists()
     elif existing_block is None:
         # Nothing to refresh is a state, not a failure -- the same doctrine
         # `agreements_state` and `position_state` already report absence
@@ -13867,6 +13856,12 @@ def cmd_position(args: argparse.Namespace) -> dict:
                if len(DOCUMENTS) > 1 else {}),
         }
 
+    if scaffold_pending:
+        # Design D5's creation write, here and not in `_chosen_holder`
+        # (X17), and its bytes are the pre-image this splice is checked
+        # against: read fresh from disk once written, never assumed empty.
+        _create_declared_holder(target_path)
+        holder_digests[target_path] = impl_position.digest_bytes(target_path.read_bytes())
     before_bytes = target_path.read_bytes() if target_path.exists() else b""
     new_block = impl_position.render(header, items).encode("utf-8")
     spliced = impl_position.splice(before_bytes, new_block, existing_block)
@@ -15934,13 +15929,20 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     # into a holder this skill did not declare is the D3 middle row, and
     # narrows `SETTLE_HOLDER_ABSENT` to "no product folder" only (D9).
     resolution = holder_resolution(target, name)
-    if resolution["action"] == "create":
-        # Design D5 (Phase 3): the declared holder does not exist yet, but
-        # its product folder does -- write the scaffold before this
-        # command's own splice ever runs against it. Never `mkdir`; that
-        # gate lives in `holder_resolution` alone.
-        _create_declared_holder(resolution["write"])
-    elif resolution["action"] == "absent":
+    # Design D5 (Phase 3): the declared holder does not exist yet, but its
+    # product folder does. Its scaffold is what this command splices into,
+    # but it is read from `HOLDER_SCAFFOLD` and reaches the disk only with
+    # the splice itself (X17): every refusal below runs first, so a refused
+    # call writes no holder. Never `mkdir`; that gate lives in
+    # `holder_resolution` alone.
+    scaffold_pending = resolution["action"] == "create"
+
+    def read_holder(path: Path) -> bytes:
+        if scaffold_pending and path == resolution["write"] and not path.exists():
+            return HOLDER_SCAFFOLD.encode("utf-8")
+        return path.read_bytes()
+
+    if resolution["action"] == "absent":
         raise Refused(
             "SETTLE_HOLDER_ABSENT",
             f"{name}/ does not exist; settle never invents a product "
@@ -15981,7 +15983,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "existing file this skill should write into."
             + _sibling_holders_note(resolution))
     # action == "declared" or "create": `resolution["write"]` exists on
-    # disk (the "create" branch above just put it there).
+    # disk, or (still "create") is read as its scaffold until the write.
     holders = [str(resolution["write"].relative_to(target))]
 
     heading = None
@@ -15993,7 +15995,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -16042,7 +16044,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -16074,7 +16076,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -16141,7 +16143,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -16191,7 +16193,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in impl_position.locate_headings(holder_data, heading):
                 candidates.append((holder_path, holder_data, span))
 
@@ -16239,7 +16241,10 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             new_line = b"\n" + new_line
         spliced = impl_position.splice(data, new_line, span)
 
-    pre_digest = impl_position.digest_bytes(data)
+    # A pending scaffold's pre-image is the absent file (`write_spliced`'s
+    # own absent-path rule); the spliced bytes already carry the scaffold.
+    pre_digest = impl_position.digest_bytes(
+        b"" if scaffold_pending and not target_path.exists() else data)
     impl_position.write_spliced(target_path, spliced, expect_digest=pre_digest)
 
     recorded_at = _now_iso8601()

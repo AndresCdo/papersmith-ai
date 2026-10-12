@@ -584,13 +584,17 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: (`return approved`, `approved` 47->48; its local keeps the name the seed
 #: mutation test anchors on). One SHRANK, deliberately: `_stage_objects`
 #: names its owed paths `owed` (`destinations` 39->36).
+#: `cross-skill-consistency` (X17): `position` and `settle` write the declared
+#: holder's scaffold with the splice instead of first; the two copies of the
+#: comment explaining the early creation write are gone. Three SHRANK,
+#: deliberately: `before` 263->261, `empty` 132->131, `write` 156->154.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 48,
-    "audit": 19, "before": 263, "benchmark": 108, "beside": 111,
+    "audit": 19, "before": 261, "benchmark": 108, "beside": 111,
     "check": 168, "checkable": 3, "claim": 41, "command": 276,
     "commands": 18, "compares": 25, "declaration": 212,
-    "destinations": 36, "empty": 132, "established": 5, "experiment": 25,
+    "destinations": 36, "empty": 131, "established": 5, "experiment": 25,
     "experiments": 6, "implementations": 4, "incomplete": 29,
     "invariant": 22, "isolated": 5, "leave": 11, "leaves": 38,
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
@@ -600,7 +604,7 @@ M5_PINNED_RESIDUE: dict[str, int] = {
     "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,
     "scaffolded": 12, "sitting": 9, "small": 8, "something": 76,
     "steps": 139, "sweep": 11, "validated": 10, "value": 246, "whose": 156,
-    "write": 156, "wrong": 52
+    "write": 154, "wrong": 52
 }
 #: Unit 6b (Part B, the transitions): thirteen pins grew from the new
 #: engine prose alone (`_comparison_reuses_acid_test_question`,

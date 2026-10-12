@@ -699,6 +699,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   skill's own lineage goes stale as before, and a bare-string binding is
   unchanged.
 
+- **A refused `position` or `settle` writes no holder.** On a product folder
+  with no declared holder yet, both commands wrote the holder's scaffold
+  (`# Agreed` / `## Ladder`) first and checked their arguments after, so a
+  call refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2) left an empty holder
+  behind, and so did `POSITION_TARGET_LEVEL_UNKNOWN`,
+  `POSITION_LEVELS_UNDECLARED`, the record checks, and every `settle` refusal
+  past holder resolution (`SETTLE_HEADING_ABSENT`, `SETTLE_TEXT_ABSENT`, ...).
+  Pre-existing on 0.13.0. The scaffold is now the base the write is spliced
+  into and reaches the disk with it, under the same compare-and-swap; a
+  refused call leaves the tree byte-identical.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1251,6 +1262,9 @@ number is `0`, breaking changes can still arrive without a major bump.
   target binds a per-label `revision` mapping). On a shared target, the
   other skill's modules leave `staleModules` and `drift`, so the headline
   `fidelity.status` can turn from `drift` to `ok`.
+- A refused `position` or `settle` on a product folder without its holder
+  no longer creates `<Name>/AGREED.md` (or `Experimental_AGREED.md`); the
+  next accepted write creates it, with the same scaffold.
 
 
 ## 0.13.0
