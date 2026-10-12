@@ -134,7 +134,8 @@ Route legend: D = delegated writer, I = inline.
   and profile (278; real 352). Counts dropped; launcher row names the sibling refusal (inline: README + CHANGELOG).
 - [x] X12 — `upgrade-project` SKILL.md does not describe the `.gitignore` marked framework block (since ec06f30).
   Section added (inline: SKILL.md + CHANGELOG).
-- [ ] X13 — deliberation refusal `INITIAL_IDEA_SINGLE_SENTENCE` says "Provide a non-empty idea".
+- [x] X13 — deliberation refusal `INITIAL_IDEA_SINGLE_SENTENCE` says "Provide a non-empty idea".
+  Own message naming the two-sentence requirement (inline: engine + test + CHANGELOG).
 - [ ] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
 
 ## Progress / evidence
@@ -1063,3 +1064,11 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   malformed markers -> `unsynchronized`, file untouched. Passive doc: structural readback; `sync-repo-harness.py
   --check` clean (95 files); generators/skills-e2e/gitignore tests 75 passed.
   Commit: `docs(upgrade-project): the .gitignore managed block survives user lines` (the commit carrying this line)
+- X13 (real): `proposal-workspace.ts` fell through to the `INITIAL_IDEA_REQUIRED` message for every
+  unhandled creation code, so a one-sentence idea read "Provide a non-empty idea in instruction." Added a branch
+  for `INITIAL_IDEA_SINGLE_SENTENCE` (code and `nextAction` unchanged). Tests in
+  `tests/deliberation-initial-revision-dry-run.test.mjs`: single-sentence message names "two sentences", real and
+  `--dry-run` (RED 1 fail / 7 pass -> GREEN 8 pass), and an empty idea keeps its message. Domain lock and
+  instruction-budget files: 27 pass. `npm run setup:harnesses && npm run typecheck`: clean. `npm run test:node`:
+  778 pass, 0 fail. No migration.
+  Commit: `fix(deliberation): the single-sentence refusal names the two-sentence rule` (the commit carrying this line)

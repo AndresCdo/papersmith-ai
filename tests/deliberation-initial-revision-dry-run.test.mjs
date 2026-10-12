@@ -78,6 +78,27 @@ test('a dry run runs the same refusals as the real call', async () => {
 	await nothingWritten(root);
 });
 
+test('the single-sentence refusal names the two-sentence requirement, not an empty idea', async () => {
+	for (const args of [[], ['--dry-run']]) {
+		const root = await freshRoot();
+		const { body } = await oneShot(root, { operation: 'CREATE_INITIAL_REVISION', instruction: 'Only one sentence here.' }, args);
+		assert.equal(body.status, 'blocked', JSON.stringify(body));
+		assert.deepEqual(body.blockers.map((b) => b.code), ['INITIAL_IDEA_SINGLE_SENTENCE']);
+		const { message } = body.blockers[0];
+		assert.match(message, /two sentences/, message);
+		assert.doesNotMatch(message, /non-empty/, message);
+		await nothingWritten(root);
+	}
+});
+
+test('an empty idea is still told to supply one', async () => {
+	const root = await freshRoot();
+	const { body } = await oneShot(root, { operation: 'CREATE_INITIAL_REVISION', instruction: '   ' });
+	assert.equal(body.status, 'blocked', JSON.stringify(body));
+	assert.deepEqual(body.blockers.map((b) => b.code), ['INITIAL_IDEA_REQUIRED']);
+	assert.match(body.blockers[0].message, /non-empty idea/);
+});
+
 test('a dry run predicts the refusal a leftover creation lock would cause, and never touches the lock', async () => {
 	const root = await freshRoot();
 	const lock = path.join(root, '.proposal-deliberation', 'locks', 'initial-revision.lock');

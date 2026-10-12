@@ -5542,6 +5542,11 @@ function projectInitialRevisionRefusal(result:{code:string;violations?:readonly 
   const line=typeof failure?.line==='string'?` Offending line: ${JSON.stringify(failure.line)}.`:'';
   return {nextAction:'repair_candidate_markdown',blockers:[{code:result.code,message:`The composed first revision fails pre-publish validation (${failure?.code ?? 'unknown'}: ${failure?.message ?? 'no detail'}), so nothing was written. ${failure?.nextStep ?? ''}${line} Repair the idea or the declared source it came from, then retry.`}]};
  }
+ // A one-sentence idea is not an empty one: the first sentence becomes the title and the
+ // second the section heading, so the refusal names that requirement instead.
+ if(result.code==='INITIAL_IDEA_SINGLE_SENTENCE'){
+  return {nextAction:'supply_initial_idea',blockers:[{code:result.code,message:'The idea in instruction needs at least two sentences, and it has one, so nothing was written: the first sentence becomes the title and the second the section heading. A sentence ends with ".", "!" or "?"; a line break does not end one. Add a second sentence and retry.'}]};
+ }
  return {nextAction:'supply_initial_idea',blockers:[{code:result.code,message:'Provide a non-empty idea in instruction.'}]};
 }
 const MANAGED_CHAT_DOCUMENT_FILENAME = strictManagedRevision;

@@ -641,6 +641,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   is converted, and that malformed markers leave the file untouched and
   reported as unsynchronized.
 
+- **`INITIAL_IDEA_SINGLE_SENTENCE` says what is missing.** The refusal of a
+  one-sentence idea came with the message for an empty one ("Provide a
+  non-empty idea in instruction."). It now says the idea needs at least two
+  sentences (title and section heading), what ends a sentence, and that
+  nothing was written. Both deliberation skills share it.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1167,6 +1173,11 @@ number is `0`, breaking changes can still arrive without a major bump.
 - `papersmith ingest` refuses exactly the sources it refused before; only the
   refusal text is longer (it keeps its old prefix, then names
   `guidance/paper-guide/` and `ADOPT_INITIAL_REVISION`). Exit code unchanged.
+
+- `CREATE_INITIAL_REVISION` refusing a one-sentence idea keeps its code
+  (`INITIAL_IDEA_SINGLE_SENTENCE`) and `nextAction` (`supply_initial_idea`);
+  only the blocker's `message` text changes. An empty idea keeps its old
+  message.
 
 
 ## 0.13.0
