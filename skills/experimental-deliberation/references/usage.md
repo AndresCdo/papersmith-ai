@@ -145,6 +145,17 @@ The same holds for the structural pre-publish validation every successor's accep
 
 Driven for real: a source fragment containing one bare URL and nothing else wrong never becomes a file on disk. So there is nothing to repair in v1 for either of those two conditions *after* creation — a v1 that exists already satisfies them, exactly as any successor does; asking the reader to check for a violation that would have blocked the write is asking them to repair a file that cannot exist. What is still worth a read once v1 is created is what the gate does **not** check: whether a pasted source fragment says what you meant it to, and whether the idea text you sent is the document you actually want to build on.
 
+### A v1 created before 0.14.0 that carries copied markers
+
+Before 0.14.0, v1 pasted each proposal revision verbatim, including its reserved artifact marker line, so a v1 from that release can hold copies of the marker inside `## Reference Sources`. Its bytes are never rewritten. A successor that keeps the copies is refused at preview:
+
+```json
+{ "status": "blocked", "message": "CANDIDATE_VALIDATION_FAILED", "nextAction": "repair_candidate",
+  "blockers": [{ "code": "successor-copied-artifact-marker", "message": "the candidate still carries 2 copied artifact marker lines inherited from its source, under \"## Reference Sources > ### proposals/…-r01.md\", \"# … > ## … > ### proposals/…-r02.md\": … In this successor, also replace each section named above (RESOLVE_TARGET it, then a replace decision whose content is the section without the marker lines); …" }] }
+```
+
+The pasted proposal brought its own `# ` heading, so the copies can sit in more than one section. Resolve each section the message names, and send one replace decision per section (`selectedEntryIds`, one query per section) whose `replacementText` is that section without the marker line. Your other edits can go in the same successor. Once that successor is published it holds no copies, and every later successor reads it normally. A replacement that writes a marker back is refused `successor-patch-limit`.
+
 ## Adopting an existing document as v1
 
 When the user chooses to adopt an unmanaged file already in `experiments/` as the first revision (decision tree branch 3), let the engine do it:
@@ -446,7 +457,7 @@ A candidate violating any canonical-form rule fails validation, and the accept t
 { "status": "blocked", "category": "recovery", "message": "CANDIDATE_VALIDATION_FAILED", "patchCount": 0, "nextAction": "inspect_error" }
 ```
 
-**The public response does not name which rule failed.** The projection that builds it keeps `status`, `category` and `message` and drops the validation detail. So the message is where to start, not where to finish — go back to the bytes you wrote and check them against the rules, in this order:
+**The public response does not name which canonical-form rule failed.** The projection that builds it keeps `status`, `category` and `message` and drops the validation detail. (A refusal from the accept turn's own pre-publish validation, such as `successor-markdown-block-safety` or `successor-copied-artifact-marker`, is named instead: `nextAction: "repair_candidate"` and one blocker with the rule's code, message and repair step.) So the message is where to start, not where to finish — go back to the bytes you wrote and check them against the rules, in this order:
 
 1. Every external URL followed immediately by `[pending-verification]` or `[verified: YYYY-MM-DD]` — including URLs inside table cells and Markdown link targets.
 2. Every report-table body cell past column one free of digits.

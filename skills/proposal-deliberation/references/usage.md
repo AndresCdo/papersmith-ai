@@ -78,6 +78,8 @@ This is explicit and user-triggered only: it never runs automatically, and it is
 
 Add `"sourceWindowBytes": <1..262144>` to the request to widen the window for that one creation (every loaded byte is pasted into v1, which then has to pass the same validation). A value outside that range, or not an integer, is refused `SOURCE_WINDOW_INVALID`; the field on any other operation is refused `SOURCE_WINDOW_UNSUPPORTED`. Combine it with `--dry-run` to read the report before anything is written.
 
+A guide that holds the engine's reserved markers (a managed revision copied into `guidance/paper-guide/`, say) is read with them neutralised: each reserved marker comment line is removed, any other occurrence of a reserved marker name becomes plain text, NUL bytes are dropped, and the document's `sourceWindow` entry carries `reservedMarkersRemoved: <count>`. v1 never carries another document's markers.
+
 ### Dry run first: see v1 before it exists
 
 A successful `CREATE_INITIAL_REVISION` takes a project-wide creation lock (`.proposal-deliberation/locks/initial-revision.lock`) and leaves it in place for good: it is the guard that keeps two concurrent creations from both winning, so after one success every further attempt is refused `MANAGED_PROPOSAL_ALREADY_EXISTS`. The engine never removes that lock. To see what v1 would be before committing to it, add `--dry-run` (or `"dryRun": true` in the request):

@@ -658,6 +658,32 @@ number is `0`, breaking changes can still arrive without a major bump.
   unchanged (README). A test now reads the engine's operation list and fails
   if any operation has no bridge route.
 
+- **An experiments v1 no longer pastes the proposal's reserved marker.**
+  Every published proposal revision opens with the engine's reserved artifact
+  marker line, and the experiments domain reads `proposals/` as a source. v1
+  pasted that line verbatim. Since v1 runs the successor's pre-publish
+  validation, `CREATE_INITIAL_REVISION` was refused
+  (`INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, `initial-candidate-limit`)
+  whenever a proposal fitted in the source window, which is the normal flow,
+  and the message asked for a repair of a source that cannot be repaired. In
+  0.13.0 the v1 was written, and no successor could ever be accepted from it.
+  The source window now neutralises every reserved marker it loads, in both
+  deliberation skills and in a chat's first turn: a marker comment line is
+  removed, any other occurrence of a reserved marker name becomes plain text,
+  and NUL bytes are dropped. The `sourceWindow` entry for that document
+  reports `reservedMarkersRemoved`. The validation itself is unchanged and
+  still refuses a v1 or successor carrying a reserved marker.
+  A v1 written by 0.13.0 keeps its bytes. A successor that keeps its copied
+  markers is refused at preview with `successor-copied-artifact-marker`, which
+  names the sections that hold them and the repair. A successor that replaces
+  those sections without the marker lines is accepted: a field that only reads
+  the source (`oldText`, `anchor`) may span a copied marker line, and the
+  accept turn's source read accepts exact copied marker lines, never any other
+  reserved byte. Every preview refused by that pre-publish validation now
+  carries `nextAction: "repair_candidate"` and one blocker with the rule's
+  code, message and repair step, where it used to answer only
+  `CANDIDATE_VALIDATION_FAILED` with `nextAction: "inspect_error"`.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1193,6 +1219,19 @@ number is `0`, breaking changes can still arrive without a major bump.
 - `papersmith deliberate --action adopt` (or `--action ADOPT_INITIAL_REVISION`)
   now runs adoption instead of refusing it as an unsupported action. Every
   other action builds the same request as before.
+
+- `CREATE_INITIAL_REVISION` reads declared sources with reserved markers
+  neutralised, so an experiments v1 whose window holds a published proposal is
+  created instead of refused, and its `## Reference Sources` no longer carries
+  the proposal's marker line. A source entry in `sourceWindow` gains
+  `reservedMarkersRemoved` when something was neutralised (absent otherwise).
+- A `CREATE_SUCCESSOR` preview refused by the accept turn's pre-publish
+  validation keeps `message: "CANDIDATE_VALIDATION_FAILED"`, but `nextAction`
+  becomes `repair_candidate` (was `inspect_error`) and a `blockers` entry
+  names the rule. Canonical-form refusals are unchanged.
+- An experiments v1 written by 0.13.0 with copied proposal markers (the
+  fixture's `experiments-*-v01.md` has two) now takes a successor that replaces
+  the sections holding them; its own bytes, receipt and state are untouched.
 
 
 ## 0.13.0

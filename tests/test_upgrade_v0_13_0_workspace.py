@@ -201,6 +201,96 @@ class UpgradeOfAPopulatedV0130WorkspaceTests(unittest.TestCase):
                 result = json.loads(completed.stdout)
                 self.assertEqual(result, {"status": "PASS", "failures": []})
 
+    def test_the_experiments_revision_takes_a_successor_after_upgrade(self) -> None:
+        """X15: 0.13.0 pasted the published proposal revisions into the experiments v1
+        verbatim, reserved artifact marker lines included, and no successor could be
+        accepted from it. Its bytes stay as they are; a successor that keeps the copied
+        markers is refused with the sections that hold them, and one that replaces those
+        sections without the marker lines is published. Runs on a copy, so the other
+        tests keep reading the upgraded workspace untouched."""
+        node = shutil.which("node")
+        modules = REPO_ROOT / "node_modules"
+        if node is None or not modules.is_dir():
+            self.skipTest("node and the repository's node_modules are required for this leg")
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        workspace = Path(holder.name).resolve() / "workspace"
+        shutil.copytree(self.workspace, workspace, symlinks=True)
+        (workspace / "node_modules").symlink_to(modules, target_is_directory=True)
+        source = "experiments-smoothing-window-sweep-v01.md"
+        before = _sha256(workspace / "experiments" / source)
+        self.assertEqual(before, _listing()[f"experiments/{source}"])
+        self.assertEqual((workspace / "experiments" / source).read_text(
+            encoding="utf-8").count("proposal-workspace:artifact"), 3,
+            "the fixture's v1 carries its own marker and two copied ones")
+
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith(("DELIBERATION_", "PROPOSAL_DELIBERATION_"))}
+        upstream = "proposals/research-concept-smoothing-estimator-for-noisy-sequences"
+        loci = {
+            "insert": [("window length estimator error", lambda entry: {
+                "kind": "insert", "anchorEntryId": entry, "position": "after",
+                "content": "## Experiment [exp:E1] -- window sweep\n\nOne declared experiment.\n\n"})],
+            "repair": [
+                (f"### {upstream}-r01.md", lambda entry: {
+                    "kind": "replace", "targetEntryId": entry,
+                    "replacementText": f"### {upstream}-r01.md\n\n"}),
+                (f"### {upstream}-r02.md", lambda entry: {
+                    "kind": "replace", "targetEntryId": entry,
+                    "replacementText": f"### {upstream}-r02.md\n\nThe estimator averages a fixed window "
+                                       "of past observations.\n\n"}),
+            ],
+        }
+
+        def successor(name: str) -> tuple[dict, dict | None]:
+            process = subprocess.Popen(
+                [node, "skills/experimental-deliberation/cli.mjs", "--serve"], cwd=workspace,
+                env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+
+            def call(request: dict) -> dict:
+                process.stdin.write(json.dumps(request) + "\n")
+                process.stdin.flush()
+                return json.loads(process.stdout.readline())
+
+            try:
+                decisions = []
+                for query, decision in loci[name]:
+                    resolved = call({"operation": "RESOLVE_TARGET", "sourceFilename": source, "query": query})
+                    self.assertEqual(resolved.get("status"), "resolved", resolved)
+                    decisions.append(decision(resolved["entryId"]))
+                queries = [query for query, _ in loci[name]]
+                request = {
+                    "operation": "CREATE_SUCCESSOR", "sourceFilename": source,
+                    **({"selectedEntryId": queries[0]} if len(queries) == 1 else {"selectedEntryIds": queries}),
+                    "resolvedDecisions": decisions, "instruction": "Revise the named sections.",
+                    "changeSummary": {"what": "Revised the named sections.", "why": "Upgrade check."},
+                }
+                preview = call(request)
+                accepted = None
+                if preview.get("status") == "awaiting_acceptance":
+                    accepted = call({**request, "acceptSuccessor": True,
+                                     "successorAcceptanceToken": preview["acceptanceToken"]})
+                return preview, accepted
+            finally:
+                process.stdin.close()
+                process.wait(timeout=180)
+
+        preview, _ = successor("insert")
+        self.assertEqual(preview.get("status"), "blocked", preview)
+        self.assertEqual(preview.get("nextAction"), "repair_candidate", preview)
+        self.assertEqual([b["code"] for b in preview.get("blockers", [])],
+                         ["successor-copied-artifact-marker"], preview)
+        for name in ("r01", "r02"):
+            self.assertIn(f"{upstream}-{name}.md", preview["blockers"][0]["message"])
+
+        preview, accepted = successor("repair")
+        self.assertEqual(preview.get("status"), "awaiting_acceptance", preview)
+        self.assertEqual(accepted and accepted.get("status"), "published", accepted)
+        written = (workspace / "experiments" / accepted["targetFilename"]).read_text(encoding="utf-8")
+        self.assertEqual(written.count("proposal-workspace:artifact"), 1)
+        self.assertEqual(_sha256(workspace / "experiments" / source), before,
+                         "the 0.13.0 revision is never rewritten")
+
 
 if __name__ == "__main__":
     unittest.main()

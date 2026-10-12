@@ -76,6 +76,51 @@ const CAPABILITY_LENGTH = 43;
 const ARTIFACT_MARKER = DOMAIN.artifact.marker;
 const ARTIFACT_MARKER_NAMESPACE = "proposal-workspace:artifact";
 const ARTIFACT_MARKER_BUFFER = artifact.marker;
+/**
+ * Every reserved engine-marker namespace a managed document's body may never carry: the
+ * artifact marker (owned by the head line alone) and the legacy revision marker. One list, so
+ * the source neutraliser below and the guards that refuse these bytes cannot drift apart.
+ */
+const REVISION_MARKER_NAMESPACE = "proposal-workspace:revision";
+const RESERVED_MARKER_NAMESPACES = [ARTIFACT_MARKER_NAMESPACE, REVISION_MARKER_NAMESPACE] as const;
+const RESERVED_MARKER_PATTERN = RESERVED_MARKER_NAMESPACES.map((namespace) => namespace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+const RESERVED_MARKER_LINE = new RegExp(`^[ \\t]*<!--[^\\n]*?(?:${RESERVED_MARKER_PATTERN})[^\\n]*?-->[ \\t]*(?:\\r?\\n|$)`, "gm");
+const RESERVED_MARKER_RESIDUE = new RegExp(RESERVED_MARKER_PATTERN, "g");
+
+/**
+ * Source material loaded into a new document with every reserved engine marker neutralised.
+ * A declared source may itself be a managed revision (a downstream domain declares another
+ * skill's managed directory), and that document's own head marker is not this one's: pasted verbatim it
+ * made the first revision unpublishable. A whole marker comment line is removed; any other
+ * occurrence of a reserved namespace (a truncated comment, an inline quotation) loses its colon,
+ * so it reads the same and is no longer reserved; NUL bytes are dropped. `removed` counts every
+ * neutralised occurrence. The guards that refuse reserved bytes are unchanged: this only keeps
+ * another document's markers out of the bytes they judge.
+ */
+export function neutralizeReservedMarkers(text: string): { text: string; removed: number } {
+	let removed = 0;
+	const lines = text.replace(RESERVED_MARKER_LINE, () => { removed++; return ""; });
+	const residue = lines.replace(RESERVED_MARKER_RESIDUE, (namespace) => { removed++; return namespace.replace(":", " "); });
+	const clean = residue.replace(/\0/g, () => { removed++; return ""; });
+	return { text: clean, removed };
+}
+
+/**
+ * A first revision created before 0.14.0 pasted its declared sources verbatim, so a source that
+ * was itself a managed revision left whole copies of the artifact marker line inside the body.
+ * Those copies confer nothing: ownership is the head line alone. These two helpers find them
+ * (an exact marker line that starts after a newline) so a successor can read such a source and
+ * drop them, while the composed candidate is still refused if any reserved byte survives.
+ */
+const COPIED_ARTIFACT_MARKER = new RegExp(`(?<=\\n)${ARTIFACT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g");
+
+function copiedArtifactMarkerOffsets(text: string): number[] {
+	return [...text.matchAll(COPIED_ARTIFACT_MARKER)].map((match) => match.index ?? 0);
+}
+
+function withoutCopiedArtifactMarkers(text: string): string {
+	return text.replace(COPIED_ARTIFACT_MARKER, "");
+}
 export const OVERWRITE_CAPABILITY_TTL_MS = 5 * 60 * 1000;
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -1415,7 +1460,7 @@ function validateRevisionBody(content: string | undefined): string {
 	}
 	if (
 		content.includes("\0") ||
-		content.includes("proposal-workspace:revision") ||
+		content.includes(REVISION_MARKER_NAMESPACE) ||
 		content.includes(ARTIFACT_MARKER_NAMESPACE)
 	) {
 		throw blocked(
@@ -3810,7 +3855,7 @@ async function readContinuitySource(
 			if (
 				!Buffer.from(text, "utf8").equals(bytes) ||
 				body.includes("\0") ||
-				body.includes(ARTIFACT_MARKER_NAMESPACE)
+				withoutCopiedArtifactMarkers(body).includes(ARTIFACT_MARKER_NAMESPACE)
 			) {
 				continuityFailure(operation, "continuity-source-unowned", "the continuity source contains invalid or reserved bytes", "Use an unchanged marker-owned latest target.", "source", { sourceTarget: target });
 			}
@@ -4539,6 +4584,7 @@ function validateSuccessorPatchText(
 	field: string,
 	allowEmpty: boolean,
 	allowArtifactMarkerPrefix = false,
+	allowCopiedMarkerLines = false,
 ): string {
 	if (typeof value !== "string") {
 		successorFailure(
@@ -4549,13 +4595,16 @@ function validateSuccessorPatchText(
 		);
 	}
 	const bytes = Buffer.byteLength(value, "utf8");
-	const markerOccurrences = value.split(ARTIFACT_MARKER_NAMESPACE).length - 1;
-	const hasAllowedMarkerPrefix = allowArtifactMarkerPrefix && value.startsWith(ARTIFACT_MARKER) && markerOccurrences === 1;
+	// A field that only READS the source (oldText, anchor) may span marker lines a first
+	// revision copied from another managed document before 0.14.0; writing fields never may.
+	const judged = allowCopiedMarkerLines ? withoutCopiedArtifactMarkers(value) : value;
+	const markerOccurrences = judged.split(ARTIFACT_MARKER_NAMESPACE).length - 1;
+	const hasAllowedMarkerPrefix = allowArtifactMarkerPrefix && judged.startsWith(ARTIFACT_MARKER) && markerOccurrences === 1;
 	if (
 		(!allowEmpty && bytes === 0) ||
 		bytes > MAX_SUCCESSOR_PATCH_BYTES ||
 		value.includes("\0") ||
-		(value.includes(ARTIFACT_MARKER_NAMESPACE) && !hasAllowedMarkerPrefix)
+		(judged.includes(ARTIFACT_MARKER_NAMESPACE) && !hasAllowedMarkerPrefix)
 	) {
 		successorFailure(
 			"successor-patch-limit",
@@ -4616,7 +4665,7 @@ function validateSuccessorPatches(
 					{ patchId: id },
 				);
 			}
-			const oldText = validateSuccessorPatchText(candidate.oldText, id, "oldText", false, true);
+			const oldText = validateSuccessorPatchText(candidate.oldText, id, "oldText", false, true, true);
 			const oldTextIncludesMarker = oldText.startsWith(ARTIFACT_MARKER);
 			const newText = validateSuccessorPatchText(candidate.newText, id, "newText", true, oldTextIncludesMarker);
 			if (oldTextIncludesMarker !== newText.startsWith(ARTIFACT_MARKER)) {
@@ -4711,7 +4760,7 @@ function validateSuccessorPatches(
 					{ patchId: id },
 				);
 			}
-			const anchor = validateSuccessorPatchText(candidate.anchor, id, "anchor", false, true);
+			const anchor = validateSuccessorPatchText(candidate.anchor, id, "anchor", false, true, true);
 			const content = validateSuccessorPatchText(candidate.content, id, "content", false);
 			if (candidate.position !== "before" && candidate.position !== "after") {
 				successorFailure(
@@ -4963,6 +5012,7 @@ function validateSuccessorManifest(
 } {
 	const validatedPatches = validateSuccessorPatches(patches, latestDocument, latestSha256);
 	const composed = composeSuccessorCandidate(latestDocument, validatedPatches);
+	refuseInheritedCopiedMarkers(composed.candidate);
 	if (!composed.candidate.startsWith(ARTIFACT_MARKER) || composed.candidate.slice(ARTIFACT_MARKER.length).includes(ARTIFACT_MARKER_NAMESPACE)) {
 		successorFailure(
 			"successor-artifact-marker",
@@ -4977,6 +5027,45 @@ function validateSuccessorManifest(
 		composed.invariant,
 	);
 	return { validatedPatches, composed, candidateBody, candidateValidation };
+}
+
+/**
+ * The heading path ("## A > ### B") enclosing `offset` in `text`, outside fenced code. It names
+ * where a copied marker sits in words a caller can resolve.
+ */
+function enclosingHeadings(text: string, offset: number): string {
+	const stack: { level: number; heading: string }[] = [];
+	let fenced = false;
+	for (const line of text.slice(0, offset).split("\n")) {
+		if (/^ {0,3}(?:```|~~~)/.test(line)) fenced = !fenced;
+		const match = fenced ? null : /^ {0,3}(#{1,6})[ \t]+\S/.exec(line);
+		if (!match) continue;
+		const level = match[1].length;
+		while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+		stack.push({ level, heading: line.trim() });
+	}
+	return stack.map((entry) => entry.heading).join(" > ") || "the document's opening";
+}
+
+/**
+ * A candidate whose only reserved bytes are marker lines inherited from a legacy first revision
+ * (see `copiedArtifactMarkerOffsets`) is refused with its own code, the sections that hold them,
+ * and the repair: replace those sections without the marker lines. The source revision is never
+ * rewritten; the repaired successor is the clean one. Any other reserved byte falls through to
+ * the general marker refusal below.
+ */
+function refuseInheritedCopiedMarkers(candidate: string): void {
+	if (!candidate.startsWith(ARTIFACT_MARKER)) return;
+	const body = candidate.slice(ARTIFACT_MARKER.length);
+	if (!body.includes(ARTIFACT_MARKER_NAMESPACE) || withoutCopiedArtifactMarkers(body).includes(ARTIFACT_MARKER_NAMESPACE)) return;
+	const offsets = copiedArtifactMarkerOffsets(body);
+	const sections = [...new Set(offsets.map((offset) => enclosingHeadings(body, offset)))];
+	successorFailure(
+		"successor-copied-artifact-marker",
+		`the candidate still carries ${offsets.length} copied artifact marker line${offsets.length === 1 ? "" : "s"} inherited from its source, under ${sections.map((section) => JSON.stringify(section)).join(", ")}: a first revision created before 0.14.0 pasted them from another managed document, and no revision may carry them. The source is never rewritten.`,
+		"In this successor, also replace each section named above (RESOLVE_TARGET it, then a replace decision whose content is the section without the marker lines); the successor is then clean and every later one reads it normally.",
+		{ copiedMarkers: offsets.length, sections },
+	);
 }
 
 function refusalOf(error: unknown): CandidateValidationFailure {
@@ -5589,7 +5678,7 @@ export const MAX_SOURCE_WINDOW_BYTES = MAX_WRITE_BYTES;
 export type SourceWindowReport = {
  limitBytes: number;
  loadedBytes: number;
- sources: { path: string; bytes: number; loadedBytes: number; status: 'loaded' | 'truncated' | 'not-loaded' }[];
+ sources: { path: string; bytes: number; loadedBytes: number; status: 'loaded' | 'truncated' | 'not-loaded'; reservedMarkersRemoved?: number }[];
 };
 
 /**
@@ -5618,10 +5707,11 @@ async function loadSourceWindow(projectRoot: string, limit: number): Promise<{ f
     continue;
    }
    const buffer = await readFile(file.canonical);
-   const text = buffer.subarray(0, limit - bytes).toString("utf8");
-   const loaded = Buffer.byteLength(text);
-   report.sources.push({ path: file.relative, bytes: buffer.length, loadedBytes: Math.min(loaded, buffer.length), status: loaded >= buffer.length ? 'loaded' : 'truncated' });
-   if (!text) continue;
+   const raw = buffer.subarray(0, limit - bytes).toString("utf8");
+   const loaded = Buffer.byteLength(raw);
+   const { text, removed } = neutralizeReservedMarkers(raw);
+   report.sources.push({ path: file.relative, bytes: buffer.length, loadedBytes: Math.min(loaded, buffer.length), status: loaded >= buffer.length ? 'loaded' : 'truncated', ...(removed ? { reservedMarkersRemoved: removed } : {}) });
+   if (!raw) continue;
    bytes += loaded;
    fragments.push({ path: file.relative, content: text });
   }
@@ -5868,7 +5958,10 @@ export function projectProposalDeliberationPublicResult(input:{result:any;operat
   const unresolved=input.audit?.status==='FAIL'||input.selfAudit?.status==='FAIL';
   return {...base,status:unresolved?'blocked':'published',...(unresolved?{category:'audit',message:'Terminal audit failed; inspect the receipt before retrying.'}:{}),targetFilename:result.published.targetFilename,targetSha256:result.published.publishedSha256,patchCount:result.published.patchCount,receiptId:`${result.published.targetFilename}:${result.published.targetRevision}`,manifestStatus:result.derived.derivedStateManifest.status,auditStatus:input.audit?.status??'NOT_RUN',selfAuditStatus:input.selfAudit?.status??'NOT_RUN',recoveryStatus:unresolved?'required':'not_required',nextAction:unresolved?'inspect_receipt':null,...(result.staleCompanionReferences?{staleCompanionReferences:result.staleCompanionReferences}:{})};
  }
- return {...base,status:result.status,category:errorCategory(result),message:result.reason??result.question??'Execution did not complete.',patchCount:0,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:result.status==='published-derived-failed'?'required':'not_required',nextAction:result.status==='budget_block'?'reduce_request_or_raise_budget':result.status==='needs-clarification'||result.status==='ambiguous'?'clarify_request':'inspect_error',...(result.assessment?{assessment:result.assessment}:{}),...(Array.isArray(result.alternatives)?{alternatives:result.alternatives}:{}),...(Array.isArray(result.risks)?{risks:result.risks}:{}),...(Array.isArray(result.unresolvedQuestions)?{unresolvedQuestions:result.unresolvedQuestions}:{}),...(result.budget?{budget:result.budget}:{})};
+ // A preview refused by the accept turn's own pre-publish validation names that refusal (its
+ // code, message and repair step), never a bare CANDIDATE_VALIDATION_FAILED the caller cannot act on.
+ const candidateRefusal=result.reason==='CANDIDATE_VALIDATION_FAILED'&&result.validation?.candidateValidation?.status==='failed'?result.validation.candidateValidation as CandidateValidationFailure:null;
+ return {...base,status:result.status,category:errorCategory(result),message:result.reason??result.question??'Execution did not complete.',patchCount:0,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:result.status==='published-derived-failed'?'required':'not_required',nextAction:result.status==='budget_block'?'reduce_request_or_raise_budget':result.status==='needs-clarification'||result.status==='ambiguous'?'clarify_request':candidateRefusal?'repair_candidate':'inspect_error',...(candidateRefusal?{blockers:[{code:candidateRefusal.code,message:`${candidateRefusal.message.replace(/\.?$/,'.')} ${candidateRefusal.nextStep}`}]}:{}),...(result.assessment?{assessment:result.assessment}:{}),...(Array.isArray(result.alternatives)?{alternatives:result.alternatives}:{}),...(Array.isArray(result.risks)?{risks:result.risks}:{}),...(Array.isArray(result.unresolvedQuestions)?{unresolvedQuestions:result.unresolvedQuestions}:{}),...(result.budget?{budget:result.budget}:{})};
 }
 
 /**

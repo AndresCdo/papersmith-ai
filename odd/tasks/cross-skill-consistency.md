@@ -138,7 +138,7 @@ Route legend: D = delegated writer, I = inline.
   Own message naming the two-sentence requirement (inline: engine + test + CHANGELOG).
 - [x] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
   `--action adopt` added (inline: bridge + test + README + CHANGELOG).
-- [ ] X15 — (found in F, open) experimental-deliberation v1 pastes `proposals/` revisions verbatim, and every managed
+- [x] X15 — (found in F; fixed, see Progress) experimental-deliberation v1 pastes `proposals/` revisions verbatim, and every managed
   proposal revision carries the reserved `proposal-workspace:artifact` marker. Since A6, v1 runs the pre-publish
   validation, so `CREATE_INITIAL_REVISION` is refused `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`
   (`initial-candidate-limit`) whenever a managed proposal falls inside the source window, which is the normal flow;
@@ -147,6 +147,19 @@ Route legend: D = delegated writer, I = inline.
   `experiments-smoothing-window-sweep-v01.md` holds 2 pasted markers, so after upgrade its lineage cannot take a
   successor (preview answers a bare `CANDIDATE_VALIDATION_FAILED`, `nextAction: inspect_error`). Workaround seen in F:
   `sourceWindowBytes` small enough to leave `proposals/` unread. See "Final verification".
+  Fix (route D, delegated writer; trigger: engine + 2 tests + 4 docs): the source window neutralises every reserved
+  marker it loads (`neutralizeReservedMarkers`: marker comment lines removed, other reserved-name occurrences
+  defanged, NUL dropped; `sourceWindow.sources[].reservedMarkersRemoved`), for both deliberation skills and a chat's
+  first turn. Validation unchanged and fail-closed. Legacy v1 (bytes untouched): a successor keeping copied markers is
+  refused `successor-copied-artifact-marker` naming the enclosing sections and the repair; read-only patch fields
+  (`oldText`, `anchor`) and the accept turn's continuity read accept exact copied marker lines only, so a successor
+  replacing those sections is published. Preview pre-publish refusals now carry `nextAction: repair_candidate` and a
+  blocker. Chosen over engine-side automatic stripping because that would make the written candidate differ from the
+  previewed patches and the untouched-region invariant. Tests: `tests/deliberation-source-reserved-markers.test.mjs`
+  (6; RED observed for the fresh experiments/proposal paths and the legacy refusal/repair), and
+  `tests/test_upgrade_v0_13_0_workspace.py::...::test_the_experiments_revision_takes_a_successor_after_upgrade` (RED
+  with the engine stashed: `inspect_error`; GREEN: refused with both `-r01.md`/`-r02.md` sections named, then the
+  two-section repair published with one marker). Mutation: reverting the continuity read turns the repair test red.
 - [ ] X16 — (found in F, open) on a target both implementation skills share, each skill's aggregate `fidelity.status`
   is `drift`: a module bound to the other skill's lineage is listed under `staleModules` with "bound to an older
   revision, but none of its sections moved", while `fidelityByDocument` is `ok` for both documents. Not checked
