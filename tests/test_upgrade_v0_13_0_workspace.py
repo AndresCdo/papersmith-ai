@@ -147,13 +147,21 @@ class UpgradeOfAPopulatedV0130WorkspaceTests(unittest.TestCase):
         self.assertIn("drift: clean", out.getvalue())
 
     def test_each_implementation_skill_still_reads_its_own_holder(self) -> None:
+        # Each launcher must reach its OWN profile, the one it defaults to. An
+        # inherited IMPLEMENTATION_DOMAIN_PROFILE is an explicit override
+        # that wins over that default, so it is not passed on (X8b): one
+        # left in this process by an earlier test made the experimental
+        # launcher read the proposal skill's holder.
+        env = {key: value for key, value in os.environ.items()
+               if key != "IMPLEMENTATION_DOMAIN_PROFILE"}
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         for skill, holder in IMPLEMENTATION_HOLDERS.items():
             with self.subTest(skill=skill):
                 completed = subprocess.run(
                     [sys.executable, f"skills/{skill}/scripts/implementation_cli.py", "verify",
                      "--target", TARGET, "--name", PACKAGE],
                     cwd=self.workspace, capture_output=True, text=True, check=False,
-                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+                    env=env)
                 self.assertEqual(completed.returncode, 0, completed.stdout[-2000:])
                 payload = json.loads(completed.stdout)
                 self.assertNotEqual(payload.get("status"), "refused", payload.get("detail"))

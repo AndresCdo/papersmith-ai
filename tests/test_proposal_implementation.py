@@ -9820,9 +9820,25 @@ class MaterializeBenchmarkDeclarationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # `materialize.py` `setdefault`s IMPLEMENTATION_DOMAIN_PROFILE at
+        # import, as a launcher does. In-process, that would outlive this
+        # class and steer every later child given `os.environ` to this
+        # skill's profile (X8b), so the environment is put back as found.
+        saved = cls._profile_before_class = os.environ.get(
+            "IMPLEMENTATION_DOMAIN_PROFILE")
         sys.path.insert(0, str(CLI.parent))
-        import materialize  # local import: path to scripts/ set above
+        try:
+            import materialize  # local import: path to scripts/ set above
+        finally:
+            if saved is None:
+                os.environ.pop("IMPLEMENTATION_DOMAIN_PROFILE", None)
+            else:
+                os.environ["IMPLEMENTATION_DOMAIN_PROFILE"] = saved
         cls.materialize = materialize
+
+    def test_importing_the_script_leaves_the_environment_as_it_found_it(self):
+        self.assertEqual(os.environ.get("IMPLEMENTATION_DOMAIN_PROFILE"),
+                         self._profile_before_class)
 
     def _box(self):
         box = FORGE / "implementations" / f"_materialize_{os.getpid()}_{id(self)}"

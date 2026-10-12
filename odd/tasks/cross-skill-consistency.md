@@ -87,6 +87,8 @@ Route legend: D = delegated writer, I = inline.
   `AGREED.md`): a profile test leaves `IMPLEMENTATION_DOMAIN_PROFILE` in `os.environ`, the fixture test passes
   `os.environ` to the experimental CLI, and the launcher only `setdefault`s it. Each file passes alone; the
   change-selected `npm run test:fast` tier hits it. Not fixed (outside B1/B4/B8/B10).
+- [x] X8b — the change-selected tier (`fast_tests.py --since 8e3f813`, 23 files, one process) still failed
+  `test_each_implementation_skill_still_reads_its_own_holder[experimental-implementation]` after X8. Fixed; see Progress.
 - X10 — `tests/test_implementation_core.py` and `tests/test_proposal_implementation.py` run together under
   `-n 8 --dist loadfile` interfere: `WorkspaceGuardTests.setUp`'s `implementations/_core_guard_*` directory
   vanishes (`FileNotFoundError`), and one such run errored 1801 proposal tests at setup. Reproduced with the
@@ -583,3 +585,23 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `test_experimental_implementation.py` + domain lock: 1935 passed, 2 skipped. Docs: proposal usage.md notebook
   status table. CHANGELOG Fixed + Behaviour changes. No migration (report-only).
   Commit: `fix(implementation): verify reports a notebook that is not a notebook instead of crashing` (the commit carrying this line)
+
+- X8b (real; reproduced on the 23-file selection and minimally with
+  `pytest tests/test_proposal_implementation.py::MaterializeBenchmarkDeclarationTests tests/test_upgrade_v0_13_0_workspace.py`
+  -> 1 failed). Found with a scratch leak-watch plugin diffing `os.environ`, cwd and `sys.modules` around every
+  test of the selection: the only profile leak was `MaterializeBenchmarkDeclarationTests.setUpClass` importing
+  `skills/proposal-implementation/scripts/materialize.py`, whose import-time `os.environ.setdefault` left the
+  proposal profile in the process. The upgrade test then passed `os.environ` to the workspace copy's experimental
+  launcher; X8's sibling guard compares skills roots, and the repository's proposal profile lives under a different
+  root than the workspace copy, so the explicit value won. Fixes: (1) the class restores the variable around the
+  import (+ `test_importing_the_script_leaves_the_environment_as_it_found_it`, RED without the restore); (2) the
+  upgrade test strips an inherited `IMPLEMENTATION_DOMAIN_PROFILE` from its child env; (3) systemic guard in
+  `tests/conftest.py`: autouse function- and module-scoped fixtures restore `os.environ` and cwd (and, per module,
+  the cached `impl_domain_profile`) only when changed. `tests/test_process_state_isolation.py` proves it in a child
+  pytest run (leaks via body, setUp, setUpClass, setUpModule; control run without the conftest fails): RED with
+  the HEAD conftest and with the module scope removed -> GREEN. Engine: its per-process caches live inside one CLI
+  process, so nothing carries across launcher calls for users. Not fixed (outside surface): the launchers' sibling
+  guard misses a sibling profile from another skills tree (`skills/*/scripts/implementation_cli.py`).
+  Verification: `fast_tests.py --since 8e3f813` (now 28 files): 3364 passed, 3 skipped; the original 23-file
+  list, one process: 3239 passed, 3 skipped, 0 failed. Route: inline. Test-only; no CHANGELOG entry, no migration.
+  Commit: `test(implementation): no test file leaves process state for the next` (the commit carrying this line)
