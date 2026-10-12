@@ -832,179 +832,179 @@ is acted on as one.
 
 ### 2. `paper-ingestion` — from PDF to Markdown
 
-**Para qué está.** Los papers llegan como PDF, y un PDF es, para un agente, una
-caja cerrada: el texto está mezclado con la maquetación, las ecuaciones son dibujos
-y las tablas son líneas sueltas. Esta skill convierte cada PDF en Markdown limpio
-—ecuaciones en LaTeX, tablas en Markdown, figuras como archivos de imagen aparte—
-para que el resto de la forja pueda **leer** el paper en vez de intentar
-descifrarlo. Todo corre localmente: sin claves, sin servicio externo.
+**What it is for.** Papers arrive as PDFs, and for an agent a PDF is a closed box:
+the text is mixed with the layout, the equations are drawings and the tables are
+loose lines. This skill turns each PDF into clean Markdown —equations in LaTeX,
+tables in Markdown, figures as separate image files— so that the rest of the forge
+can **read** the paper instead of trying to decipher it. Everything runs locally:
+no keys, no external service.
 
-**De dónde recibe y a quién le entrega.** Es el principio de la cadena: lo único que
-recibe son los PDFs que dejas en `guidance/`. Lo que entrega tiene una
-consecuencia que conviene entender antes de usarla:
+**What it receives and what it hands on.** It is the start of the chain: the only
+thing it receives is the PDFs left in `guidance/`. What it hands on has a
+consequence that matters before it is used:
 
-- `guidance/paper-guide/` — lo que cae aquí es lo que `proposal-deliberation` carga
-  **automáticamente**, desde la constante `GUIDE_DIRECTORY = "guidance/paper-guide"`
-  de su motor. Pero lo carga **una sola vez en toda la vida de la propuesta**: en la
-  creación de la v1, y nunca más.
-- `guidance/reference-papers/` — corpus de consulta. **Nunca se carga solo.** Está
-  ahí para que tú o el agente lo lean cuando haga falta.
+- `guidance/paper-guide/` — what lands here is what `proposal-deliberation` loads
+  **automatically**, from the `GUIDE_DIRECTORY = "guidance/paper-guide"` constant in
+  its engine. But it loads it **only once in the entire life of the proposal**: at
+  the creation of v1, and never again.
+- `guidance/reference-papers/` — a consultation corpus. **It is never loaded on its
+  own.** It is there for the operator or the agent to read when needed.
 
-> **El orden importa, y esto no es obvio.** Si ingieres un paper guía **después** de
-> haber creado la v1 de la propuesta, ese paper ya no entra por esa vía: la carga es
-> irrepetible por diseño. Ingiere primero, delibera después.
+> **The order matters.** If a guide paper is ingested **after** the v1 of the
+> proposal has been created, that paper no longer enters by that route: the load is
+> unrepeatable by design. Ingestion comes first, deliberation after.
 
-**Qué necesita antes.** Una única preparación por máquina: correr
-`./.claude/skills/paper-ingestion/setup.sh`. Es idempotente y hace dos cosas:
-instala el binario `llama-server` (el motor de OCR; no es un paquete de pip) y crea
-el entorno virtual con `marker-pdf` adentro. La primera ingesta real descarga los
-modelos (~1,5 GB) y los cachea; de ahí en más funciona offline.
+**What it needs first.** A single per-machine preparation: running
+`./.claude/skills/paper-ingestion/setup.sh`. It is idempotent and does two things:
+it installs the `llama-server` binary (the OCR engine; it is not a pip package) and
+creates the virtual environment with `marker-pdf` inside. The first real ingestion
+downloads the models (~1.5 GB) and caches them; from then on it works offline.
 
-**Las etapas que declara.** El flujo no es la lista de comandos: es lo que cada
-etapa deja establecido, y cuándo puedes darla por superada. Esta tabla está leída
-de `OBJECTIVE_FLOW` en el script, que un test mantiene igual al `SKILL.md`.
+**The stages it declares.** The flow is not the list of commands: it is what each
+stage establishes, and when it can be considered passed. This table is read
+from `OBJECTIVE_FLOW` in the script, which a test keeps equal to the `SKILL.md`.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | It is passed when |
 |---|---|---|
-| `filed` | El PDF está dentro de una carpeta temática propia — eso es lo que lo vuelve un paper y no una descarga | deja de aparecer entre los sueltos |
-| `extracted` | El Markdown existe al lado, con sus figuras escritas como archivos en vez de quedar dentro de la página | la carpeta del paper tiene el documento y sus imágenes |
-| `readable` | Las ecuaciones son LaTeX y las tablas son Markdown, así un lector posterior puede **citar** una fórmula en vez de describir una foto de una | es la llegada; no está detrás de nadie |
+| `filed` | The PDF sits inside a topic folder of its own — that is what turns it into a paper and not a download | it stops appearing among the loose ones |
+| `extracted` | The Markdown exists beside it, with its figures written as files instead of staying inside the page | the paper folder holds the document and its images |
+| `readable` | The equations are LaTeX and the tables are Markdown, so a later reader can **cite** a formula instead of describing a photo of one | it is the arrival; it is behind no one |
 
-**Llegada:** un documento que una persona puede leer y una sesión posterior puede
-citar — que un PDF no es. Sus ecuaciones son dibujos y sus tablas son tinta.
+**Arrival:** a document that a person can read and a later session can cite — which
+a PDF is not. Its equations are drawings and its tables are ink.
 
-**Una tensión declarada, que no es un error tuyo si la ves.** El campo
-`humanStops` de esta skill está **vacío**: ninguna *etapa* se detiene a esperar a
-una persona. Pero su Activation Contract dice *"Never ingest without asking
-first"*, y la confirmación de la Fase 2 es obligatoria. Las dos cosas conviven
-porque la confirmación ocurre **antes** de que el flujo arranque, y el script no
-tiene mecanismo de consentimiento propio — la regla vive en el `SKILL.md` y la
-hace cumplir el agente. Vale anotar que `kaggle-accounts`, que también escribe,
-sí declara *"consentir la validación"* como parada de una persona: las dos skills
-no describen igual el mismo consentimiento.
+**A declared tension, not a defect.** The `humanStops` field of this skill is **empty**: no
+*stage* stops to wait for a person. But its Activation Contract says
+*"Never ingest without asking first"*, and the Phase 2 confirmation is
+mandatory. The two things coexist because the confirmation happens
+**before** the flow starts, and the script has no consent mechanism of its
+own — the rule lives in the `SKILL.md` and the agent enforces it.
+`kaggle-accounts`, which also writes, does declare *"consenting to
+validate at all"* as a stop that belongs to a person: the two skills do not
+describe the same consent in the same way.
 
-**El flujo, paso a paso.** El punto clave es que **son dos comandos, no uno**, y esa
-división existe para que exista un momento de consentimiento.
+**The flow, step by step.** It is **two commands, not one**, and that split exists
+so that there is a moment of consent.
 
-*Fase 1 — Descubrir (gratis, no toca nada):*
+*Phase 1 — Discover (free, touches nothing):*
 
-1. El agente corre el script con `--list`. Esto lee `papersmith.yaml`, valida la
-   configuración, descubre las carpetas fuente y busca PDFs sueltos. **No carga
-   ningún modelo y no mueve ningún archivo**: el código corta antes.
-2. Se imprime la lista: ruta relativa y cantidad de páginas de cada PDF.
-3. Si hay PDFs tirados directamente en `guidance/` —fuera de toda carpeta temática—
-   se reportan aparte, junto con los temas existentes como opciones.
+1. The agent runs the script with `--list`. This reads `papersmith.yaml`, validates
+   the configuration, discovers the source folders and looks for loose PDFs. **It
+   loads no model and moves no file**: the code stops before that.
+2. The list is printed: relative path and page count of each PDF.
+3. If there are PDFs lying directly in `guidance/` —outside any topic folder— they
+   are reported separately, together with the existing topics as options.
 
-*Fase 2 — Confirmar (obligatorio):*
+*Phase 2 — Confirm (mandatory):*
 
-4. El agente te pregunta **cuáles** ingerir, como selección múltiple. Esta regla vive
-   en `SKILL.md`, no en el script: el script no tiene mecanismo de consentimiento. La
-   división en dos comandos es lo que hace posible que exista el paso de aprobación.
-5. Si no apruebas nada, se termina ahí. Nada se movió.
+4. The agent asks **which** ones to ingest, as a multiple selection. This rule lives
+   in `SKILL.md`, not in the script: the script has no consent mechanism. The split
+   into two commands is what makes the approval step possible.
+5. If nothing is approved, it ends there. Nothing moved.
 
-*Fase 3 — Ejecutar:*
+*Phase 3 — Execute:*
 
-6. El agente vuelve a correr el script con exactamente las rutas aprobadas. Cada ruta
-   se valida **antes** de cargar el motor: que exista, que sea un `.pdf`, que siga
-   suelta. Así un argumento mal escrito no cuesta una carga de modelo.
-7. Se construye el conversor de Marker, explícitamente **sin servicio de LLM** — eso
-   es lo que lo mantiene local y keyless.
-8. Por cada paper, la conversión es **transaccional**: se arma todo en un directorio
-   temporal al lado del PDF, y sólo cuando el `.md` y las figuras están completos se
-   crea la carpeta final, se mueven los archivos, y **el PDF se mueve último**. Hasta
-   que eso pasa, el paper sigue suelto y reintentar es simplemente volver a correr.
-9. Si un paper falla, se reporta y **el lote sigue** con los demás. Si falla a mitad,
-   se borra la carpeta sólo si la creó esta corrida.
+6. The agent runs the script again with exactly the approved paths. Each path is
+   validated **before** the engine loads: that it exists, that it is a `.pdf`, that
+   it is still loose. That way a misspelled argument does not cost a model load.
+7. The Marker converter is built explicitly **without an LLM service** — which keeps
+   it local and keyless.
+8. For each paper, the conversion is **transactional**: everything is staged in a
+   temporary directory beside the PDF, and only when the `.md` and the figures are
+   complete is the final folder created, the files moved, and **the PDF moved last**.
+   Until that happens, the paper stays loose and retrying is simply running again.
+9. If a paper fails, it is reported and **the batch continues** with the others. If
+   it fails halfway, the folder is deleted only if this run created it.
 
-*Reingerir:* no hay bandera de "forzar" ni archivo de estado. La idempotencia es
-puramente estructural: un PDF está *suelto* cuando el nombre de su carpeta padre no
-coincide con su propio nombre. Una vez que vive en `<nombre>/<nombre>.pdf`, dejó de
-estar suelto y nadie lo vuelve a tocar. **Para reingerir, borras la carpeta del
-paper** y el PDF vuelve a quedar suelto para la próxima corrida.
+*Re-ingest:* there is no "force" flag and no state file. Idempotence is purely
+structural: a PDF is *loose* when the name of its parent folder does not match its
+own name. Once it lives in `<name>/<name>.pdf`, it has stopped being loose and
+nobody touches it again. **Re-ingestion means deleting the paper folder** and the
+PDF becomes loose again for the next run.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `SKILL.md` | El contrato de conducta: correr `--list` primero, pedir aprobación por paper, cómo tratar un PDF sin archivar. El script no dice nada de esto — sólo devuelve códigos de salida. |
-| `setup.sh` | Provisión del entorno, idempotente: instala `llama-server` y arma el `.venv`. Existe porque el OCR necesita un binario de sistema que pip no puede instalar. |
-| `requirements.txt` | Fija `marker-pdf==2.0.0`. Sin ese pin, una versión nueva podría cambiar la API del conversor y romper la extracción en silencio. |
-| `scripts/extract_pdf.py` | El motor completo: validación de configuración, descubrimiento, listado, archivado, conversión transaccional, quitado de bibliografía, escritura de figuras, y el contrato de códigos de salida. |
+| `SKILL.md` | The behavioral contract: run `--list` first, ask for approval per paper, how to handle an unfiled PDF. The script says none of this — it only returns exit codes. |
+| `setup.sh` | Environment provisioning, idempotent: it installs `llama-server` and builds the `.venv`. It exists because the OCR needs a system binary that pip cannot install. |
+| `requirements.txt` | Pins `marker-pdf==2.0.0`. Without that pin, a new version could change the converter API and break extraction silently. |
+| `scripts/extract_pdf.py` | The complete engine: config validation, discovery, listing, filing, transactional conversion, reference stripping, figure writing, and the exit-code contract. |
 
-Las funciones que importan, si vas a leer el código: `is_loose()` —el chequeo de
-idempotencia entero, en una línea—, `discover_source_roots()`, `find_loose_pdfs()`,
-`resolve_single_target()` (la validación previa a cargar el motor),
-`build_converter()`, `ingest_loose()` (la transacción) y `file_into()` (el archivado
-de un PDF sin tema).
+The functions that matter, if the code is going to be read: `is_loose()` —the whole
+idempotence check, in one line—, `discover_source_roots()`, `find_loose_pdfs()`,
+`resolve_single_target()` (the validation before loading the engine),
+`build_converter()`, `ingest_loose()` (the transaction) and `file_into()` (the filing
+of a PDF with no topic).
 
-**Qué escribe en el disco.**
+**What it writes to disk.**
 
 ```
-guidance/reference-papers/<nombre>/
-├── <nombre>.pdf              el PDF original, movido aquí al final
-├── <nombre>.md               texto + LaTeX + tablas, sin bibliografía
-└── _page_4_Figure_2.jpeg     las figuras que el .md referencia
+guidance/reference-papers/<name>/
+├── <name>.pdf                the original PDF, moved here at the end
+├── <name>.md                 text + LaTeX + tables, no bibliography
+└── _page_4_Figure_2.jpeg     the figures that the .md references
 ```
 
-Claves que respeta de `papersmith.yaml`, bajo el bloque `paper_ingestion:`: `engine`
-(sólo `marker`), `mode` (`fast` o `balanced`), `strip_references` (bool, por defecto
-`true`), `source_base` (por defecto `guidance`) y `source_roots`.
+Keys it honors from `papersmith.yaml`, under the `paper_ingestion:` block: `engine`
+(only `marker`), `mode` (`fast` or `balanced`), `strip_references` (bool, default
+`true`), `source_base` (default `guidance`) and `source_roots`.
 
-**Los seguros.**
+**The safeguards.**
 
-- **Nunca convierte sin que se haya preguntado.** Protocolo del `SKILL.md`,
-  habilitado por la división en dos comandos.
-- **Falla cerrado ante configuración inválida.** Un `papersmith.yaml` malformado sale
-  con código 2 sin tocar nada — elegido por sobre reportar "no hay nada que hacer",
-  que sería indistinguible de un caso sano.
-- **Nunca fusiona con una carpeta existente.** Si ya hay contenido, se niega. El único
-  camino a reingerir es borrarla, que es explícito y se ve destructivo a propósito.
-- **Nunca adivina el tema de un PDF sin archivar.** Convertirlo donde está lo
-  convertiría permanentemente en una "carpeta temática" propia.
-- **Sólo revierte lo que creó.** Una carpeta que ya existía nunca se borra.
+- **It never converts without having been asked.** `SKILL.md` protocol, enabled by
+  the split into two commands.
+- **It fails closed on invalid configuration.** A malformed `papersmith.yaml` exits
+  with code 2 without touching anything — chosen over reporting "there is nothing to
+  do", which would be indistinguishable from a healthy case.
+- **It never merges with an existing folder.** If content is already there, it refuses.
+  The only route to re-ingest is deleting it: explicit, and destructive on purpose.
+- **It never guesses the topic of an unfiled PDF.** Converting it where it is would
+  permanently turn it into a "topic folder" of its own.
+- **It reverts only what it created.** A folder that already existed is never deleted.
 
-**Limitaciones conocidas.** Ninguna abierta hoy. La que figuraba aquí
-—`.claude/agents/paper-ingestion.md` describía una interfaz que el script no tiene:
-`--output-dir`, `--force`, un manifiesto versionado y extracción con PyMuPDF— **ya no
-aplica**: esa definición se corrigió y hoy sólo nombra la skill y delega el contrato en
-ella. Medido: el script expone `--list`, `--file` e `--into`, no importa PyMuPDF y no
-escribe manifiesto; la única aparición de la palabra *manifest* en la definición del
-agente es la nota que explica que dejó de restatear el contrato. Una regla escrita dos
-veces son dos copias que se separan, y la vieja se lee tan autorizada como la nueva.
+**Known limitations.** None open today. The one that used to appear here
+—`.claude/agents/paper-ingestion.md` described an interface the script does not have:
+`--output-dir`, `--force`, a versioned manifest and extraction with PyMuPDF— **no longer
+applies**: that definition was corrected and today it only names the skill and delegates
+the contract to it. Measured: the script exposes `--list`, `--file` and `--into`, does not import
+PyMuPDF and writes no manifest; the only appearance of the word *manifest* in the agent
+definition is the note explaining that it stopped restating the contract. A rule written
+twice is two copies that drift apart, and the old one reads as authoritative as the new one.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Usuario pide ingerir"] --> B["Script con --list"]
-    B --> C["Lee papersmith.yaml"]
-    C --> D{"¿Config válida?"}
-    D -- No --> E["Sale con código 2. Nada tocado"]
-    D -- Sí --> F["Descubre carpetas fuente y PDFs sueltos"]
-    F --> G{"¿Hay PDFs sueltos en carpetas temáticas?"}
-    G -- No --> H["Reporta: nada que ingerir + PDFs sin archivar"]
-    H --> I["Agente pregunta en qué tema va cada uno"]
-    I --> J["Script con --file y --into: sólo mueve"]
-    G -- Sí --> K["Imprime la lista con páginas"]
-    K --> L["Agente pregunta cuáles ingerir"]
-    L --> M{"¿El usuario aprueba alguno?"}
-    M -- No --> N["Fin. Nada se movió"]
-    M -- Sí --> O["Script con las rutas aprobadas"]
-    O --> P{"¿Cada ruta existe, es PDF y sigue suelta?"}
+    A["Operator requests ingestion"] --> B["Script with --list"]
+    B --> C["Reads papersmith.yaml"]
+    C --> D{"Valid config?"}
+    D -- No --> E["Exits with code 2. Nothing touched"]
+    D -- Yes --> F["Discovers source folders and loose PDFs"]
+    F --> G{"Are there loose PDFs in topic folders?"}
+    G -- No --> H["Reports: nothing to ingest + unfiled PDFs"]
+    H --> I["Agent asks which topic each one goes into"]
+    I --> J["Script with --file and --into: moves only"]
+    G -- Yes --> K["Prints the list with pages"]
+    K --> L["Agent asks which ones to ingest"]
+    L --> M{"Does the operator approve any?"}
+    M -- No --> N["End. Nothing moved"]
+    M -- Yes --> O["Script with the approved paths"]
+    O --> P{"Does each path exist, is it a PDF and still loose?"}
     P -- No --> E
-    P -- Sí --> Q["Carga Marker sin servicio de LLM"]
-    Q --> R["Por cada paper"]
-    R --> S{"¿Ya existe la carpeta del paper?"}
-    S -- Sí --> T["Se niega este paper. El lote sigue"]
-    S -- No --> U["Directorio temporal de staging"]
-    U --> V["Convierte, quita bibliografía, escribe figuras y .md"]
-    V --> W{"¿Salió bien?"}
-    W -- No --> X["Borra lo que creó. El PDF sigue suelto"]
-    W -- Sí --> Y["Mueve lo generado y el PDF al final"]
-    Y --> Z["Reporte final y código de salida"]
+    P -- Yes --> Q["Loads Marker without an LLM service"]
+    Q --> R["For each paper"]
+    R --> S{"Does the paper folder already exist?"}
+    S -- Yes --> T["This paper is refused. The batch continues"]
+    S -- No --> U["Temporary staging directory"]
+    U --> V["Converts, strips references, writes figures and .md"]
+    V --> W{"Did it succeed?"}
+    W -- No --> X["Deletes what it created. The PDF stays loose"]
+    W -- Yes --> Y["Moves the generated output and the PDF last"]
+    Y --> Z["Final report and exit code"]
     T --> Z
     X --> Z
-    Z --> AA["El Markdown queda listo para proposal-deliberation"]
+    Z --> AA["The Markdown is ready for proposal-deliberation"]
 ```
 
 ---
