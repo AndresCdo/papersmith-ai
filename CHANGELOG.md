@@ -321,6 +321,25 @@ number is `0`, breaking changes can still arrive without a major bump.
   `contention: "unmeasured"`, and no contention factor is supplied. A
   malformed `parallelism` is echoed as `parallelismMalformed` and never read.
 
+- **A successor locus is matched by its heading's own words, and an outer
+  section can be named.** `RESOLVE_TARGET` (and `CREATE_SUCCESSOR`'s
+  `selectedEntryId`/`selectedEntryIds`, which share its resolver) tested each
+  query word as a substring of the heading line, so `O1` also matched
+  `O10` and blocked; two headings carrying the same words tied even when
+  one of them was exactly the query; and nested matches collapsed to the
+  innermost one, so once `### Synthetic data` existed `## Data` could not be
+  targeted at all and a label line directly under it could not be edited.
+  A query word now matches a whole heading token (a dotted identifier such
+  as `3.1` stays one token; the parts of a hyphenated word still count); a
+  heading whose words are exactly the query's, ignoring its section label
+  (read from `_core/conventions/sections.json`) and stopwords, outranks one
+  that merely contains them; and a query opening with level marks (`## Data`)
+  considers only headings of that level. Nested matches are no longer
+  collapsed: the gate decides on the scores. A blocked result lists every
+  candidate with its level marks and its real heading path
+  (`### Methods › Setup`), and `RESOLVE_TARGET` returns them as
+  `candidates`.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -542,6 +561,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   unreadable) wherever they carry a projection; `projectedSeconds` is
   unchanged. Search records are read, never rewritten, so no migration is
   needed.
+
+- Locus queries resolve differently only where they were wrong: a word that
+  matched part of a heading word no longer matches (`O1` vs `O10`); a query
+  naming an outer heading exactly (`Data`) now resolves to it instead of a
+  nested heading sharing the word; a query whose candidates nest within the
+  gate's margin blocks and lists both instead of silently picking the
+  innermost; and a query opening with `#` level marks only considers headings
+  of that level. Entry ids, labels and tags (the non-successor resolver) are
+  untouched. A blocked `RESOLVE_TARGET` result gains a `candidates` array;
+  managed revisions, receipts and locks are not read differently, so no
+  migration is needed.
 
 ## 0.13.0
 

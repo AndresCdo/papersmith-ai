@@ -38,6 +38,8 @@
 //
 //   { "operation": "RESOLVE_TARGET", "sourceFilename": "<file>.md", "query": "<locus description>" }
 //   -> { "status": "resolved", "operation": "RESOLVE_TARGET", "entryId": "...", "blocked": false, "question": null }
+//   A blocked result also carries "candidates": [{ "entryId", "headingLevel", "headingPath", "score" }, ...].
+//   A query opening with level marks ("## Data") considers only headings of that level.
 //
 //   { "operation": "RESOLVE_TARGET", "sourceFilename": "<file>.md", "queries": [{ "query": "..." }, ...] }
 //   -> { "status": "resolved", "operation": "RESOLVE_TARGET", "results": [{ "query": "...", "entryId": "...", "blocked": false, "question": null }, ...] }
@@ -150,6 +152,10 @@ async function resolveOneTarget(sourceFilename, query) {
 		entryId: gate.candidate?.entryId ?? null,
 		blocked: gate.blocked,
 		question: gate.question ?? null,
+		// A blocked locus lists every candidate, each with its level and real
+		// heading path, so the caller can name the one it meant (by its own
+		// heading words, or by level marks for an outer section).
+		...(gate.blocked && gate.candidates.length ? { candidates: gate.candidates.map(candidateSummary) } : {}),
 		// A `replace` decision must carry the entry's WHOLE new text, so a caller
 		// that cannot read the current text cannot write a faithful one: it either
 		// guesses the boundaries or silently drops whatever else the entry holds.
@@ -157,6 +163,10 @@ async function resolveOneTarget(sourceFilename, query) {
 		// from their own byte range in the same state.
 		text: gate.blocked ? null : candidateText(state, gate.candidate),
 	};
+}
+
+function candidateSummary(candidate) {
+	return { entryId: candidate.entryId, headingLevel: candidate.headingLevel ?? null, headingPath: candidate.headingPath ?? [], score: candidate.score };
 }
 
 function candidateText(state, candidate) {

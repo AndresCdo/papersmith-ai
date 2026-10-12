@@ -78,7 +78,13 @@ Before you can build a `resolvedDecisions` entry, you need the engine's own reso
 { "operation": "RESOLVE_TARGET", "sourceFilename": "research-concept-r05.md", "query": "Assumptions stationarity" }
 ```
 
-Write the query as **distinctive words from the target heading**, not as a sentence describing it. The resolver scores a heading by how many query words appear as substrings of its heading line, so only the rare words help. Drop punctuation (the query is truncated at the first `,;:.`), drop the section number, and keep accents exactly as the heading spells them — matching is accent-sensitive. Stopwords are filtered out for you.
+Write the query as **distinctive words from the target heading**, not as a sentence describing it. The resolver scores a heading by how many query words are words of its heading line, so only the rare words help. A query word matches a heading only when it equals one of the heading's own words, never part of one: `O1` matches `### O1. Objective` and not `### O10. Scope`, and `entropy` still reaches `Cross-entropy` because each part of a hyphenated word counts. A heading whose words are exactly the query's (ignoring its section label and stopwords) outranks one that merely contains them, so `Alignment loss` names `## Alignment loss`, not `## Alignment loss weighting`. Drop punctuation (the query is truncated at the first `,;:.`), drop the section number, and keep accents exactly as the heading spells them — matching is accent-sensitive. Stopwords are filtered out for you.
+
+**Naming an outer section.** Open the query with the heading's level marks and only headings of that level are considered: `## Data` names the whole `## Data` section, subsections included, even when `### Synthetic data` carries the same word, which is how a line directly under `## Data` (a `**Dataset:**` label, say) becomes editable. A level-marked query is read as the heading spelled out, so its label and punctuation are harmless: `## 4. Baselines: comparison table` is a valid selector. Without level marks every level is considered, and a match nested inside another is no longer collapsed to the innermost section: a tie blocks and lists both.
+
+```json
+{ "operation": "RESOLVE_TARGET", "sourceFilename": "research-concept-r05.md", "query": "## Data" }
+```
 
 
 ```json
@@ -86,7 +92,7 @@ Write the query as **distinctive words from the target heading**, not as a sente
 ```
 
 - If `blocked` is `false`, `entryId` is the real value to use as `targetEntryId`/`anchorEntryId`/`sourceEntryIds`/`destinationAnchorId` in your decision.
-- If `blocked` is `true`, the query matched more than one candidate — `question` lists them and names the terms that matched all of them. **Remove those terms; never add more.** Extra words match more headings, so "narrowing" a blocked query widens it. Never guess between the listed candidates.
+- If `blocked` is `true`, the query matched more than one candidate — `question` lists them and names the terms that matched all of them, and `candidates` carries each one's `entryId`, `headingLevel` and `headingPath`. A candidate reads as its level marks and its real heading path (`### Methods › Setup`), so two sections with the same title, or a section and the subsection inside it, are told apart. **Remove those terms; never add more.** Extra words match more headings, so "narrowing" a blocked query widens it. Never guess between the listed candidates.
 - If the reason is `SUCCESSOR_TARGET_NOT_FOUND`, no heading line matched — you described the section's content instead of its title. Name the heading. A successor locus is never resolved from body text, so a near-miss can never silently hand you the wrong section.
 
 Do this once per independent locus in the batch you are about to apply. To resolve several loci in one call, send `queries` (an array of `{ "query": "..." }`) instead of `query`:

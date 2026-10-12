@@ -133,12 +133,15 @@ Every example below is one JSON line to that process.
 { "status": "resolved", "operation": "RESOLVE_TARGET", "entryId": "…", "blocked": false, "question": null }
 ```
 
-Write the query as **distinctive words from the target heading**, not a sentence describing it. The resolver scores a heading by how many query words appear as substrings of its heading line, so only rare words help. Drop punctuation (the query truncates at the first `,;:.`), drop the section number, keep accents exactly as the heading spells them.
+Write the query as **distinctive words from the target heading**, not a sentence describing it. The resolver scores a heading by how many query words are words of its heading line, so only rare words help. A query word matches a heading only when it equals one of the heading's own words, never part of one: `O1` matches `### O1. Objective` and not `### O10. Scope`, and `entropy` still reaches `Cross-entropy` because each part of a hyphenated word counts. A heading whose words are exactly the query's (ignoring its section label and stopwords) outranks one that merely contains them, so `Alignment loss` names `## Alignment loss`, not `## Alignment loss weighting`. Drop punctuation (the query truncates at the first `,;:.`), drop the section number, keep accents exactly as the heading spells them.
 
 - ✅ `"Baselines comparison"`
-- ❌ `"## 4. Baselines: comparison table"` — punctuation truncates it to `"4"`
+- ✅ `"## 4. Baselines: comparison table"` — level marks first: the heading spelled out, label and punctuation included
+- ❌ `"Section 4. Baselines: comparison table"` — after a section noun, punctuation truncates it to `"4"`
 
-If `blocked` is `true`, the query matched more than one candidate — **remove the terms the question names, never add more**. Adding words to "narrow" a query widens it. If the reason is `SUCCESSOR_TARGET_NOT_FOUND`, no heading matched: you described the section's content instead of its title.
+**Naming an outer section.** Open the query with the heading's level marks and only headings of that level are considered: `## Data` names the whole `## Data` section, subsections included, even when `### Synthetic data` carries the same word, which is how a line directly under `## Data` (a `**Dataset:**` label, say) becomes editable. A level-marked query is read as the heading spelled out, so its label and punctuation are harmless: `## 4. Baselines: comparison table` is a valid selector. Without level marks every level is considered, and a match nested inside another is no longer collapsed to the innermost section: a tie blocks and lists both.
+
+If `blocked` is `true`, the query matched more than one candidate — **remove the terms the question names, never add more**. When a query is blocked, `question` and `candidates` list every candidate with its level marks and its real heading path (`### Methods › Setup`); name the one you meant by its own heading words, or by level marks for the outer one. The blocked result also carries `candidates`, one `{ entryId, headingLevel, headingPath, score }` per candidate. Adding words to "narrow" a query widens it. If the reason is `SUCCESSOR_TARGET_NOT_FOUND`, no heading matched: you described the section's content instead of its title.
 
 An experiment whose heading carries its own `[exp:E1]` declaration resolves from a query of just `E1` (measured), so keep the declaration in the heading rather than in the body. `experimental-implementation` reads the same convention (`skills/_core/conventions/experiments.json`) and locates an experiment only by such a heading, its block running to the next heading of the same or a higher level; one heading per experiment is all either skill needs (no wrapping `## N`).
 

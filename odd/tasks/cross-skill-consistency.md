@@ -60,6 +60,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B7 — executed kit notebooks are not structure drift (D, writer trigger: engine + test + 2 docs)
   - [x] B11 — step digest scope kept and stated on every unmeasured `@step` item (D, writer trigger: engine + test + 2 docs)
   - [x] B12 — cost forecasts state the parallelism of their duration (D, writer trigger: engine + test + 2 docs)
+  - [x] B3 — `RESOLVE_TARGET` matches whole heading tokens; level marks name an outer section (D, writer trigger: resolver + gate + CLI + 2 SKILL.md + 2 usage.md + 3 test files)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -500,6 +501,28 @@ Route legend: D = delegated writer, I = inline.
   tests/test_proposal_implementation.py` (single process): 1799 passed, 2 skipped; seal files 73 passed;
   `test_implementation_core.py` alone 139 passed. No migration (records are read, never rewritten).
   Commit: `fix(implementation): a cost forecast states the parallelism it was taken at` (the commit carrying this line)
+
+- B3 (real): `resolveSuccessorTarget` tested each query word with `heading.includes(term)` (substring; `O1`
+  hit `O10`), gave an exact heading no edge over a longer one carrying the same words, and
+  `collapseNestedSuccessorCandidates` always dropped an outer candidate containing another, so `## Data`
+  was unreachable once `### Synthetic data` existed. Fix (`target-resolver.ts`): tokens per heading
+  (dotted identifiers whole; hyphen/underscore parts added), exact-heading bonus `EXACT_HEADING=6` (over
+  the gate margin of 4; label stripped via `_core/conventions/sections.json`, stopwords ignored), a
+  leading `#{1,6} ` makes the query level-restricted and literal, collapse removed (gate decides; ties
+  block), ties ordered by document position. `ambiguity-gate.ts` prints `<level marks> <real path>` and
+  an outer-section hint when candidates nest; `cli.mjs` returns `candidates` on a blocked locus.
+  Non-successor `resolveTargets` (entry ids, labels, tags) untouched. Tests:
+  `tests/deliberation-heading-target.test.mjs` (13; RED 11F on the base -> GREEN). Mutations: substring
+  back -> 3 red; bonus 0 -> 4 red; level filter off -> 1 red. Re-anchored:
+  `proposal-deliberation-v2-successor-acceptance-e2e.test.mjs` (pinned innermost collapse: bare
+  `Framing` now names `# 2 Framing`; query is `Framing average`), and
+  `proposal-deliberation-v2-revision-lifecycle.test.mjs` (copies the engine alone; now also copies
+  `_core/conventions`, as the kit ships it). `npm run test:node`: 716 passed. `npm run test:fast`: 3237
+  passed, 1 failed (`test_upgrade_v0_13_0_workspace.py::...reads_its_own_holder[experimental-implementation]`
+  reads `AGREED.md`: an implementation-profile leak between files in that run; the file passes alone, 8
+  passed, and with each implementation test file in turn; unrelated to the deliberation engine). No
+  migration (resolution only; a blocked result gains an additive key).
+  Commit: `fix(deliberation): a locus query matches whole heading words and can name an outer section` (the commit carrying this line)
 
 ## Next step
 
