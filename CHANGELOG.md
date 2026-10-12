@@ -437,6 +437,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   `target_resolution` instead. Profiles naming neither placeholder run as
   written.
 
+- **A sibling's profile from another skills tree no longer passes the
+  launcher.** The `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` guard compared
+  skills roots only, so an inherited `impl_profile.py` of the other
+  implementation skill from a second checkout or workspace was accepted and,
+  for example, `experimental-implementation` read `AGREED.md`. Both
+  launchers now read the skill a profile declares (the skill directory of
+  its `PROFILE["cli"]["path"]`) and refuse any other skill's profile
+  wherever it lives; this skill's own profile, and a fixture profile naming
+  this launcher, still run. A sibling in the same tree is still refused by
+  path even when it cannot be loaded.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -712,6 +723,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   where it exists, the profile runs exactly as before. A `--dry-run` of such
   a profile, and every run of a profile naming the new placeholders, records
   a `target_resolution` key in its ledger row. No migration (user-owned file).
+
+- An `IMPLEMENTATION_DOMAIN_PROFILE` naming the other implementation skill's
+  profile from a different skills tree now exits `2` with
+  `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` where 0.13.0 ran against it.
+  Nothing on disk is read differently; no migration is needed.
 
 ## 0.13.0
 

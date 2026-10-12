@@ -24,7 +24,10 @@ another skill's own `impl_profile.py` (for example `experimental-implementation`
 left exported by a shell or an earlier process), the launcher refuses
 `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` with exit `2` before the engine loads,
 naming both profiles, instead of reading the other skill's documents and
-holder. Unset the variable and run the command again.
+holder. Unset the variable and run the command again. "Another skill's" is the
+skill the profile declares (the skill directory of its `PROFILE["cli"]["path"]`),
+so a sibling's profile from a different checkout or workspace is refused as
+well, while this skill's own profile is accepted wherever it lives.
 
 ## 0. Bind the revision
 

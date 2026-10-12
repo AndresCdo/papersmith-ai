@@ -15,17 +15,41 @@
 # exported by a shell or by an earlier process that ran the other skill. Under
 # it this skill would read the other skill's documents and holder, silently.
 # It is refused here, before the engine loads, naming both profiles.
+#
+# "Another skill's profile" is decided by the skill the profile itself
+# declares -- the skill directory of its `PROFILE["cli"]["path"]` launcher --
+# so a sibling's profile from a different skills tree (another checkout or
+# workspace) is refused too, while this skill's own profile is accepted
+# wherever it lives. A sibling in this tree is still refused by path even
+# when it cannot be loaded. A profile this launcher cannot read declares
+# nothing here; the engine refuses it on load.
+import importlib.util
 import os
 import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve()
 _OWN = _HERE.parents[1] / "impl_profile.py"
+
+
+def _declared_skill(profile: Path):
+    """The skill directory name a profile's declared launcher sits in."""
+    try:
+        spec = importlib.util.spec_from_file_location("_launcher_identity_probe", profile)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return Path(module.PROFILE["cli"]["path"]).resolve().parents[1].name
+    except Exception:  # unreadable: the engine's own load refuses it
+        return None
+
+
 _INHERITED = os.environ.get("IMPLEMENTATION_DOMAIN_PROFILE")
 if _INHERITED:
     _NAMED = Path(_INHERITED).resolve()
-    if (_NAMED != _OWN and _NAMED.name == _OWN.name
-            and _NAMED.parent.parent == _OWN.parent.parent):
+    _DECLARED = None if _NAMED == _OWN else _declared_skill(_NAMED)
+    if _NAMED != _OWN and (
+            (_DECLARED is not None and _DECLARED != _HERE.parents[1].name)
+            or (_NAMED.name == _OWN.name and _NAMED.parent.parent == _OWN.parent.parent)):
         sys.stderr.write(
             "IMPLEMENTATION_DOMAIN_PROFILE_SIBLING: the environment carries "
             f"IMPLEMENTATION_DOMAIN_PROFILE={_INHERITED}, which is another "

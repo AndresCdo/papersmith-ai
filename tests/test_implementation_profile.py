@@ -530,6 +530,66 @@ class InheritedSiblingProfileTests(unittest.TestCase):
                 self.assertNotIn("IMPLEMENTATION_DOMAIN_PROFILE",
                                  proc.stdout + proc.stderr)
 
+    # X8c: the guard compared skills roots only, so a sibling's profile
+    # from ANOTHER skills tree (a second checkout or workspace) was accepted
+    # and this skill read the sibling's holder. Identity is now the skill a
+    # profile declares (`PROFILE["cli"]["path"]`'s skill directory).
+
+    def _copied_tree(self, skill: str) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="x8c-tree-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        ignore = shutil.ignore_patterns("__pycache__")
+        shutil.copytree(FORGE / "skills" / "_core", root / "skills" / "_core", ignore=ignore)
+        shutil.copytree(FORGE / "skills" / skill, root / "skills" / skill, ignore=ignore)
+        return root / "skills" / skill / "impl_profile.py"
+
+    def _run(self, launcher: Path, profile: Path) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env[_ENV_VAR] = str(profile)
+        return subprocess.run(
+            [sys.executable, str(launcher), "verify", "--target",
+             "/tmp/_x8_sibling_probe_does_not_exist", "--name", "Method"],
+            capture_output=True, text=True, env=env)
+
+    def test_a_sibling_profile_from_another_skills_tree_is_refused(self):
+        pairs = _skill_launchers()
+        for launcher, own in pairs:
+            for _other_launcher, other in pairs:
+                if other == own:
+                    continue
+                with self.subTest(launcher=launcher.parents[1].name,
+                                  inherited=other.parent.name):
+                    elsewhere = self._copied_tree(other.parent.name)
+                    proc = self._run(launcher, elsewhere)
+                    self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+                    self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING", proc.stderr)
+                    self.assertIn(str(elsewhere), proc.stderr)
+                    self.assertEqual(proc.stdout, "")
+
+    def test_a_profile_declaring_a_siblings_launcher_is_refused_wherever_it_lives(self):
+        pairs = _skill_launchers()
+        launcher, own = pairs[0]
+        other_launcher = next(l for l, p in pairs if p != own)
+        holder = Path(tempfile.mkdtemp(prefix="x8c-anywhere-"))
+        self.addCleanup(shutil.rmtree, holder, ignore_errors=True)
+        profile = holder / "any_name.py"
+        profile.write_text(
+            "from pathlib import Path\n"
+            f"PROFILE = {{'kit': {{'root': Path({str(holder)!r})}}, "
+            f"'cli': {{'path': Path({str(other_launcher)!r})}}}}\n",
+            encoding="utf-8")
+        proc = self._run(launcher, profile)
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING", proc.stderr)
+
+    def test_its_own_profile_from_another_skills_tree_still_runs(self):
+        for launcher, own in _skill_launchers():
+            with self.subTest(launcher=launcher.parents[1].name):
+                elsewhere = self._copied_tree(own.parent.name)
+                proc = self._run(launcher, elsewhere)
+                self.assertNotIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING",
+                                 proc.stdout + proc.stderr)
+
     def test_both_launchers_stay_byte_identical(self):
         """Each launcher derives its own profile from its own location, so
         the refusal costs no per-skill text."""

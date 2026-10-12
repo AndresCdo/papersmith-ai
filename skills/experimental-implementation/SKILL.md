@@ -316,7 +316,11 @@ value is refused instead: another skill's own `impl_profile.py` (for example
 `proposal-implementation`'s, left exported by a shell or an earlier process),
 under which this skill would read the other skill's documents and holder. The
 launcher exits `2` with `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` before the
-engine loads, naming both profiles; unset the variable and run again.
+engine loads, naming both profiles; unset the variable and run again. The
+sibling is recognized by the skill its profile declares (the skill directory of
+`PROFILE["cli"]["path"]`), not by where the file sits, so a sibling's profile
+from another checkout or workspace is refused too; this skill's own profile is
+accepted from any tree.
 
 ## Which commands are not available yet, and why
 

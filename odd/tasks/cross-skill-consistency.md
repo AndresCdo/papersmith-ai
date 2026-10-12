@@ -66,6 +66,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B5 — fresh target clean through env/plan/apply/materialize (D, writer trigger: engine + forge harness + 2 SKILL.md + usage + new test file)
   - [x] B6 — declared array backend, neutral kit helpers, env torch variants (D, writer trigger: engine + 3 kit files + 2 SKILL.md + usage + 2 test files + seals)
   - [x] B9 — default run profile resolves the target and its venv (D, writer trigger: executor + template + README + test)
+  - [x] X8c — launcher refuses a sibling profile from any skills tree (D, writer trigger: 2 launchers + test + 2 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -701,3 +702,15 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   with their guards; RED shown by mutation: legacy guard off -> 1 red; venv check off -> 1 red). Related e2e files
   191 passed, 1 failed = known `.venv` wiring smoke. test:fast 220 passed.
   Commit: `fix(run): the default profile runs the target's own interpreter against the target` (the commit carrying this line)
+
+- X8c (real, reproduced by the new tests): the launcher guard refused a sibling profile only when its skills root
+  equalled the launcher's, so the other skill's `impl_profile.py` from a copied skills tree ran (the experimental
+  launcher would read `AGREED.md`). Fix (both launchers, still byte-identical): `_declared_skill` loads the named
+  profile (`importlib`, fresh module) and takes the skill directory of its `PROFILE["cli"]["path"]`; refuse when it
+  differs from this launcher's skill, in addition to the existing same-tree path rule (kept so an unloadable sibling
+  in this tree still refuses). An unreadable profile declares nothing in the launcher and the engine's own load
+  refuses it. Own profile from another tree and fixture profiles naming this launcher still run (tested).
+  Tests: `InheritedSiblingProfileTests` +3 (other-tree sibling both directions, a profile at an arbitrary filename
+  declaring the sibling's launcher, own profile from another tree) RED 3F -> GREEN; mutation (declared clause off ->
+  3 red). test:fast 3218 passed, 3 skipped. No migration.
+  Commit: `fix(implementation): the launcher refuses a sibling's profile from any skills tree` (the commit carrying this line)
