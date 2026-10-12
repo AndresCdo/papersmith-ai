@@ -275,109 +275,109 @@ what you send out.
 
 ---
 
-## Cómo funciona — el orden
+## How it works — the order
 
-### Paso 1 — Colocar cada PDF en la carpeta según su rol
+### Step 1 — Put each PDF in the folder according to its role
 
-| Carpeta | Qué va aquí |
+| Folder | What goes here |
 |---------|------------|
-| `guidance/paper-guide/` | **Papers guía** — las referencias metodológicas / de estilo. `proposal-deliberation` las carga como contexto al inicio de cada deliberación. |
-| `guidance/reference-papers/` | **Corpus de referencia** — papers de apoyo, ingeridos a Markdown para consulta. No se cargan automáticamente en la deliberación. |
-| `guidance/data-paper/` | **Paper de datos — obligatorio para `experimental-deliberation`.** Describe la base de datos de la investigación y es el **techo**: acota qué se puede afirmar. Una afirmación que los datos no sostienen no es un experimento. Sin esta carpeta poblada, `CREATE_INITIAL_REVISION` no puede arrancar. |
+| `guidance/paper-guide/` | **Guide papers** — the methodological / style references. `proposal-deliberation` loads them as context at the start of each deliberation. |
+| `guidance/reference-papers/` | **Reference corpus** — supporting papers, ingested to Markdown for consultation. They aren't loaded automatically into the deliberation. |
+| `guidance/data-paper/` | **Data paper — mandatory for `experimental-deliberation`.** It describes the research's database and is the **ceiling**: it bounds what can be claimed. A claim the data doesn't support isn't an experiment. Without this folder populated, `CREATE_INITIAL_REVISION` can't start. |
 
-**Las tres carpetas viajan vacías.** Cada una llega a un clon con su `.gitkeep` y nada más: `guidance/*/*` está ignorado, con `!guidance/*/.gitkeep` como única escapatoria. El andamiaje se versiona, los PDFs y su Markdown no. `tests/test_forge_scaffolding.py` deriva las dos mitades —lo que los `profile.ts` declaran como fuente contra lo que git realmente rastrea— y se pone rojo si una carpeta declarada deja de viajar.
+**All three folders travel empty.** Each one arrives in a clone with its `.gitkeep` and nothing more: `guidance/*/*` is ignored, with `!guidance/*/.gitkeep` as the only escape hatch. The scaffolding is versioned, the PDFs and their Markdown are not. `tests/test_forge_scaffolding.py` derives both halves —what the `profile.ts` declare as source against what git actually tracks— and goes red if a declared folder stops travelling.
 
-### Paso 2 — Ingerir los PDFs (PDF → Markdown)
+### Step 2 — Ingest the PDFs (PDF → Markdown)
 
-En **Claude Code**, invocar la skill:
+In **Claude Code**, invoke the skill:
 
 ```
 /paper-ingestion
 ```
 
-(o simplemente pedir: *"ingiere los papers"*). Por cada PDF **suelto**, crea una
-carpeta con el nombre del paper, mueve el PDF adentro y escribe un `<nombre>.md`
-liviano (texto + LaTeX + tablas, con la bibliografía quitada) junto con las
-imágenes de las figuras:
+(or simply ask: *"ingiere los papers"*). For each **loose** PDF, it creates a
+folder with the paper's name, moves the PDF inside and writes a lightweight
+`<name>.md` (text + LaTeX + tables, with the bibliography stripped) together
+with the images of the figures:
 
 ```
 guidance/reference-papers/computers-13-00176-v2-1/
 ├── computers-13-00176-v2-1.pdf
 ├── computers-13-00176-v2-1.md
-└── _page_4_Figure_2.jpeg   (figuras que el .md referencia)
+└── _page_4_Figure_2.jpeg   (figures that the .md references)
 ```
 
-Un **PDF suelto** (directamente en una carpeta raíz) está pendiente; un paper
-que ya está dentro de su carpeta se saltea. Para re-ingerir, borrar la carpeta
-del paper (dejando el PDF suelto) y volver a ejecutar la skill. La configuración
-vive en `papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
+A **loose PDF** (directly in a source root folder) is pending; a paper that's
+already inside its folder is skipped. To re-ingest, delete the paper's folder
+(leaving the PDF loose) and run the skill again. The configuration lives in
+`papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
 
-### Paso 3 — Deliberar sobre una propuesta (`proposal-deliberation`)
+### Step 3 — Deliberate over a proposal (`proposal-deliberation`)
 
-En **Claude Code**, invocar la skill:
+In **Claude Code**, invoke the skill:
 
 ```
 /proposal-deliberation
 ```
 
-En el primer turno carga automáticamente los Markdown de `guidance/paper-guide/`
-como contexto y actúa como tutor matemático. Desde ahí se puede:
+On the first turn it automatically loads the Markdown from `guidance/paper-guide/`
+as context and acts as a mathematics tutor. From there you can:
 
-- describir una idea y pedir una primera versión,
-- pedir ediciones a una propuesta gestionada,
-- ejecutar el ciclo de vida de revisiones gestionadas.
+- describe an idea and ask for a first version,
+- ask for edits to a managed proposal,
+- run the lifecycle of managed revisions.
 
-Las propuestas viven en `proposals/`, una por revisión gestionada
+Proposals live in `proposals/`, one per managed revision
 (`research-concept-rNN.md`).
 
-Cada revisión publicada viaja con su propia constelación: la del SOTA con la
-propuesta adentro, en `proposals/research-concept-rNN.graph.html`, dibujada por
-el mismo visor 3D que el atlas y nombrada desde la revisión. La produce el
-tramo de publicación de la deliberación, a partir de la superposición
-`proposals/research-concept-rNN.sky.json` que se redacta durante la discusión:
-ahí la idea principal, los temas que la propuesta toma de los papers del SOTA,
-su novedad, el problema que resolvería y de tres a cinco conceptos quedan como
-nodos y aristas en vez de como frases. Si esa superposición no existe, el tramo
-lo reporta como pendiente en lugar de dibujar relaciones que nadie acordó.
+Each published revision travels with its own constellation: the SOTA's with the
+proposal inside, in `proposals/research-concept-rNN.graph.html`, drawn by the
+same 3D viewer as the atlas and named from the revision. The deliberation's
+publication stretch produces it, from the `proposals/research-concept-rNN.sky.json`
+overlay written during the discussion: there the main idea, the topics the
+proposal takes from the SOTA papers, its novelty, the problem it would solve and
+three to five concepts remain as nodes and edges instead of as sentences. If
+that overlay doesn't exist, the stretch reports it as pending instead of drawing
+relationships nobody agreed on.
 
-### Paso 4 — Llevar la propuesta a código (`proposal-implementation`)
+### Step 4 — Take the proposal to code (`proposal-implementation`)
 
-En **Claude Code**, invocar la skill:
+In **Claude Code**, invoke the skill:
 
 ```
 /proposal-implementation
 ```
 
-Toma la revisión vigente y la materializa en un repositorio destino, que vive en
-`implementations/` con su propio git y su propio entorno virtual. El flujo tiene
-dos fases separadas:
+It takes the current revision and materializes it in a target repository, which
+lives in `implementations/` with its own git and its own virtual environment. The
+flow has two separate phases:
 
-1. **Estructura.** Si el repo trae contenido, lo lleva al layout y verifica
-   —sin ejecutar nada— que cuadernos, rutas y referencias sigan resolviendo. No
-   audita ni valida el código que ya estaba: es lo que hay, ordenado.
-2. **Materialización.** Solo entonces implementa la matemática y la somete a
-   la escalera de validación.
+1. **Structure.** If the repo comes with content, it moves it to the layout and
+   verifies —without running anything— that notebooks, paths and references
+   still resolve. It doesn't audit or validate the code that was already there:
+   it's what's there, tidied up.
+2. **Materialization.** Only then does it implement the mathematics and subject
+   it to the validation ladder.
 
 ```
 <repo>/
 ├── <Name>/            Notebooks/  Data/  Results/  Models/
-├── src/<Package>/     una implementación por objeto matemático
-├── tests/             smoke · invariantes · sintéticos · auditoría · remedios
+├── src/<Package>/     one implementation per mathematical object
+├── tests/             smoke · invariants · synthetic · audit · remedies
 └── pyproject.toml
 ```
 
-La escalera tiene cinco niveles, del más barato al más caro: **smoke**,
-**invariantes** (cada afirmación de la propuesta anclada a un test),
-**sintéticos** (deterministas, semilla fija), **auditoría** (hallazgos sobre la
-matemática, medidos sobre 200 configuraciones aleatorias) y **remedios** (cada
-corrección propuesta validada con el mismo rigor). Un hallazgo sin remedio
-validado no se reporta.
+The ladder has five levels, from the cheapest to the most expensive: **smoke**,
+**invariants** (each claim of the proposal anchored to a test), **synthetic**
+(deterministic, fixed seed), **audit** (findings about the mathematics, measured
+over 200 random configurations) and **remedies** (each proposed fix validated
+with the same rigour). A finding without a validated remedy isn't reported.
 
-Eso es todo lo que hace falta para usar la forja. Si quieres entender **qué pasa
-adentro** de cada skill —sus pasos, sus piezas, cómo se conectan entre sí y qué
-limitaciones tiene cada una— sigue en [Anatomía de cada
-skill](#anatomía-de-cada-skill). Y para el contrato literal, el `SKILL.md` de cada
-una.
+That's all it takes to use the forge. If you want to understand **what goes on
+inside** each skill —its steps, its pieces, how they connect to each other and
+what limitations each one has— read on in [Anatomy of each
+skill](#anatomía-de-cada-skill). And for the literal contract, each one's
+`SKILL.md`.
 
 ---
 
@@ -387,7 +387,7 @@ una.
 tocar tu checkout— con esta forma:
 
 ```
-mi-paper/
+my-paper/
 ├── .papersmith/                 # estado del workspace (config, manifest, ledger)
 │   ├── config.json              #   target y perfil activos, rutas del ledger
 │   ├── manifest.json            #   hashes de todo lo que generó el framework
