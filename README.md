@@ -122,9 +122,9 @@ None of this requires keys or external services: the forge runs locally.
 
 ### 0. What your machine needs to have
 
-Two runtimes, and both are mandatory. It's not a recommendation: the forge uses
-Python for the CLI and Node for the deliberation engine, and without the second
-one half the framework won't start.
+Two runtimes, and both are mandatory: the forge uses Python for the CLI and Node
+for the deliberation engine, and without the second one half the framework won't
+start.
 
 | Runtime | Version | What for | If it's missing |
 | --- | --- | --- | --- |
@@ -132,19 +132,18 @@ one half the framework won't start.
 | **Node.js** | ≥ 21 | the deliberation engine (`jiti`, `typebox`) and the dashboard | `init` warns and `deliberate` refuses |
 | `npm` | whatever Node ships | installing those two dependencies in the workspace | same as above |
 
-Check both at once:
+Both are checked at once:
 
 ```bash
 python3 --version && node --version && npm --version
 ```
 
-**What exactly happens if Node isn't there.** `papersmith init` doesn't fail: it
-warns with `npm was not found; deliberate requires npm install for jiti/typebox`
-and moves on, because the rest of the workspace can be created. But
-`proposal-deliberation` and `experimental-deliberation` —the two skills that
-propose and discuss before writing— don't run without those dependencies. If you
-want to create the workspace on purpose without them, `init --no-npm` says so
-explicitly instead of leaving it to chance.
+If Node is missing, `papersmith init` doesn't fail: it warns with
+`npm was not found; deliberate requires npm install for jiti/typebox` and moves
+on, because the rest of the workspace can be created. But `proposal-deliberation`
+and `experimental-deliberation` —the two skills that propose and discuss before
+writing— don't run without those dependencies. To create the workspace without
+them, `init --no-npm` does so explicitly.
 
 The ingestion runtime from step 2 is separate and **is optional**: it's only
 needed to extract PDFs with OCR.
@@ -154,23 +153,23 @@ needed to extract PDFs with OCR.
 ```bash
 # 1a. The CLI, from the latest version published on PyPI
 pipx install papersmith-ai
-#     the same with pip, if you don't use pipx
+#     the same with pip, for setups without pipx
 pip install papersmith-ai
 #     or the tip of `main`, without waiting for a release
 pipx install git+https://github.com/LIAUNAL/papersmith-ai.git
 
-# 1b. Or from a clone of `main` (if you're going to develop the framework)
+# 1b. Or from a clone of `main` (for framework development)
 git clone https://github.com/LIAUNAL/papersmith-ai.git && cd papersmith-ai
 pipx install .            # with pip: pip install .
 
 # 1c. Update the CLI when a new release comes out
 pipx upgrade papersmith-ai
-#     if you installed it from a git URL, `upgrade` doesn't see it: reinstall
+#     `upgrade` doesn't see a git-URL install: reinstall
 pipx install --force git+https://github.com/LIAUNAL/papersmith-ai.git
 #     with pip, `--upgrade` over a git URL doesn't always re-clone
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai.git"
 
-# 1d. And bring the workspaces that already exist up to that version
+# 1d. Bring existing workspaces up to that version
 papersmith upgrade --plan-migrations ~/papers/sparse-ae  # which artifacts are missing, without writing anything
 papersmith upgrade ~/papers/sparse-ae                    # syncs the files and migrates the artifacts
 papersmith status ~/papers/sparse-ae                     # drift and pending migrations
@@ -184,38 +183,37 @@ npm run setup:harnesses
 ```
 
 **The package is published on PyPI.** `pipx install papersmith-ai` brings the
-latest release, and that's what `pipx upgrade papersmith-ai` in **1c** updates.
-The git URL in **1a**, on the other hand, brings the tip of `main`, which is what
-you want if you're going to develop the framework. And watch out for the
-neighbouring name: `papersmith` —without the `-ai`— is also on PyPI, but it's
-**another project** (Word document generation), so `pip install papersmith`
-doesn't install this forge.
+latest release, which `pipx upgrade papersmith-ai` in **1c** updates. The git URL
+in **1a** brings the tip of `main`, for framework development. The neighbouring
+name `papersmith` —without the `-ai`— is also on PyPI, but it's **another
+project** (Word document generation), so `pip install papersmith` doesn't install
+this forge.
 
 `main` is the only branch that's maintained, and each release also gets its tag,
-so if you need to freeze an exact build, pin it in the URL — for example
+so an exact build is frozen by pinning it in the URL — for example
 `pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.13.0"`.
-**1b** takes the clone as it is, including uncommitted changes, so to reproduce a
-build use **1a** or a tag. The changelog is in [CHANGELOG.md](CHANGELOG.md).
+**1b** takes the clone as it is, including uncommitted changes; a reproducible
+build comes from **1a** or a tag. The changelog is in [CHANGELOG.md](CHANGELOG.md).
 
 Updating is two steps and they're two different objects. **1c** reinstalls the
-CLI from `main`; confirm what you got with `papersmith --version`. **1d** moves
-each **workspace** that already exists, and it isn't optional: a release can
-change the shape of an artifact a workspace has already produced —the graph
+CLI from `main`; `papersmith --version` confirms the installed version. **1d**
+moves each **workspace** that already exists, and it isn't optional: a release
+can change the shape of an artifact a workspace has already produced —the graph
 pool's `atlas.html`, for example—, so syncing the framework files without
 migrating the artifacts leaves the new scaffolding reading old state.
 
 `papersmith upgrade` syncs the workspace with the installed version and applies
 that version's artifact migrations. The version the workspace records doesn't
-advance until those migrations are done, so `papersmith status` may tell you it
-hasn't yet reached the release you just installed. `--plan-migrations` reports
+advance until those migrations are done, so `papersmith status` may report that
+it hasn't yet reached the release just installed. `--plan-migrations` reports
 what's pending and finishes without writing anything; it isn't called
-`--dry-run` on purpose, because it doesn't preview the kit copy. `--no-migrate`
+`--dry-run`, because it doesn't preview the kit copy. `--no-migrate`
 syncs the files and leaves the artifacts as they are, with the version marker
 where it was.
 
-Be careful not to mix up the two `upgrade`s: neither one touches the other.
+The two `upgrade`s are separate: neither one touches the other.
 `papersmith upgrade` refuses to take a workspace to a version older than the one
-it records, unless you ask it to with `--allow-downgrade`.
+it records, unless `--allow-downgrade` is passed.
 
 `scripts/setup_env.py install` provisions **the whole** ingestion stack in a
 separate micromamba environment (CPU or CUDA, depending on what it detects),
@@ -241,7 +239,7 @@ papersmith status --json          # machine-readable snapshot
 ```
 
 The workspace stays decoupled from the framework checkout: the scaffolding is
-synced with `papersmith upgrade`, and your research artifacts are protected by
+synced with `papersmith upgrade`, and the research artifacts are protected by
 contract. What `init` creates exactly —and what gets versioned— in
 [Inside the workspace](#inside-the-workspace).
 
@@ -269,9 +267,9 @@ papersmith run smoke_and_invariants --dry-run                             # plan
 Inside a harness, the same capabilities are requested by skill name:
 `/paper-ingestion`, `/proposal-deliberation`, `/experimental-deliberation`,
 `/proposal-implementation`, `/experimental-implementation`, `/paper-writing`.
-And the ones that don't depend on a domain — `/kaggle-accounts`,
+The ones that don't depend on a domain — `/kaggle-accounts`,
 `/remote-execution`, `/skill-audit` — act as gatekeeper, memory and auditor of
-what you send out.
+what is sent out.
 
 ---
 
