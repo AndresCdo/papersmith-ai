@@ -300,7 +300,7 @@ It reports `managedRevisions` (each with `lineage`/`revisionNumber`/`isLatest`),
 
 1. **`sourceClassification` is `LATEST`.** Work on it directly.
 2. **`sourceClassification` is `OLDER_MANAGED`.** Ask the user: move the newer revisions to `backup/experiments/<timestamp>/` and resume from the older one, or keep working on the real latest? Never default silently.
-3. **`sourceClassification` is `UNMANAGED`.** Ask the user: start fresh from that file's content as the new v1, or adopt it as v1 directly by adding the marker and renaming it to `experiments-<slug>-v01.md`? Adoption preserves an already-developed document's real structure. The user's call, never yours.
+3. **`sourceClassification` is `UNMANAGED`.** Ask the user: start fresh from that file's content as the new v1, or adopt it as v1 directly with `ADOPT_INITIAL_REVISION` (`sourceFilename` = that file)? Adoption preserves an already-developed document's real structure. The user's call, never yours. Adopt through the engine, never by hand: it runs [the canonical form](#the-canonical-form) and the pre-publish validation exactly as for a created v1, and writes the same committed state and receipt, under `experiments-<slug of its first # title>-v01.md`; a marker prepended and a file renamed by hand gets no state, no receipt (`MISSING_MANIFEST` in the consistency audit) and no validation. The source file stays where it is; moving it to a backup is your confirmed step. An old hand-adopted v1 keeps reading as before; `ADOPT_INITIAL_REVISION` with `sourceFilename` set to that revision records its state and receipt after the same validation, bytes untouched, and refuses one that already has a receipt (`ADOPTION_ALREADY_RECORDED`).
 4. **No path in mind, a latest exists, `multipleActive: false`.** Work on `latest`.
 5. **No path in mind, zero managed revisions, `nonManagedFiles: []`.** A pure initial creation — proceed to `CREATE_INITIAL_REVISION`.
 6. **Zero managed revisions and exactly one non-managed file.** Ask whether that file is the base — do not assume it.
@@ -404,6 +404,7 @@ This skill **does not run experiments**, **does not ingest real results**, and *
 | --- | --- |
 | `STATUS` | Read-only, keyless inventory of `experiments/`. Never mutates. Run it at the start of every deliberation. |
 | `RESOLVE_TARGET` | Read-only locus resolution, using the exact resolver `CREATE_SUCCESSOR` uses internally. |
+| `ADOPT_INITIAL_REVISION` | Makes an existing document in `experiments/` v1, or records the missing state and receipt of an old hand-adopted v1. Same gate, state and receipt as `CREATE_INITIAL_REVISION`; accepts `--dry-run`. See [usage](references/usage.md#adopting-an-existing-document-as-v1). |
 | `CREATE_INITIAL_REVISION` | Creates v1 from your idea plus the declared sources. Only when no managed revision exists; never overwrites or duplicates one. A success leaves a permanent creation lock (`.experimental-deliberation/locks/initial-revision.lock`), so preview it first with `--dry-run` (or `"dryRun": true`): every check and the composed `markdown`, no lock, no write. See [usage](references/usage.md#dry-run-first-see-v1-before-it-exists). |
 | `WITHDRAW_REVISION` | Withdraws one eligible managed revision, preserving an audited recovery copy. Not content deletion. |
 | `RESTORE_WITHDRAWN_REVISION` | Restores a previously withdrawn revision from its audited copy. |
@@ -414,7 +415,7 @@ This skill **does not run experiments**, **does not ingest real results**, and *
 
 - **Launch only through this skill's own `cli.mjs`.** The shared core refuses to start without a domain profile, so an instruction to invoke the core's own launcher directly is an instruction that errors. `node skills/experimental-deliberation/cli.mjs` is the entry point, and it is the only one.
 - The environment the engine reads is `PROPOSAL_DELIBERATION_PROJECT_ROOT` (defaults to cwd) and `PROPOSAL_DELIBERATION_SESSION_ID` — shared core names, not renamed for this domain. No `ANTHROPIC_API_KEY` and no model configuration is ever required: no call on this path reaches a network or a model.
-- `CREATE_INITIAL_REVISION` is the only way to create a managed revision, and only when none exists.
+- `CREATE_INITIAL_REVISION` and `ADOPT_INITIAL_REVISION` are the only ways to create a managed revision, and only when none exists.
 - An `instruction` longer than 65,536 characters is refused with `INSTRUCTION_TOO_LONG` on every operation, nothing written; the preview and v1's result report `instructionBudget`.
 - If more than one active managed revision resolves, the engine reports `MULTIPLE_ACTIVE_REVISIONS` with the candidate list — never silently pick one.
 - Do not modify engine infrastructure, tests, or this skill during normal deliberation work.

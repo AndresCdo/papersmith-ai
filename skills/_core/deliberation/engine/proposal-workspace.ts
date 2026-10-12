@@ -5472,7 +5472,7 @@ export function createProposalWorkspaceTool(
 	};
 }
 
-import { ChatDeliberationService, createFilesystemInitialRevisionPublicationPort, initialRevisionLockState, DraftMaterializationService, InitialRevisionCreationService, LifecycleV1PublicRouter, ProposalDeliberationOrchestrator, ProposalWorkspaceAdapter, defaultPiSessionDraftLifecycleAdapter, getRuntimeMetrics, getSharedPiSessionDraftRegistry, loadDocumentState, MAX_CHAT_DOCUMENT_CONTEXT_BYTES, MAX_CHAT_GUIDE_CONTEXT_BYTES, recordLifecycleMetric, recordRouteMetric, resolveIntent, resolveLatestManagedRevision, runConsistencyAudit, runProposalDeliberationSelfAudit, type ChatDocumentContext, type ChatGuideFragment, type DraftMaterializationPolicy, type EditAction, type DraftMaterializationRequest, type PiSessionDraftLifecycleAdapter, type PiSessionDraftRegistry, type ReviewerAdapter, type SemanticEditPlanner, type TutorAdapter } from './exports.js';
+import { adoptInitialRevision, ChatDeliberationService, createFilesystemInitialRevisionPublicationPort, initialRevisionLockState, DraftMaterializationService, InitialRevisionCreationService, LifecycleV1PublicRouter, ProposalDeliberationOrchestrator, ProposalWorkspaceAdapter, defaultPiSessionDraftLifecycleAdapter, getRuntimeMetrics, getSharedPiSessionDraftRegistry, loadDocumentState, MAX_CHAT_DOCUMENT_CONTEXT_BYTES, MAX_CHAT_GUIDE_CONTEXT_BYTES, recordLifecycleMetric, recordRouteMetric, resolveIntent, resolveLatestManagedRevision, runConsistencyAudit, runProposalDeliberationSelfAudit, type ChatDocumentContext, type ChatGuideFragment, type DraftMaterializationPolicy, type EditAction, type DraftMaterializationRequest, type PiSessionDraftLifecycleAdapter, type PiSessionDraftRegistry, type ReviewerAdapter, type SemanticEditPlanner, type TutorAdapter } from './exports.js';
 import { createSuccessorAcceptanceRegistry, type SuccessorAcceptanceRegistry } from './successor-acceptance-registry.js';
 
 type GlobalRouteStage = 'LIFECYCLE' | 'DIRECT_DOCUMENT' | 'CHAT_DELIBERATION' | 'DRAFT_MATERIALIZATION' | 'MAINTENANCE' | 'CREATE_INITIAL_REVISION' | 'EXISTING_FALLBACK';
@@ -5502,7 +5502,8 @@ function decisionRecordBlocker(params:{operation?:string;rationale?:unknown;deci
 }
 
 /** Operations that accept `dryRun`: the ones that publish without a preview turn of their own. */
-const DRY_RUN_OPERATIONS = new Set([CREATE_INITIAL_REVISION_OPERATION]);
+const ADOPT_INITIAL_REVISION_OPERATION = 'ADOPT_INITIAL_REVISION';
+const DRY_RUN_OPERATIONS = new Set([CREATE_INITIAL_REVISION_OPERATION, ADOPT_INITIAL_REVISION_OPERATION]);
 
 /**
  * The longest `instruction` any operation accepts, in characters (UTF-16 code units, what a
@@ -5921,7 +5922,7 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
   promptGuidelines:['Use operation CHAT_DELIBERATION for non-mutating tutor conversation; it is session-local, mode-first, and cannot mint document or task authority. Materialize chat only with draftMaterialization INITIAL_CREATE plus explicit current-turn authorization and an exact validated route or approval of the pending proposed route; UPDATE and REPLACE are forbidden. Use document mutation verbs only for explicit principal-local managed edits, which retain exact target resolution and guarded publication. Use operation CREATE_INITIAL_REVISION, with instruction as the idea, only to explicitly create the first managed proposal (v1); it never runs automatically and is rejected outright whenever a managed proposal already exists. MAINTENANCE is an explicit external-controller handoff only; V2 does not create or resume workers or grant document authority. For managed-revision withdrawal or restore, pass the typed lifecycle operation and an exact sourceFilename or restore withdrawalOperationId; omit withdrawalOperationId for withdrawal because V2 generates it. Supply only user-facing semantic selectors and content; never construct patches, offsets, manifests, receipts, or internal revision mechanics.'],
   parameters:Type.Object({
    instruction:Type.String({minLength:1,maxLength:MAX_INSTRUCTION_CHARACTERS}),
-   operation:Type.Optional(StringEnum(['WITHDRAW_REVISION','RESTORE_WITHDRAWN_REVISION','CREATE_SUCCESSOR','CREATE_INITIAL_REVISION','CHAT_DELIBERATION','CLOSE_DELIBERATION','MAINTENANCE'] as const,{description:'Explicit lifecycle, managed-successor edit, explicit first-managed-version creation, session-local chat, explicit chat close, external-maintenance handoff, or persistent scientific-workflow operation. Omit for existing direct-document classification.'})),
+   operation:Type.Optional(StringEnum(['WITHDRAW_REVISION','RESTORE_WITHDRAWN_REVISION','CREATE_SUCCESSOR','CREATE_INITIAL_REVISION','ADOPT_INITIAL_REVISION','CHAT_DELIBERATION','CLOSE_DELIBERATION','MAINTENANCE'] as const,{description:'Explicit lifecycle, managed-successor edit, explicit first-managed-version creation, session-local chat, explicit chat close, external-maintenance handoff, or persistent scientific-workflow operation. Omit for existing direct-document classification.'})),
        editIntent:Type.Optional(StringEnum(['MODIFY','CONCEPTUAL_REVISION'] as const,{description:'Required only with CREATE_SUCCESSOR; identifies the bounded inner document edit.'})),
        sectionRange:Type.Optional(Type.String({minLength:5,maxLength:64,pattern:'^(?:sections?\\s+)?\\d+(?:\\.\\d+)*\\s*[–-]\\s*\\d+(?:\\.\\d+)*$',description:'Required only with CREATE_SUCCESSOR. Exact numbered Markdown-heading range, for example sections 1–2.2.'})),
        acceptSuccessor:Type.Optional(Type.Boolean({description:'Set true only for an explicit current-turn acceptance of a previously previewed successor.'})),
@@ -5954,6 +5955,22 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
        dryRun:Type.Optional(Type.Boolean({description:'CREATE_INITIAL_REVISION only: run every check and compose the first revision, then stop before the creation lock and any write (status preview). Refused on every other operation.'})),
   }),
   async execute(_toolCallId,params,_signal,_onUpdate,ctx){
+   /** ADOPT_INITIAL_REVISION: an existing document becomes v1 under CREATE_INITIAL_REVISION's own gate, state and receipt (`adoptInitialRevision`). */
+   const runAdoption=async(request:{sourceFilename?:unknown;dryRun?:boolean})=>{
+    const authority=resolveV2ExecutionAuthority('CREATE_INITIAL_REVISION');
+    const base={operation:ADOPT_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,sourceFilename:typeof request.sourceFilename==='string'?request.sourceFilename:null};
+    const result=await adoptInitialRevision({projectRoot,sourceFilename:request.sourceFilename,dryRun:request.dryRun===true,hasManagedProposal:async()=>(await safeResolveLatestManagedRevision(projectRoot)).status!=='empty'});
+    if(result.status==='preview')return {...base,status:'preview' as const,dryRun:true as const,mode:result.mode,targetFilename:result.filename,targetRevision:result.revision,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'adopt_initial_revision'};
+    if(result.status==='adopted'){
+     let auditStatus='FAIL';
+     try{auditStatus=(await runConsistencyAudit({projectRoot})).status;}catch{auditStatus='FAIL';}
+     return {...base,status:'adopted' as const,mode:result.mode,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'COMMITTED',auditStatus,selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:result.mode==='rename'?'move_adopted_source_to_backup':null,...(result.mode==='rename'?{sourceLeftInPlace:true}:{})};
+    }
+    const blockers='detail' in result
+     ?{nextAction:result.code==='ADOPTION_ALREADY_RECORDED'||result.code==='MANAGED_PROPOSAL_ALREADY_EXISTS'?'use_existing_managed_proposal':'fix_adoption_source',blockers:[{code:result.code,message:`${result.detail} Nothing was written.`}]}
+     :projectInitialRevisionRefusal(result);
+    return {...base,status:'blocked' as const,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...blockers};
+   };
    // The schema's `maxLength`, enforced on every host: refused before any route runs, nothing written.
    if(typeof params.instruction==='string'&&params.instruction.length>MAX_INSTRUCTION_CHARACTERS){
     const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'shorten_instruction',instructionBudget:instructionBudget(params.instruction),blockers:[{code:'INSTRUCTION_TOO_LONG',message:`instruction is ${params.instruction.length} characters; every operation accepts at most ${MAX_INSTRUCTION_CHARACTERS}. Nothing was written. Shorten it, or move long reference material into a declared source instead of the instruction.`}]};
@@ -5972,6 +5989,10 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
    }
    if(params.dryRun!==undefined&&!DRY_RUN_OPERATIONS.has(params.operation??'')){
     const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_dry_run',blockers:[{code:'DRY_RUN_UNSUPPORTED',message:`dryRun applies only to ${[...DRY_RUN_OPERATIONS].join(', ')}; nothing was run. CREATE_SUCCESSOR previews without it; STATUS and RESOLVE_TARGET never write.`}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
+   if(params.operation===ADOPT_INITIAL_REVISION_OPERATION){
+    const publicResult=await runAdoption(params as {sourceFilename?:unknown;dryRun?:boolean});
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
    }
    const openDeliberation=params.conversationId?chatDeliberation.isOpen(sessionIdentity(ctx),params.conversationId):false;

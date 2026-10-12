@@ -780,3 +780,18 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `tests/deliberation-successor-decision-record.test.mjs` (7) RED 6F -> GREEN (the no-fields case passes before and
   after by design). Core comment reworded to keep the pinned "proposal" residue at 171. Additive shape: no migration.
   Commit: `feat(deliberation): successor receipts record an optional rationale and decider` (the commit carrying this line)
+
+- C5 (real, reproduced): a hand-adopted v1 (marker + rename) audited `MISSING_MANIFEST` and never met the gate.
+  Fix: `ADOPT_INITIAL_REVISION` (`adoptInitialRevision`, `initial-revision-creation.ts`; routed in
+  `proposal-workspace.ts`, accepted by `cli.mjs`). Shared `initialRevisionGate` (canonical form + pre-publish
+  validation) now serves CREATE and ADOPT. rename mode: unmanaged `.md` -> creation port (lock, O_EXCL, state,
+  receipt `operation: CREATE_INITIAL_REVISION` + additive `adoptedFrom`), slug from the first `# ` title; source left
+  in place (`nextAction: move_adopted_source_to_backup`). record mode (explicit repair, no silent rewrite): a marked
+  first revision with no receipt gets state + receipt, bytes untouched, no lock; a receipt present ->
+  `ADOPTION_ALREADY_RECORDED`; a failing gate -> no record and the revision keeps reading (tested via STATUS).
+  `--dry-run` supported. Docs: both SKILL.md (branch 3, operations table, Limits), both usage.md ("Adopting an
+  existing document as v1", driven examples). Tests: `tests/deliberation-initial-revision-adoption.test.mjs` (12)
+  RED 12F -> GREEN; mutation (record-mode gate removed -> 1 red). Re-anchored the operation-surface test's
+  `ACCEPTED_OPERATIONS` (pins the set by design). Core comment reworded ("stops"). Additive receipt key: no migration.
+  Not done (outside surfaces): `src/papersmith/bridges/deliberation.py` exposes no adopt verb.
+  Commit: `feat(deliberation): ADOPT_INITIAL_REVISION gives an adopted v1 the created v1's state, receipt and gate` (the commit carrying this line)

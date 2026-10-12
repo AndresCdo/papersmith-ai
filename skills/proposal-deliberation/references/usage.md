@@ -91,6 +91,40 @@ node skills/proposal-deliberation/cli.mjs --dry-run '{
 
 The dry run runs every check the real call runs — required sources, an existing managed revision, the single-sentence refusal, the canonical form, the pre-publish validation — and composes the document, then stops before the lock and the write. It answers `status: "preview"`, `dryRun: true`, `mutations: 0`, the would-be `targetFilename` and `targetRevision`, `canonicalMetadata`, the composed `markdown` (without the artifact marker) and `instructionBudget`; nothing under `proposals/` or `.proposal-deliberation/` is created. Sending the same request without the flag then writes exactly that markdown. If the creation lock is already present, the dry run answers the refusal the real call would meet (`MANAGED_PROPOSAL_ALREADY_EXISTS`, naming the lock) and leaves the lock untouched. `dryRun` applies only to `CREATE_INITIAL_REVISION`; on any other operation it is refused `DRY_RUN_UNSUPPORTED` and nothing runs (`CREATE_SUCCESSOR` already previews without it; `STATUS` and `RESOLVE_TARGET` never write and ignore the flag).
 
+## Adopting an existing document as v1
+
+When the user chooses to adopt an unmanaged file already in `proposals/` as the first revision (decision tree branch 3), let the engine do it:
+
+```bash
+node skills/proposal-deliberation/cli.mjs '{
+  "operation": "ADOPT_INITIAL_REVISION",
+  "instruction": "Adopt the existing draft as the first revision.",
+  "sourceFilename": "my-draft.md"
+}'
+```
+
+It runs the same gate a created v1 meets (the canonical form, then the pre-publish validation) over the file's own bytes, and then publishes them through the creation path itself: the single-winner creation lock, an exclusive write under `research-concept-<slug of the first "# " title, else of the file name>-r01.md`, the committed derived state and the receipt. The receipt is the one a created v1 gets (`"operation": "CREATE_INITIAL_REVISION"`) plus `"adoptedFrom": "my-draft.md"`. Driven against a `my-draft.md` titled `# Calibrated sampling under drift` (proposal skill shown; `authority` omitted):
+
+```json
+{
+  "operation": "ADOPT_INITIAL_REVISION",
+  "sourceFilename": "my-draft.md",
+  "status": "adopted",
+  "mode": "rename",
+  "targetFilename": "research-concept-calibrated-sampling-under-drift-r01.md",
+  "targetRevision": "r01",
+  "mutations": 1,
+  "manifestStatus": "COMMITTED",
+  "auditStatus": "PASS",
+  "nextAction": "move_adopted_source_to_backup",
+  "sourceLeftInPlace": true
+}
+```
+
+The engine never moves or deletes a file in `proposals/`, so `my-draft.md` is still there, byte-identical: move it to a backup after the user confirms, as the decision tree's backups paragraph describes. Refusals, each with nothing written: `ADOPTION_SOURCE_INVALID` (not one `.md` file directly inside `proposals/`), `MANAGED_PROPOSAL_ALREADY_EXISTS` (a managed revision or the creation lock already exists), `INITIAL_REVISION_CANONICAL_FORM_VIOLATION` / `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED` (the document breaks the gate; repair it and retry). `--dry-run` answers `status: "preview"` with the would-be `targetFilename` and writes nothing.
+
+**Recording an old hand-adopted v1.** A first revision adopted by hand (marker prepended, file renamed) has no state and no receipt, and the consistency audit reports `MISSING_MANIFEST` for it. It keeps reading exactly as before — nothing invalidates it. To give it its record, send the same operation with `sourceFilename` set to that revision: `mode: "record"`, its bytes untouched, after the same gate, with the state and the receipt (`adoptedFrom` names the revision itself) written and no lock taken; the audit then passes. A revision that already has a receipt is refused `ADOPTION_ALREADY_RECORDED` and never re-recorded, and a managed revision past the first is refused `ADOPTION_SOURCE_NOT_INITIAL`.
+
 ## Open one `--serve` process for the whole deliberation
 
 The engine host's own cold start (jiti compiling its TS sources) is paid once per spawned process. A single version already needs at least three calls — resolve, preview, accept — so start ONE persistent process and keep it open for the whole deliberation instead of spawning a fresh `cli.mjs` invocation per call:
@@ -321,7 +355,7 @@ If your resolution or decision was wrong, the engine rejects it instead of silen
 
 ## The operations this host accepts
 
-`STATUS`, `RESOLVE_TARGET`, `CREATE_INITIAL_REVISION`, `CREATE_SUCCESSOR`, `WITHDRAW_REVISION`,
+`STATUS`, `RESOLVE_TARGET`, `CREATE_INITIAL_REVISION`, `ADOPT_INITIAL_REVISION`, `CREATE_SUCCESSOR`, `WITHDRAW_REVISION`,
 `RESTORE_WITHDRAWN_REVISION`, `CHAT_DELIBERATION`, `CLOSE_DELIBERATION`, `MAINTENANCE`. Anything
 else is refused by name with `UNKNOWN_OPERATION` rather than routed as something else.
 

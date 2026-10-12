@@ -145,6 +145,40 @@ The same holds for the structural pre-publish validation every successor's accep
 
 Driven for real: a source fragment containing one bare URL and nothing else wrong never becomes a file on disk. So there is nothing to repair in v1 for either of those two conditions *after* creation — a v1 that exists already satisfies them, exactly as any successor does; asking the reader to check for a violation that would have blocked the write is asking them to repair a file that cannot exist. What is still worth a read once v1 is created is what the gate does **not** check: whether a pasted source fragment says what you meant it to, and whether the idea text you sent is the document you actually want to build on.
 
+## Adopting an existing document as v1
+
+When the user chooses to adopt an unmanaged file already in `experiments/` as the first revision (decision tree branch 3), let the engine do it:
+
+```bash
+node skills/experimental-deliberation/cli.mjs '{
+  "operation": "ADOPT_INITIAL_REVISION",
+  "instruction": "Adopt the existing draft as the first revision.",
+  "sourceFilename": "my-draft.md"
+}'
+```
+
+It runs the same gate a created v1 meets (the canonical form, then the pre-publish validation) over the file's own bytes, and then publishes them through the creation path itself: the single-winner creation lock, an exclusive write under `experiments-<slug of the first "# " title, else of the file name>-v01.md`, the committed derived state and the receipt. The receipt is the one a created v1 gets (`"operation": "CREATE_INITIAL_REVISION"`) plus `"adoptedFrom": "my-draft.md"`. Driven against a `my-draft.md` titled `# Domain shift baseline sweep` and carrying both declarations (`authority` and the audit fields omitted):
+
+```json
+{
+  "operation": "ADOPT_INITIAL_REVISION",
+  "sourceFilename": "my-draft.md",
+  "status": "adopted",
+  "mode": "rename",
+  "targetFilename": "experiments-domain-shift-baseline-sweep-v01.md",
+  "targetRevision": "v01",
+  "mutations": 1,
+  "manifestStatus": "COMMITTED",
+  "auditStatus": "PASS",
+  "nextAction": "move_adopted_source_to_backup",
+  "sourceLeftInPlace": true
+}
+```
+
+The engine never moves or deletes a file in `experiments/`, so `my-draft.md` is still there, byte-identical: move it to a backup after the user confirms, as the decision tree's backups paragraph describes. Refusals, each with nothing written: `ADOPTION_SOURCE_INVALID` (not one `.md` file directly inside `experiments/`), `MANAGED_PROPOSAL_ALREADY_EXISTS` (a managed revision or the creation lock already exists), `INITIAL_REVISION_CANONICAL_FORM_VIOLATION` / `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED` (the document breaks the gate; repair it and retry). `--dry-run` answers `status: "preview"` with the would-be `targetFilename` and writes nothing.
+
+**Recording an old hand-adopted v1.** A first revision adopted by hand (marker prepended, file renamed) has no state and no receipt, and the consistency audit reports `MISSING_MANIFEST` for it. It keeps reading exactly as before — nothing invalidates it. To give it its record, send the same operation with `sourceFilename` set to that revision: `mode: "record"`, its bytes untouched, after the same gate, with the state and the receipt (`adoptedFrom` names the revision itself) written and no lock taken; the audit then passes. A revision that already has a receipt is refused `ADOPTION_ALREADY_RECORDED` and never re-recorded, and a managed revision past the first is refused `ADOPTION_SOURCE_NOT_INITIAL`.
+
 ## Open one `--serve` process for the whole deliberation
 
 The acceptance token lives only in that process's memory, and the host's cold start is paid once per process. Resolve, preview and accept are three calls; send all three — and every later version's calls — down the same stdin:
@@ -442,7 +476,7 @@ That fires when a line asserts an achieved result. The right fix is almost alway
 
 ## The operations this host accepts
 
-`STATUS`, `RESOLVE_TARGET`, `CREATE_INITIAL_REVISION`, `CREATE_SUCCESSOR`, `WITHDRAW_REVISION`, `RESTORE_WITHDRAWN_REVISION`, `CHAT_DELIBERATION`, `CLOSE_DELIBERATION`, `MAINTENANCE`. Anything else is refused by name with `UNKNOWN_OPERATION` rather than routed as something else.
+`STATUS`, `RESOLVE_TARGET`, `CREATE_INITIAL_REVISION`, `ADOPT_INITIAL_REVISION`, `CREATE_SUCCESSOR`, `WITHDRAW_REVISION`, `RESTORE_WITHDRAWN_REVISION`, `CHAT_DELIBERATION`, `CLOSE_DELIBERATION`, `MAINTENANCE`. Anything else is refused by name with `UNKNOWN_OPERATION` rather than routed as something else.
 
 Three are accepted but outside this skill's flow:
 

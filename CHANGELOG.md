@@ -537,6 +537,23 @@ number is `0`, breaking changes can still arrive without a major bump.
   `DECISION_RECORD_INVALID` at the preview, and either field on another
   operation `DECISION_RECORD_UNSUPPORTED`. Documented in both deliberation
   skills' `SKILL.md` and `references/usage.md`.
+- **`ADOPT_INITIAL_REVISION`: adopting an existing document as v1 gets the
+  same state, receipt and validation as creating one.** Both deliberation
+  skills offered "adopt it as v1" and the only way was by hand (prepend the
+  marker, rename the file), which left no committed state and no receipt
+  (`runConsistencyAudit` reported `MISSING_MANIFEST`) and skipped the
+  canonical-form gate and pre-publish validation, so a document breaking the
+  domain's rules entered the lineage unexamined. The new operation, with
+  `sourceFilename` naming an unmanaged `.md` in the managed directory, runs
+  that gate and publishes the file's bytes through the creation path itself
+  (lock, exclusive write, state, receipt with `operation:
+  "CREATE_INITIAL_REVISION"` and an additive `adoptedFrom`), named after its
+  first `# ` title; the source is left in place for the agent to back up. With
+  `sourceFilename` naming an old hand-adopted v1 it is the explicit repair
+  path: after the same gate it writes that revision's state and receipt,
+  bytes untouched, and refuses one that already has a receipt
+  (`ADOPTION_ALREADY_RECORDED`). Accepts `--dry-run`. Documented in both
+  deliberation skills' decision trees, operation tables and usage.
 
 ### Changed
 
@@ -834,6 +851,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   `decider`, only when the request supplied them. The change is additive:
   receipts written by 0.13.0 carry neither and keep validating and reading
   unchanged, so no migration is needed.
+
+- A first revision adopted by hand in 0.13.0 (no state, no receipt) keeps
+  reading unchanged and is never rewritten by `upgrade`; the consistency audit
+  still reports `MISSING_MANIFEST` for it until `ADOPT_INITIAL_REVISION` is run
+  on it explicitly, which writes the state and a receipt carrying
+  `adoptedFrom`. `ADOPT_INITIAL_REVISION` joins the CLI's accepted operations.
+  No migration is needed.
 
 ## 0.13.0
 

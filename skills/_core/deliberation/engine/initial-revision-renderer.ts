@@ -38,8 +38,8 @@ function deriveCanonicalMetadataFromIdea(idea: string): CanonicalProposalMetadat
 	return { schemaVersion: 1, title, sectionHeading };
 }
 
-/** Derives a lowercase-hyphen filename slug from the idea-derived title -- never the fixed `r01` slug. */
-function deriveSlugFromTitle(title: string): string {
+/** Derives a lowercase-hyphen filename slug from the idea-derived title -- never the fixed `r01` slug. Also names an adopted first revision after its own title (`adoptInitialRevision`). */
+export function deriveSlugFromTitle(title: string): string {
 	const normalized = title
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, '-')
