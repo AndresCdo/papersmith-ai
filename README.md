@@ -2379,9 +2379,9 @@ lanzamiento — que son horas de la cuota de alguien.
 
 **El flujo.** Esta skill **es** casi enteramente el motor compartido en
 `_core/implementation/engine/` —unas 21.000 líneas en 12 archivos, la misma base que
-sostiene a `proposal-implementation`— y lo que agrega son unos 300 bytes propios: un
-perfil de dominio (`impl_profile.py`, 278 líneas), una copia byte-a-byte del lanzador del
-hermano (`scripts/implementation_cli.py`, 24 líneas), este `SKILL.md`, dos agentes y su
+sostiene a `proposal-implementation`— y lo que agrega es poco y propio: un
+perfil de dominio (`impl_profile.py`), una copia byte-a-byte del lanzador del
+hermano (`scripts/implementation_cli.py`), este `SKILL.md`, dos agentes y su
 propio corpus sellado bajo `tests/`. Ninguna línea del motor cambió para admitir este
 segundo huésped.
 
@@ -2412,7 +2412,7 @@ veredicto sobre cuál lado debe cambiar. Solo con `agree` sin discrepancias pend
 | Archivo | Qué hace y por qué existe |
 |---------|---------------------------|
 | `impl_profile.py` | El perfil de dominio entero: dos documentos, cada uno con su propio overlay de vocabulario. Cada ruta se deriva de la ubicación de **este** archivo, nunca de la del motor —así la misma forma que usa el hermano resuelve a este perfil sin una sola línea específica de dominio. |
-| `scripts/implementation_cli.py` | El lanzador, 24 líneas, byte a byte idéntico al del hermano. No hace nada propio: sólo fija `IMPLEMENTATION_DOMAIN_PROFILE` a este perfil antes de entregarle el control al motor compartido. Todo argumento, subcomando y código de salida es del motor. |
+| `scripts/implementation_cli.py` | El lanzador, byte a byte idéntico al del hermano. No implementa ningún comando: fija `IMPLEMENTATION_DOMAIN_PROFILE` a este perfil antes de entregarle el control al motor compartido, y antes se niega (`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`, salida 2) si el entorno ya trae el perfil de otra skill. Todo argumento, subcomando y código de salida restante es del motor. |
 | `SKILL.md` | La doctrina de esta skill: los dos documentos, su vocabulario, el flujo A y B propios, y qué no está disponible (`materialize --stage scaffold`) y por qué. |
 | `tests/test_experimental_implementation.py`, `tests/test_experimental_implementation_mutation.py` | El corpus sellado propio, fuera de esta carpeta (vive en `tests/` del repositorio), que ancla el comportamiento de dos documentos contra el motor compartido. |
 

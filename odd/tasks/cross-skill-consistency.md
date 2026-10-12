@@ -130,6 +130,12 @@ Route legend: D = delegated writer, I = inline.
 - [x] X9 — `verify` crashes (traceback, exit 1) when a file under `<Name>/Notebooks/` is not valid JSON:
   `notebooks_state` calls `notebook_seals(json.loads(...))` unguarded (found in B7). Fixed; see Progress.
 
+- [x] X11 — README `experimental-implementation` section gave stale line counts for the launcher (24; real 65)
+  and profile (278; real 352). Counts dropped; launcher row names the sibling refusal (inline: README + CHANGELOG).
+- [ ] X12 — `upgrade-project` SKILL.md does not describe the `.gitignore` marked framework block (since ec06f30).
+- [ ] X13 — deliberation refusal `INITIAL_IDEA_SINGLE_SENTENCE` says "Provide a non-empty idea".
+- [ ] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
+
 ## Progress / evidence
 
 - A1 (real): `finding_adoption` + `adopted_record` in the engine; `admit`, `verify` audit
@@ -1044,3 +1050,8 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `ingest` reference, CHANGELOG Fixed + Behaviour changes. `npm run test:fast`: 225 passed, 1 failed (expected
   `.venv` wiring-smoke). No migration.
   Commit: `fix(ingest): non-PDF refusals name where text material goes` (the commit carrying this line)
+- X11 (real): `wc -l` gives 65 for both `scripts/implementation_cli.py` (byte-identical, `cmp`) and 352 for
+  `experimental-implementation/impl_profile.py`; README said 24 and 278 (and "unos 300 bytes"). Dropped the
+  numbers (they rot with every launcher change); the launcher row now names `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`
+  (exit 2, read from the launcher). Passive doc: structural readback only, no RED applicable.
+  Commit: `docs(readme): drop the implementation launcher line counts` (the commit carrying this line)

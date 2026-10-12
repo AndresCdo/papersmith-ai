@@ -626,6 +626,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   Documented in `paper-ingestion`'s `SKILL.md` and the manual's `ingest`
   reference.
 
+- **The manual no longer gives line counts for the implementation launcher.**
+  The `experimental-implementation` section said the launcher was 24 lines
+  and the profile 278; they are 65 and 352. The counts are dropped rather
+  than updated, so they cannot go stale again, and the launcher's row now
+  says it also refuses a sibling skill's profile
+  (`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`, exit 2).
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
