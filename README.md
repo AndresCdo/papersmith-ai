@@ -2872,179 +2872,179 @@ before it reaches argv.
 
 ### 11. `skill-audit` — the auditor that derives both halves of a closed set, and reads neither
 
-**Para qué está.** Cualquier skill o CLI que declara un conjunto cerrado —los
-subcomandos que acepta, los códigos de error que puede devolver, los archivos
-que dice que embarca— corre el mismo riesgo: que ese conjunto se repita a mano
-en más de un lugar y que, con el tiempo, esas repeticiones se separen entre sí
-y de lo que el código realmente acepta. Esta skill busca exactamente eso, y
-sólo eso. No lee el código para adivinar qué acepta, ni lee la documentación
-para confiar en lo que dice: **deriva** el lado del código conduciendo el
-sujeto como un proceso real y tomando el roster de su propio mensaje de
-rechazo, y deriva el lado documentado parseando una tabla. Compara las dos
-mitades y **se detiene ahí** — el reporte es lo que entrega, y la reparación
-queda para quien es dueño del sujeto auditado.
+**What it is for.** Any skill or CLI that declares a closed set —the
+subcommands it accepts, the error codes it can return, the files it says it
+ships— runs the same risk: that the set is restated by hand in more than one
+place and that, over time, those restatements drift from each other and from
+what the code actually accepts. This skill looks for exactly that, and only
+that. It does not read the code to guess what it accepts, nor read the
+documentation to trust what it says: it **derives** the code side by driving the
+subject as a real process and taking the roster from its own refusal message,
+and derives the documented side by parsing a table. It compares the two halves
+and **stops there** — the report is the deliverable, and the repair belongs to
+whoever owns the audited subject.
 
-**De dónde recibe y a quién le entrega.** Recibe un sujeto nombrado —una
-skill, un CLI, cualquier cosa que enumere un conjunto cerrado— y una receta de
-prueba (`--probe-spec`) que le dice cómo conducirlo y dónde leer su tabla
-doctrinal. El trabajo real corre en el agente `audit-report`, delegado en un
-contexto propio: el motivo no es cosmético, es de método. Un contexto que ya
-cargó al sujeto ya vio una de las dos mitades antes de derivarla, lo mismo que
-una fixture escrita y leída por la misma mano. El agente carga `SKILL.md`
-entero antes de moverse, tiene `Read`, `Write`, `Bash`, `Glob`, `Grep` y **no
-tiene `Edit`** — así que "reporta, nunca repara" deja de ser una frase y pasa a
-ser un hecho sobre lo que puede alcanzar. Le entrega el reporte a quien pidió
-la auditoría; no vuelve a tocar el sujeto después.
+**Where it receives from and what it hands to.** It receives a named subject
+—a skill, a CLI, anything that enumerates a closed set— and a probe recipe
+(`--probe-spec`) that tells it how to drive it and where to read its doctrinal
+table. The real work runs in the `audit-report` agent, delegated in a context of
+its own: the reason is methodological, not cosmetic. A context that already
+loaded the subject has seen one of the two halves before deriving it, the same
+as a fixture written and read by one hand. The agent loads `SKILL.md` in full
+before moving, has `Read`, `Write`, `Bash`, `Glob`, `Grep` and **has no
+`Edit`** — so "reports; never repairs" stops being a sentence and becomes a
+fact about what it can reach. It hands the report to whoever asked for the
+audit; it does not touch the subject again afterwards.
 
-**Qué necesita antes.** Un shell real. Sin `Bash` la skill **se niega** —
-nombra la capacidad que falta y no emite reporte, hallazgo, candidato ni
-veredicto parcial. No hay entorno virtual: todo corre con la biblioteca
-estándar. No toca red, con una sola excepción declarada: el paso `driver`
-opcional de `structure`. La negativa sin shell no es una falla del audit, es
-su salida correcta — un audit cuyas afirmaciones son puras lecturas no le dice
-al usuario nada que no pudiera haber leído solo.
+**What it needs first.** A real shell. Without `Bash` the skill **refuses** —
+it names the missing capability and emits no report, finding, candidate or
+partial verdict. There is no virtual environment: everything runs on the
+standard library. It touches no network, with one declared exception: the
+optional `driver` step of `structure`. The refusal without a shell is not a
+failure of the audit, it is its correct output — an audit whose claims are pure
+readings tells the user nothing they could not have read on their own.
 
-**El flujo, por etapas.** Una auditoría diferencial contra un segundo sujeto
-corre en **seis etapas, de la más barata a la más cara**. Cada una es una fila de
-una tabla, nunca un encabezado numerado, y **todo informe lleva las seis filas**,
-sea diferencial o no.
+**The flow, by stages.** A differential audit against a second subject runs in
+**six stages, from cheapest to most expensive**. Each one is a row of a table,
+never a numbered heading, and **every report carries all six rows**, whether
+differential or not.
 
-| # | Etapa | Modelos que gasta | Qué exige |
+| # | Stage | Models spent | What it demands |
 |---|---|---|---|
-| 0 | Congelar el sujeto | 0 | `frozen` |
-| 1 | Decidir por herramienta | 0 | `undecidable` |
-| 2 | Manejarlo desde la ignorancia | 1 | `user-drive` |
-| 3 | Dos lecturas ciegas, sólo sobre esa lista | 2 | `reading-diff` |
-| 4 | Manejo diferencial: una caja con la skill y una sin ella | 2 | `drives` |
-| 5 | Partir las dos transcripciones | 1 | `found-by` |
+| 0 | Freeze the subject | 0 | `frozen` |
+| 1 | Decide by tool | 0 | `undecidable` |
+| 2 | Drive it from ignorance | 1 | `user-drive` |
+| 3 | Two blind readings, over that list only | 2 | `reading-diff` |
+| 4 | Differential drive: one box with the skill and one without | 2 | `drives` |
+| 5 | Partition the two transcripts | 1 | `found-by` |
 
-**Seis corridas de modelo en total**, y sólo si cada etapa después de las tres
-primeras efectivamente corre. Las dos primeras no gastan ninguna: el orden existe
-para que lo que se puede decidir con una herramienta nunca cueste un modelo.
+**Six model runs in total**, and only if every stage after the first three
+actually runs. The first two spend none: the order exists so that whatever a
+tool can decide never costs a model.
 
-**La etapa 2 no es diferencial.** Exige que el sujeto se maneje desde la
-ignorancia siempre que haya algo alcanzable que manejar — es lo que separa *"la
-documentación dice X"* de *"el código hace X"*.
+**Stage 2 is not differential.** It demands that the subject be driven from
+ignorance whenever there is something reachable to drive — it is what separates
+*"the documentation says X"* from *"the code does X"*.
 
-**El flujo.** `roster` es el verbo central y el que reconstruye las dos
-mitades: `probe_code_side` (`audit_cli.py:308-372`) corre el argv propio del
-sujeto con un nonce que no puede aceptar (`__AUDIT_NONCE__`), y saca el roster
-del texto de su propio rechazo por regex — nunca abre ni parsea un archivo
-fuente del sujeto para esto. `doctrine_side` (`audit_cli.py:92-135`) hace lo
-simétrico del otro lado: parsea una tabla Markdown nombrada por su encabezado
-y devuelve una columna, sin correr ningún proceso. El resultado compara
-`code` contra `doctrine` y publica `unregistered`, `phantom`, `duplicated`,
-`numeralMismatch`. Los otros ocho subcomandos —medidos vía `--help`, ver
-tabla abajo— cubren dimensiones distintas del mismo problema: `structure`
-compara lo declarado, lo que hay en disco y lo que un scaffold desde cero
-produce; `walkthrough` conduce una receta paso a paso hasta el índice donde se
-traba; `reading-diff` compara dos lecturas ya dadas de una misma superficie de
-prosa; `sensitivity` varía una entrada declarada y mide si la salida se mueve;
-`inversion` invierte un hecho guardado por un lock y observa si el lock
-dispara; `exits` conduce, por cada estado que una receta declara, el acto
-publicado que le corresponde; `enumeration-reach` clasifica si la fuente de
-iteración de cada chequeo declarado está acotada o deriva del sujeto.
+**The flow.** `roster` is the central verb and the one that reconstructs both
+halves: `probe_code_side` (`audit_cli.py:308-372`) runs the subject's own argv
+with a nonce it cannot accept (`__AUDIT_NONCE__`), and takes the roster from the
+text of its own refusal by regex — it never opens or parses a source file of the
+subject for this. `doctrine_side` (`audit_cli.py:92-135`) does the symmetric
+thing on the other side: it parses a Markdown table named by its heading and
+returns one column, without running any process. The result compares `code`
+against `doctrine` and publishes `unregistered`, `phantom`, `duplicated`,
+`numeralMismatch`. The other eight subcommands —measured via `--help`, see the
+table below— cover different dimensions of the same problem: `structure`
+compares what is declared, what is on disk and what a from-zero scaffold
+produces; `walkthrough` drives a recipe step by step up to the index where it
+stalls; `reading-diff` compares two given readings of the same prose surface;
+`sensitivity` varies a declared input and measures whether the output moves;
+`inversion` inverts a fact guarded by a lock and observes whether the lock
+fires; `exits` drives, for each state a recipe declares, the published act that
+corresponds to it; `enumeration-reach` classifies whether the iteration source of
+each declared check is bounded or derives from the subject.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `SKILL.md` | La doctrina completa: los nueve subcomandos, sus códigos de salida, la tabla de archivos embarcados y las puertas de decisión. El agente la carga entera antes de moverse. |
-| `scripts/audit_cli.py` | La implementación entera de los nueve verbos, sin dependencias externas. `doctrine_side` y `probe_code_side` son las dos derivaciones que nunca se leen entre sí. |
-| `references/usage.md` | Una invocación resuelta por subcomando. |
-| `references/example-report.md` | Un reporte que `check-report` acepta como válido — la forma contra la que se valida cualquier reporte nuevo. |
-| `references/probes/skill-audit.*.json` (ocho archivos) | Las recetas de autoauditoría: `subcommands`, `structure`, `first-run`, `reading-a`/`reading-b`, `sensitivity`, `self-guarded-facts` (para `inversion`), `exits`, `enumeration-reach`. `skill-audit` es el único sujeto con las nueve dimensiones cubiertas. |
-| `references/probes/proposal-deliberation.accepted-operations.json`, `proposal-implementation.accepted-operations.json` | Recetas `roster` contra sujetos ajenos, con su propia tabla doctrinal como lado documentado. |
-| `references/probes/remote-execution.accepted-operations.json`, `remote-execution.smoke-subcommands.json` | Recetas `roster` contra `remote-execution`, top-level y anidada en `smoke record`. Las únicas dos que declaran `minInterpreterVersion` (ver Los seguros). |
-| `.claude/agents/audit-report.md` | El agente que corre el stretch. Sin `Edit`; sin `stretch:` en su frontmatter, porque esta skill no declara un norte al que un agente pueda amarrar una etapa — es legítimo, no un descuido, y así lo dice el propio archivo. |
+| `SKILL.md` | The complete doctrine: the nine subcommands, their exit codes, the shipped-files table and the decision gates. The agent loads it in full before moving. |
+| `scripts/audit_cli.py` | The entire implementation of the nine verbs, with no external dependencies. `doctrine_side` and `probe_code_side` are the two derivations that are never read against each other. |
+| `references/usage.md` | One worked invocation per subcommand. |
+| `references/example-report.md` | A report that `check-report` accepts as valid — the shape against which any new report is validated. |
+| `references/probes/skill-audit.*.json` (eight files) | The self-audit recipes: `subcommands`, `structure`, `first-run`, `reading-a`/`reading-b`, `sensitivity`, `self-guarded-facts` (for `inversion`), `exits`, `enumeration-reach`. `skill-audit` is the only subject with all nine dimensions covered. |
+| `references/probes/proposal-deliberation.accepted-operations.json`, `proposal-implementation.accepted-operations.json` | `roster` recipes against foreign subjects, with their own doctrinal table as the documented side. |
+| `references/probes/remote-execution.accepted-operations.json`, `remote-execution.smoke-subcommands.json` | `roster` recipes against `remote-execution`, top-level and nested in `smoke record`. The only two that declare `minInterpreterVersion` (see The guarantees). |
+| `.claude/agents/audit-report.md` | The agent that runs the stretch. No `Edit`; no `stretch:` in its frontmatter, because this skill declares no north an agent could tie a stage to — that is legitimate, not an oversight, and the file itself says so. |
 
-**Los seguros.**
+**The guarantees.**
 
-- **Sin shell, refusal, no degradación.** No existe un modo "leer el código y
-  describirlo" cuando `Bash` falta; eso produciría un documento con apariencia
-  de audit y ninguna autoridad de audit.
-- **Una extracción que no matchea nada, revienta.** `roster` nunca convierte
-  "no encontré nada" en un conjunto vacío — devolver vacío convertiría cada
-  fila documentada en un phantom finding, una probe rota disfrazada de
-  resultado.
-- **La inhabilidad de mirar nunca comparte código de salida con un hallazgo
-  vacío.** Cada uno de los nueve subcomandos separa explícitamente sus
-  motivos de exit `2` (no pudo mirar) de sus veredictos exit `0` (miró y
-  reporta, incluso cuando el reporte es "no hay nada").
-- **El agente no tiene `Edit`.** "Reporta, nunca repara" es una restricción de
-  herramienta, no una promesa de conducta.
-- **Un piso de intérprete, nombrado en vez de fallar en silencio.** Las dos
-  recetas contra `remote-execution` corrían con `argv[0]="python3"` a secas;
-  en esta máquina eso resuelve a 3.9.6, y `adapter.py:373` del sujeto necesita
-  ≥3.10 al importar, así que moría antes de llegar a su propio rechazo y
-  `roster` contestaba `{"status": "unprobeable"}` sin decir por qué. El commit
-  `0275fa6` lo resolvió con un campo declarado, `minInterpreterVersion`, que
-  `probe_code_side` usa para buscar en `PATH` el nombre y sus variantes con
-  sufijo de versión y sustituir la primera que satisface el piso — o fallar
-  **nombrando** qué versión hacía falta y cuáles encontró. El roster nunca
-  estuvo mal; sólo la selección de intérprete.
+- **No shell, refusal, no degradation.** There is no "read the code and
+  describe it" mode when `Bash` is missing; that would produce a document with
+  the appearance of an audit and none of an audit's authority.
+- **An extraction that matches nothing raises.** `roster` never turns
+  "found nothing" into an empty set — returning empty would turn every
+  documented row into a phantom finding, a broken probe disguised as a result.
+- **The inability to look never shares an exit code with an empty finding.**
+  Each of the nine subcommands explicitly separates its exit `2` reasons (it
+  could not look) from its exit `0` verdicts (it looked and reports, even when
+  the report is that nothing was found).
+- **The agent has no `Edit`.** "Reports; never repairs" is a tool restriction,
+  not a promise of conduct.
+- **An interpreter floor, named instead of failing silently.** The two
+  recipes against `remote-execution` ran with a bare `argv[0]="python3"`; on
+  this machine that resolves to 3.9.6, and `adapter.py:373` of the subject needs
+  ≥3.10 on import, so it died before reaching its own refusal and `roster`
+  answered `{"status": "unprobeable"}` without saying why. Commit `0275fa6`
+  resolved it with a declared field, `minInterpreterVersion`, which
+  `probe_code_side` uses to look on `PATH` for the name and its version-suffixed
+  variants and substitute the first one that satisfies the floor — or fail
+  **naming** which version was needed and which it found. The roster was never
+  wrong; only the interpreter selection.
 
-**Limitaciones conocidas.**
+**Known limitations.**
 
-*Una de nueve skills se audita entera; las otras ocho, a medias.* Medido el 2026-09-13
-manejando cada receta: sólo `remote-execution` responde `comparison: run` —nueve
-operaciones del código contra nueve de su tabla, sin sobrantes ni fantasmas—. Las otras
-ocho responden `comparison: not-run` y nombran el motivo, `no-closed-roster`: sus
-documentos declaran el roster **en prosa**, y la prosa es justo de donde el lado
-documentado no puede leerse. Conviene leer bien lo que eso significa: el `unregistered: []`
-que aparece al lado **no es un veredicto limpio**, es un campo vacío de una comparación que
-nunca corrió. El auditor es honesto; lo que falta es la otra mitad del sujeto. **Cómo se
-arregla:** cada `SKILL.md` publicando su roster en una tabla cerrada — trabajo dentro de
-cada skill, no del auditor.
+*One of nine skills is audited whole; the other eight, halfway.* Measured on
+2026-09-13 by driving each recipe: only `remote-execution` answers
+`comparison: run` —nine code operations against nine from its table, with no
+leftovers and no phantoms—. The other eight answer `comparison: not-run` and
+name the reason, `no-closed-roster`: their documents declare the roster **in
+prose**, and prose is exactly where the documented side cannot be read from. The
+`unregistered: []` that appears beside it **is not a clean verdict**, it is an
+empty field of a comparison that never ran. The auditor is honest; what is
+missing is the subject's other half. **How it is fixed:** each `SKILL.md`
+publishing its roster in a closed table — work inside each skill, not in the
+auditor.
 
-*Una receta ata una mutación a un número de línea exacto.*
-`references/probes/skill-audit.self-guarded-facts.json` fija la mutación de
-`inversion` en la línea 3873 de `audit_cli.py` (`REPORT_SCHEMA_VERSION = 1` →
-`= 97`). Cualquier edición por encima de esa línea corre el número real y
-rompe la receta sin tocar el hecho que dice guardar — ya pasó una vez: el
-propio commit `0275fa6`, al agregar ochenta líneas más arriba, desplazó el
-pin y dejó dos tests en rojo hasta que alguien lo corrigió a mano. La
-fragilidad es real y sigue en pie; el commit la nombra explícitamente como
-"dejada de pie porque rediseñarla no es este cambio". **Cómo se arregla:**
-que la receta ancle por contenido (el literal `REPORT_SCHEMA_VERSION = 1`
-buscado en el archivo) en vez de por número de línea, o que `inversion`
-resuelva la línea buscando el literal antes de mutar.
+*One recipe ties a mutation to an exact line number.*
+`references/probes/skill-audit.self-guarded-facts.json` pins the `inversion`
+mutation at line 3873 of `audit_cli.py` (`REPORT_SCHEMA_VERSION = 1` →
+`= 97`). Any edit above that line moves the real number and breaks the recipe
+without touching the fact it says it guards — it has already happened once:
+commit `0275fa6`, by adding eighty lines further up, shifted the pin and left
+two tests red until someone corrected it by hand. The fragility is real and
+still stands; the commit names it explicitly as "left standing because
+redesigning it is not this change". **How it is fixed:** the recipe anchoring by
+content (the literal `REPORT_SCHEMA_VERSION = 1` searched in the file) instead
+of by line number, or `inversion` resolving the line by searching for the
+literal before mutating.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Se nombra un sujeto + una receta --probe-spec"] --> B{"¿Hay shell (Bash)?"}
-    B -- No --> C["Refusal: nombra Bash, sin reporte ni hallazgo"]
-    B -- Sí --> D["audit-report arranca en contexto propio"]
-    D --> E["probe_code_side: corre el argv del sujeto\ncon un nonce, lee su rechazo"]
-    D --> F["doctrine_side: parsea la tabla\ndoctrinal del sujeto"]
-    E --> G{"¿Exit code y extracción\ncomo la receta espera?"}
-    G -- No --> H["unprobeable / exit 2\n(inhabilidad de mirar, no hallazgo)"]
-    G -- Sí --> I["code = roster derivado del rechazo"]
-    F --> J["doctrine = roster derivado de la tabla"]
-    I --> K["Compara code vs doctrine"]
+    A["A subject plus a --probe-spec recipe are named"] --> B{"Is there a shell (Bash)?"}
+    B -- No --> C["Refusal: names Bash, no report and no finding"]
+    B -- Yes --> D["audit-report starts in a context of its own"]
+    D --> E["probe_code_side: runs the subject's argv\nwith a nonce, reads its refusal"]
+    D --> F["doctrine_side: parses the subject's\ndoctrinal table"]
+    E --> G{"Exit code and extraction\nas the recipe expects?"}
+    G -- No --> H["unprobeable / exit 2\n(inability to look, not a finding)"]
+    G -- Yes --> I["code = roster derived from the refusal"]
+    F --> J["doctrine = roster derived from the table"]
+    I --> K["Compares code vs doctrine"]
     J --> K
     K --> L["unregistered / phantom / duplicated / numeralMismatch"]
-    L --> M["Reporte al dueño del sujeto"]
+    L --> M["Report to the subject's owner"]
     H --> M
 ```
 
-**Limitaciones conocidas.** La skill de auditoría no prueba contención por
-contenido: dos comandos quedaron fuera por presupuesto y siguen fuera —
-`manifest --root <dir> [--baseline <f>]` (huella `sha256` por archivo sobre una
-carpeta declarada y, contra una foto previa, qué se agregó, se borró y cambió) y
-`counts --before <f> --after <f>` (conteo de tests antes y después, **por separado
-en las dos suites**, con el número que no sube tratado como hallazgo). Mientras no
-estén, la prueba de que una carpeta de trabajo quedó limpia y de que
-`implementations/Domain_Adaptation` no se tocó descansa en `git status`, que sobre
-un directorio ignorado sale vacío **por construcción**: no prueba contención, solo
-lo parece; y "la suite quedó verde" sigue valiendo como evidencia de cobertura
-agregada, cuando lo que prueba es que el conteo suba. La decisión de diferirlos
-está registrada en el cambio archivado `the-skill-that-audits-the-others` y es
-explícita: *"The budget decision is made — do not reopen."* El cambio de
-seguimiento que iba a recogerlos nunca se creó, y esa nota apuntaba a la nada;
-este párrafo la reemplaza.
+**Known limitations.** The audit skill does not prove containment by
+content: two commands were left out for budget and remain out — `manifest --root
+<dir> [--baseline <f>]` (a per-file `sha256` fingerprint over a declared folder
+and, against a previous snapshot, what was added, deleted and changed) and
+`counts --before <f> --after <f>` (a test count before and after, **separately
+in the two suites**, with a number that does not rise treated as a finding).
+While they are absent, the proof that a working folder was left clean and that
+`implementations/Domain_Adaptation` was not touched rests on `git status`, which
+over an ignored directory comes out empty **by construction**: it does not prove
+containment, it only looks as though it does; and "the suite stayed green" still
+passes as evidence of added coverage, when what it proves is that the count
+rose. The decision to defer them is recorded in the archived change
+`the-skill-that-audits-the-others` and is explicit: *"The budget decision is
+made — do not reopen."* The follow-up change that was going to collect them was
+never created, and that note pointed at nothing; this paragraph replaces it.
 
 ---
 
