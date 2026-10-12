@@ -339,6 +339,8 @@ Say out loud to the user what is leaving the document before you acknowledge it.
 
 Leave a lost id out and the accept answers `MATH_REMOVALS_NOT_ACKNOWLEDGED` and writes nothing. (`acknowledgedMathRemovals` is accepted as an equivalent field name; the two are merged into one set.)
 
+When the successor would still name a file named after ANOTHER revision with a suffix other than `.md` (an artifact rendered for the previous version, inherited outside your locus), the preview, the published result and the receipt carry `staleCompanionReferences`, one `{ "reference", "revision", "inherited" }` per reference, absent when there is none. The engine never rewrites that line or regenerates the artifact: replace the line inside this successor as an ordinary decision, or publish with the flag and say so.
+
 The acceptance token is single-use and lives only in that `--serve` process's memory: a preview from one process cannot be accepted by another invocation.
 
 ### Resolved: the accept turn publishes in this domain

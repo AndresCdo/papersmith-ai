@@ -118,6 +118,17 @@ overlay's own contract forbids. Link the HTML from the published revision; the
 engine's publish transaction never sees either file, so the mathematics stays
 byte-exact.
 
+**A successor inherits the previous revision's link.** Every byte outside the
+locus is copied, so a line naming `research-concept-r01.graph.html` still names
+it in r02, a picture built from r01's overlay. The engine never re-renders the
+picture and never rewrites a revision; it flags the line instead: the preview,
+the published result and the receipt carry `staleCompanionReferences`, one
+`{reference, revision, inherited}` per reference to a file named after another
+revision (any suffix but `.md`). To clear it, replace the link line inside the
+successor with the successor's own `<revision>.graph.html`, as a decision
+deliberated and validated like any other edit; otherwise publish with the flag
+and report the link as `owed`.
+
 **Who runs the three steps: the publish stretch.** `deliberation-publish` is
 the only stretch of this flow that is delegated, and the graph is part of its
 work: it requires the overlay, runs the chain in the order above, and reports

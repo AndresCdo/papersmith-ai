@@ -246,6 +246,16 @@ The preview also carries a `mathDelta` naming every mathematical atom that exist
 
 Publishing requires echoing every lost id in `acknowledgedMathRemovals`; leave one out and the accept answers `MATH_REMOVALS_NOT_ACKNOWLEDGED` and writes nothing. Editing an equation counts as removing its previous form. Say out loud to the user what is leaving the document before you acknowledge it.
 
+When the successor would still name a companion artifact of ANOTHER revision — a file named after a revision with a suffix other than `.md`, such as the graph rendered for the source — the preview, the published result and the receipt carry `staleCompanionReferences` (absent when there is none):
+
+```json
+"staleCompanionReferences": [
+  { "reference": "research-concept-r05.graph.html", "revision": "research-concept-r05.md", "inherited": true }
+]
+```
+
+`inherited: true` means the source carried the same reference outside your locus; `false` means your own replacement wrote it. The engine never rewrites the line and never renders the picture: either replace the line inside this successor with the successor's own reference, as a decision like any other, or publish with the flag and say so. See [the graph](../SKILL.md#the-graph-the-proposal-inside-the-sota-sky).
+
 To publish, reuse the SAME `--serve` session opened at the top of this page — send the resolve line, then the preview line, then an accept line with `acceptSuccessor: true`, the returned `acceptanceToken`, and any `acknowledgedMathRemovals`, all over the same stdin:
 
 ```json

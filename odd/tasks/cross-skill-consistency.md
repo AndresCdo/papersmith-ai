@@ -61,6 +61,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B11 — step digest scope kept and stated on every unmeasured `@step` item (D, writer trigger: engine + test + 2 docs)
   - [x] B12 — cost forecasts state the parallelism of their duration (D, writer trigger: engine + test + 2 docs)
   - [x] B3 — `RESOLVE_TARGET` matches whole heading tokens; level marks name an outer section (D, writer trigger: resolver + gate + CLI + 2 SKILL.md + 2 usage.md + 3 test files)
+  - [x] B13 — successors flag an inherited link to another revision's companion artifacts (D, writer trigger: naming + orchestrator + projection + types + 3 docs + test)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -523,6 +524,22 @@ Route legend: D = delegated writer, I = inline.
   passed, and with each implementation test file in turn; unrelated to the deliberation engine). No
   migration (resolution only; a blocked result gains an additive key).
   Commit: `fix(deliberation): a locus query matches whole heading words and can name an outer section` (the commit carrying this line)
+
+- B13 (real): no code writes the companion-picture line. `proposal-deliberation/SKILL.md` ("The graph")
+  has the deliberation link `proposals/<revision>.graph.html` from the revision's own text, and
+  `deliberation-publish` renders it; plausibility's grapher only writes `sota-pool/atlas.html`. A successor
+  copies every byte outside its locus, so the link kept naming the source's picture. Fix (flag, never
+  rewrite or regenerate): `artifact-naming.ts` `scanCompanionReferences` (stem + revision + any suffix but
+  `.md`, built from the profile's naming parts) and `staleCompanionReferences` (references naming a
+  revision other than the successor; `inherited` = present in the source); `orchestrator.publish` adds
+  `staleCompanionReferences` to the preview, the published result and the receipt (key only when
+  non-empty); `proposal-workspace.ts` projects it on both public results. Tests:
+  `tests/deliberation-stale-companion-reference.test.mjs` (4; RED 2F -> GREEN; the receipt carrying the key
+  is read back through `loadDerivedState`). Mutations: own revision not excluded -> 1 red; `.md` counted
+  -> 1 red; `inherited` constant -> 1 red. Docs: proposal SKILL.md (graph section), both usage.md.
+  `npm run test:node`: 721 passed (2 failing = the uncommitted X1 RED file). `test_upgrade_v0_13_0_workspace.py`:
+  8 passed. No migration (optional receipt key; old receipts validate unchanged).
+  Commit: `fix(deliberation): a successor flags an inherited link to another revision's companion artifacts` (the commit carrying this line)
 
 ## Next step
 

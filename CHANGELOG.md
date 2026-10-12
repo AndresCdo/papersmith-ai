@@ -340,6 +340,19 @@ number is `0`, breaking changes can still arrive without a major bump.
   (`### Methods › Setup`), and `RESOLVE_TARGET` returns them as
   `candidates`.
 
+- **A successor that inherits a link to the previous revision's companion
+  artifacts says so.** Nothing in the engine writes the companion-picture
+  line: the deliberation links `proposals/<revision>.graph.html` (rendered
+  from `<revision>.sky.json`) from the revision's own text. A successor copies
+  every byte outside its locus, so r02 kept pointing at r01's picture and
+  nothing flagged it. `CREATE_SUCCESSOR` now reports every reference in the
+  successor to a file named after another managed revision with a suffix
+  other than `.md`, as `staleCompanionReferences` (`reference`, `revision`,
+  `inherited`), on the preview, on the published result and in the receipt.
+  The engine never rewrites the line or renders the picture; a replacement of
+  the line inside the successor, deliberated and validated like any other
+  edit, clears the flag.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -572,6 +585,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   untouched. A blocked `RESOLVE_TARGET` result gains a `candidates` array;
   managed revisions, receipts and locks are not read differently, so no
   migration is needed.
+
+- A `CREATE_SUCCESSOR` preview, its published result and the successor's
+  receipt gain an optional `staleCompanionReferences` array, present only
+  when the successor names another revision's companion artifact. Receipts
+  written by 0.13.0 carry no such key and keep validating on read; no
+  existing revision is rewritten and no migration is needed.
 
 ## 0.13.0
 
