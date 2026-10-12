@@ -37,6 +37,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   to read as humanly edited and changes no claim. A rewrite shaped so that a
   classifier reads the text differently is shaped by something other than the
   evidence, and this forge's invariant is that every claim is tied to its own.
+- **`plausibility` gains its acceptance gate.** The third stretch ends at the
+  plausibility report, and the ranked top 5 it hands to the ingestion stage is a
+  list of PDFs somebody is about to be sent looking for. Nothing approved that
+  list before the next stage acted on it. The gate is deliberately narrow: it
+  approves the reading and not the idea, and this skill publishes and files
+  nothing by design. Every re-screen is a new reading and carries its own gate,
+  because an earlier acceptance of an earlier report is not an acceptance of this
+  one — and presenting the report while proceeding anyway is the failure the
+  section exists to prevent.
 
 ## 0.13.0
 
