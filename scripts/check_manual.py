@@ -24,6 +24,13 @@ already English, which is what makes it safe to fail a build on.
 - Markdown links: a line carrying `](` is exempt from the identity check, because
   a link line changes only when the prose around it does.
 
+**What it checks that a link-parity check would miss.** A section heading carries
+an anchor, and the table of contents points at it by name. Renaming a section
+without its links leaves a reader at a dead anchor, and nothing else here would
+notice: file targets are compared against the original, but `#fragments` are the
+document talking to itself. Every `](#fragment)` must land on a heading whose
+GitHub slug matches it.
+
 Exit code is 1 when any error was found, 0 otherwise. The script only reads; it
 never writes to the manual.
 """
@@ -193,10 +200,40 @@ def anchor_parity(original: str, current: str) -> list[Finding]:
     return found
 
 
+def slug(heading: str) -> str:
+    """The anchor GitHub generates for a heading: lowercased, punctuation gone,
+    spaces turned into hyphens. An em dash leaves two spaces behind, so
+    `Use flow — the short path` slugs to `use-flow--the-short-path`."""
+    text = heading.lower()
+    text = "".join(ch for ch in text if ch.isalnum() or ch in " -_")
+    return text.strip().replace(" ", "-")
+
+
+def fragment_anchors(text: str) -> list[Finding]:
+    """Every `](#fragment)` link must land on a heading of this document. The
+    check is document-wide on purpose: the point is that a renamed section and
+    the links that point at it move together, whatever line either one is on."""
+    known = {slug(line) for _, line, inside in _numbered(text)
+             if not inside and _HEADING.match(line)}
+    found: list[Finding] = []
+    seen: set[str] = set()
+    for number, line, _ in _numbered(text):
+        for target in _MARKDOWN_LINK.findall(line):
+            if not target.startswith("#") or target[1:] in known:
+                continue
+            if target in seen:
+                continue
+            seen.add(target)
+            found.append(Finding(number, ERROR, "unresolved-anchor",
+                                 f"{target} has no heading in this document"))
+    return found
+
+
 def report(current: str, original: str | None = None,
            scope: tuple[int, int] | None = None) -> list[Finding]:
     """Every rule, in one list: residue first, then the anchors."""
     found = residue(current, original=original, scope=scope)
+    found += fragment_anchors(current)
     if original is not None:
         found += anchor_parity(original, current)
     return found

@@ -136,6 +136,33 @@ class AnchorTests(unittest.TestCase):
         current = "[a](https://example.test/y) [b](#other)\n"
         self.assertEqual(manual.anchor_parity(original, current), [])
 
+    def test_a_fragment_that_matches_a_heading_resolves(self):
+        text = "## The CLI commands\n\nSee [cli](#the-cli-commands).\n"
+        self.assertEqual(manual.fragment_anchors(text), [])
+
+    def test_a_fragment_with_no_heading_behind_it_is_an_error(self):
+        text = "## The CLI commands\n\nSee [cli](#los-comandos-del-cli).\n"
+        findings = manual.fragment_anchors(text)
+        self.assertEqual(codes(findings), ["unresolved-anchor"])
+        self.assertEqual(findings[0].line, 3)
+        self.assertIn("los-comandos-del-cli", findings[0].detail)
+
+    def test_an_em_dash_heading_slugifies_the_way_github_does_it(self):
+        # The em dash leaves two spaces behind, so the slug carries two hyphens.
+        self.assertEqual(manual.slug("Use flow — the short path"),
+                         "use-flow--the-short-path")
+        self.assertEqual(manual.slug("Cómputo remoto, con cuidado"),
+                         "cómputo-remoto-con-cuidado")
+
+    def test_a_heading_carrying_inline_code_slugifies_without_the_backticks(self):
+        self.assertEqual(manual.slug("### `papersmith target {list,set,check}`"),
+                         "papersmith-target-listsetcheck")
+
+    def test_every_fragment_anchor_in_the_live_manual_resolves(self):
+        current = (FORGE / "README.md").read_text(encoding="utf-8")
+        findings = manual.fragment_anchors(current)
+        self.assertEqual(findings, [], [f.detail for f in findings])
+
 
 class ReportTests(unittest.TestCase):
     def test_the_report_collects_every_rule_in_one_list(self):

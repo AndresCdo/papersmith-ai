@@ -223,3 +223,13 @@ remove.
   carrying a markdown link is exempt from the identity check -- and the rule a
   machine cannot apply, the neutral register, is left where it was: with the
   reader.
+- **L6** — The guard gains a rule before U10 is touched, because the first unit
+  is where it would have bitten. The manual's Contents points at the sections by
+  anchor, and those anchors are Spanish (`#los-comandos-del-cli`, and
+  `#cómputo-remoto-con-cuidado` further down). Renaming a heading without its
+  links leaves a reader at a dead anchor, and no other rule here notices: file
+  targets are compared against the original, but a `#fragment` is the document
+  talking to itself. There are nine of them. Every `](#fragment)` now has to
+  land on a heading whose GitHub slug matches it, and the check is document-wide
+  on purpose -- a heading and the links pointing at it have to move in the same
+  commit, whatever lines they sit on.
