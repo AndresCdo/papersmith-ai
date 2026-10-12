@@ -47,7 +47,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] D1 — kit provenance record + dirty-kit guard (D, writer trigger: 7 src files + build-kit + 4 scripts + tests + 4 docs)
 - [x] D2 — migration support policy (I within this writer: docs only)
 - [x] F-prep — populated v0.13.0 workspace fixture + upgrade test (D, writer trigger: generator + fixture + test + src fix + docs)
-- [ ] D3 — engine state gitignore decision
+- [x] D3 — engine state gitignore decision (D, writer trigger: generators + manifest + upgrade + template + 2 test files + docs)
 - [ ] D4 — plausibility metadata cache inside sota-pool
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
 - [ ] B1–B13
@@ -285,6 +285,25 @@ Route legend: D = delegated writer, I = inline.
   manifest.json,version}` change; both migrations satisfied; consistency audit PASS (both domains); both
   `verify` runs read their own holder. Related upgrade files 78 passed.
   Commit: `fix(upgrade): one upgrade of a populated 0.13.0 workspace ends drift-clean` (the commit carrying this line)
+
+- D3 (real, plus a sibling): decision = engine state is content. Derived from code: every root-level
+  engine dir is a deliberation `artifact.sidecarRoot` (`.proposal-deliberation`, `.experimental-deliberation`);
+  paper-writing (`paper/.paper-writing`), implementation/remote-execution (`implementations/<t>/...`),
+  plausibility (`sota-pool/`) and the kaggle store (own `store/.gitignore`) already sit under ignored paths.
+  `backup/<directory>/` (SKILL.md reconciliation destination) also holds revisions + sidecars. Template now
+  ignores all four. Sibling found: `upgrade` re-rendered `.gitignore` wholesale (`apply_generated`), clobbering
+  user lines; `status`/`audit --check-drift` reported any user edit as drift. Fix: managed block
+  (`generators.MANAGED_BLOCK_*`, `merge_managed`, `managed_view`): upgrade rewrites the block, keeps lines
+  outside; drift (check_generated + manifest digest) measured on the block; markerless (<=0.13.0) file replaced
+  whole when its digest equals the manifest baseline, else block + every line not already carried kept below;
+  malformed markers -> untouched, reported unsynchronized, baseline UNSYNCHRONIZED (stays drift). No REGISTRY
+  migration: upgrade's per-run re-render is the convergence (content compare, idempotent).
+  Tests: `tests/test_workspace_gitignore.py` (12; profiles read via the engine's `artifact-naming.ts`, engine run
+  + `git status`, managed block, 0.13.0 fixture conversions). RED 12F (after constants only) -> GREEN.
+  Mutations: keep-outside off -> 5 red; baseline check off -> 1; check_generated view off -> 1; manifest view
+  off -> 2; malformed guard off -> 1. Fixture test: `.gitignore` added to `INTENDED_CHANGES`. Related suites
+  246 passed. Docs gap (outside surface): `skills/upgrade-project/SKILL.md` does not mention the block.
+  Commit: `fix(workspace): engine state is ignored and upgrade keeps a workspace's own .gitignore lines` (the commit carrying this line)
 
 ## Next step
 

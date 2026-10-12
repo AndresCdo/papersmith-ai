@@ -8,10 +8,11 @@ intentionally do not fork agent instructions between harnesses.
 from __future__ import annotations
 
 import ast
+import hashlib
 import warnings as _warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .core import fs
 from .core.config import load_papersmith_yaml, load_workspace_config
@@ -160,6 +161,113 @@ PLUGIN_FILES = {
 }
 
 CAPABILITIES = ("skills", "commands", "agents", "plugins")
+
+#: Rendered files the framework owns only part of: a block between these two
+#: marker lines. ``upgrade`` rewrites the block and keeps every line outside it,
+#: and ``status``/``audit`` compare only the block. ``.gitignore`` is the one
+#: rendered file a user is expected to edit -- their own data folders, their
+#: editor's files -- and before 0.14.0 every upgrade overwrote it whole.
+MANAGED_BLOCK_FILES = frozenset({".gitignore"})
+MANAGED_BLOCK_BEGIN = ("# >>> papersmith managed block: `papersmith upgrade` rewrites every "
+                       "line up to the closing marker")
+MANAGED_BLOCK_END = ("# <<< papersmith managed block ends: lines below this marker are this "
+                     "workspace's own, and upgrade keeps them")
+
+
+def _block_span(lines: list[str]) -> tuple[int, int] | None | bool:
+    """Where the managed block sits in ``lines``.
+
+    ``(begin, end)`` line indices for exactly one begin marker followed by
+    exactly one end marker; ``None`` when neither marker is present (a file
+    rendered before the block existed, or one the framework never wrote);
+    ``False`` for anything else -- a lone marker, a repeated one, or the two
+    in the wrong order -- which cannot be told apart from the workspace's own
+    lines and is therefore never guessed at.
+    """
+    stripped = [line.rstrip("\r\n") for line in lines]
+    begins = [index for index, line in enumerate(stripped) if line == MANAGED_BLOCK_BEGIN]
+    ends = [index for index, line in enumerate(stripped) if line == MANAGED_BLOCK_END]
+    if not begins and not ends:
+        return None
+    if len(begins) == 1 and len(ends) == 1 and begins[0] < ends[0]:
+        return begins[0], ends[0]
+    return False
+
+
+def managed_view(relpath: str, data: bytes) -> bytes | None:
+    """The part of a rendered file the framework owns.
+
+    The whole file for every rendered path except those in
+    :data:`MANAGED_BLOCK_FILES`, where it is the block alone when the markers
+    are well formed. Drift is measured on this view, so lines a workspace added
+    outside the block are never drift. A file with no markers is returned whole
+    (it reads as drift until ``upgrade`` gives it a block, and its digest is
+    what a manifest written before 0.14.0 recorded). ``None`` -- not
+    verifiable -- for malformed markers or bytes that are not UTF-8: the file
+    cannot be split into the framework's part and the workspace's, so it is
+    drift until somebody repairs it, and a baseline must not record it as
+    current.
+    """
+    if relpath not in MANAGED_BLOCK_FILES:
+        return data
+    try:
+        lines = data.decode("utf-8").splitlines(keepends=True)
+    except UnicodeDecodeError:
+        return None
+    span = _block_span(lines)
+    if span is None:
+        return data
+    if span is False:
+        return None
+    begin, end = span
+    block = "".join(lines[begin:end + 1])
+    return (block if block.endswith("\n") else block + "\n").encode("utf-8")
+
+
+def merge_managed(relpath: str, rendered: str, existing: bytes | None,
+                  baseline_digest: str | None = None) -> str | None:
+    """What to write at ``relpath``, given what is already there.
+
+    ``rendered`` unchanged for any path outside :data:`MANAGED_BLOCK_FILES`
+    and for an absent file. Otherwise:
+
+    * a well-formed block is replaced and every byte outside it is kept;
+    * a file with no markers (written before 0.14.0, or by somebody else) is
+      replaced whole when its digest is ``baseline_digest`` -- exactly what
+      the framework last wrote, so there is nothing of the workspace's in it --
+      and otherwise keeps every line the new block does not already carry,
+      in order, below the block;
+    * malformed markers, or bytes that are not UTF-8, return ``None``: the
+      caller leaves the file alone and reports it, because there is no way to
+      tell the framework's lines from the workspace's.
+    """
+    if relpath not in MANAGED_BLOCK_FILES or existing is None:
+        return rendered
+    try:
+        lines = existing.decode("utf-8").splitlines(keepends=True)
+    except UnicodeDecodeError:
+        return None
+    span = _block_span(lines)
+    if span is False:
+        return None
+    if span is not None:
+        begin, end = span
+        return "".join(lines[:begin]) + rendered + "".join(lines[end + 1:])
+    if baseline_digest is not None and hashlib.sha256(existing).hexdigest() == baseline_digest:
+        return rendered
+    carried = set(rendered.splitlines())
+    kept: list[str] = []
+    for line in (raw.rstrip("\r\n") for raw in lines):
+        if line in carried and line.strip():
+            continue
+        if not line.strip() and (not kept or not kept[-1].strip()):
+            continue  # no leading blank line, and no run of them
+        kept.append(line)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    if not kept:
+        return rendered
+    return rendered + "\n" + "\n".join(kept) + "\n"
 
 
 @dataclass(frozen=True)
@@ -673,7 +781,8 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
                  tools: list[str] | tuple[str, ...] = ALL_TOOLS, *,
                  warnings: list[str] | None = None) -> dict[str, str]:
     ctx = _context_with_defaults(context or context_for_workspace(workspace))
-    rendered: dict[str, str] = {".gitignore": render_package_template("gitignore.tpl", ctx)}
+    rendered: dict[str, str] = {".gitignore": (
+        f"{MANAGED_BLOCK_BEGIN}\n{render_package_template('gitignore.tpl', ctx)}{MANAGED_BLOCK_END}\n")}
     templates = {
         "claude": ("CLAUDE.md", "claude.md.tpl"),
         "opencode": ("OPENCODE.md", "opencode.md.tpl"),
@@ -731,7 +840,8 @@ def render_files(workspace: Path, context: dict[str, Any] | None = None,
 def apply_generated(workspace: Path, context: dict[str, Any] | None = None,
                     tools: list[str] | tuple[str, ...] = ALL_TOOLS, *,
                     warnings: list[str] | None = None,
-                    skipped: list[str] | None = None) -> list[str]:
+                    skipped: list[str] | None = None,
+                    baseline: Mapping[str, str] | None = None) -> list[str]:
     """Write every rendered file, never blocking on a damaged workspace.
 
     Every target passes the same regular-file gate the readers use. A rendered
@@ -746,11 +856,29 @@ def apply_generated(workspace: Path, context: dict[str, Any] | None = None,
     omits a path it cannot hash, so a baseline rewritten without it would drop
     the path from both sides of the comparison and ``status`` would report a
     false "no drift".
+
+    A path in :data:`MANAGED_BLOCK_FILES` is merged rather than replaced (see
+    :func:`merge_managed`). ``baseline`` is the stored manifest's digests, so a
+    file written before the block existed and never edited can be told apart
+    from one the workspace added lines to; without it every such file is
+    treated as edited, which keeps lines rather than losing them. A file that
+    cannot be merged is skipped and reported like any other.
     """
     changed: list[str] = []
     unsynchronized: list[str] = []
     for relpath, content in render_files(workspace, context, tools, warnings=warnings).items():
         path = workspace / relpath
+        if relpath in MANAGED_BLOCK_FILES and fs.is_regular_file(path):
+            try:
+                existing = path.read_bytes()
+            except OSError:
+                unsynchronized.append(relpath)
+                continue
+            merged = merge_managed(relpath, content, existing, (baseline or {}).get(relpath))
+            if merged is None:
+                unsynchronized.append(relpath)
+                continue
+            content = merged
         encoded = content.encode("utf-8")
         if fs.is_regular_file(path):
             try:
@@ -798,7 +926,7 @@ def check_generated(workspace: Path, context: dict[str, Any] | None = None,
             drifted.append(relpath)
             continue
         try:
-            if path.read_bytes() != content.encode("utf-8"):
+            if managed_view(relpath, path.read_bytes()) != content.encode("utf-8"):
                 drifted.append(relpath)
         except OSError:
             # A regular file whose mode denies the read: present, but not

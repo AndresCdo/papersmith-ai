@@ -43,6 +43,8 @@ INTENDED_CHANGES = {
     ".papersmith/config.json": "upgrade rewrites `updated_at` on every run",
     ".papersmith/manifest.json": "the baseline now records this release's files",
     ".papersmith/version": "the marker moves to this release once migrations finish",
+    ".gitignore": "0.14.0 wraps the framework's lines in a managed block and ignores the "
+                  "deliberation engines' state (tests/test_workspace_gitignore.py)",
 }
 
 #: The deliberation engines and the profile each reads.

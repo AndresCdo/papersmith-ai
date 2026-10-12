@@ -181,6 +181,33 @@ number is `0`, breaking changes can still arrive without a major bump.
   `upgrade` cleared it. They are now rendered again once the marker moves.
   Found by upgrading the populated 0.13.0 fixture below.
 
+- **Deliberation engine state is ignored like the content it describes.**
+  The workspace `.gitignore` keeps research content local (`proposals/*`,
+  `experiments/*` and the rest), but `.proposal-deliberation/` and
+  `.experimental-deliberation/`, where the two deliberation engines keep each
+  revision's state, receipts and permanent locks, were neither tracked nor
+  ignored. That state embeds and hashes the revisions the file already keeps
+  local, so committing it published them, and it grows to megabytes. Both are
+  now ignored, together with `backup/proposals/` and `backup/experiments/`,
+  where the deliberation skills move revisions and their sidecars when
+  reconciling a base. The set is checked against every `skills/*/profile.ts`
+  the kit ships (its `artifact.sidecarRoot`, read through the engine) and by
+  running the engine and asking git what it would track. The other skills'
+  engine state already lives inside ignored folders (`paper/.paper-writing/`,
+  `implementations/<target>/...`, `sota-pool/`).
+- **`upgrade` no longer overwrites lines a workspace added to its
+  `.gitignore`.** The file was re-rendered whole on every upgrade, so a user's
+  own ignore lines were lost, and until then `status` and `audit
+  --check-drift` reported the edit as drift. The framework's lines now sit in
+  a delimited managed block: `upgrade` rewrites the block and keeps every line
+  outside it, and drift is measured on the block alone. A file with no block
+  yet (every workspace made before 0.14.0) is converted on its next upgrade:
+  replaced whole when it is byte-identical to what the framework last wrote
+  (the manifest's digest), and otherwise given the block with every line the
+  block does not already carry kept below it, in order. Malformed markers
+  are never guessed at: the file is left as it is, the run reports it as not
+  written, and it stays drift until repaired.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -327,6 +354,18 @@ number is `0`, breaking changes can still arrive without a major bump.
 - After an `upgrade` that moves the version marker, the routing docs name the
   new version in the same run. No stored artefact changes; no migration is
   needed.
+- The workspace `.gitignore` changes shape on the next `upgrade`: the
+  framework's lines move into a block between two marker lines, and lines the
+  workspace added stay below it. It now ignores `.proposal-deliberation/`,
+  `.experimental-deliberation/`, `backup/proposals/` and
+  `backup/experiments/`. No registry migration is needed: `upgrade` re-renders
+  `.gitignore` on every run, and that render now merges into the existing file
+  (converting a 0.13.0 file as described under Fixed) instead of replacing it,
+  which `tests/test_workspace_gitignore.py` checks against the 0.13.0
+  fixture. Ignoring a path does not untrack it: a workspace that already
+  committed engine state keeps it in git until `git rm -r --cached
+  .proposal-deliberation .experimental-deliberation` is run, which is the
+  user's call.
 
 ## 0.13.0
 

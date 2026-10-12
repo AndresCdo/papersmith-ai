@@ -270,7 +270,8 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     # Rendered files are framework-owned projections. Context is read after
     # raw agent/config files have been synchronized so the new roster appears.
     context = context_for_workspace(root)
-    generated = apply_generated(root, context, active_tools, skipped=unsynchronized)
+    generated = apply_generated(root, context, active_tools, skipped=unsynchronized,
+                                baseline=stored["files"])
     for relpath in generated:
         if relpath not in changed:
             changed.append(relpath)
@@ -364,7 +365,7 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
             # until a second upgrade re-rendered them.
             skipped_again: list[str] = []
             rerendered = apply_generated(root, context_for_workspace(root), active_tools,
-                                         skipped=skipped_again)
+                                         skipped=skipped_again, baseline=stored["files"])
             changed.extend(relpath for relpath in rerendered if relpath not in changed)
             unsynchronized.extend(relpath for relpath in skipped_again
                                   if relpath not in unsynchronized)

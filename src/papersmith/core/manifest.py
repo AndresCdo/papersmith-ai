@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Sequence
 
 from ..errors import UserError
-from ..generators import render_files, workspace_tools
+from ..generators import MANAGED_BLOCK_FILES, managed_view, render_files, workspace_tools
 from . import fs
 
 MANIFEST_SCHEMA = 1
@@ -403,6 +403,18 @@ def sha256_if_readable(path: Path) -> str | None:
         return None
 
 
+def _managed_digest(path: Path, relpath: str) -> str | None:
+    if not fs.is_regular_file(path):
+        return None
+    try:
+        view = managed_view(relpath, path.read_bytes())
+    except OSError:
+        return None
+    # Unverifiable (malformed markers): omitted, so the baseline writer records
+    # it as unsynchronized and ``status`` keeps reporting it.
+    return None if view is None else hashlib.sha256(view).hexdigest()
+
+
 def synchronized_paths(workspace: Path, kit_root: Path, context: dict | None = None,
                        tools: list[str] | tuple[str, ...] | None = None) -> set[str]:
     """Every path a run is responsible for *delivering* into a workspace.
@@ -450,7 +462,12 @@ def workspace_framework_files(workspace: Path, kit_root: Path,
             files[relpath] = digest
     rendered = render_files(workspace, context, workspace_tools(workspace))
     for relpath in rendered:
-        digest = sha256_if_readable(workspace / relpath)
+        if relpath in MANAGED_BLOCK_FILES:
+            # Only the block is the framework's; lines the workspace added
+            # outside it are not drift (``generators.managed_view``).
+            digest = _managed_digest(workspace / relpath, relpath)
+        else:
+            digest = sha256_if_readable(workspace / relpath)
         if digest is not None:
             files[relpath] = digest
     version_digest = sha256_if_readable(workspace / VERSION_MARKER)
