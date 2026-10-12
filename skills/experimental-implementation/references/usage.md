@@ -59,7 +59,10 @@ create a holder in," never a filename problem.
 
 Once created, the file carries both declared headings
 (`# Agreed`, `## Ladder`), so the very next `settle --under "## Ladder"`
-places its line without also having to fix a missing heading.
+places its line without also having to fix a missing heading. When
+`position` created the holder, its block sits directly under `## Ladder`;
+`settle` appends after the section's last item and never enters the block, so
+the first item lands directly after `<!-- /position -->`.
 
 ## The sibling's holder is set aside, never refused
 

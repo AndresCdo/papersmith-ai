@@ -1567,31 +1567,42 @@ class LocateHeadingsTests(unittest.TestCase):
     # `settle` landed its bullet between the heading and the paragraph
     # that introduces the section) ---
 
-    def test_a_section_that_opens_with_prose_inserts_before_the_first_bullet(self):
+    def test_a_section_that_opens_with_prose_inserts_after_the_last_bullet(self):
         """`heading / blank / prose / blank / bullets` is a real shape, not
-        only `heading / blank / bullets`. The insertion point must be
-        immediately before the first `- [` line, not the first non-blank
-        line -- landing ahead of the prose that explains the section is
-        the exact defect a real `settle` call produced.
+        only `heading / blank / bullets`. The insertion point is never
+        ahead of the prose that explains the section (the defect a real
+        `settle` call once produced); since B4 (`cross-skill-consistency`)
+        it is directly after the section's last item, so items read in the
+        order they were settled.
         """
         data = (b"## The trials search\n\n"
                 b"Agreed 2026-08-26/27, while replacing the grid engine.\n\n"
                 b"- [x] first item\n"
-                b"- [x] second item\n")
+                b"- [x] second item\n\n## Next\n")
         spans = impl_position.locate_headings(data, "## The trials search")
         self.assertEqual(len(spans), 1)
-        self.assertEqual(data[spans[0]["start"]:],
-                         b"- [x] first item\n- [x] second item\n")
+        self.assertEqual(data[spans[0]["start"]:], b"\n## Next\n")
 
-    def test_a_bullets_first_section_is_unchanged_by_the_prose_skip(self):
-        """Must not regress: a section that already opens with a bullet
-        keeps landing at that first bullet, exactly as before.
-        """
+    def test_a_bullets_first_section_appends_after_its_last_bullet(self):
+        """B4: a section that opens with bullets receives the new item after
+        the last of them, never at the first (which read newest first)."""
         data = b"## Heading\n\n- [ ] first item\n- [ ] second item\n"
         spans = impl_position.locate_headings(data, "## Heading")
-        self.assertEqual(len(spans), 1)
-        self.assertEqual(data[spans[0]["start"]:],
-                         b"- [ ] first item\n- [ ] second item\n")
+        self.assertEqual(spans, [{"start": len(data), "end": len(data)}])
+
+    def test_the_position_block_is_never_the_sections_items(self):
+        """X6: on the holder `position` creates, the block's own item is the
+        section's first checklist line. The insertion lands past the block's
+        closing line, then past each item settled since."""
+        block = (b"<!-- position revision=r1.md sha256=" + b"a" * 64
+                 + b" derivedAt=2026-01-01T00:00:00Z session=s target=local -->\n"
+                 b"- [ ] 1. Rehearse. `@rehearsal job1`\n<!-- /position -->\n")
+        data = b"# Agreed\n\n## Ladder\n\n" + block
+        span = impl_position.locate_headings(data, "## Ladder")[0]
+        self.assertEqual(span["start"], len(data))
+        grown = data + b"- [ ] first\n\n## Reversed\n\nprose\n"
+        span = impl_position.locate_headings(grown, "## Ladder")[0]
+        self.assertEqual(grown[span["start"]:], b"\n## Reversed\n\nprose\n")
 
     def test_a_bullet_less_section_falls_back_to_the_first_non_blank_line(self):
         """Must not regress: a section with prose and NO bullet at all --

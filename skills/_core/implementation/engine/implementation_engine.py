@@ -14758,21 +14758,14 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     existing holder already carries changes meaning, and no claim this
     command did not log is ever presented as one it did.
 
-    **Un-ticking does not belong in this change.** `--done` closes a
-    measured gap: no composition of the other four modes could ever
-    produce a tick. The inverse has no equivalent gap to close -- a human
-    can already un-tick a line by hand today, the same "unsupported,
-    never technically prevented" doctrine that already governs every
-    hand edit this file does not itself perform, and nothing measured
-    against a real target found a ticked-in-error agreement this command
-    needed to correct. Un-ticking is also not this guard's mirror image:
+    **No mode un-ticks; a mistaken tick is corrected on the record.**
     `--done` asserts a fact came true and rests that assertion on a
     witness; retracting a tick asserts a PRIOR assertion was wrong, which
-    is closer in shape to `--reverse` (a written admission that something
-    changed) than to any read this command already performs -- it would
-    need its own guard, arguably its own required explanation, designed
-    on its own terms rather than inherited from `--done`'s. Left open,
-    not overlooked.
+    is a written admission of change -- exactly what `--reverse` records.
+    `--reverse` works on a ticked line as on an open one: the line goes,
+    the explanation stays under `## Reversed`, and the ledger keeps the
+    event; a fresh `[ ]` placement then states the corrected agreement.
+    Nothing ever turns `[x]` back into `[ ]` silently.
 
     **Why `--reverse` exists at all, and why it is not merely
     `--remove` with extra steps.** `--remove` shipped guarded by
@@ -14840,17 +14833,12 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     codebase's own adopted target carries today.
 
     **What happens when `## Reversed` does not exist at all in a holder --
-    refused, not authored.** `--reverse` reuses `SETTLE_HEADING_ABSENT`
-    (the identical code the create path already raises for a missing
-    `--under` heading) rather than inventing the section. The create
-    path's own restraint already applies here: `settle` places items UNDER
-    a heading, it never authors headings, and a freshly-invented `##
-    Reversed` section would need its own preamble prose -- the real
-    target's own preamble ("Written rather than deleted...") is exactly
-    the kind of scoped, once-per-target writing this command has never
-    performed for any OTHER heading either. A human adds the heading (and
-    whatever preamble the target wants) once, the same one-time step
-    `--under` already requires for any other missing heading.
+    the first reversal opens it.** The section is appended at the end of
+    the file (a blank line, the heading, a blank line, then the entry), in
+    the same single splice as the deletion; nothing above it moves.
+    The engine writes the heading only, never preamble prose: the entry's
+    own bold quote and paragraph are the record, and a target that wants a
+    preamble adds it by hand.
 
     **Why `--attach` skips the discussion precondition -- decided, not
     inherited from where the check happened to sit.** `SETTLE_NOT_DISCUSSED`
@@ -15037,8 +15025,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     14. `--reverse` path only, checked after the text search narrows to one
         holder's own bytes: `SETTLE_ALREADY_REVERSED` -- see "What happens
         when the section already quotes the text," above -- THEN
-        `SETTLE_HEADING_ABSENT` / `SETTLE_HEADING_AMBIGUOUS` over
-        `_reversed_section_body_spans(data)`, scoped to that one holder
+        `SETTLE_HEADING_AMBIGUOUS` (more than one heading) over
+        `_reversed_section_body_spans(data)`; none opens one, scoped to that one holder
         (never aggregated across all of them the way the create path's own
         `--under` search is, because by this point the search already
         knows which single holder the located line lives in) -- see "Where
@@ -15443,35 +15431,34 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 "which plain --remove performs on its own.")
 
         reversed_spans = _reversed_section_body_spans(data)
-        if not reversed_spans:
-            raise Refused(
-                "SETTLE_HEADING_ABSENT",
-                f"'## Reversed' occurs in none of {target_path.name}'s own "
-                "headings; --reverse places its entry under an existing "
-                "'## Reversed' section and never invents one, the "
-                "identical restraint the create path's own --under "
-                "already keeps for a heading it is given.")
         if len(reversed_spans) > 1:
             raise Refused(
                 "SETTLE_HEADING_AMBIGUOUS",
                 f"'## Reversed' occurs {len(reversed_spans)} times in "
                 f"{target_path.name}; which one receives this entry is "
                 "not decidable without a human choosing.")
-        body_start, body_end = reversed_spans[0]["start"], reversed_spans[0]["end"]
-
-        try:
-            position_block = impl_position.locate_block(data)
-        except Refused:
-            position_block = None
-        if position_block is not None and body_start <= position_block["start"] < body_end:
-            boundary = position_block["start"]
-        else:
-            boundary = body_end
-
         raw_line = data[span["start"]:span["end"]]
         entry = _render_reversed_entry(raw_line, paragraph)
-        prefixed = impl_position.splice(data[:boundary], entry, None)
-        insertion = prefixed[boundary:]
+        if reversed_spans:
+            body_start, body_end = reversed_spans[0]["start"], reversed_spans[0]["end"]
+            try:
+                position_block = impl_position.locate_block(data)
+            except Refused:
+                position_block = None
+            if position_block is not None and body_start <= position_block["start"] < body_end:
+                boundary = position_block["start"]
+            else:
+                boundary = body_end
+            prefixed = impl_position.splice(data[:boundary], entry, None)
+            insertion = prefixed[boundary:]
+        else:
+            # The holder has no `## Reversed` section yet: the first
+            # reversal opens it at the end of the file, one blank line past
+            # whatever precedes it, and nothing above moves.
+            boundary = len(data)
+            separator = (b"" if not data or data.endswith(b"\n\n")
+                         else b"\n" if data.endswith(b"\n") else b"\n\n")
+            insertion = separator + b"## Reversed\n\n" + entry
 
         edits = sorted(
             [(span, b""), ({"start": boundary, "end": boundary}, insertion)],
@@ -15576,6 +15563,9 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 f"the {len(collides)} computed colliding agreement(s).")
 
         new_line = _render_settled_line(text, witness)
+        if span["start"] == len(data) and data and not data.endswith(b"\n"):
+            # Appended past a last line that has no newline of its own.
+            new_line = b"\n" + new_line
         spliced = impl_position.splice(data, new_line, span)
 
     pre_digest = impl_position.digest_bytes(data)

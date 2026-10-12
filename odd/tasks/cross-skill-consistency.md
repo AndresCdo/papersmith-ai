@@ -52,6 +52,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
 - [ ] B1–B13
   - [x] B1 — section labels in `verify` drift (D, writer trigger: engine + resolver + 2 profiles + convention + 2 test files + 4 docs + seal)
+  - [x] B4 + X6 — settle ordering, reverse heading, tick correction path (D, writer trigger: impl_position + engine + 3 test files + 3 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -68,7 +69,7 @@ Route legend: D = delegated writer, I = inline.
 - X6 — `settle --under "## Ladder"` (the documented example) on a fresh holder inserts the item at the first
   non-blank line after the heading, which is inside the position block that `position` installs directly
   under `## Ladder`; the holder then no longer parses (`verify` -> `POSITION_ITEM_MALFORMED`). Reproduced on
-  0.13.0 and on the current engine (found in F-prep; engine `skills/_core/implementation`, not fixed).
+  0.13.0 and on the current engine (found in F-prep; engine `skills/_core/implementation`). Fixed with B4.
 - X7 — 0.13.0 only (fixed by A2): with `AGREED.md` holding a plain item, the experimental skill refused
   `position` with `HOLDER_UNDECLARED`; the fixture creates both holders before settling for that reason.
 
@@ -347,6 +348,34 @@ Route legend: D = delegated writer, I = inline.
   noise reverted. `tests/seal` unchanged. No migration (reader-side; no artefact shape change). Upgrade
   fixture test 8/8.
   Commit: `fix(implementation): verify reads the section labels a revision carries` (the commit carrying this line)
+
+- B4 + X6 (real, all four reproduced on a fresh target via the CLI): (a) `locate_headings` returned the
+  section's FIRST checklist line, so items read newest first; (X6) on the holder `position` creates, that
+  line is the block's own `- [ ] 1.` item, so `settle --under "## Ladder"` wrote inside the block and the
+  next `verify`/`settle` refused `POSITION_ITEM_MALFORMED`; (b) `--reverse` refused `SETTLE_HEADING_ABSENT`
+  without a hand-written `## Reversed`; (c) nothing un-ticks. Decision: chronological. Fix:
+  `impl_position._first_bullet_insertion` now returns the offset past the section's LAST checklist item,
+  skipping the position block's lines (`_block_lines`, read from the two markers line by line, never
+  refusing); a section whose only items are the block's gets the item past `<!-- /position -->`; prose-only
+  sections keep the first-non-blank fallback. No existing line moves (0.13.0 holders keep their
+  newest-first run; new items follow it). `cmd_settle`: create path prefixes `\n` when appending past an
+  unterminated last line; `--reverse` with no `## Reversed` appends `\n## Reversed\n\n<entry>` at the end
+  of the file in the same splice (ambiguity still refuses). (c) is intended and now documented with the
+  correction path: `--reverse` works on a ticked line (verified) and a fresh `--under` placement follows;
+  docstring paragraphs that argued for the old refusals replaced.
+  Tests: `SettleOrderingAndCorrectionTests` (5, CLI end to end incl. `verify` on the fresh holder and a
+  0.13.0-shaped holder byte check; RED 5F -> GREEN), `LocateHeadingsTests` +1 (block). Re-anchored (pinned the
+  old behaviour): `LocateHeadingsTests.test_a_section_that_opens_with_prose_inserts_before_the_first_bullet`
+  -> `..._after_the_last_bullet`, `test_a_bullets_first_section_is_unchanged_by_the_prose_skip` ->
+  `..._appends_after_its_last_bullet`, `SettleCommandTests.test_settle_writes_exactly_one_unticked_line_
+  byte_identical_otherwise` (expected position), `SettleReverseCommandTests.test_reverse_refuses_heading_
+  absent` -> `test_reverse_opens_the_heading_when_absent`. Mutations: block skip off -> 3 red; first item
+  instead of last -> 3 red; no block fallback -> 2 red. Domain-lock pins SHRANK deliberately (against,
+  command, measured, rather, something; justified in the test). Seals unchanged. Upgrade fixture 8/8. No
+  migration (write-side placement only; holder and ledger shapes unchanged). Out of surface, left as is:
+  `scripts/build-v0_13_0-fixture.py`'s comment explaining why the fixture settles under `# Agreed` (still
+  true of 0.13.0, which builds it).
+  Commit: `fix(implementation): settle appends in order, never inside the position block` (the commit carrying this line)
 
 ## Next step
 

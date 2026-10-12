@@ -24868,9 +24868,12 @@ class SettleCommandTests(unittest.TestCase):
         self.assertEqual(result["status"], "written")
 
         after = (box / "Method" / "AGREED.md").read_text(encoding="utf-8")
+        # B4 (`cross-skill-consistency`): appended after the section's
+        # last item, so the section reads oldest first.
         expected = before.replace(
-            "## Ladder\n\n",
-            "## Ladder\n\n- [ ] the free scalar stays at its neutral\n")
+            "- [x] an unrelated settled item\n",
+            "- [x] an unrelated settled item\n"
+            "- [ ] the free scalar stays at its neutral\n")
         self.assertEqual(after, expected)
 
     def test_settle_never_writes_a_ticked_mark(self):
@@ -26251,16 +26254,21 @@ class SettleReverseCommandTests(unittest.TestCase):
 
     # --- where the entry would even go ---
 
-    def test_reverse_refuses_heading_absent(self):
+    def test_reverse_opens_the_heading_when_absent(self):
+        """B4 (`cross-skill-consistency`): with no `## Reversed` heading the
+        first reversal opens one at the end of the file, in the same write
+        as the deletion, where it used to refuse `SETTLE_HEADING_ABSENT`."""
         box = self._box()
         (box / "Method" / "AGREED.md").write_text(
             "# Agreed\n\n## Ladder\n\n- [ ] a retired agreement\n",
             encoding="utf-8")
         proc = self._settle(box)
-        self.assertEqual(proc.returncode, 2, proc.stdout)
-        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_HEADING_ABSENT")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
         after = (box / "Method" / "AGREED.md").read_text(encoding="utf-8")
-        self.assertIn("- [ ] a retired agreement", after)
+        self.assertNotIn("- [ ] a retired agreement", after)
+        self.assertTrue(after.startswith("# Agreed\n\n## Ladder\n\n\n## Reversed\n\n"
+                                         '**"a retired agreement"** '), after)
+        self.assertEqual(after.count("## Reversed"), 1)
 
     def test_reverse_refuses_heading_ambiguous(self):
         box = self._box()
@@ -38882,3 +38890,155 @@ class SettleDoneUnwitnessedTests(unittest.TestCase):
         proc = self._settle(box, "--done", "--unwitnessed", "--reason", "x")
         self.assertEqual(proc.returncode, 2, proc.stdout)
         self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_ALREADY_DONE")
+
+
+class SettleOrderingAndCorrectionTests(unittest.TestCase):
+    """B4 + X6 (`cross-skill-consistency`): where `settle` places a new item,
+    how `--reverse` finds its section, and how a ticked item is corrected.
+
+    Before 0.14.0: (a) each new item landed directly under its heading, so a
+    section read newest first; (X6) on a holder `position` had just created,
+    `--under "## Ladder"` landed inside the position block (the section's
+    first checklist line is the block's own item), and `verify` then refused
+    `POSITION_ITEM_MALFORMED`; (b) `--reverse` refused `SETTLE_HEADING_ABSENT`
+    until somebody wrote `## Reversed` by hand. A ticked item stays ticked:
+    nothing un-ticks it; the correction is `--reverse` (ledger-recorded, with
+    its explanation) followed by a new item.
+    """
+
+    PROPOSAL_TEXT = "## 1\ntext\n"
+
+    def _proposals(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "r1.md").write_text(self.PROPOSAL_TEXT, encoding="utf-8")
+        return root
+
+    def _box(self):
+        box = FORGE / "implementations" / f"_e2e_settle_order_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args, stdin=None, proposals=None):
+        env = dict(os.environ)
+        if proposals is not None:
+            env["IMPLEMENTATION_PROPOSALS"] = str(proposals)
+        return subprocess.run([sys.executable, str(CLI), *args], input=stdin,
+                              capture_output=True, text=True, cwd=FORGE, env=env)
+
+    def _discuss_and_settle(self, box, proposals, about, text, under="## Ladder"):
+        question = f"What do we agree about item {about}?"
+        for extra in ((), ("--answer", "Agreed.")):
+            proc = self.run_cli("discuss", "--target", str(box), "--name", "Method",
+                                "--about", about, "--question", question, *extra,
+                                proposals=proposals)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--about", about, "--text", text,
+                            "--under", under, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return proc
+
+    def _install_position(self, box, proposals):
+        sequence = json.dumps([
+            {"text": "Rehearse the first job.",
+             "witness": {"kind": "rehearsal", "operand": "job1"}},
+            {"text": "Rehearse the second job.",
+             "witness": {"kind": "rehearsal", "operand": "job2"}}])
+        proc = self.run_cli("position", "--target", str(box), "--name", "Method",
+                            "--revision", "r1.md", "--session", "s1",
+                            "--sequence", "-", "--target-level", "local",
+                            stdin=sequence, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_the_documented_example_works_on_a_fresh_holder(self):
+        """X6: `position` creates the holder with its block directly under
+        `## Ladder`; the documented `settle --under "## Ladder"` must land
+        outside the block, and `verify` must still read the position."""
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        holder = box / "Method" / "AGREED.md"
+        before = holder.read_text(encoding="utf-8")
+        self._discuss_and_settle(box, proposals, "1", "the first job runs locally")
+        after = holder.read_text(encoding="utf-8")
+        block = impl_position.locate_block(after.encode("utf-8"))
+        self.assertNotIn("the first job runs locally", block["body"])
+        self.assertEqual(after.replace("- [ ] the first job runs locally\n", ""), before)
+        proc = self.run_cli("verify", "--target", str(box), "--name", "Method",
+                            proposals=proposals)
+        self.assertNotIn("POSITION_ITEM_MALFORMED", proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertNotEqual(payload["position"]["status"], "malformed")
+        self.assertIn("the first job runs locally", payload["agreements"]["open"])
+
+    def test_items_read_in_the_order_they_were_settled(self):
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        self._discuss_and_settle(box, proposals, "1", "first agreement")
+        self._discuss_and_settle(box, proposals, "2", "second agreement")
+        text = (box / "Method" / "AGREED.md").read_text(encoding="utf-8")
+        self.assertLess(text.index("first agreement"), text.index("second agreement"))
+        self.assertLess(text.index("<!-- /position -->"), text.index("first agreement"))
+
+    def test_a_0_13_0_holder_keeps_every_existing_line(self):
+        """Holders written newest first keep their lines byte for byte; the
+        new item is appended after the section's last item."""
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        holder = box / "Method" / "AGREED.md"
+        legacy = holder.read_text(encoding="utf-8").replace(
+            "<!-- /position -->\n",
+            "<!-- /position -->\n\nIntro prose for the section.\n\n"
+            "- [x] newer item\n- [ ] older item\n") + "\n## Other\n\n- [ ] elsewhere\n"
+        holder.write_text(legacy, encoding="utf-8")
+        self._discuss_and_settle(box, proposals, "1", "the newest item")
+        self.assertEqual(
+            holder.read_text(encoding="utf-8"),
+            legacy.replace("- [ ] older item\n",
+                           "- [ ] older item\n- [ ] the newest item\n"))
+
+    def test_reverse_creates_its_own_heading(self):
+        box, proposals = self._box(), self._proposals()
+        holder = box / "Method" / "AGREED.md"
+        holder.write_text("# Agreed\n\n## Ladder\n\n- [ ] keep me\n- [ ] drop me\n",
+                          encoding="utf-8")
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--text", "drop me", "--reverse",
+                            "--paragraph", "Turned over after the pilot.",
+                            proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(
+            holder.read_text(encoding="utf-8"),
+            "# Agreed\n\n## Ladder\n\n- [ ] keep me\n\n## Reversed\n\n"
+            '**"drop me"** Turned over after the pilot.\n\n')
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["open"], ["keep me"])
+
+    def test_a_ticked_item_is_corrected_by_reverse_and_a_new_item(self):
+        """Irreversibility: `--done` has no inverse. A ticked item is
+        corrected by `--reverse` (its explanation and the ledger event stay)
+        and a new item; the tick itself is never silently undone."""
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        holder = box / "Method" / "AGREED.md"
+        holder.write_text(holder.read_text(encoding="utf-8")
+                          + "- [x] a wrong closure `test_w`\n", encoding="utf-8")
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--text", "a wrong closure", "--reverse",
+                            "--paragraph", "Closed by mistake; reopened below.",
+                            proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self._discuss_and_settle(box, proposals, "1", "a wrong closure, reopened")
+        text = holder.read_text(encoding="utf-8")
+        self.assertIn("- [ ] a wrong closure, reopened\n", text)
+        self.assertIn('**"a wrong closure"** Closed by mistake; reopened below.', text)
+        self.assertNotIn("- [x] a wrong closure", text)
+        events = [e for e in impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+            if e.get("kind") == "settle"]
+        self.assertEqual([e["reverse"] for e in events], [True, False])

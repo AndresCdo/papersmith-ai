@@ -234,6 +234,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   nested under another is its own section and still part of its parent, and
   the parent covers the same lines it did before. `proposal-deliberation`
   documents the labels to use for sections that should be tracked.
+- **`settle` places items in the order they were settled, never inside the
+  position block, and `--reverse` opens its own heading.** The create path
+  inserted each new item at the section's first checklist line, so a
+  section read newest first. On the holder `position` creates, that first
+  line is the position block's own item, so the documented
+  `settle --under "## Ladder"` wrote into the block and `verify` then refused
+  `POSITION_ITEM_MALFORMED`. A new item is now appended after the section's
+  last checklist item, skipping the block's lines. If the section's only
+  items are the block's, the new item goes right after `<!-- /position -->`.
+  `settle --reverse` refused `SETTLE_HEADING_ABSENT` until someone added
+  `## Reversed` by hand; now the first reversal adds that heading at the end
+  of the file, in the same write as the deletion. A tick still cannot be
+  undone. The correction path, now documented, is `settle --reverse` on the
+  ticked line (the explanation and the ledger event stay) followed by a new
+  `settle --under`.
 
 ### Added
 
@@ -412,6 +427,16 @@ number is `0`, breaking changes can still arrive without a major bump.
   leaf (refused as `IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING`
   when malformed; a profile that does not declare it reads no sections). This
   is reader-side only: no stored artefact changes and no migration is needed.
+- `settle --under` appends after the section's last item instead of placing
+  the item first. In a holder that 0.13.0 wrote newest first, the existing
+  lines stay where they are and new items follow them, so the section reads
+  as the old newest-first run followed by an oldest-first run. Nothing is
+  reordered or rewritten. A section whose only items are the position
+  block's receives the item right after the block. `settle --reverse` with no
+  `## Reversed` heading now adds one at the end of the file instead of
+  refusing `SETTLE_HEADING_ABSENT`, a code that path no longer raises. More
+  than one heading still refuses `SETTLE_HEADING_AMBIGUOUS`. Holders and
+  ledgers keep their shape, so no migration is needed.
 
 ## 0.13.0
 

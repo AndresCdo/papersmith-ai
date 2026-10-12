@@ -1344,9 +1344,16 @@ earlier answer. Refuses `SETTLE_NOT_DISCUSSED` when no `discuss` event names
 it at all, `SETTLE_DISCUSSION_UNANSWERED` when one does but none is answered.
 
 `--under` is matched by exact equality against a heading line, hash marks
-included — `## Figures` never matches `## Figures — phase 2` — and the item
-is inserted at the first non-blank line after it, so the document's own
-`heading / blank / bullets` shape survives untouched. Refuses
+included — `## Figures` never matches `## Figures — phase 2`. The item is
+appended after the section's last checklist item, so a section reads in the
+order its items were settled (oldest first). The section runs to the next
+heading of any level. The position block's own lines are never the section's
+items: on the holder `position` creates (block directly under `## Ladder`),
+the first item lands directly after `<!-- /position -->`. A section with no
+item and no block receives the item at its first non-blank line. Nothing
+already in the holder moves: a holder written by 0.13.0 or earlier, whose
+section reads newest first, keeps those lines in place and gains the new item
+after them. Refuses
 `SETTLE_HEADING_ABSENT` or `SETTLE_HEADING_AMBIGUOUS` when it occurs zero, or
 more than one, times across every markdown file `agreements_state` already
 knows holds checklist items; `SETTLE_HOLDER_ABSENT` when none does at all.
@@ -1392,8 +1399,8 @@ one, so `verify` and `close` evaluate either exactly the same way.
 `--text` only ever CREATES with the shape above; there was no way to bind
 `--witness` onto an agreement a prior `settle` call already placed, ticked
 or not, without either hand-editing `AGREED.md` (unsupported) or
-re-`settle`ing it (which would write a fresh `[ ]` line and un-tick
-whatever was already reached). `--attach` closes that gap:
+re-`settle`ing it (which would write a second, fresh `[ ]` line beside one
+that may already be ticked). `--attach` closes that gap:
 
 ```bash
 python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
@@ -1613,12 +1620,11 @@ under `## Reversed` — this mode writes a NEW explanation together with
 the deletion, and would duplicate one the document already has. In that
 state the explanation already exists and only the deletion is still
 pending; plain `--remove` (above) is the reachable command for exactly
-that case. Refuses `SETTLE_HEADING_ABSENT` when no `## Reversed` heading
-exists in the holder at all — this mode places its entry under an
-existing section and never authors one, the identical restraint the
-create path's own `--under` already keeps for a heading it is given —
-and `SETTLE_HEADING_AMBIGUOUS` when more than one `## Reversed` heading
-occurs in the same holder.
+that case. When the holder has no `## Reversed` heading yet, the first
+reversal opens one at the end of the file (a blank line, `## Reversed`, a
+blank line, then the entry); nothing above it moves. Refuses
+`SETTLE_HEADING_AMBIGUOUS` when more than one `## Reversed` heading occurs in
+the same holder.
 
 **Conflicts.** `--under`, `--supersedes` and `--witness` name nothing in
 this mode (the identical reasoning `--remove`'s own conflict already
@@ -1701,14 +1707,15 @@ the only thing this writes. `--under`, `--supersedes`, `--witness` and
 identical reason `--attach` skips it: a line `--done` matches was already
 discussed and placed by a prior `settle` call.
 
-**Un-ticking is deliberately out of scope.** `--done` closes a measured
-gap — no composition of the other modes could ever produce a tick.
-Retracting one is a different kind of assertion (a prior claim was wrong,
-not that a fact came true) and would need its own guard, designed on its
-own terms; nothing measured against a real target found a mistakenly
-ticked agreement this command needed to correct. A human may still
-un-tick a line by hand today, the same doctrine that already covers every
-other hand edit this file does not itself perform.
+**A tick cannot be undone, only corrected on the record.** No mode turns
+`[x]` back into `[ ]`: a tick asserts that something came true, and taking it
+back is a different assertion (the earlier claim was wrong), which the holder
+keeps in writing, never by editing a mark. To correct a mistaken tick, run
+`settle --reverse --text "<the ticked text>" --paragraph "<why it was
+wrong>"` (it works on a ticked line exactly as on an open one: the line is
+removed, the explanation lands under `## Reversed`, and the ledger records the
+`reverse` event), then place the corrected agreement again with `discuss` and
+`settle --under`, which writes it as a fresh `[ ]` line.
 
 ## `defect` — declare a forge file broken
 

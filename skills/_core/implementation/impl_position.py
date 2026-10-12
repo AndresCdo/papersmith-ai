@@ -259,61 +259,95 @@ _CHECKLIST_ITEM_START_RE = re.compile(r"^[-*]\s*\[")
 _ANY_ATX_HEADING_RE = re.compile(r"^#{1,6}(\s|$)")
 
 
+def _block_lines(decoded: list[str]) -> set[int]:
+    """The line indexes a position block occupies, opener through closer.
+
+    Read line by line from the block's own two markers, never through
+    `locate_block`: a placement only needs to know which lines are not its
+    own to enter, and must not refuse because a block elsewhere is malformed
+    -- that is `position`'s and `verify`'s finding to report.
+    """
+    inside: set[int] = set()
+    opener = re.compile(_BLOCK_OPEN_MARKER.decode("ascii"))
+    closer = BLOCK_CLOSE.decode("ascii")
+    open_at = None
+    for index, line in enumerate(decoded):
+        if open_at is None and opener.match(line):
+            open_at = index
+        if open_at is not None:
+            inside.add(index)
+            if closer in line:
+                open_at = None
+    return inside
+
+
 def _first_bullet_insertion(
         decoded: list[str], offsets: list[int], total: int, heading_index: int) -> int:
     """The insertion offset for one located heading occurrence at
-    `heading_index`: the first byte of the section's first checklist item,
-    skipping past any prose paragraph the heading opens with, or the
-    section's own first non-blank line when it carries no checklist item
-    at all (unchanged from before this function existed).
+    `heading_index`: directly after the section's LAST checklist item, so a
+    section reads in the order its items were settled (`cross-skill-
+    consistency`, B4). Nothing already in the section moves: a holder
+    written newest first by an earlier release keeps every line where it
+    is, and the new item follows them.
 
-    Measured against the operator's own `AGREED.md` (2026-08-29): of 17
-    `## ` sections, 15 open directly with a bullet and 2 open with a
-    paragraph of prose before the first one. A rule that stops at the
-    first non-blank line alone -- correct for the 15 -- wedged a fresh
-    bullet between the heading and that introductory paragraph on one of
-    the 2, ahead of the very prose that explains the section. This
-    function is the fix: it keeps stopping at the first non-blank line
-    when THAT line is already a checklist item (the 15 case, and the
-    "no checklist item anywhere" case below -- both unchanged), and only
-    when it is not does it keep looking, past blank lines and fenced
-    regions, for the first line that is.
+    A position block's lines are never the section's items: the block is
+    `position`'s, and an item spliced into it stops the block parsing
+    (`POSITION_ITEM_MALFORMED`, X6). A section whose only checklist lines
+    sit inside the block -- the holder `position` has just created --
+    receives its first item directly after the block's closing line.
 
-    The search for that bullet is bounded, not open-ended: it gives up at
-    the next ATX heading of any level, or at the end of the document,
-    whichever comes first, and falls back to the section's own first
-    non-blank line -- the exact position this function would have
-    returned before it existed. A prose-only section (no checklist item
-    ever) must read identically to how it always did; only a section that
-    opens with prose and THEN has a checklist item changes.
+    The section ends at the next ATX heading of any level, or at the end of
+    the document. A section with no checklist item and no block falls back
+    to its own first non-blank line, or `total` when nothing follows the
+    heading (unchanged from before this function existed). Fenced regions
+    are skipped throughout.
     """
     count = len(decoded)
-    first_content = heading_index + 1
-    while first_content < count and decoded[first_content] == "":
-        first_content += 1
-    if first_content >= count:
-        return total
-    fallback = offsets[first_content]
-    if _CHECKLIST_ITEM_START_RE.match(decoded[first_content]):
-        return fallback
-
+    block = _block_lines(decoded)
+    last_item = None
+    block_close = None
     fenced = False
-    cursor = first_content
+    first_content = None
+    cursor = heading_index + 1
     while cursor < count:
         line = decoded[cursor]
+        if cursor in block:
+            if first_content is None:
+                first_content = cursor
+            if BLOCK_CLOSE.decode("ascii") in line:
+                block_close = cursor
+            cursor += 1
+            continue
         if line.startswith("```") or line.startswith("~~~"):
             fenced = not fenced
+            if first_content is None:
+                first_content = cursor
             cursor += 1
             continue
-        if fenced or line == "":
+        if fenced:
             cursor += 1
             continue
-        if _CHECKLIST_ITEM_START_RE.match(line):
-            return offsets[cursor]
+        if line == "":
+            cursor += 1
+            continue
         if _ANY_ATX_HEADING_RE.match(line):
             break
+        if first_content is None:
+            first_content = cursor
+        if _CHECKLIST_ITEM_START_RE.match(line):
+            last_item = cursor
         cursor += 1
-    return fallback
+    anchor = last_item if last_item is not None else block_close
+    if anchor is not None:
+        return offsets[anchor + 1] if anchor + 1 < count else total
+    if first_content is None:
+        # Nothing but blank lines before the next heading (or the end):
+        # the first non-blank line is that heading itself, or nothing.
+        probe = heading_index + 1
+        while probe < count and decoded[probe] == "":
+            probe += 1
+        return offsets[probe] if probe < count else total
+    return offsets[first_content]
 
 
 def locate_headings(data: bytes, heading: str) -> list[dict]:
