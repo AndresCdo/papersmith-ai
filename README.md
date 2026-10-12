@@ -32,28 +32,28 @@ remote compute, development and troubleshooting.
 14. [Related documentation](#documentación-relacionada)
 15. [License](#licencia)
 
-## Si es tu primera vez
+## If this is your first time
 
-Bienvenido. Esta forja está pensada para que puedas ir de un PDF a un paper
-compilado sin adivinar el orden. El camino mínimo:
+Welcome. This forge is built so you can go from a PDF to a compiled paper
+without guessing the order. The minimum path:
 
-1. **Instala el CLI y prepara el entorno** — ver [Puesta en marcha](#puesta-en-marcha).
-2. **Crea tu workspace** — `papersmith init ~/papers/mi-paper --title "…" --topic "…"`.
-   Qué te deja adentro, en [El workspace por dentro](#el-workspace-por-dentro).
-3. **Pon un PDF de referencia** en `guidance/reference-papers/` y ejecuta
-   `papersmith ingest <pdf>` — o pide `/paper-ingestion` dentro de tu harness.
-4. **Abre la deliberación** con `/proposal-deliberation` y discute la matemática
-   con el agente.
+1. **Install the CLI and set up the environment** — see [Getting started](#puesta-en-marcha).
+2. **Create your workspace** — `papersmith init ~/papers/my-paper --title "…" --topic "…"`.
+   What it leaves inside, in [Inside the workspace](#el-workspace-por-dentro).
+3. **Put a reference PDF** in `guidance/reference-papers/` and run
+   `papersmith ingest <pdf>` — or ask for `/paper-ingestion` inside your harness.
+4. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
+   with the agent.
 
-No hace falta usar todas las skills ni en este orden: **cada una declara qué
-necesita antes y se niega antes de hacer algo a medias**. Si le falta una
-entrada no la inventa: sale con un código de rechazo que nombra qué falta. Un
-`PAPER_ABSENT` no es un error tuyo; es la skill diciéndote qué le falta.
+You don't have to use every skill, or in this order: **each one declares what
+it needs first and refuses before doing something half-done**. If an input is
+missing it doesn't invent it: it exits with a rejection code that names what's missing. A
+`PAPER_ABSENT` is not your mistake; it's the skill telling you what it's missing.
 
-El mapa completo está en [Flujo de uso](#flujo-de-uso--el-camino-corto); la
-ruta con detalle, en [Cómo funciona — el orden](#cómo-funciona--el-orden). Y si
-vas a usar un agente de IA como copiloto, los que ya vienen definidos están en
-[Los agentes](#los-agentes).
+The full map is in [Use flow](#use-flow--the-short-path); the
+detailed route, in [How it works — the order](#cómo-funciona--el-orden). And if
+you're going to use an AI agent as copilot, the ones already defined are in
+[The agents](#los-agentes).
 
 ---
 
