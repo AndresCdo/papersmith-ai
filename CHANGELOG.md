@@ -633,6 +633,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   says it also refuses a sibling skill's profile
   (`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`, exit 2).
 
+- **`upgrade-project` describes the `.gitignore` managed block.** Its
+  `SKILL.md` said only that hand-edited files outside the protected patterns
+  are replaced, which since the managed block was added is no longer true of
+  `.gitignore`. It now says that `upgrade` re-renders only the block between
+  the two marker lines and keeps every line outside it, how a pre-0.14.0 file
+  is converted, and that malformed markers leave the file untouched and
+  reported as unsynchronized.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**

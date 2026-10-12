@@ -132,7 +132,8 @@ Route legend: D = delegated writer, I = inline.
 
 - [x] X11 — README `experimental-implementation` section gave stale line counts for the launcher (24; real 65)
   and profile (278; real 352). Counts dropped; launcher row names the sibling refusal (inline: README + CHANGELOG).
-- [ ] X12 — `upgrade-project` SKILL.md does not describe the `.gitignore` marked framework block (since ec06f30).
+- [x] X12 — `upgrade-project` SKILL.md does not describe the `.gitignore` marked framework block (since ec06f30).
+  Section added (inline: SKILL.md + CHANGELOG).
 - [ ] X13 — deliberation refusal `INITIAL_IDEA_SINGLE_SENTENCE` says "Provide a non-empty idea".
 - [ ] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
 
@@ -1055,3 +1056,10 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   numbers (they rot with every launcher change); the launcher row now names `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`
   (exit 2, read from the launcher). Passive doc: structural readback only, no RED applicable.
   Commit: `docs(readme): drop the implementation launcher line counts` (the commit carrying this line)
+- X12 (real): `upgrade-project` SKILL.md had no word on `.gitignore`; its "What is never overwritten" section
+  implied every hand-edited file outside `PRESERVE_PATTERNS` is replaced. Added a subsection read from
+  `merge_managed`/`_block_span`/`render` in `src/papersmith/generators.py`: block re-rendered, lines outside kept,
+  drift on the block only, pre-0.14.0 conversion (baseline digest -> whole replace, else lines kept below),
+  malformed markers -> `unsynchronized`, file untouched. Passive doc: structural readback; `sync-repo-harness.py
+  --check` clean (95 files); generators/skills-e2e/gitignore tests 75 passed.
+  Commit: `docs(upgrade-project): the .gitignore managed block survives user lines` (the commit carrying this line)

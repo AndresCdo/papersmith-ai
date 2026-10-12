@@ -182,6 +182,26 @@ that was edited by hand will be replaced by the release's own copy. If a user
 has such edits, the answer is to commit them first — a working tree under
 version control is the backup the CLI does not provide.
 
+### `.gitignore`: the framework owns one block, not the file
+
+`.gitignore` is the one rendered file a workspace is expected to edit, so the
+framework writes its lines between two marker lines (`# >>> papersmith managed
+block: ...` and `# <<< papersmith managed block ends: ...`). `upgrade`
+re-renders that block and keeps every line outside it, above or below, byte
+for byte. `status` and `audit --check-drift` compare only the block, so a line
+the workspace added is not drift. The marker text and the merge rules live in
+`MANAGED_BLOCK_BEGIN`, `MANAGED_BLOCK_END` and `merge_managed` in
+`src/papersmith/generators.py`.
+
+A file with no block yet (every workspace created before 0.14.0) is converted
+on its next upgrade: replaced whole when it is byte-identical to what the
+framework last wrote, and otherwise given the block, with every line the block
+does not already carry kept below it in order. Markers that are malformed (a
+lone marker, a repeated one, or the two in the wrong order) are never guessed
+at: the file is left as it is, the report lists it under **unsynchronized**,
+and it stays drift until the markers are repaired. Edit outside the block, not
+inside it: a line added inside the block is replaced on the next upgrade.
+
 ## Reading the result
 
 The report names the workspace, the version, the count of changed files, and
