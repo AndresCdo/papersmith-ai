@@ -211,6 +211,21 @@ no se llama `--dry-run` a propósito, porque no previsualiza la copia del kit.
 `--no-migrate` sincroniza los archivos y deja los artefactos como están, con el
 marcador de versión donde estaba.
 
+**Qué workspaces se pueden actualizar.** Re-inicializar un workspace vivo
+nunca es la respuesta: `papersmith init` en un directorio nuevo deja atrás cada
+ledger, recibo, sello, revisión gestionada y lock que el paper acumuló. Los
+workspaces registrados en la 0.12.0 o después están soportados, y desde la
+0.14.0 cada release que cambia la forma de algo que un workspace ya tiene trae
+en el mismo release su migración (o una lectura compatible que sigue leyendo la
+forma vieja). Un workspace anterior a la 0.12.0 también se actualiza —se
+sincronizan los archivos y corren las migraciones de convergencia—, pero los
+cambios de forma de antes de la 0.12.0 no trajeron migración y pueden quedar
+restos (los `.antigravity/` de la 0.8.0 no se borran). Sin versión registrada,
+las migraciones atadas a versión quedan `undetermined` y no se aplican; una
+versión que no se puede ordenar, o más nueva que el kit, se rechaza salvo
+`--allow-downgrade`. La política del lado del mantenedor está en
+[`docs/releasing.md`](docs/releasing.md#workspace-support-policy).
+
 Ojo con no confundir los dos `upgrade`: ninguno de los dos toca al otro.
 `papersmith upgrade` se niega a llevar un workspace a una versión anterior a la
 que él registra, salvo que se lo pidas con `--allow-downgrade`.

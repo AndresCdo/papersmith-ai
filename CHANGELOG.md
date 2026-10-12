@@ -172,6 +172,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `bridges.python.script_environment`; an explicit caller value still wins),
   the rule the MCP bridge and the dashboard child already followed.
 
+### Changed
+
+- **Workspace support policy: a live workspace is upgraded, never
+  re-initialized.** This supersedes the 0.8.0 note "existing workspaces are
+  not migrated; re-run `papersmith init` in a fresh workspace", which would
+  discard a paper's ledgers, receipts, seals and managed revisions. From
+  0.14.0 on, every release that changes the shape of something a workspace
+  already holds ships, in the same release, a migration in `upgrade`'s
+  registry or a compatibility read that keeps the old shape reading, and says
+  which under Behaviour changes. Workspaces recorded at 0.12.0 or later (the
+  first release with artifact migrations) are supported; older ones still
+  upgrade, but pre-0.12.0 shape changes have no migration (0.8.0's
+  `.antigravity/` files are not removed). Documented in `docs/releasing.md`
+  ("Workspace support policy"), the `upgrade-project` skill and the manual.
+
 ### Behaviour changes
 
 - `admit` returns a new `adopted` map (present only when some finding is

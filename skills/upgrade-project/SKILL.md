@@ -139,6 +139,30 @@ was a checkout, the bundled kit or a `PAPERSMITH_KIT_ROOT` override. Every
 created before 0.14.0 reads `unknown (recorded before 0.14.0)` until its next
 upgrade writes the record; no migration is involved.
 
+## Which workspaces can be upgraded
+
+Say this plainly when a user asks whether their workspace is too old, and
+never suggest re-initializing a live workspace instead: `papersmith init` in a
+fresh directory leaves behind every ledger, receipt, seal, managed revision and
+lock the paper accumulated.
+
+- Workspaces recorded at **0.12.0 or later** are supported. From 0.14.0 on,
+  every release that changes the shape of something a workspace already holds
+  ships a migration (or a compatibility read that keeps the old shape working)
+  in the same release, so `upgrade` is always the path forward.
+- An **older** workspace still upgrades: files are synchronized and the
+  convergence migrations run. Shape changes released before 0.12.0 shipped no
+  migration, so leftovers can remain (0.8.0's `.antigravity/` files are not
+  removed).
+- A workspace with **no recorded version** upgrades too, but version-gated
+  migrations are reported `undetermined` and never applied.
+- A recorded version that is **unorderable** (`nightly`) or **newer than the
+  installed kit** refuses; `--allow-downgrade` is the override, and a refusal
+  here usually means the wrong distribution is installed.
+
+The maintainer side of this policy lives in `docs/releasing.md`, section
+"Workspace support policy".
+
 ## What is never overwritten
 
 The upgrade preserves the user's own work by pattern, not by hope. The

@@ -45,7 +45,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A7 — shared experiment heading convention (D, writer trigger: 2 profiles + engine + resolver + 2 TS + 3 test files + 4 docs)
 - [x] A8 — per-lineage `__implementation__` binding (verify) (D, writer trigger: engine + 2 test files + 2 docs)
 - [x] D1 — kit provenance record + dirty-kit guard (D, writer trigger: 7 src files + build-kit + 4 scripts + tests + 4 docs)
-- [ ] D2 — migration support policy
+- [x] D2 — migration support policy (I within this writer: docs only)
 - [ ] D3 — engine state gitignore decision
 - [ ] D4 — plausibility metadata cache inside sota-pool
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
@@ -239,6 +239,27 @@ Route legend: D = delegated writer, I = inline.
   workspace. No migration.
   Commit: `fix(bridges): scripts the CLI launches write no bytecode into the workspace` (the commit carrying this line)
 
+- D2 (real): the 0.8.0 CHANGELOG note told users to re-init. Verified what `upgrade` accepts:
+  any orderable recorded version <= kit (files + convergence migrations); missing marker proceeds,
+  gated migrations `undetermined` (`test_a_workspace_with_no_recorded_version_is_never_a_downgrade`,
+  `test_a_missing_recorded_version_leaves_a_gate_undetermined`); unorderable or newer marker refuses
+  unless `--allow-downgrade` (`test_versions_that_cannot_be_ordered_refuse_rather_than_guess`).
+  REGISTRY today holds only convergence migrations; `RETIRED_STATIC` retires only `PI.md`, so
+  0.8.0's `.antigravity/` files survive upgrade. Policy written: supported floor 0.12.0 (first
+  release with artifact migrations); from 0.14.0 every shape change ships a migration or a
+  compatibility read in the same release, stated under Behaviour changes; re-init never the answer.
+  Files: `docs/releasing.md` ("Workspace support policy"), `skills/upgrade-project/SKILL.md`
+  ("Which workspaces can be upgraded"), README.md (upgrade paragraph), CHANGELOG 0.14.0 `### Changed`
+  (0.8.0 entry untouched). No test: the policy is a release obligation, not runtime behaviour; the
+  runtime claims it repeats are already pinned by the tests named above.
+  Commit: `docs(upgrade): a live workspace is upgraded, never re-initialized` (the commit carrying this line)
+
+- D1/D5/D2 full-suite check (after 4d0071b-equivalent tree): `npm run test:node` 703/703, tree clean
+  afterwards; `npm run test:py:par` 5969 passed, 13 skipped, 3 failed -- all `.venv/bin/python`
+  absent on this machine (the two known ones plus `UsageReferenceTests::
+  test_every_documented_invocation_runs` subtest for the self-guarded-facts inversion, which exits 2
+  with the same `.venv` error on base 0426dbc too).
+
 ## Next step
 
-D2 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
