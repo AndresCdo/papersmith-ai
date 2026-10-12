@@ -471,6 +471,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `CREATE_INITIAL_REVISION` result carry
   `instructionBudget: { limit, used, remaining }`. Both deliberation skills'
   `SKILL.md` and `references/usage.md` state the cap.
+- **The first revision's source window is reported, warns when it cuts, and
+  can be widened.** `CREATE_INITIAL_REVISION` reads at most 4000 bytes across
+  every declared source, in declaration order (for the experiments domain the
+  data paper first), and cut the crossing document mid-text and skipped every
+  later one in silence: a data paper over 4000 bytes left the managed proposal
+  out of v1 with nothing saying so. Every result that composed a document now
+  carries `sourceWindow` (`limitBytes`, `loadedBytes`, one
+  `{path, bytes, loadedBytes, status}` per document) and a
+  `SOURCE_WINDOW_TRUNCATED` warning naming what was cut or left out;
+  `sourceWindowBytes` (1 to 262144) widens the window for one creation
+  (`SOURCE_WINDOW_INVALID` outside that range, `SOURCE_WINDOW_UNSUPPORTED` on
+  another operation). The experimental `SKILL.md` no longer claims that only
+  `<source>/<folder>/<folder>.md` is loaded and that `proposals/` contributes
+  presence only (flat files have been read since the flat pass); both rules,
+  the order and the window are documented in both skills.
 
 ### Added
 
@@ -783,6 +798,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   `CREATE_INITIAL_REVISION` is now refused with `DRY_RUN_UNSUPPORTED` (nothing
   runs); 0.13.0 ignored the unknown field and executed the operation. Existing
   creation locks are untouched; no migration is needed.
+
+- `CREATE_INITIAL_REVISION` results gain additive `sourceWindow` and, when a
+  source was cut or left out, `warnings` keys; the default window (4000 bytes)
+  and what v1 contains for a given set of sources are unchanged. A request
+  carrying `sourceWindowBytes` outside 1..262144, or on another operation, is
+  refused. No migration is needed.
 
 ## 0.13.0
 

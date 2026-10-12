@@ -213,7 +213,7 @@ If `multipleActive` is `true` (a tied latest across lineages), stop and ask the 
 
 ### Context-loading rule
 
-- **Initial case only — creating v1 (decision tree branches 3's "START FRESH" choice, 5, 6, 7):** load `guidance/paper-guide` once, exactly as `CREATE_INITIAL_REVISION` itself already does internally. This ingest exists only to seed a brand-new proposal.
+- **Initial case only — creating v1 (decision tree branches 3's "START FRESH" choice, 5, 6, 7):** load `guidance/paper-guide` once, exactly as `CREATE_INITIAL_REVISION` itself already does internally. This ingest exists only to seed a brand-new proposal. The engine reads `<folder>/<folder>.md` files first, then flat `*.md` files, and stops at 4000 bytes in total by default: a guide document crossing that limit is cut and later ones are not read. The result's `sourceWindow` lists every document with its `status` (`loaded`, `truncated`, `not-loaded`), a `SOURCE_WINDOW_TRUNCATED` warning names what was cut, and `sourceWindowBytes` (1 to 262144) widens the window for that creation. See [usage](references/usage.md#the-source-window).
 - **Any existing version (`r ≥ 1`) — branches 1, 2, 3's "ADOPT" choice, and 4:** load the latest version's document plus a brief general objective/framing for the deliberation. **Never** reload the paper-guide for an existing version — that ingest is spent only once, at true v1 creation.
 
 ## Deliberate, then decide

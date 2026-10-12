@@ -112,6 +112,24 @@ node skills/experimental-deliberation/cli.mjs --dry-run '{
 
 The dry run runs every check the real call runs — required sources, an existing managed revision, the single-sentence refusal, the canonical form, the pre-publish validation — and composes the document, then stops before the lock and the write. It answers `status: "preview"`, `dryRun: true`, `mutations: 0`, the would-be `targetFilename` and `targetRevision`, `canonicalMetadata`, the composed `markdown` (without the artifact marker) and `instructionBudget`; nothing under `experiments/` or `.experimental-deliberation/` is created. Sending the same request without the flag then writes exactly that markdown. If the creation lock is already present, the dry run answers the refusal the real call would meet (`MANAGED_PROPOSAL_ALREADY_EXISTS`, naming the lock) and leaves the lock untouched. `dryRun` applies only to `CREATE_INITIAL_REVISION`; on any other operation it is refused `DRY_RUN_UNSUPPORTED` and nothing runs (`CREATE_SUCCESSOR` already previews without it; `STATUS` and `RESOLVE_TARGET` never write and ignore the flag).
 
+### The source window
+
+`CREATE_INITIAL_REVISION` pastes the declared sources into v1, but reads at most **4000 bytes across all of them** by default, in declaration order (the data paper, then `proposals/`, then the paper guide); inside each source, `<folder>/<folder>.md` files come first and flat `*.md` files second, in name order. The document that crosses the limit is cut at it and the ones after it are not read at all. Every result that composed a document — `created`, the dry run's `preview`, and a canonical-form or validation refusal — carries the report, and a warning whenever something was cut or left out. Driven with a 6,001-byte data paper and one proposal file:
+
+```json
+"sourceWindow": {
+  "limitBytes": 4000,
+  "loadedBytes": 4000,
+  "sources": [
+    { "path": "guidance/data-paper/benchmark/benchmark.md", "bytes": 6001, "loadedBytes": 4000, "status": "truncated" },
+    { "path": "proposals/research-concept-shared-code-r02.md", "bytes": 44, "loadedBytes": 0, "status": "not-loaded" }
+  ]
+},
+"warnings": [{ "code": "SOURCE_WINDOW_TRUNCATED", "message": "The first revision reads at most 4000 bytes across its declared sources, in declaration order; cut at the window: guidance/data-paper/benchmark/benchmark.md (4000 of 6001 bytes); not read at all: proposals/research-concept-shared-code-r02.md. Pass sourceWindowBytes (up to 262144) to widen it for this creation, shorten the sources, or carry what matters in the idea text." }]
+```
+
+Add `"sourceWindowBytes": <1..262144>` to the request to widen the window for that one creation (every loaded byte is pasted into v1, which then has to pass the same validation). A value outside that range, or not an integer, is refused `SOURCE_WINDOW_INVALID`; the field on any other operation is refused `SOURCE_WINDOW_UNSUPPORTED`. Combine it with `--dry-run` to read the report before anything is written.
+
 ### v1 is checked before it is written
 
 **v1 is checked, not exempt.** Source fragments are pasted in verbatim under a `## Reference Sources` heading (this profile's `sourceReferenceHeading`), one `### <path>` per fragment — but `CREATE_INITIAL_REVISION` runs the composed candidate through the identical `violations()` gate `CREATE_SUCCESSOR` runs, before any write (see [SKILL.md](../SKILL.md#creating-v1-checked-by-the-same-gate-as-every-successor)). If a pasted fragment carries a filled report-table cell, or a URL with no verification tag, v1 is refused outright:

@@ -749,3 +749,14 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   ("stops" is a domain-north word, `proposal-deliberation-domain-profile-lock`). test:node 740 (739 + that fix).
   No migration.
   Commit: `feat(deliberation): CREATE_INITIAL_REVISION previews with --dry-run, no lock, no write` (the commit carrying this line)
+
+- C2 (real; the SKILL.md rules were also stale): `loadGuideDirectoryFragments` read nested then flat Markdown per
+  source, sources in declaration order, 4000 bytes total, cutting and skipping silently; the experimental SKILL.md
+  still said only `<folder>/<folder>.md` loads and `proposals/` gives presence only. Fix: `loadSourceWindow(root,
+  limit)` (same walk and limit; also inventories what it did not read) feeds both the chat path (fixed 4000) and
+  CREATE_INITIAL_REVISION, whose created/preview/refusal results carry `sourceWindow` and a
+  `SOURCE_WINDOW_TRUNCATED` warning; `sourceWindowBytes` 1..262144 (`MAX_SOURCE_WINDOW_BYTES` = the managed write
+  limit), `SOURCE_WINDOW_INVALID` / `SOURCE_WINDOW_UNSUPPORTED` otherwise. Docs: both SKILL.md, both usage.md ("The
+  source window", driven example). Tests: `tests/deliberation-source-window.test.mjs` (9) RED 9F -> GREEN, including
+  the experiments data-paper-first case. test:node 749/749; typecheck clean. No migration.
+  Commit: `fix(deliberation): the first revision's source window is reported, warned and widenable` (the commit carrying this line)

@@ -60,6 +60,24 @@ node skills/proposal-deliberation/cli.mjs '{
 
 This is explicit and user-triggered only: it never runs automatically, and it is rejected outright when a managed proposal already exists (it never overwrites or duplicates one). The engine loads the project's `guidance/paper-guide` directory once and composes v1 from that guide content plus the supplied idea — title, section heading, and filename slug are all derived from the idea, never a fixed generic skeleton: the title is the first sentence and the section heading the second, each with its terminal `.`, `!` or `?` dropped (punctuation inside a sentence is kept) and capped at 200 characters, and the slug is the title lowercased and hyphenated. The whole idea is then written verbatim as the section body, so those two sentences appear twice on purpose: the headings are labels, and the body is the only place the full text survives. An idea with no second sentence is refused with `INITIAL_IDEA_SINGLE_SENTENCE`. A successful call returns the created filename, revision, and document hash as completion evidence. Before writing, the composed v1 runs the same structural pre-publish validation every successor's accept turn runs over the whole document (size and reserved bytes, well-formed display blocks, standalone ATX headings); a failure is refused with `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, `nextAction: "repair_candidate_markdown"`, and a message naming the rule and the offending line. A heading marker inside a backtick code span is text and passes.
 
+### The source window
+
+`CREATE_INITIAL_REVISION` pastes the declared sources into v1, but reads at most **4000 bytes across all of them** by default, in declaration order (this skill declares one source, `guidance/paper-guide`); inside each source, `<folder>/<folder>.md` files come first and flat `*.md` files second, in name order. The document that crosses the limit is cut at it and the ones after it are not read at all. Every result that composed a document — `created`, the dry run's `preview`, and a canonical-form or validation refusal — carries the report, and a warning whenever something was cut or left out. Driven on the experiments skill, whose sources are a data paper and `proposals/` (this skill reports the same shape for its paper guide):
+
+```json
+"sourceWindow": {
+  "limitBytes": 4000,
+  "loadedBytes": 4000,
+  "sources": [
+    { "path": "guidance/data-paper/benchmark/benchmark.md", "bytes": 6001, "loadedBytes": 4000, "status": "truncated" },
+    { "path": "proposals/research-concept-shared-code-r02.md", "bytes": 44, "loadedBytes": 0, "status": "not-loaded" }
+  ]
+},
+"warnings": [{ "code": "SOURCE_WINDOW_TRUNCATED", "message": "The first revision reads at most 4000 bytes across its declared sources, in declaration order; cut at the window: guidance/data-paper/benchmark/benchmark.md (4000 of 6001 bytes); not read at all: proposals/research-concept-shared-code-r02.md. Pass sourceWindowBytes (up to 262144) to widen it for this creation, shorten the sources, or carry what matters in the idea text." }]
+```
+
+Add `"sourceWindowBytes": <1..262144>` to the request to widen the window for that one creation (every loaded byte is pasted into v1, which then has to pass the same validation). A value outside that range, or not an integer, is refused `SOURCE_WINDOW_INVALID`; the field on any other operation is refused `SOURCE_WINDOW_UNSUPPORTED`. Combine it with `--dry-run` to read the report before anything is written.
+
 ### Dry run first: see v1 before it exists
 
 A successful `CREATE_INITIAL_REVISION` takes a project-wide creation lock (`.proposal-deliberation/locks/initial-revision.lock`) and leaves it in place for good: it is the guard that keeps two concurrent creations from both winning, so after one success every further attempt is refused `MANAGED_PROPOSAL_ALREADY_EXISTS`. The engine never removes that lock. To see what v1 would be before committing to it, add `--dry-run` (or `"dryRun": true` in the request):

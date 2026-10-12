@@ -115,11 +115,12 @@ and names both shapes that would answer it. Creating the empty directory does no
 satisfy the declaration — that was the older behaviour, and it let `v1` render
 against nothing.
 
-Two facts about how the engine actually reads these, both worth knowing before you rely on it:
+How the engine actually reads these, worth knowing before you rely on it (`proposal-workspace.ts`, `loadSourceWindow`):
 
-- **Only `<source>/<folder>/<folder>.md` is ever loaded.** The loader descends one level into each source directory and reads the Markdown file named after the folder (`proposal-workspace.ts`, `loadGuideDirectoryFragments`). A data paper ingested as `guidance/data-paper/<name>/<name>.md` is picked up; a loose file directly under the source directory is not.
-- **`proposals/` contributes presence, not content.** Managed revisions are flat `.md` files, and the loader only descends into subdirectories — so the proposal's text never enters v1 through the engine. Its directory must exist; its claims reach the document because *you* carry them there, in the idea text you send and in the deliberation that follows.
-- The total content loaded across all sources is capped at 4000 bytes (`MAX_CHAT_GUIDE_CONTEXT_BYTES`), and is truncated, not summarized.
+- **Two shapes per source, nested first.** In each source directory the loader reads every `<folder>/<folder>.md` (one level down, the file named after its folder), then every `*.md` sitting directly in the directory, each group in name order. A data paper ingested as `guidance/data-paper/<name>/<name>.md` is picked up, and so is a managed revision, which is a flat file in `proposals/`. Any other layout (a file two levels down, a Markdown file not named after its folder) is not read.
+- **Sources are read in declaration order: the data paper first, then `proposals/`, then the paper guide.** That order decides what survives the window below.
+- **The source window: 4000 bytes in total, by default.** The loader stops once 4000 bytes have been read across all sources together. The document that crosses the limit is cut at it (truncated, not summarized) and every document after it is not read at all — so a data paper over 4000 bytes leaves the proposal out of v1 entirely. `CREATE_INITIAL_REVISION` reports what happened in `sourceWindow` (`limitBytes`, `loadedBytes`, and one `{path, bytes, loadedBytes, status}` per document, `status` being `loaded`, `truncated` or `not-loaded`) and adds a `SOURCE_WINDOW_TRUNCATED` warning naming every document it cut or left out. Pass `sourceWindowBytes` (an integer from 1 to 262144) to widen the window for that one creation; anything else is refused `SOURCE_WINDOW_INVALID`, and the field on any other operation is refused `SOURCE_WINDOW_UNSUPPORTED`. Run it with `--dry-run` first to read the report before anything is written. A deliberation chat's first turn reads the same sources through a fixed 4000-byte window.
+- Whatever the window leaves out still reaches the document only because *you* carry it there, in the idea text you send and in the deliberation that follows.
 
 ## External validation, before any draft
 

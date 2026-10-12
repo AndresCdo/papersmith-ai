@@ -5556,26 +5556,64 @@ export function resolveChatDocumentFilename(rawFilename: unknown): { filename?: 
  * directory delivered nothing at all until the flat pass existed.
  */
 async function loadGuideDirectoryFragments(projectRoot: string): Promise<ChatGuideFragment[]> {
+ return (await loadSourceWindow(projectRoot, MAX_CHAT_GUIDE_CONTEXT_BYTES)).fragments;
+}
+
+/** The largest source window one `CREATE_INITIAL_REVISION` may ask for: the managed document's own size limit, since every loaded byte is pasted into v1. */
+export const MAX_SOURCE_WINDOW_BYTES = MAX_WRITE_BYTES;
+
+/** What the source window read: every Markdown document the declared sources offer, in load order, and how much of each reached the fragments. */
+export type SourceWindowReport = {
+ limitBytes: number;
+ loadedBytes: number;
+ sources: { path: string; bytes: number; loadedBytes: number; status: 'loaded' | 'truncated' | 'not-loaded' }[];
+};
+
+/**
+ * The fragments `loadGuideDirectoryFragments` hands a first revision, plus the report of what the
+ * window did. Same walk, same order (declared sources in profile order; nested before flat inside
+ * each), same `limit` semantics: the window is a total across every source, a document that
+ * crosses it is cut at the limit, and every document after it is not read at all. The report
+ * lists every document regardless, so a cut or a left-out source is visible instead of silent.
+ */
+async function loadSourceWindow(projectRoot: string, limit: number): Promise<{ fragments: ChatGuideFragment[]; report: SourceWindowReport }> {
+ const report: SourceWindowReport = { limitBytes: limit, loadedBytes: 0, sources: [] };
  let root: string;
  try {
   root = await canonicalProjectRoot(projectRoot);
  } catch {
-  return [];
+  return { fragments: [], report };
  }
  const fragments: ChatGuideFragment[] = [];
  let bytes = 0;
  for (const source of DOMAIN.sources) {
-  if (bytes >= MAX_CHAT_GUIDE_CONTEXT_BYTES) break;
   for (const file of await sourceMarkdownFiles(root, source.path)) {
-   if (bytes >= MAX_CHAT_GUIDE_CONTEXT_BYTES) break;
+   let size = 0;
+   try { size = (await stat(file.canonical)).size; } catch { continue; }
+   if (bytes >= limit) {
+    report.sources.push({ path: file.relative, bytes: size, loadedBytes: 0, status: 'not-loaded' });
+    continue;
+   }
    const buffer = await readFile(file.canonical);
-   const text = buffer.subarray(0, MAX_CHAT_GUIDE_CONTEXT_BYTES - bytes).toString("utf8");
+   const text = buffer.subarray(0, limit - bytes).toString("utf8");
+   const loaded = Buffer.byteLength(text);
+   report.sources.push({ path: file.relative, bytes: buffer.length, loadedBytes: Math.min(loaded, buffer.length), status: loaded >= buffer.length ? 'loaded' : 'truncated' });
    if (!text) continue;
-   bytes += Buffer.byteLength(text);
+   bytes += loaded;
    fragments.push({ path: file.relative, content: text });
   }
  }
- return fragments;
+ report.loadedBytes = bytes;
+ return { fragments, report };
+}
+
+/** The `SOURCE_WINDOW_TRUNCATED` warning for a report that cut or left out a document, or none. */
+function sourceWindowWarnings(report: SourceWindowReport): { code: string; message: string }[] | undefined {
+ const truncated = report.sources.filter((source) => source.status === 'truncated').map((source) => `${source.path} (${source.loadedBytes} of ${source.bytes} bytes)`);
+ const left = report.sources.filter((source) => source.status === 'not-loaded').map((source) => source.path);
+ if (!truncated.length && !left.length) return undefined;
+ const parts = [truncated.length ? `cut at the window: ${truncated.join(', ')}` : '', left.length ? `not read at all: ${left.join(', ')}` : ''].filter(Boolean).join('; ');
+ return [{ code: 'SOURCE_WINDOW_TRUNCATED', message: `The first revision reads at most ${report.limitBytes} bytes across its declared sources, in declaration order; ${parts}. Pass sourceWindowBytes (up to ${MAX_SOURCE_WINDOW_BYTES}) to widen it for this creation, shorten the sources, or carry what matters in the idea text.` }];
 }
 
 /**
@@ -5893,6 +5931,7 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
        },{additionalProperties:false})),
        maintenanceTaskId:Type.Optional(Type.String({minLength:13,maxLength:256,pattern:'^maintenance-[a-z0-9][a-z0-9-]{0,242}$'})),
        idempotencyKey:Type.Optional(Type.String({minLength:1,maxLength:256})),
+       sourceWindowBytes:Type.Optional(Type.Integer({minimum:1,maximum:MAX_SOURCE_WINDOW_BYTES,description:'CREATE_INITIAL_REVISION only: how many bytes of the declared sources, in total and in declaration order, v1 reads (default 4000). Refused on every other operation.'})),
        dryRun:Type.Optional(Type.Boolean({description:'CREATE_INITIAL_REVISION only: run every check and compose the first revision, then stop before the creation lock and any write (status preview). Refused on every other operation.'})),
   }),
   async execute(_toolCallId,params,_signal,_onUpdate,ctx){
@@ -5903,6 +5942,10 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
    }
    // A dry run exists only where an operation has no preview of its own; anywhere else it would
    // silently mutate a caller who believed nothing would be written, so it is refused instead.
+   if((params as {sourceWindowBytes?:unknown}).sourceWindowBytes!==undefined&&params.operation!==CREATE_INITIAL_REVISION_OPERATION){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_source_window',blockers:[{code:'SOURCE_WINDOW_UNSUPPORTED',message:'sourceWindowBytes applies only to CREATE_INITIAL_REVISION, the one operation that reads the declared sources into a document; nothing was run.'}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
    if(params.dryRun!==undefined&&!DRY_RUN_OPERATIONS.has(params.operation??'')){
     const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_dry_run',blockers:[{code:'DRY_RUN_UNSUPPORTED',message:`dryRun applies only to ${[...DRY_RUN_OPERATIONS].join(', ')}; nothing was run. CREATE_SUCCESSOR previews without it; STATUS and RESOLVE_TARGET never write.`}]};
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
@@ -5993,7 +6036,15 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
       :{code:'REQUIRED_SOURCE_EMPTY',message:`Required source "${source.path}" exists but holds no Markdown document; CREATE_INITIAL_REVISION cannot proceed without its content. Ingest at least one document into it, as "${source.path}/<name>/<name>.md" or as a Markdown file directly inside it.`})};
      return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
     }
-    const guideFragments=await loadGuideDirectoryFragments(projectRoot);
+    const windowRequest=params.sourceWindowBytes;
+    if(windowRequest!==undefined&&!(typeof windowRequest==='number'&&Number.isInteger(windowRequest)&&windowRequest>=1&&windowRequest<=MAX_SOURCE_WINDOW_BYTES)){
+     const publicResult={status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'fix_source_window',blockers:[{code:'SOURCE_WINDOW_INVALID',message:`sourceWindowBytes must be an integer from 1 to ${MAX_SOURCE_WINDOW_BYTES}; got ${JSON.stringify(windowRequest)}. Nothing was composed.`}]};
+     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+    }
+    const window=await loadSourceWindow(projectRoot,windowRequest??MAX_CHAT_GUIDE_CONTEXT_BYTES);
+    const guideFragments=window.fragments;
+    const windowWarnings=sourceWindowWarnings(window.report);
+    const windowFields={sourceWindow:window.report,...(windowWarnings?{warnings:windowWarnings}:{})};
     const dryRun=params.dryRun===true;
     const result=await initialRevisionCreation.execute({idea:params.instruction,...(guideFragments.length?{guideFragments}:{}),...(dryRun?{dryRun}:{})});
     if(result.status==='preview'){
@@ -6002,12 +6053,12 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
      const lock=await initialRevisionLockState(projectRoot);
      const publicResult=lock.present
       ?{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'use_existing_managed_proposal',blockers:[{code:'MANAGED_PROPOSAL_ALREADY_EXISTS',message:`The creation lock ${lock.path} is present, so a real CREATE_INITIAL_REVISION would be refused. It records that a first revision was already created here; it is never removed by the engine.`}]}
-      :{status:'preview' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:result.filename,targetRevision:result.revision,canonicalMetadata:result.canonicalMetadata,markdown:result.markdown,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'create_initial_revision',instructionBudget:instructionBudget(params.instruction)};
+      :{status:'preview' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:result.filename,targetRevision:result.revision,canonicalMetadata:result.canonicalMetadata,markdown:result.markdown,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'create_initial_revision',instructionBudget:instructionBudget(params.instruction),...windowFields};
      return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
     }
     const publicResult=result.status==='created'
-     ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null,instructionBudget:instructionBudget(params.instruction)}
-     :{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...projectInitialRevisionRefusal(result)};
+     ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null,instructionBudget:instructionBudget(params.instruction),...windowFields}
+     :{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...projectInitialRevisionRefusal(result),...windowFields};
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
    }
    const resolvedIntent=resolveIntent(params.instruction).intent;
