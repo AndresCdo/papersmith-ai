@@ -1,18 +1,18 @@
 # papersmith-ai
 
-> **Una forja de papers**: convierte PDFs de referencia en Markdown de alta fidelidad y legible por un agente (ecuaciones en LaTeX, tablas como tablas, figuras como archivos), y conduce la deliberación formal —matemática y de diseño experimental— hasta el código que se prueba solo y el paper compilado.
+> **A paper forge**: turns reference PDFs into high-fidelity Markdown that an agent can read (equations in LaTeX, tables as tables, figures as files), and drives the formal deliberation —mathematics and experimental design— all the way to the code that tests itself and the compiled paper.
 
 [![CI](https://github.com/LIAUNAL/papersmith-ai/actions/workflows/test.yml/badge.svg)](https://github.com/LIAUNAL/papersmith-ai/actions/workflows/test.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D21-green.svg)](https://nodejs.org/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 <p align="center">
-  <img src="docs/assets/agent-smith-anime.jpg" alt="Agent Smith en clave anime, con un paper holográfico y agentes de IA orbitando a su alrededor" width="560">
+  <img src="docs/assets/agent-smith-anime.jpg" alt="Agent Smith in anime style, with a holographic paper and AI agents orbiting around him" width="560">
 </p>
 
-Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los doce comandos del CLI, las doce skills, los diecinueve agentes,
-cómputo remoto, desarrollo y solución de problemas.
+This README is the **complete manual, in English**: installation, the workspace from the
+inside, the twelve CLI commands, the twelve skills, the nineteen agents,
+remote compute, development and troubleshooting.
 
 ## Índice
 
