@@ -11,6 +11,33 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.14.0
+
+### Added
+
+- **`paper-writing` says which language its blocks are written in, and it is
+  English.** Nothing in that skill stated it, so the answer was whatever language
+  the session happened to be speaking. `proposal-implementation` has declared the
+  split for its own artifacts for releases — *"Every artifact stays English ...
+  The conversation does not."* — and the skill that writes the manuscript was the
+  exception. A manuscript written in a language nobody chose is a defect that
+  stays invisible until someone who was not part of the conversation reads it.
+- **A prose pass, with a list it may not touch.** A written block can be edited
+  for prose --- vocabulary, phrasing, sentence rhythm, the connective between two
+  sentences. It may not change a citation or its identifier, a number or
+  statistic, the methodology as stated, or the technical terms that block's
+  contract names; changing one of those is a **failure rather than a warning**,
+  the same class `UNBOUND_SENTENCE` and `SPAN_NOT_IN_SOURCE` already catch.
+  It is opt-in, it never writes to `main.tex` itself --- its output goes through
+  `open` and `substitute`, so the engine's proof that not one byte outside the
+  target block moved still holds for it --- and it runs as a checklist with
+  nothing installed, so an operator-wired humanizer is an accelerator inside the
+  contract rather than a prerequisite for it.
+  **What it is not:** a way to lower an AI-detection score. It adds no digressions
+  to read as humanly edited and changes no claim. A rewrite shaped so that a
+  classifier reads the text differently is shaped by something other than the
+  evidence, and this forge's invariant is that every claim is tied to its own.
+
 ## 0.13.0
 
 ### Added
