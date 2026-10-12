@@ -422,6 +422,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `TORCH_VERSION_REQUIRED` without an exact release), GPU the default
   index's build. Shared by `experimental-implementation`.
 
+- **The default `smoke_and_invariants` profile runs the target's own
+  interpreter against the target.** It substituted the workspace folder name
+  for `{paper_slug}` (`implementations/<workspace>/tests/...`, a directory
+  no target is named after) and ran `pytest` from PATH. `papersmith run`
+  now resolves two new placeholders, `{target}` (`implementations/<name>`,
+  the only directory there or the one `--implementation <name>` picks) and
+  `{target_python}` (that target's `.venv` interpreter), and the
+  `papersmith init` template uses them (`{target_python} -m pytest
+  {target}/tests/test_invariants.py`; the remote profiles name `{target}`).
+  An unresolvable target (none, several without `--implementation`, an
+  unknown name, or no `.venv` when `{target_python}` is named) refuses before
+  anything is dispatched or recorded; `--dry-run` reports it under
+  `target_resolution` instead. Profiles naming neither placeholder run as
+  written.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -688,6 +703,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   `pyproject.toml` with `dependencies = []`; files already in a target are
   never rewritten and their receipts are untouched, so no migration is
   needed.
+
+- `papersmith.yaml` is the user's and `upgrade` never rewrites it, so a
+  workspace initialized before 0.14.0 keeps its `smoke_and_invariants`
+  profile. Where that profile's `implementations/{paper_slug}` names a
+  directory that does not exist, `papersmith run` now refuses before
+  dispatch and names the edit (`{target}`, `{target_python} -m pytest`);
+  where it exists, the profile runs exactly as before. A `--dry-run` of such
+  a profile, and every run of a profile naming the new placeholders, records
+  a `target_resolution` key in its ledger row. No migration (user-owned file).
 
 ## 0.13.0
 

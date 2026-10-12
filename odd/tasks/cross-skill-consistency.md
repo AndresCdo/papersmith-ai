@@ -65,6 +65,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B2 — `papersmith status` stage from engine receipts (D, writer trigger: status.py + test + README + CHANGELOG)
   - [x] B5 — fresh target clean through env/plan/apply/materialize (D, writer trigger: engine + forge harness + 2 SKILL.md + usage + new test file)
   - [x] B6 — declared array backend, neutral kit helpers, env torch variants (D, writer trigger: engine + 3 kit files + 2 SKILL.md + usage + 2 test files + seals)
+  - [x] B9 — default run profile resolves the target and its venv (D, writer trigger: executor + template + README + test)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -684,3 +685,19 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   longer yields). Seals: `probe` in both corpora regenerated via the capture scripts (+47 bytes each = the two new
   keys); experiments `propose` timestamp noise reverted. Domain-lock pins unchanged (prose reworded). No migration.
   Commit: `fix(implementation): the array backend is declared, not inferred from a helper` (the commit carrying this line)
+
+- B9 (real): the init template's `smoke_and_invariants` ran `pytest implementations/{paper_slug}/...` with
+  `{paper_slug}` = workspace folder name and `pytest` from PATH. Fix (`src/papersmith/core/executor.py`): placeholders
+  `{target}` (`implementations/<name>`) and `{target_python}` (that target's `.venv` interpreter, POSIX/Windows);
+  `resolve_target` picks the only `implementations/` directory or `--implementation <name>` (new `run` flag and
+  `run_profile(implementation=)` kwarg); none/several/unknown name, or no `.venv` when `{target_python}` is named,
+  raises `UserError` naming the fix before dispatch or ledger write; `--dry-run` records `target_resolution`
+  (`resolved`/`unresolved`) instead of refusing (keeps `scripts/cli-paper-*smoke.sh` dry-runs green). Template:
+  `{target_python} -m pytest {target}/tests/test_invariants.py`, `PYTHONPATH: "{target}/src"`; remote profiles name
+  `{target}` (no local venv required). Profiles naming neither placeholder are unchanged (tested). `papersmith.yaml`
+  is user-owned (`manifest.py` never-overwrite list), so no migration: a pre-0.14.0 profile naming
+  `implementations/{paper_slug}` runs unchanged when that directory exists and otherwise refuses with the edit.
+  Tests: `DefaultProfileResolvesTheTargetTests` (11) RED 9F -> GREEN (the remote and two legacy tests were added
+  with their guards; RED shown by mutation: legacy guard off -> 1 red; venv check off -> 1 red). Related e2e files
+  191 passed, 1 failed = known `.venv` wiring smoke. test:fast 220 passed.
+  Commit: `fix(run): the default profile runs the target's own interpreter against the target` (the commit carrying this line)

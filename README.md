@@ -447,7 +447,7 @@ compute_targets:
     slurm-cluster:     { provider: "remote-ssh", host: "hpc.university.edu", ... }
 
 execution_profiles:
-  smoke_and_invariants:  { target: "local-workstation", entrypoint: "pytest …/tests/test_invariants.py" }
+  smoke_and_invariants:  { target: "local-workstation", entrypoint: "{target_python} -m pytest {target}/tests/test_invariants.py" }
   sweep_training:        { target: "kaggle-gpu-pool", sharding: { … }, artifacts: { … } }
   benchmark_evaluation:  { target: "kaggle-gpu-pool", entrypoint: "papermill …/benchmark.ipynb" }
 
@@ -3184,6 +3184,21 @@ papersmith run sweep_training --target kaggle-gpu-pool --consent <token>
 | `--dry-run` | Sólo planifica — registra el comando, no despacha nada |
 | `--shard VALUE` | Corre un solo shard de la campaña |
 | `--consent TOKEN` | Token de consentimiento para envío remoto (se reenvía, se hace cumplir aguas abajo) |
+| `--implementation NAME` | El directorio de `implementations/` que nombran `{target}` y `{target_python}` (por defecto, el único que haya) |
+
+Placeholders de un perfil: `{paper_slug}` (el nombre de la carpeta del
+workspace), `{job_id}`, `{shard_value}`, y desde 0.14.0 `{target}`
+(`implementations/<nombre>`) y `{target_python}` (el intérprete del `.venv`
+propio del target, creado por el comando `env` de la skill de implementación).
+El perfil por defecto `smoke_and_invariants` corre
+`{target_python} -m pytest {target}/tests/test_invariants.py`, nunca un `pytest`
+del PATH. Si el target no se puede resolver (ninguno o varios en
+`implementations/` sin `--implementation`, o sin `.venv` cuando el perfil nombra
+`{target_python}`), `run` se niega antes de despachar o registrar nada;
+`--dry-run` no se niega y lo reporta en `target_resolution`. Un perfil anterior
+a 0.14.0 que nombra `implementations/{paper_slug}` sigue igual mientras ese
+directorio exista; si no existe, `run` se niega y dice qué líneas cambiar
+(`papersmith.yaml` es tuyo: `upgrade` no lo reescribe).
 
 Despacha según el provider (subproceso local / submit a Kaggle / `sbatch` por
 ssh) y agrega cada trabajo a `.papersmith/runs_ledger.jsonl`. Los procesos
