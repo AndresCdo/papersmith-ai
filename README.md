@@ -18,8 +18,8 @@ remote compute, development and troubleshooting.
 
 1. [If this is your first time](#if-this-is-your-first-time)
 2. [Use flow — the short path](#use-flow--the-short-path)
-3. [Getting started](#puesta-en-marcha)
-4. [How it works — the order](#cómo-funciona--el-orden)
+3. [Getting started](#getting-started)
+4. [How it works — the order](#how-it-works--the-order)
 5. [Inside the workspace](#el-workspace-por-dentro)
 6. [Harnesses and skill projection](#harnesses-y-proyección-de-skills)
 7. [The agents](#los-agentes)
@@ -37,7 +37,7 @@ remote compute, development and troubleshooting.
 Welcome. This forge is built so you can go from a PDF to a compiled paper
 without guessing the order. The minimum path:
 
-1. **Install the CLI and set up the environment** — see [Getting started](#puesta-en-marcha).
+1. **Install the CLI and set up the environment** — see [Getting started](#getting-started).
 2. **Create your workspace** — `papersmith init ~/papers/my-paper --title "…" --topic "…"`.
    What it leaves inside, in [Inside the workspace](#el-workspace-por-dentro).
 3. **Put a reference PDF** in `guidance/reference-papers/` and run
@@ -51,7 +51,7 @@ missing it doesn't invent it: it exits with a rejection code that names what's m
 `PAPER_ABSENT` is not your mistake; it's the skill telling you what it's missing.
 
 The full map is in [Use flow](#use-flow--the-short-path); the
-detailed route, in [How it works — the order](#cómo-funciona--el-orden). And if
+detailed route, in [How it works — the order](#how-it-works--the-order). And if
 you're going to use an AI agent as copilot, the ones already defined are in
 [The agents](#los-agentes).
 
@@ -116,119 +116,118 @@ and its source and its recipe are versioned in
 
 ---
 
-## Puesta en marcha
+## Getting started
 
-Nada de esto requiere claves ni servicios externos: la forja corre localmente.
+None of this requires keys or external services: the forge runs locally.
 
-### 0. Lo que tu máquina necesita tener
+### 0. What your machine needs to have
 
-Dos runtimes, y los dos son obligatorios. No es una recomendación: la forja usa
-Python para el CLI y Node para el motor de deliberación, y sin el segundo la
-mitad del framework no arranca.
+Two runtimes, and both are mandatory. It's not a recommendation: the forge uses
+Python for the CLI and Node for the deliberation engine, and without the second
+one half the framework won't start.
 
-| Runtime | Versión | Para qué | Si falta |
+| Runtime | Version | What for | If it's missing |
 | --- | --- | --- | --- |
-| **Python** | ≥ 3.11 | el CLI `papersmith` y todas las skills de Python | no hay instalación posible |
-| **Node.js** | ≥ 21 | el motor de deliberación (`jiti`, `typebox`) y el tablero | `init` avisa y `deliberate` se niega |
-| `npm` | el que trae Node | instalar esas dos dependencias en el workspace | igual que arriba |
+| **Python** | ≥ 3.11 | the `papersmith` CLI and all the Python skills | there's no possible installation |
+| **Node.js** | ≥ 21 | the deliberation engine (`jiti`, `typebox`) and the dashboard | `init` warns and `deliberate` refuses |
+| `npm` | whatever Node ships | installing those two dependencies in the workspace | same as above |
 
-Comprueba las dos de una vez:
+Check both at once:
 
 ```bash
 python3 --version && node --version && npm --version
 ```
 
-**Qué pasa exactamente si Node no está.** `papersmith init` no falla: avisa con
-`npm was not found; deliberate requires npm install for jiti/typebox` y sigue
-adelante, porque el resto del workspace sí se puede crear. Pero
-`proposal-deliberation` y `experimental-deliberation` —las dos skills que
-proponen y discuten antes de escribir— no corren sin esas dependencias. Si
-quieres crear el workspace a propósito sin ellas, `init --no-npm` lo dice
-explícitamente en lugar de dejarlo al azar.
+**What exactly happens if Node isn't there.** `papersmith init` doesn't fail: it
+warns with `npm was not found; deliberate requires npm install for jiti/typebox`
+and moves on, because the rest of the workspace can be created. But
+`proposal-deliberation` and `experimental-deliberation` —the two skills that
+propose and discuss before writing— don't run without those dependencies. If you
+want to create the workspace on purpose without them, `init --no-npm` says so
+explicitly instead of leaving it to chance.
 
-El runtime de ingestión del paso 2 es aparte y **sí es opcional**: solo hace
-falta para extraer PDFs con OCR.
+The ingestion runtime from step 2 is separate and **is optional**: it's only
+needed to extract PDFs with OCR.
 
-### 1. Instala el CLI y prepara el entorno
+### 1. Install the CLI and set up the environment
 
 ```bash
-# 1a. El CLI, desde la última versión publicada en PyPI
+# 1a. The CLI, from the latest version published on PyPI
 pipx install papersmith-ai
-#     lo mismo con pip, si no usas pipx
+#     the same with pip, if you don't use pipx
 pip install papersmith-ai
-#     o la punta de `main`, sin esperar a que salga una release
+#     or the tip of `main`, without waiting for a release
 pipx install git+https://github.com/LIAUNAL/papersmith-ai.git
 
-# 1b. O desde un clon de `main` (si vas a desarrollar el framework)
+# 1b. Or from a clone of `main` (if you're going to develop the framework)
 git clone https://github.com/LIAUNAL/papersmith-ai.git && cd papersmith-ai
-pipx install .            # con pip: pip install .
+pipx install .            # with pip: pip install .
 
-# 1c. Actualizar el CLI cuando sale una release nueva
+# 1c. Update the CLI when a new release comes out
 pipx upgrade papersmith-ai
-#     si lo instalaste desde una URL de git, `upgrade` no lo ve: reinstala
+#     if you installed it from a git URL, `upgrade` doesn't see it: reinstall
 pipx install --force git+https://github.com/LIAUNAL/papersmith-ai.git
-#     con pip, `--upgrade` sobre una URL de git no siempre vuelve a clonar
+#     with pip, `--upgrade` over a git URL doesn't always re-clone
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai.git"
 
-# 1d. Y llevar a esa versión los workspaces que ya existen
-papersmith upgrade --plan-migrations ~/papers/sparse-ae  # qué artefactos faltan, sin escribir nada
-papersmith upgrade ~/papers/sparse-ae                    # sincroniza los archivos y migra los artefactos
-papersmith status ~/papers/sparse-ae                     # deriva y migraciones pendientes
+# 1d. And bring the workspaces that already exist up to that version
+papersmith upgrade --plan-migrations ~/papers/sparse-ae  # which artifacts are missing, without writing anything
+papersmith upgrade ~/papers/sparse-ae                    # syncs the files and migrates the artifacts
+papersmith status ~/papers/sparse-ae                     # drift and pending migrations
 
-# 2. Runtime aislado de ingestión (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
+# 2. Isolated ingestion runtime (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
 python3 scripts/setup_env.py install
 
-# 3. Dependencias de Node y proyección de skills a los harnesses
+# 3. Node dependencies and projection of skills to the harnesses
 npm install
 npm run setup:harnesses
 ```
 
-**El paquete está publicado en PyPI.** `pipx install papersmith-ai` trae la
-última release, y es lo que `pipx upgrade papersmith-ai` del **1c** actualiza. La
-URL de git del **1a**, en cambio, trae la punta de `main`, que es lo que conviene
-si vas a desarrollar el framework. Y cuidado con el nombre vecino: `papersmith`
-—sin el `-ai`— también está en PyPI, pero es **otro proyecto** (generación de
-documentos Word), así que `pip install papersmith` no instala esta forja.
+**The package is published on PyPI.** `pipx install papersmith-ai` brings the
+latest release, and that's what `pipx upgrade papersmith-ai` in **1c** updates.
+The git URL in **1a**, on the other hand, brings the tip of `main`, which is what
+you want if you're going to develop the framework. And watch out for the
+neighbouring name: `papersmith` —without the `-ai`— is also on PyPI, but it's
+**another project** (Word document generation), so `pip install papersmith`
+doesn't install this forge.
 
-`main` es la única rama que se mantiene, y cada release queda además con su tag,
-así que si necesitas congelar un build exacto fíjalo en la URL — por ejemplo
+`main` is the only branch that's maintained, and each release also gets its tag,
+so if you need to freeze an exact build, pin it in the URL — for example
 `pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.13.0"`.
-La **1b** toma el clon tal como está, incluidos cambios sin commitear, así que
-para reproducir un build usa la **1a** o un tag. El historial de cambios está en
-[CHANGELOG.md](CHANGELOG.md).
+**1b** takes the clone as it is, including uncommitted changes, so to reproduce a
+build use **1a** or a tag. The changelog is in [CHANGELOG.md](CHANGELOG.md).
 
-Actualizar son dos pasos y son dos objetos distintos. El **1c** reinstala el
-CLI desde `main`; confirma qué quedó con `papersmith --version`. El **1d**
-mueve cada **workspace** que ya existe, y no es opcional: un release puede
-cambiar la forma de un artefacto que el workspace ya produjo —el `atlas.html`
-del pool de grafos, por ejemplo—, así que sincronizar los archivos del
-framework sin migrar los artefactos deja el andamiaje nuevo leyendo estado
-viejo.
+Updating is two steps and they're two different objects. **1c** reinstalls the
+CLI from `main`; confirm what you got with `papersmith --version`. **1d** moves
+each **workspace** that already exists, and it isn't optional: a release can
+change the shape of an artifact a workspace has already produced —the graph
+pool's `atlas.html`, for example—, so syncing the framework files without
+migrating the artifacts leaves the new scaffolding reading old state.
 
-`papersmith upgrade` sincroniza el workspace con la versión instalada y aplica
-las migraciones de artefactos de esa versión. La versión que el workspace
-registra no avanza hasta que esas migraciones están hechas, así que
-`papersmith status` puede decirte que todavía no llegó al release que acabas de
-instalar. `--plan-migrations` informa lo pendiente y termina sin escribir nada;
-no se llama `--dry-run` a propósito, porque no previsualiza la copia del kit.
-`--no-migrate` sincroniza los archivos y deja los artefactos como están, con el
-marcador de versión donde estaba.
+`papersmith upgrade` syncs the workspace with the installed version and applies
+that version's artifact migrations. The version the workspace records doesn't
+advance until those migrations are done, so `papersmith status` may tell you it
+hasn't yet reached the release you just installed. `--plan-migrations` reports
+what's pending and finishes without writing anything; it isn't called
+`--dry-run` on purpose, because it doesn't preview the kit copy. `--no-migrate`
+syncs the files and leaves the artifacts as they are, with the version marker
+where it was.
 
-Ojo con no confundir los dos `upgrade`: ninguno de los dos toca al otro.
-`papersmith upgrade` se niega a llevar un workspace a una versión anterior a la
-que él registra, salvo que se lo pidas con `--allow-downgrade`.
+Be careful not to mix up the two `upgrade`s: neither one touches the other.
+`papersmith upgrade` refuses to take a workspace to a version older than the one
+it records, unless you ask it to with `--allow-downgrade`.
 
-`scripts/setup_env.py install` provisiona **todo** el stack de ingestión en un
-entorno micromamba aparte (CPU o CUDA, según lo que detecte), incluido el
-binario `llama-server` que el OCR necesita — **no** es Ollama ni una
-instalación de Homebrew. `npm run setup:harnesses` enlaza el árbol canónico
-`skills/` dentro de `.claude/skills`, `.pi/skills`, `.opencode/skills`
-y `.agents/skills`, con enlaces relativos e idempotentes (ver
-[Harnesses y proyección de skills](#harnesses-y-proyección-de-skills)). La
-primera corrida de `papersmith ingest` descarga ~1.5 GB de pesos de Surya si el
-entorno no quedó pre-provisionado.
+`scripts/setup_env.py install` provisions **the whole** ingestion stack in a
+separate micromamba environment (CPU or CUDA, depending on what it detects),
+including the `llama-server` binary that the OCR needs — it is **not** Ollama
+nor a Homebrew installation. `npm run setup:harnesses` symlinks the canonical
+`skills/` tree into `.claude/skills`, `.pi/skills`, `.opencode/skills`
+and `.agents/skills`, with relative, idempotent symlinks (see
+[Harnesses and skill projection](#harnesses-y-proyección-de-skills)). The first
+run of `papersmith ingest` downloads ~1.5 GB of Surya weights if the
+environment wasn't pre-provisioned.
 
-### 2. Crea un workspace
+### 2. Create a workspace
 
 ```bash
 papersmith init ~/papers/sparse-ae \
@@ -238,40 +237,41 @@ papersmith init ~/papers/sparse-ae \
 
 cd ~/papers/sparse-ae
 papersmith status
-papersmith status --json          # snapshot legible por máquina
+papersmith status --json          # machine-readable snapshot
 ```
 
-El workspace queda desacoplado del checkout del framework: el andamiaje se
-sincroniza con `papersmith upgrade` y tus artefactos de investigación están
-protegidos por contrato. Qué crea `init` exactamente —y qué se versiona— en
-[El workspace por dentro](#el-workspace-por-dentro).
+The workspace stays decoupled from the framework checkout: the scaffolding is
+synced with `papersmith upgrade`, and your research artifacts are protected by
+contract. What `init` creates exactly —and what gets versioned— in
+[Inside the workspace](#el-workspace-por-dentro).
 
-### 3. Ingiere literatura
+### 3. Ingest literature
 
 ```bash
-papersmith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview o URL
-papersmith ingest ~/Downloads/reference-paper.pdf     # PDF local
-papersmith ingest ~/Downloads/escaneo.pdf --ocr       # escaneado: modo OCR balanceado
+papersmith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview or URL
+papersmith ingest ~/Downloads/reference-paper.pdf     # local PDF
+papersmith ingest ~/Downloads/scan.pdf --ocr       # scanned: balanced OCR mode
 ```
 
-Cada PDF suelto termina en su propia carpeta, junto a su Markdown (texto +
-LaTeX + tablas, con la bibliografía quitada) y las imágenes de sus figuras. El
-detalle del pipeline, en la sección de `paper-ingestion` de la
-[Anatomía](#anatomía-de-cada-skill).
+Each loose PDF ends up in its own folder, next to its Markdown (text + LaTeX +
+tables, with the bibliography stripped) and the images of its figures. The
+pipeline's details, in the `paper-ingestion` section of the
+[Anatomy](#anatomía-de-cada-skill).
 
-### 4. Delibera, implementa y ejecuta
+### 4. Deliberate, implement and run
 
 ```bash
-papersmith deliberate . --action status                                   # estado de la propuesta gestionada
-papersmith implement . --action verify --target implementations/mi-repo   # sobre un repo ya materializado
-papersmith run smoke_and_invariants --dry-run                             # planifica; no despacha nada
+papersmith deliberate . --action status                                   # state of the managed proposal
+papersmith implement . --action verify --target implementations/my-repo   # over an already materialized repo
+papersmith run smoke_and_invariants --dry-run                             # plans; dispatches nothing
 ```
 
-Dentro de un harness, las mismas capacidades se piden por nombre de skill:
+Inside a harness, the same capabilities are requested by skill name:
 `/paper-ingestion`, `/proposal-deliberation`, `/experimental-deliberation`,
 `/proposal-implementation`, `/experimental-implementation`, `/paper-writing`.
-Y las que no dependen de un dominio — `/kaggle-accounts`, `/remote-execution`,
-`/skill-audit` — hacen de portero, memoria y auditor de lo que envías afuera.
+And the ones that don't depend on a domain — `/kaggle-accounts`,
+`/remote-execution`, `/skill-audit` — act as gatekeeper, memory and auditor of
+what you send out.
 
 ---
 
