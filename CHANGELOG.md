@@ -486,6 +486,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   `<source>/<folder>/<folder>.md` is loaded and that `proposals/` contributes
   presence only (flat files have been read since the flat pass); both rules,
   the order and the window are documented in both skills.
+- **An experiments plan can state its fixed settings in a table.**
+  `report-table-fabricated-value` refused any digit in a body cell past column
+  one of every table but a baselines table, so `| learning rate | 3e-4 |`
+  blocked `CREATE_INITIAL_REVISION` and every successor as a "fabricated
+  result". A table whose first header cell is, whole and case-insensitively,
+  `Parameter`, `Parameters`, `Hyperparameter` or `Hyperparameters` is now a
+  parameters table: a declaration of settings the plan fixes, exempt from the
+  rule and from the baseline rules. Every other table keeps the rule, including
+  one whose first header cell merely contains the word (`Parameter count`) or
+  carries it in another column. Documented in `experimental-deliberation`'s
+  `SKILL.md` and its usage example.
 
 ### Added
 
@@ -804,6 +815,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   and what v1 contains for a given set of sources are unchanged. A request
   carrying `sourceWindowBytes` outside 1..262144, or on another operation, is
   refused. No migration is needed.
+
+- `experimental-deliberation` now accepts digits in the body of a table whose
+  first header cell is `Parameter(s)` or `Hyperparameter(s)`; such a document
+  was refused by 0.13.0. Every other table is judged exactly as before, and
+  published revisions are unaffected. No migration is needed.
 
 ## 0.13.0
 

@@ -177,12 +177,13 @@ A `[verified: …]` date also makes staleness visible instead of permanent. When
 
 In a report table's body, every cell past column one must contain no digit (`report-table-fabricated-value`). A report table is a **promise about a future run**: its body cells are slots, and a number in one is a result nobody measured.
 
-Two exemptions, and the distinction between them is the rule:
+Three exemptions, and the distinction between them is the rule:
 
 - **Column one is exempt.** It is the row *label* — what is being reported on, not a reported value. `| Adapted (k=3) | | |` is a name, not a result.
 - **Baselines tables are exempt entirely.** A baselines table is a **reference**, not a promise: a venue year, a parameter count, a published figure all legitimately belong in its cells.
+- **Parameters tables are exempt entirely.** A parameters table is a **declaration** of settings the plan fixes now — a learning rate, a batch size, a seed list — not a slot a run fills, so its numbers are decided rather than measured.
 
-What makes a table a baselines table is one thing and one thing only: its **first header cell** reads `Baseline` or `Baselines` (case-insensitively). Nothing else distinguishes them, so if you want the exemption, spell the header that way; if you do not want it, do not.
+What declares either kind is one thing and one thing only: the table's **first header cell**, read whole and case-insensitively. `Baseline` or `Baselines` makes a baselines table; `Parameter`, `Parameters`, `Hyperparameter` or `Hyperparameters` makes a parameters table. Nothing else distinguishes them: a first header cell that merely contains the word (`Parameter count`), or the word in any other column, leaves the table a report table under the rule. So if you want an exemption, spell the header that way; if you do not want it, do not — and never put a result in a parameters table to get past the rule, because a measured value there is exactly the fabrication the rule exists to refuse.
 
 Numbers in prose, outside any table, are never touched by this rule. A learning rate, a seed count, a split year in a protocol paragraph are all fine.
 
@@ -387,7 +388,7 @@ Do not import the mathematical rigor doctrine here. Necessity-before-formalizati
 - Never assert an achieved result. This document plans work that has not happened.
 - Never invent a repository, a URL, a venue, a year, or a metric value.
 - Every external URL carries `[pending-verification]` or `[verified: YYYY-MM-DD]`, immediately after it.
-- Report-table body cells stay empty until a run fills them.
+- Report-table body cells stay empty until a run fills them. Only a baselines table (references) or a parameters table (settings the plan fixes) carries numbers.
 - Every success criterion is declared before the run it judges.
 - Never invent an entry ID, offset, hash, patch, or receipt field. Resolve, don't guess.
 

@@ -189,7 +189,7 @@ Several loci in one call:
 
 ## What a well-formed experiment block looks like
 
-This is the shape to put in `replacementText`. It satisfies every canonical-form rule: empty report cells, a tagged URL, a baseline row carrying both a repository and a venue year, a criterion under its bold label, and a declared identifier a claim can cite.
+This is the shape to put in `replacementText`. It satisfies every canonical-form rule: empty report cells, a declared parameters table, a tagged URL, a baseline row carrying both a repository and a venue year, a criterion under its bold label, and a declared identifier a claim can cite.
 
 ```markdown
 ## Experiment [exp:E1] — labelled-budget sweep
@@ -207,6 +207,11 @@ Sustains claim C1 [tests:E1]: the method needs no target labels.
 - **Success criterion:** the adapted arm's mean held-out accuracy is not lower than the source-only arm's at every value of k, with the paired test not rejecting equality.
 
 **Priority.** Core. **Estimated cost.** 30 runs, roughly 6 GPU-hours.
+
+| Parameter | Value |
+| --- | --- |
+| Learning rate | 3e-4 |
+| Batch size | 128 |
 
 ### Expected report
 
@@ -228,7 +233,8 @@ Sustains claim C1 [tests:E1]: the method needs no target labels.
 Three things to notice, each of which is a rule and not a style choice:
 
 - The report table's body cells are **empty**, and its first header cell is `Arm`, so the fabricated-value rule applies to every column past the first.
-- The baselines table's first header cell is **`Baseline`**, which is the only thing that exempts its cells from that rule. Spell it that way when you want the exemption; do not when you do not.
+- The baselines table's first header cell is **`Baseline`**, which exempts its cells from that rule as a reference. Spell it that way when you want the exemption; do not when you do not.
+- The settings table's first header cell is **`Parameter`**, which declares it a parameters table: values the plan fixes now, not results, so its numbers are allowed. `Parameters`, `Hyperparameter` and `Hyperparameters` declare the same (case-insensitively, the whole cell). Nothing else does: a first header cell like `Parameter count`, or a `Parameter` column further right, leaves the table an ordinary report table under the rule.
 - Both URLs are tagged, one per style. `[verified: 2026-09-08]` says a search on that date reached it; `[pending-verification]` says nobody has.
 
 ## Building `resolvedDecisions` and applying

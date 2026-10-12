@@ -760,3 +760,13 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   source window", driven example). Tests: `tests/deliberation-source-window.test.mjs` (9) RED 9F -> GREEN, including
   the experiments data-paper-first case. test:node 749/749; typecheck clean. No migration.
   Commit: `fix(deliberation): the first revision's source window is reported, warned and widenable` (the commit carrying this line)
+
+- C3 (real): `preservation-experimental.ts` exempted only baselines tables (first header cell `Baseline(s)`) from
+  `report-table-fabricated-value`, so a plan's own settings could not be tabulated. Fix: `PARAMETER_COLUMNS`
+  (`parameter(s)`, `hyperparameter(s)`, whole first header cell, case-insensitive) marks a parameters table, skipped
+  by the rule (and by the baseline rules); still a `report-table` atom. Fail-closed kept: partial matches and other
+  columns stay under the rule; undeclared tables unchanged. Docs: experimental SKILL.md (three exemptions,
+  non-negotiable), usage.md (example block gains a parameters table; block checked: no violations). Tests:
+  `tests/experimental-deliberation-parameters-table.test.mjs` (8) RED 5F -> GREEN (the three fail-closed/atom cases
+  pass before and after by design). test:node 757/757. No migration.
+  Commit: `fix(experimental-deliberation): a declared parameters table carries the plan's fixed settings` (the commit carrying this line)
