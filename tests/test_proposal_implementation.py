@@ -10046,6 +10046,111 @@ class VerifyDiscoversTheNewestRevisionTests(unittest.TestCase):
         self.assertEqual(fidelity["status"], "unknown")
 
 
+class SectionHeadingConventionTests(unittest.TestCase):
+    """B1 (`cross-skill-consistency`): `verify` speaks in the section labels a
+    managed revision actually carries.
+
+    Before 0.14.0 a section was only a heading whose first token was a bare
+    number followed by whitespace (`## 3. Title`). A revision whose headings
+    carry an identifier label (`### O1. Title`), a dotted label (`### 3.1`),
+    or a label alone on its line (`## 3`) yielded no sections at all, so
+    `changedSections` stayed empty and a module's `__provenance__["sections"]`
+    was never crossed with what moved: only the file-level revision drift
+    worked. The grammar now lives once, in
+    `skills/_core/conventions/sections.json`, read by the engine.
+    """
+
+    IDENTIFIERS = (
+        "# Title\n\n## Framing\n\nIntro.\n\n"
+        "### O1. First objective\n\nalpha\n\n"
+        "### O2. Second objective\n\nbeta\n"
+    )
+    NUMBERED = (
+        "# Title\n\n## 3. Formulation\n\nbody three\n\n"
+        "### 3.1 Detail\n\ninner\n\n## Discussion\n\nloose\n\n"
+        "## 4) Next\n\nbody four\n"
+    )
+
+    def test_identifier_headings_are_sections(self):
+        sections = impl.revision_sections(self.IDENTIFIERS)
+        self.assertEqual(sorted(sections), ["O1", "O2"])
+        moved = impl.changed_sections(
+            self.IDENTIFIERS, self.IDENTIFIERS.replace("beta", "gamma"))
+        self.assertEqual(moved, ["O2"])
+
+    def test_numbered_headings_read_as_before(self):
+        moved = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("body four", "changed"))
+        self.assertEqual(moved, ["4"])
+
+    def test_a_dotted_label_is_its_own_section_inside_its_parent(self):
+        inner = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("inner", "changed"))
+        self.assertEqual(inner, ["3", "3.1"])
+        outer = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("body three", "changed"))
+        self.assertEqual(outer, ["3"])
+
+    def test_an_unlabelled_heading_stays_in_the_enclosing_section(self):
+        moved = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("loose", "changed"))
+        self.assertEqual(moved, ["3"])
+
+    def test_a_label_alone_on_its_heading_line_is_a_section(self):
+        source = "## 3\n\nbody\n\n## 4\n\nmore\n"
+        moved = impl.changed_sections(source, source.replace("more", "less"))
+        self.assertEqual(moved, ["4"])
+
+    def test_the_parent_hash_matches_the_pre_change_reading(self):
+        """A labelled sub-heading's lines still belong to its parent: the
+        parent's digest is the one the old single-section reader computed,
+        so a parent reference keeps meaning the same bytes."""
+        old = {}
+        current = None
+        for line in self.NUMBERED.splitlines():
+            heading = re.match(r"^#{1,6}\s+(\d+)[.)]?\s", line)
+            if heading:
+                current = heading.group(1)
+                old.setdefault(current, [])
+                continue
+            if current is not None:
+                old[current].append(line)
+        expected = {n: hashlib.sha256("\n".join(b).encode("utf-8")).hexdigest()
+                    for n, b in old.items()}
+        sections = impl.revision_sections(self.NUMBERED)
+        self.assertEqual(sections["3"], expected["3"])
+        self.assertEqual(sections["4"], expected["4"])
+
+    def test_verify_crosses_an_identifier_reference_with_what_moved(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "draft-1.md").write_text(self.IDENTIFIERS, encoding="utf-8")
+        (root / "draft-2.md").write_text(
+            self.IDENTIFIERS.replace("beta", "gamma"), encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_sections_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src/Method").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__implementation__ = {'revision': 'draft-1.md'}\n", encoding="utf-8")
+        for module, section in (("first", "O1"), ("second", "O2")):
+            (box / f"src/Method/{module}.py").write_text(
+                "__provenance__ = {'revision': 'draft-1.md', "
+                f"'sections': ['{section}'], 'equations': [], 'invariants': []}}\n",
+                encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box), "--name", "Method"],
+            capture_output=True, text=True, cwd=FORGE,
+            env=dict(os.environ, IMPLEMENTATION_PROPOSALS=str(root)))
+        fidelity = json.loads(proc.stdout or "{}")["fidelity"]
+        drift = {Path(d["module"]).stem: d for d in fidelity["drift"]}
+        self.assertEqual(drift["second"]["changedSections"], ["O2"])
+        self.assertEqual(drift["second"]["touchedSections"], ["O2"])
+        self.assertEqual(drift["first"]["touchedSections"], [])
+        self.assertEqual(fidelity["benchmark"]["changedSections"], ["O2"])
+
+
 class VerifyAgreementWitnessTests(unittest.TestCase):
     """`verify` announces the witness dimension on every run, including
     zero (spec Group 4), and never refuses on `disagrees` -- `close` is the

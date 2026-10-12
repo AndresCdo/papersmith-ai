@@ -2878,6 +2878,9 @@ class SharedExperimentConventionTests(unittest.TestCase):
         conventions.mkdir(parents=True)
         (conventions / "experiments.json").write_text(
             json.dumps(convention), encoding="utf-8")
+        # B1: the profile also reads the shared section-label convention.
+        shutil.copy(CONVENTION_FILE.parent / "sections.json",
+                    conventions / "sections.json")
         return _load_module(skill / "impl_profile.py", "relocated_profile").PROFILE
 
     def test_the_profile_reads_the_shared_file(self):
@@ -3006,3 +3009,67 @@ class PerLineageImplementationBindingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExperimentSectionsTests(unittest.TestCase):
+    """B1 (`cross-skill-consistency`), the experimental side: per-section
+    drift in `verify` speaks in the experiment ids the shared convention
+    declares (`[exp:<id>]` in a heading), and still reads the legacy `## N`
+    form. Before 0.14.0 neither form produced a section: the canonical
+    heading carries no leading number, and the legacy `## N` stands alone on
+    its line, which the old reader never matched."""
+
+    CANONICAL = SharedExperimentConventionTests.CANONICAL
+    LEGACY_DUAL = SharedExperimentConventionTests.LEGACY_DUAL
+
+    def _engine(self):
+        module, _ = _engine_with_documents(_real_profile()["documents"])
+        return module
+
+    def test_canonical_experiment_headings_are_sections(self):
+        engine = self._engine()
+        self.assertEqual(sorted(engine.revision_sections(self.CANONICAL)), ["E1", "E2"])
+        moved = engine.changed_sections(
+            self.CANONICAL, self.CANONICAL.replace("Five seeds", "Ten seeds"))
+        self.assertEqual(moved, ["E1"])
+
+    def test_legacy_blocks_read_both_ids(self):
+        engine = self._engine()
+        self.assertEqual(sorted(engine.revision_sections(self.LEGACY_DUAL)),
+                         ["1", "2", "E1", "E2"])
+        moved = engine.changed_sections(
+            self.LEGACY_DUAL, self.LEGACY_DUAL.replace("Old text two", "New"))
+        self.assertEqual(moved, ["2", "E2"])
+
+    def test_a_malformed_section_heading_is_refused_by_the_resolver(self):
+        real = dict(_real_profile()["documents"][0]["section_heading"])
+        for grammar in ({**real, "marker": r"\[exp:[A-Z0-9]+\]"},
+                        {**real, "marker": r"(a)(b)"},
+                        {**real, "label": r"(unclosed"},
+                        {"closer": real["closer"]},
+                        "not a mapping"):
+            with self.subTest(grammar=grammar):
+                profile = copy.deepcopy(dict(_real_profile()))
+                profile["documents"][0]["section_heading"] = grammar
+                tmp_dir = Path(tempfile.mkdtemp(prefix="section-heading-"))
+                self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+                profile_file = tmp_dir / "impl_profile.py"
+                profile_file.write_text(
+                    "from pathlib import Path\n" f"PROFILE = {_to_source(profile)}\n",
+                    encoding="utf-8")
+                with self.assertRaises(RuntimeError) as ctx:
+                    _resolve_with(profile_file)
+                self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING",
+                              str(ctx.exception))
+
+    def test_both_implementation_profiles_hand_over_the_one_convention(self):
+        convention = {key: value for key, value in json.loads(
+            (FORGE / "skills/_core/conventions/sections.json").read_text(
+                encoding="utf-8")).items() if not key.startswith("$")}
+        sibling = _load_module(
+            FORGE / "skills/proposal-implementation/impl_profile.py",
+            "proposal_impl_profile_sections").PROFILE
+        self.assertEqual(sibling["documents"][0]["section_heading"], convention)
+        mine = dict(_real_profile()["documents"][0]["section_heading"])
+        mine.pop("marker")
+        self.assertEqual(mine, convention)

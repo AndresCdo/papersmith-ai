@@ -74,6 +74,14 @@ sibling's own doctrine requires for its own claim key.
 
 ## How an experiment is located: one convention, shared
 
+`verify`'s per-section drift (`fidelity.drift[].changedSections`) speaks in
+experiment ids too: an experiment heading's `[exp:<id>]` is its section label
+(`documents[0].section_heading.marker` in this skill's profile), and a legacy `## N`
+heading reads through the engine's shared section-label convention
+(`skills/_core/conventions/sections.json`). Inside a legacy block both ids
+move together (`## 1` wrapping `[exp:E1]` reports `1` and `E1`). A module's
+`__provenance__["sections"]` names those ids.
+
 `experimental-deliberation` writes the experiments document, and this skill
 reads it, so both read the same convention from one file:
 `skills/_core/conventions/experiments.json` (the identifier class, the

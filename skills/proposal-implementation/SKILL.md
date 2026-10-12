@@ -1197,6 +1197,16 @@ design decisions.
    nothing about where. `benchmark` answers the same question for the bench: which
    arms a changed section reaches, so the experiment is re-run because something it
    depends on moved rather than because a string did.
+
+   A section is a heading whose first token is a label: a number (`## 3. Formulation`,
+   `## 3`), a dotted number (`### 3.1`), or an identifier (`### O1. Objective`), closed
+   by an optional `.`, `)` or `:`. The grammar lives once, in
+   `skills/_core/conventions/sections.json`. A labelled heading nested under another
+   is its own section and still part of its parent, so a change inside `3.1` reports
+   both `3` and `3.1`; an unlabelled heading belongs to the section around it. A
+   module's `__provenance__["sections"]` names those labels exactly as the headings
+   spell them. A revision whose headings carry no label yields no sections, and only
+   the file-level revision drift (`staleModules`) is reported for it.
    - **They did** → the code is ahead of the proposal. Remind them to update the
      mathematics and hand them the prompt that does it. Do not edit their code to
      match an older proposal.

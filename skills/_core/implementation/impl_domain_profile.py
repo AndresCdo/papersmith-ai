@@ -551,6 +551,36 @@ def _resolve() -> Mapping[str, Any]:
                 f"block_aliases as {locator['block_aliases']!r}; it must be "
                 "true or false when declared.")
 
+    # `documents[N].section_heading` (`cross-skill-consistency`, B1):
+    # optional; absent means no heading is a section. When declared it is a
+    # mapping whose `label` and `closer` compile, and whose optional
+    # `marker` compiles with exactly one capturing group, the label its
+    # reader takes.
+    for index, entry in enumerate(documents):
+        grammar = entry.get("section_heading")
+        if grammar is None:
+            continue
+        where = f"{configured} declares documents[{index}].section_heading"
+        problem = None
+        if (not isinstance(grammar, Mapping)
+                or not isinstance(grammar.get("label"), str)
+                or not isinstance(grammar.get("closer"), str)
+                or not isinstance(grammar.get("marker", ""), str)):
+            problem = ("it must be a mapping with string `label` and `closer` "
+                       "and an optional string `marker`")
+        else:
+            try:
+                re.compile(grammar["label"])
+                re.compile(grammar["closer"])
+                if grammar.get("marker") and re.compile(grammar["marker"]).groups != 1:
+                    problem = "its `marker` must carry exactly 1 capturing group"
+            except re.error as exc:
+                problem = f"a pattern in it does not compile: {exc}"
+        if problem:
+            raise ImplementationProfileError(
+                f"IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING: "
+                f"{where}; {problem}.")
+
     # `the-agreement-nothing-computes` (Slice D, design.md D5): every
     # `documents[N].cross_citation`'s own shape, validated at resolve
     # time -- guaranteed either the literal `None` or a complete two-key

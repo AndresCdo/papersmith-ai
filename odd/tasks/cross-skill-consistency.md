@@ -51,6 +51,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] D4 — plausibility metadata cache inside sota-pool (D, writer trigger: paper_cli + paper_resolve + 2 agents + 2 SKILL.md + test)
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
 - [ ] B1–B13
+  - [x] B1 — section labels in `verify` drift (D, writer trigger: engine + resolver + 2 profiles + convention + 2 test files + 4 docs + seal)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -320,6 +321,32 @@ Route legend: D = delegated writer, I = inline.
   workspace's shipped `paper_cli.py` with the `OPENER` seam). RED 3F (+1 subtest) -> GREEN. Mutations: cache-dir
   ignored -> 3 red; containment dropped -> 1 red. test:fast 2018 passed, 1 failed (known `.venv` env failure).
   Commit: `fix(plausibility): resolve caches in sota-pool, never starting a paper tree` (the commit carrying this line)
+
+- B1 (real, verified by reproduction): `revision_sections` matched only `^#{1,6}\s+(\d+)[.)]?\s`; on a
+  generic revision with `### O1.`/`### O2.` headings it returned `{}` and `changed_sections` `[]`; `### 3.1`
+  and label-only `## 3` (the legacy experiments form) were not sections either. The deliberation engine
+  imposes no heading form (`document-index.ts` indexes any ATX heading; `initial-revision-renderer.ts`
+  emits the idea-derived `##` heading and `### <decisionId>`), so `verify` now recognizes labelled headings
+  and `proposal-deliberation` documents the labels. Fix: one convention file
+  `skills/_core/conventions/sections.json` (`label` `[A-Za-z]*[0-9]+(?:\.[0-9]+)*`, `closer` `[.):]`), read by
+  both implementation profiles and handed to the engine as optional `documents[0].section_heading`
+  (experimental adds `marker` = the `[exp:<id>]` heading from experiments.json); resolver validates it
+  (`IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING`). Nesting: a labelled heading closes open
+  sections of the same or a deeper level; deeper labelled headings stay part of their parents line for
+  line (parent digest identical to the old reader's, asserted); an unlabelled heading never closes the
+  outermost section, only nested deeper ones. The engine first read the JSON itself; 17 mutation tests copy
+  only `_core/implementation` into scratch trees, so the read moved into the profiles (the A7 pattern).
+  Tests: `SectionHeadingConventionTests` (7, proposal; RED 4F, 3 pins of the old numbered reading),
+  `ExperimentSectionsTests` (4, experimental; RED 2F; resolver refusal with 5 subtests; both profiles hand
+  over the identical convention). Mutations: no parent lines -> 1 red; unlabelled-closing off -> 1 red;
+  marker off -> 2 red; marker group check off -> red. Re-anchored: `SharedExperimentConventionTests.
+  _relocated_profile` (scratch tree also needs `sections.json`). Domain-lock pins unchanged (comments
+  reworded). Seal: experiments `verify-a-declared`, `verify-b-declared`, `verify-b-undeclared`, `verify-t`
+  regenerated via `tests/experiments_seal_capture.py`; output diff = only `changedSections`/
+  `touchedSections`/`reason`/`armsReached` (the corpus's bare `## N` sections now read); `propose` timestamp
+  noise reverted. `tests/seal` unchanged. No migration (reader-side; no artefact shape change). Upgrade
+  fixture test 8/8.
+  Commit: `fix(implementation): verify reads the section labels a revision carries` (the commit carrying this line)
 
 ## Next step
 

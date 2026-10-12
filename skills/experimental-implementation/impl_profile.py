@@ -87,6 +87,14 @@ _FORGE_ROOT = _SKILL.parents[1]
 EXPERIMENT_CONVENTION = json.loads(
     (_SKILL.parent / "_core" / "conventions" / "experiments.json")
     .read_text(encoding="utf-8"))
+#: The ONE section-label convention, shared with `proposal-implementation`:
+#: what a section heading's leading label looks like (`cross-skill-consistency`,
+#: B1). Read, never respelled here.
+SECTION_CONVENTION = {
+    key: value for key, value in json.loads(
+        (_SKILL.parent / "_core" / "conventions" / "sections.json")
+        .read_text(encoding="utf-8")).items()
+    if not key.startswith("$")}
 _IDENTIFIER = EXPERIMENT_CONVENTION["identifier"]
 _DECLARES = re.escape("[" + EXPERIMENT_CONVENTION["declares"] + ":")
 _PROSE_REFERENCE = EXPERIMENT_CONVENTION["proseReference"].replace(
@@ -266,6 +274,16 @@ PROFILE = {
                     + _IDENTIFIER + r"\][^\n]*)$.*?(?=\n(?!\1#)#{1,6}[ \t]|\Z)"),
                 "identity": "## {value}",
                 "block_aliases": True,
+            },
+            # The section unit `verify`'s per-section drift speaks in
+            # (`cross-skill-consistency`, B1): the shared section-label
+            # convention (`_core/conventions/sections.json`), which still
+            # reads a legacy `## N` heading, plus an experiment heading's own
+            # `[exp:<id>]` declaration as its marker.
+            "section_heading": {
+                **SECTION_CONVENTION,
+                "marker": (r"^#{1,6}[ \t][^\n]*?" + _DECLARES + r"("
+                           + _IDENTIFIER + r")\]"),
             },
             # `the-agreement-nothing-computes` (Slice D, design.md D5,
             # task 2.7): THIS document -- the experiments document -- is

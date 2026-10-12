@@ -7877,31 +7877,81 @@ def declared_dimension_names(target: Path, package: str) -> list[str] | None:
     return None
 
 
+#: The section-label grammar (`documents[0].section_heading`, optional): the
+#: host's profile hands over the shared convention
+#: (`skills/_core/conventions/sections.json`) and, where a document names its
+#: unit inside a heading marker and not as a leading label, that marker. Read,
+#: never respelled here, so a document and the reader that reports on it cannot
+#: come to disagree about what a section heading is. Undeclared: no heading is
+#: a section, and only file-level revision drift is read.
+_SECTION_GRAMMAR = DOCUMENTS[0].get("section_heading") or {}
+_SECTION_HEADING = (re.compile(
+    r"^(#{1,6})\s+(" + _SECTION_GRAMMAR["label"] + r")"
+    + _SECTION_GRAMMAR["closer"] + r"?(?:\s|$)")
+    if _SECTION_GRAMMAR else None)
+_SECTION_MARKER = (re.compile(_SECTION_GRAMMAR["marker"])
+                   if _SECTION_GRAMMAR.get("marker") else None)
+
+
+def _section_heading(line: str) -> tuple[int, str] | None:
+    """`(level, label)` when `line` is a section heading, else `None`."""
+    level = re.match(r"^(#{1,6})\s", line)
+    if level is None:
+        return None
+    if _SECTION_MARKER is not None:
+        marked = _SECTION_MARKER.search(line)
+        if marked:
+            return len(level.group(1)), marked.group(1)
+    heading = _SECTION_HEADING.match(line) if _SECTION_HEADING else None
+    if heading:
+        return len(heading.group(1)), heading.group(2)
+    return None
+
+
 def revision_sections(source: str | None) -> dict[str, str]:
-    """Each numbered section of a revision, keyed by its number, hashed by content.
+    """Each labelled section of a revision, keyed by its label, hashed by content.
 
     Sections are what modules declare, so sections are the unit a drift report has to
-    speak in. Anything before the first numbered heading belongs to no section and is
-    ignored rather than attributed to one.
+    speak in. A section heading starts with a label in the shared
+    convention (`3`, `3.1`, `O1`), or that carries the document's declared marker.
+    Its body runs to the next section heading of the same or a lower level; a
+    labelled heading nested deeper is its own section AND stays part of every
+    enclosing one, line for line, so a parent's digest covers exactly the bytes
+    it covered when only leading numbers were read. An unlabelled heading never
+    closes the outermost open section; it closes only nested sections deeper
+    than itself. Anything before the first section heading belongs to no section and
+    is ignored rather than attributed to one.
     """
     if not source:
         return {}
     sections: dict[str, list[str]] = {}
-    current = None
+    open_sections: list[tuple[int, str]] = []
     for line in source.splitlines():
-        heading = re.match(r"^#{1,6}\s+(\d+)[.)]?\s", line)
+        heading = _section_heading(line)
         if heading:
-            current = heading.group(1)
-            sections.setdefault(current, [])
+            level, label = heading
+            open_sections = [(lvl, lab) for lvl, lab in open_sections if lvl < level]
+            for _, enclosing in open_sections:
+                sections[enclosing].append(line)
+            open_sections.append((level, label))
+            sections.setdefault(label, [])
             continue
-        if current is not None:
-            sections[current].append(line)
-    return {number: hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
-            for number, body in sections.items()}
+        unlabelled = re.match(r"^(#{1,6})\s", line)
+        if unlabelled and len(open_sections) > 1:
+            # A shallower unlabelled heading ends the nested sections it
+            # outranks, never the outermost one: that one keeps every
+            # line up to the next section heading, as it always has.
+            depth = len(unlabelled.group(1))
+            open_sections = open_sections[:1] + [
+                entry for entry in open_sections[1:] if entry[0] <= depth]
+        for _, label in open_sections:
+            sections[label].append(line)
+    return {label: hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
+            for label, body in sections.items()}
 
 
 def changed_sections(old: str | None, new: str | None) -> list[str]:
-    """Which numbered sections differ between two revisions, added and removed too."""
+    """Which labelled sections differ between two revisions, added and removed too."""
     before, after = revision_sections(old), revision_sections(new)
     if not before or not after:
         return []

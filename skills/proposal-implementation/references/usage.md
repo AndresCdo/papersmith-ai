@@ -549,6 +549,15 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py verify \
 }
 ```
 
+`fidelity.drift` lists, per stale module, the `changedSections` between the
+revision it declares and the current one and the `touchedSections` it declares
+among them. Section labels follow `skills/_core/conventions/sections.json`: the
+first token of a heading, a number (`3`), a dotted number (`3.1`) or an
+identifier (`O1`), with an optional `.`, `)` or `:` after it. A nested
+labelled heading also counts for its parent (`3.1` moving reports `3` and
+`3.1`). Before 0.14.0 only a leading bare number followed by a space counted,
+so identifier, dotted and label-only headings produced no sections.
+
 `missingProvenance` never lists the kit's own seal,
 `src/<Package>/report_digest.py`, while it is still the kit's file: its path
 is a scaffold destination with a kit source and its bytes equal either today's

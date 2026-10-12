@@ -219,6 +219,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `paper/`, where `bib` and `full_text` read. The test reads the invocation out
   of each agent's definition and runs it against a workspace's shipped
   `paper_cli.py`.
+- **`verify` reports per-section drift for the section labels revisions
+  actually carry.** The implementation engine counted a heading as a section
+  only when its first token was a bare number followed by a space
+  (`## 3. Title`). Headings with an identifier label (`### O1. Objective`), a
+  dotted label (`### 3.1`) or a label alone on the line (`## 3`, the legacy
+  experiments form) produced no sections. `changedSections` stayed empty and
+  `__provenance__["sections"]` was never compared with what moved, so only
+  the file-level revision drift worked. The label grammar now lives once, in
+  `skills/_core/conventions/sections.json`, and both implementation profiles
+  pass it to the engine as `documents[0].section_heading`.
+  `experimental-implementation` adds the experiment heading's `[exp:<id>]` as
+  a marker, so its drift is reported per experiment id. A labelled heading
+  nested under another is its own section and still part of its parent, and
+  the parent covers the same lines it did before. `proposal-deliberation`
+  documents the labels to use for sections that should be tracked.
 
 ### Added
 
@@ -384,6 +399,19 @@ number is `0`, breaking changes can still arrive without a major bump.
   and keep reading; nothing moves them and no migration is needed. A
   workspace that wants them gone can delete
   `paper/.paper-writing/metadata/` while no paper has been started.
+- `verify`'s `fidelity.drift[].changedSections`/`touchedSections` and
+  `fidelity.benchmark.changedSections`/`armsReached` now list identifier,
+  dotted and label-only sections. A change inside `3.1` reports both `3` and
+  `3.1`. A drift entry whose sections now resolve reads
+  `sections it declares have changed` where it used to read `bound to an older
+  revision, but none of its sections moved`. A numbered parent's digest covers
+  the same lines as before, so existing numbered `__provenance__` references
+  keep matching what they matched. Under `experimental-implementation`,
+  sections are experiment ids (`E1`) and legacy `## N` numbers. The
+  implementation profile gains an optional `documents[N].section_heading`
+  leaf (refused as `IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING`
+  when malformed; a profile that does not declare it reads no sections). This
+  is reader-side only: no stored artefact changes and no migration is needed.
 
 ## 0.13.0
 
