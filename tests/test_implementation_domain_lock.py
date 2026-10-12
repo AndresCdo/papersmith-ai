@@ -574,6 +574,10 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: `cross-skill-consistency` (C10): `_called_roots` walks an attribute
 #: call down to the name it starts from through `ast.Attribute.value`,
 #: twice -- code, not prose (`value` 244->246).
+#: `cross-skill-consistency` (C11): `materialize --module` is a CLI flag the
+#: engine must spell -- its parser registration, its `getattr` read and the
+#: one refusal that names it (`module` 195->198). Variables and prose around
+#: it say `stem`/"file" instead.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
@@ -584,7 +588,7 @@ M5_PINNED_RESIDUE: dict[str, int] = {
     "experiments": 6, "implementations": 4, "incomplete": 29,
     "invariant": 22, "isolated": 5, "leave": 11, "leaves": 38,
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
-    "measured": 143, "measurement": 43, "module": 195, "notebooks": 110,
+    "measured": 143, "measurement": 43, "module": 198, "notebooks": 110,
     "object": 33, "pilot": 123, "place": 58, "produces": 51,
     "rather": 384, "recorded": 81, "remedy": 57, "remote": 65,
     "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,

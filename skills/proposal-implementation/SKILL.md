@@ -819,6 +819,12 @@ date. Drift is Flow B's fourth step, not a reason to start over.
    `OBJECT_MAP_NOT_APPROVED` until step 8's `revision`/`premises` are recorded in
    `src/<Package>/__init__.py` — this stage cannot run before that gate.
 
+   Pass `--module <name>` to write the first row under the name the approved
+   map gives the module (`src/<Package>/<name>.py`); without it the stage
+   writes `module.py`, and only while the package holds no module of its own.
+   Once the map's modules exist, `structure.objectGaps` no longer names
+   `module.py`.
+
    | Written into | Written from |
    | --- | --- |
    | `src/<Package>/<module>.py` | `assets/kit/src/module.py` |
@@ -3209,7 +3215,7 @@ me to do that now?". That is the failure this section exists to make
 impossible. **The engine publishes what happens next. The agent never composes
 it.**
 
-One hundred and twenty-eight distinct codes are reachable from the ten gating
+One hundred and thirty distinct codes are reachable from the ten gating
 commands — `apply`, `admit`, `gate`, `offer`, `close`, `step`, `settle`,
 `materialize`, `position`, `agree` (`GATING_COMMANDS`). **Reachable from, not
 raised inside**, and the difference cost a live session: the roster was first
@@ -3227,7 +3233,7 @@ decision somebody made rather than a shape somebody noticed:
 > Can the caller clear this by changing the invocation alone, without touching
 > the repository?
 
-- **Yes — an *invocation* defect** (56 codes). The detail already names the
+- **Yes — an *invocation* defect** (58 codes). The detail already names the
   flag, the token or the mutual exclusion. Nothing is published beside it: a
   `resolve` key on every refusal is the shape a reader learns to skip, and that
   is how a real one stops being read.

@@ -509,6 +509,20 @@ number is `0`, breaking changes can still arrive without a major bump.
   passing a function along uncalled, and calling an unrelated import remain no
   control. Shared by `experimental-implementation`. Documented in
   `proposal-implementation`'s `references/usage.md`.
+- **The objects stage follows the approved object map instead of a fixed
+  file name.** `materialize --stage objects` always wrote
+  `src/<Package>/module.py`, and `verify`'s `structure.objectGaps` reported it
+  missing on any target without it, even one whose map had been written as
+  modules of their own names, so the structure could not read `ok` without a
+  file nobody asked for. `--module <name>` now names the module the stage
+  writes (`src/<Package>/<name>.py`, from the same template, sealed and
+  releasable with `--authored` like `module.py`), refusing
+  `MODULE_NAME_INVALID` and `MODULE_STAGE_MISMATCH` for a name that cannot be
+  a module file or a mode other than `--stage objects`. Without the flag the
+  module destination is owed, and written, only while the package holds no
+  module of its own. Targets that already carry `module.py` verify unchanged.
+  Documented in `proposal-implementation`'s `SKILL.md` step 9 and
+  `references/usage.md`.
 
 ### Added
 
@@ -940,6 +954,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   revisions without the marker read and agree exactly as before, and
   `--acknowledge` is unchanged. The convention file gains one additive key; no
   migration is needed.
+
+- `verify`'s `structure.objectGaps` no longer names `src/<Package>/module.py`
+  on a target whose package already holds modules of its own, so such a target
+  can now read `structure: ok`; `materialize --stage objects` then writes only
+  the two test files. `materialize` accepts `--module`. Targets carrying
+  `module.py` and every existing receipt read exactly as before; no migration
+  is needed.
 
 
 ## 0.13.0

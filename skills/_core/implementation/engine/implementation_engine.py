@@ -29,6 +29,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import keyword
 import os
 import re
 import shlex
@@ -5197,8 +5198,63 @@ def object_destinations(name: str) -> list[str]:
             "tests/test_synthetic.py"]
 
 
+def package_own_modules(target: Path, name: str) -> list[str]:
+    """The `.py` files the method's package holds of its own: every one under
+    `src/<Package>/` except `__init__.py` files and the kit-owned files
+    (`kit_owned_package_files`, the seal today). These are what the step-8
+    map was written as, whatever their names."""
+    package = target / "src" / package_name(name)
+    if not package.is_dir():
+        return []
+    kit_owned = kit_owned_package_files(name)
+    return sorted(rel for rel in (str(file.relative_to(target))
+                                  for file in package.rglob("*.py")
+                                  if file.name != "__init__.py")
+                  if rel not in kit_owned)
+
+
 def object_gaps(target: Path, name: str) -> list[str]:
-    return [w for w in object_destinations(name) if not (target / w).exists()]
+    """The `objects` paths still owed. The first of them, the kit's
+    own default file (`object_destinations(name)[0]`), is owed only while
+    the package holds no file of its own: once the step-8 map has been
+    written, under whatever names it chose, that path is nobody's answer.
+    A target that carries it reads exactly as it always did."""
+    owed = [w for w in object_destinations(name) if not (target / w).exists()]
+    default = object_destinations(name)[0]
+    if default in owed and package_own_modules(target, name):
+        owed.remove(default)
+    return owed
+
+
+def recorded_object_modules(target: Path, name: str) -> list[str]:
+    """Files the `objects` stage wrote under a name its flag chose: the
+    receipt's own `objects` entries inside `src/<Package>/` that are not one
+    of `object_destinations`. Sealed and releasable exactly like the
+    default one."""
+    package = f"src/{package_name(name)}/"
+    fixed = set(object_destinations(name))
+    try:
+        entries = read_materialization_receipt(target)["entries"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return sorted(e["path"] for e in entries
+                  if isinstance(e, dict) and e.get("stage") == "objects"
+                  and isinstance(e.get("path"), str)
+                  and e["path"].startswith(package) and e["path"].endswith(".py")
+                  and e["path"] not in fixed)
+
+
+def object_module_name_problem(stem: str, name: str) -> str | None:
+    """Why `stem` cannot name the file `materialize --stage objects` writes
+    into the package, or `None` when it can: an importable identifier that
+    is not a keyword, not `__init__`, and not a file the kit itself owns."""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", stem) or keyword.iskeyword(stem):
+        return f"{stem!r} is not an importable Python identifier"
+    if stem == "__init__":
+        return "`__init__` is the package's own file, authored at scaffold time"
+    if f"src/{package_name(name)}/{stem}.py" in kit_owned_package_files(name):
+        return f"{stem}.py is a file the kit itself owns"
+    return None
 
 
 def object_kit_source(destination: str, name: str) -> Path | None:
@@ -5788,7 +5844,8 @@ def object_structure_gaps(target: Path, name: str) -> dict:
     — `scaffold_gaps`/`scaffold_structure_gaps` stay scoped to the scaffold
     destinations, as every existing caller and test already assumes.
     """
-    return _kit_structure_gaps(target, object_destinations(name), name)
+    return _kit_structure_gaps(
+        target, [*object_destinations(name), *recorded_object_modules(target, name)], name)
 
 
 def harness_structure_gaps(target: Path, name: str) -> dict:
@@ -19085,14 +19142,24 @@ def _materialize_scaffold_anchors(target: Path, name: str) -> list[dict]:
     return entries
 
 
-def _materialize_object_destinations(target: Path, name: str) -> list[str]:
+def _materialize_object_destinations(target: Path, name: str,
+                                     stem: str | None = None) -> list[str]:
     """The `objects` stage's own destination set: `object_destinations` minus
     whatever already exists on disk — the identical seam
     `_materialize_scaffold_destinations` gives the scaffold stage, kept as a
     separate function per stage so a test can monkeypatch one without
     touching the others.
+
+    `stem` (the flag's answer) names the first destination instead of the
+    kit's default file. Without it that destination follows `object_gaps`:
+    a package that already holds files of its own is owed none.
     """
-    return [d for d in object_destinations(name) if not (target / d).exists()]
+    paths = list(object_destinations(name))
+    if stem is not None:
+        paths[0] = f"src/{package_name(name)}/{stem}.py"
+    elif package_own_modules(target, name):
+        paths = paths[1:]
+    return [d for d in paths if not (target / d).exists()]
 
 
 def _materialize_harness_destinations(target: Path, name: str) -> list[str]:
@@ -19218,7 +19285,8 @@ def _implementation_predates_relocation(target: Path, name: str) -> dict | None:
     return None
 
 
-def _stage_objects(target: Path, name: str, seed: str) -> dict:
+def _stage_objects(target: Path, name: str, seed: str,
+                   stem: str | None = None) -> dict:
     """Writes the three step-9 kit destinations as raw, `{{PKG}}`/`{{SEED}}`-
     substituted templates — deliberately NOT gated by
     `writable_at_scaffold_time`.
@@ -19292,15 +19360,24 @@ def _stage_objects(target: Path, name: str, seed: str) -> dict:
             "9's authoring, not before that approval is recorded.",
         )
 
-    destinations = _materialize_object_destinations(target, name)
+    destinations = _materialize_object_destinations(target, name, stem)
+    named = (f"src/{package_name(name)}/{stem}.py" if stem is not None else None)
+
+    def kit_source(destination: str, kit_name: str) -> Path | None:
+        # A file the flag named is still written from the kit's own default
+        # template; every other destination maps as it always did.
+        if destination == named:
+            destination = object_destinations(kit_name)[0]
+        return object_kit_source(destination, kit_name)
+
     bodies = {
         destination: scaffold_substitute_body(
-            object_kit_source(destination, name).read_text(encoding="utf-8"),
+            kit_source(destination, name).read_text(encoding="utf-8"),
             name, seed)
         for destination in destinations
     }
     return _write_kit_stage(target, name, "objects", destinations, bodies,
-                            object_kit_source)
+                            kit_source)
 
 
 def _stage_harness(target: Path, name: str) -> dict:
@@ -19336,7 +19413,8 @@ def _kit_destination_stage(path: str, name: str) -> str | None:
 
 
 def _materialize_authored(target: Path, name: str, path: str) -> dict:
-    if path not in all_kit_destinations(name):
+    if (path not in all_kit_destinations(name)
+            and path not in recorded_object_modules(target, name)):
         raise Refused("NOT_A_KIT_DESTINATION",
                       f"{path} is not one of this stage's kit destinations.")
     full = target / path
@@ -19419,6 +19497,16 @@ def cmd_materialize(args: argparse.Namespace) -> dict:
                       f"--{'/--'.join(modes_given)} were given together; the "
                       "three modes are mutually exclusive.")
 
+    stem = getattr(args, "module", None)
+    if stem is not None and args.stage != "objects":
+        raise Refused("MODULE_STAGE_MISMATCH",
+                      "--module names the file `--stage objects` writes into the "
+                      "package; no other mode writes one.")
+    if stem is not None:
+        problem = object_module_name_problem(stem, name)
+        if problem:
+            raise Refused("MODULE_NAME_INVALID", f"The name given: {problem}.")
+
     if args.stage:
         # The writer: plan-gated, clean worktree required -- files land on
         # disk and the receipt is written last, atomically.
@@ -19450,7 +19538,7 @@ def cmd_materialize(args: argparse.Namespace) -> dict:
         if args.stage == "scaffold":
             return _stage_scaffold(target, name, args.seed)
         if args.stage == "objects":
-            return _stage_objects(target, name, args.seed)
+            return _stage_objects(target, name, args.seed, stem)
         return _stage_harness(target, name)
 
     # `--authored`/`--adopt`: ledger-only, no file write, no plan gate and
@@ -20144,6 +20232,8 @@ GATING_REFUSALS: dict[str, str] = {
     "MATERIALIZE_MODE_CONFLICT": INVOCATION_DEFECT,
     "PLAN_REQUIRED": INVOCATION_DEFECT,
     "SEED_REQUIRED": INVOCATION_DEFECT,
+    "MODULE_STAGE_MISMATCH": INVOCATION_DEFECT,  # the flag is the objects stage's
+    "MODULE_NAME_INVALID": INVOCATION_DEFECT,    # name an importable file
     # --- position ----------------------------------------------------------
     "POSITION_SEQUENCE_AND_RECONCILE": INVOCATION_DEFECT,  # drop one of the two
     "POSITION_SEQUENCE_UNREADABLE": INVOCATION_DEFECT,     # fix the JSON typed
@@ -22012,6 +22102,12 @@ def main(argv: list[str] | None = None) -> int:
                 "--seed", default=None,
                 help="the suite's fixed seed, substituted into {{SEED}}; "
                      "required with --stage scaffold")
+            p.add_argument(
+                "--module", default=None,
+                help="--stage objects only: the name the step-8 map gives "
+                     "the first file, written as src/<Package>/<name>.py "
+                     "instead of the kit's default. Omitted, the default is "
+                     "written only while the package holds no file of its own")
         if name == "adopt":
             p.add_argument(
                 "--source", default=None,

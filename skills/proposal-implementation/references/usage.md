@@ -456,7 +456,17 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py materialize
 ```
 
 The three destinations SKILL.md step 9 names: `src/<Package>/module.py`,
-`tests/test_invariants.py`, `tests/test_synthetic.py`. Same plan/clean-worktree
+`tests/test_invariants.py`, `tests/test_synthetic.py`. The first follows the
+approved map rather than the kit's file name. `--module <name>` writes it as
+`src/<Package>/<name>.py` (from the same template; sealed in the receipt and
+released by `--authored` like the default), refusing `MODULE_NAME_INVALID` for
+anything but an importable identifier that is not a keyword, `__init__` or a
+kit-owned file such as `report_digest`, and `MODULE_STAGE_MISMATCH` with any
+other mode. Without the flag, `module.py` is written only while the package
+holds no `.py` file of its own (its `__init__.py` and the kit's seal do not
+count); once the map's modules exist under their own names it is not written,
+and `verify`'s `structure.objectGaps` stops naming it. A target that already
+carries `module.py` keeps verifying unchanged. Same plan/clean-worktree
 preflight as `--stage scaffold`, plus one more: it refuses
 `OBJECT_MAP_NOT_APPROVED` until `src/<Package>/__init__.py`'s `__implementation__`
 carries step 8's `revision`/`premises` — or, on a target scaffolded before this
@@ -2721,6 +2731,8 @@ state, alongside the scenarios — not verified by hand once.
 | `MATERIALIZE_MODE_REQUIRED` | `materialize` needs exactly one of `--stage`/`--authored`/`--adopt`; none was given. |
 | `MATERIALIZE_MODE_CONFLICT` | Two or more of `--stage`/`--authored`/`--adopt` were given together; the three modes are mutually exclusive. |
 | `PLAN_REQUIRED` | `materialize --stage` needs `--plan <approved plan JSON>`. |
+| `MODULE_STAGE_MISMATCH` | `materialize --module` was given with a mode other than `--stage objects`, the only one that writes a module. |
+| `MODULE_NAME_INVALID` | `materialize --module` names something that cannot be the module's file: not an importable identifier, a keyword, `__init__`, or a file the kit owns (`report_digest`). |
 | `SEED_REQUIRED` | `materialize --stage scaffold` needs `--seed`, substituted into `{{SEED}}`. |
 | `STAGE_CANNOT_ANSWER` | A scaffold-stage `.py` destination still fails `ast.parse` after `{{PKG}}`/`{{SEED}}` substitution — its remaining token answers a later step. Names the file. Never raised by `objects`/`harness`: their three destinations are either written with tokens deliberately left standing (`objects`) or already parse cleanly (`harness`'s two `.py` files). |
 | `OBJECT_MAP_NOT_APPROVED` | `materialize --stage objects` ran before step 8's `revision`/`premises` were recorded in `src/<Package>/__init__.py`'s `__implementation__`. The detail names whichever of the two is still blank, so a half-written map does not send you back to re-read the half that is already right. Get that declaration approved and written first. |
@@ -2749,7 +2761,7 @@ them. Which refusals carry the extra key is itself the answer to a question:
 > the repository?
 
 **Yes — an invocation defect.** The detail already names the flag, the token or
-the mutual exclusion. Fifty-six codes, and nothing is published beside them:
+the mutual exclusion. Fifty-eight codes, and nothing is published beside them:
 `SETTLE_STDIN_CONFLICT`, `OFFER_ANSWER_NOT_A_TOKEN`, `MATERIALIZE_MODE_REQUIRED`,
 `NOT_A_GIT_REPO`, `GATE_ELECTION_REQUIRED` and the rest. Retype the call.
 

@@ -880,3 +880,21 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   experimental-deliberation-references 9 passed; `npm run test:fast` 3373 passed, 1 failed (the Z11 anchor, then
   re-anchored and green).
   Commit: `feat(experimental-implementation): an experiments document can mark a proposal claim out of scope` (the commit carrying this line)
+
+- C11 (real): `object_destinations` fixed `src/<Package>/module.py` and `object_gaps` reported it missing whenever
+  absent. Fix: `package_own_modules` (package `.py` files minus `__init__.py` and kit-owned files); `object_gaps` and
+  `_materialize_object_destinations` drop the default module destination once the package holds any; `materialize
+  --module <name>` writes `src/<Package>/<name>.py` from the same template (`object_module_name_problem` ->
+  `MODULE_NAME_INVALID`; any other mode -> `MODULE_STAGE_MISMATCH`, both invocation defects);
+  `recorded_object_modules` keeps a named module drift-checked (`objectDrift`) and `--authored`-releasable.
+  Targets with `module.py` unchanged (test-locked). Docs: proposal SKILL.md step 9, usage.md (objects stage +
+  refusal table). Tests: `tests/test_implementation_object_stage.py` (7, via new shared helper
+  `tests/implementation_lifecycle.py`) RED 5F -> GREEN. Seals: verify-a/-b/-t (proposal) and verify-a/-b/-t,
+  verify-a-declared, verify-b-declared, verify-b-undeclared (experimental) recaptured with the capture scripts;
+  the only output delta is `structure.objectGaps` losing `src/Seal/module.py` (and the `resolve` question listing
+  the same gaps), checked by diffing the verify outputs before/after; `propose` re-recorded too but it is the
+  declared non-deterministic case, excluded from comparison. Re-anchored: roster 128 -> 130 (invocation 56 -> 58);
+  domain-lock pin `module` 195->198 (the flag's parser entry, `getattr`, one refusal). No migration.
+  Verification: focused 7 passed; engine suites `-n 8 --dist loadfile` 2250 passed, 11 failed = seal digests,
+  then recaptured: both seal files green.
+  Commit: `fix(implementation): the objects stage follows the approved map instead of a fixed module.py` (the commit carrying this line)
