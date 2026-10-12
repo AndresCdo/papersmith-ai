@@ -2621,202 +2621,199 @@ flowchart TD
 
 ### 9. `paper-writing` — from the section contracts to the PDF, with nothing assumed
 
-**Para qué está.** Escribir un paper a mano tiene un problema silencioso: una frase
-sobrevive al dato que la sostenía, una cita queda sin resolver, un diagrama se
-declara "compilado" sin haber compilado nunca. Esta skill lleva `paper/` de un
-andamio vacío a un documento renderizado donde cada bloque, cada decisión y cada
-cita quedan grabados y verificables — nunca asumidos. Es el reverso de
-`paper-ingestion`: esa skill mete papers *hacia adentro* como Markdown legible; esta
-saca prosa *hacia afuera* como LaTeX que compila, con la misma regla de fondo
-(`no-claim-without-a-source-that-holds-it`) aplicada del otro lado.
+**What it is for.** Writing a paper by hand has a silent problem: a sentence
+outlives the datum that supported it, a citation stays unresolved, a diagram is
+declared "compiled" without ever having compiled. This skill takes `paper/` from an
+empty scaffold to a rendered document in which every block, every decision and
+every citation is recorded and verifiable — never assumed. It is the reverse of
+`paper-ingestion`: that skill pulls papers *inward* as readable Markdown; this one
+pushes prose *outward* as LaTeX that compiles, with the same underlying rule
+(`no-claim-without-a-source-that-holds-it`) applied from the other side.
 
-**De dónde recibe y a quién le entrega.** Lee tres cosas que no escribe: los
-contratos de sección en `sections/*.md` (front-matter JSON versionado, diez
-archivos), lo que `proposals/` y `experiments/` declaran, y el código de un
-repositorio de implementación objetivo. De ahí resuelve citas contra OpenAlex,
-Crossref y arXiv, y le entrega al operador un `paper/main.tex` con cada bloque
-sustituido, su `refs.bib` reconstruido desde metadata cacheada, y un PDF
-compilado vía `latexmk`. No hay una skill "después" — `verify` es el último paso
-antes de que el documento salga del repositorio.
+**What it receives and what it hands on.** It reads three things it does not
+write: the section contracts in `sections/*.md` (versioned JSON front matter, ten
+files), what `proposals/` and `experiments/` declare, and the code of a target
+implementation repository. From these it resolves citations against OpenAlex,
+Crossref and arXiv, and hands the operator a `paper/main.tex` with every block
+substituted, its `refs.bib` rebuilt from cached metadata, and a PDF compiled
+through `latexmk`. There is no skill "after" it — `verify` is the last step before
+the document leaves the repository.
 
-**Qué necesita antes.** Python 3.10+ de biblioteca estándar únicamente — sin
-`pip install` para nada del CLI. `render`/`place` necesitan `latexmk` instalado
-(medido: `/Library/TeX/texbin/latexmk`, presente). `resolve` necesita red hacia
-`api.openalex.org`, `api.crossref.org` y `export.arxiv.org` — sin API key, sin
-secreto: OpenAlex sólo pide un contacto de cortesía (`papersmith.yaml`,
-`paper_writing.contact`), nunca enviado como credencial. Verificado en vivo:
+**What it needs first.** Python 3.10+ with the standard library only — no
+`pip install` for anything in the CLI. `render`/`place` need `latexmk` installed
+(measured: `/Library/TeX/texbin/latexmk`, present). `resolve` needs network access
+to `api.openalex.org`, `api.crossref.org` and `export.arxiv.org` — no API key, no
+secret: OpenAlex asks only for a courtesy contact (`papersmith.yaml`,
+`paper_writing.contact`), never sent as a credential. Verified live:
 
 ```
 $ paper_cli.py resolve --identifier 10.1038/nature14539 --resolver crossref
 {"status": "ok", "title": "Deep learning", "doi": "10.1038/nature14539", ...}
 ```
 
-**El flujo, por grupos de verbos.** Esta skill no declara una tabla de etapas:
-declara **diecinueve verbos detrás de una sola puerta** (`scripts/paper_cli.py`),
-y el flujo es el orden en que esos grupos se habilitan entre sí.
+**The flow, by groups of verbs.** This skill declares no stage table: it declares
+**nineteen verbs behind a single door** (`scripts/paper_cli.py`), and the flow is
+the order in which those groups enable one another.
 
-| Grupo | Verbos | Qué deja establecido |
+| Group | Verbs | What it establishes |
 |---|---|---|
-| El documento existe | `scaffold`, `status` | `paper/main.tex`, `refs.bib`, `Figures/`. `scaffold` es idempotente: una segunda corrida **nunca toca un byte existente**, ediciones a mano incluidas |
-| El contrato de sección | `contract`, `readiness`, `order` | Qué debe cumplir cada sección. El contrato es **dato, no código** |
-| Las decisiones del paper | `declare`, `observe`, `plan` | Lo que el paper decide sobre sí mismo. `observe` valida un informe de `insumos-observer` contra el esquema **antes** de que una persona corra `declare` |
-| La evidencia que sostiene | `resolve`, `bib build`, `validate` | Resolución de citas, bibliografía con fuente, y la compuerta de veredicto/colocación: **ninguna afirmación sin una fuente que la sostenga** |
-| Escribir y dibujar | `write`, `render`, `place`, `figure optimize`, `figure audit` | Redacción atada a evidencia, auditoría de contrato y prueba de fuga de estilo. Optimización de TikZ y auditoría semántica de figuras. `render`/`place`: un diagrama que compila o dice por qué, con su presupuesto de reparación |
-| Comprobar | `verify` | Verificación de acoplamientos de sólo lectura, integridad de citas, consistencia semántica de figuras y vigencia del contrato |
+| The document exists | `scaffold`, `status` | `paper/main.tex`, `refs.bib`, `Figures/`. `scaffold` is idempotent: a second run **never touches an existing byte**, hand edits included |
+| The section contract | `contract`, `readiness`, `order` | What every section has to satisfy. The contract is **data, not code** |
+| The paper's own decisions | `declare`, `observe`, `plan` | What the paper decides about itself. `observe` validates a report from `insumos-observer` against the schema **before** a person runs `declare` |
+| The supporting evidence | `resolve`, `bib build`, `validate` | Citation resolution, a sourced bibliography, and the verdict/placement gate: **no claim without a source that holds it** |
+| Writing and drawing | `write`, `render`, `place`, `figure optimize`, `figure audit` | Drafting bound to evidence, contract audit and the style-leak proof. TikZ optimization and semantic figure audit. `render`/`place`: a diagram that compiles or says why, with its repair budget |
+| Checking | `verify` | Read-only coupling verification, citation integrity, semantic figure consistency and contract currency |
 
-**El motor de sustitución son cuatro de esos diecinueve** —`scaffold`, `status`,
-`open`, `substitute`— y tienen una regla que conviene saber: **no existe
-`--force`**. Nada aquí descarta jamás el texto en disco de una persona a favor de
-un cuerpo entrante. La única salida de un bloque editado a mano es `--adopt`,
-que rebasa el digest y **deja el cuerpo intacto**.
+**The substitution engine is four of those nineteen** — `scaffold`, `status`,
+`open`, `substitute` — and they carry one rule: **there is no `--force`**. Nothing
+here ever discards a person's on-disk text in favor of an incoming body. The only
+exit from a hand-edited block is `--adopt`, which re-baselines the digest and
+**leaves the body untouched**.
 
-**Y nunca afirma que el documento compile.** Un `substitute` exitoso siempre
-agrega `"rendering": "unproven"`: este motor no tiene toolchain de LaTeX y no
-hace ninguna afirmación sobre cómo queda la página.
+**And it never claims the document compiles.** A successful `substitute` always
+adds `"rendering": "unproven"`: this engine has no LaTeX toolchain and makes no
+claim about how the page comes out.
 
-**El flujo.** Siete etapas, declaradas en `paper_objective.OBJECTIVE_FLOW` y
-leídas por los tests de los agentes, no por prosa suelta: `scaffold` crea
-`paper/main.tex`, `refs.bib` y `Figures/` de forma idempotente, sin pisar jamás
-un edit a mano; `plan` reporta de sólo lectura la clase de cada carpeta de
-`guidance/`, el estado de cada declaración y hecho, y la procedencia de cada
-bloque ya escrito; `declare` fija esas declaraciones y resoluciones de hecho —
-siempre una decisión humana, nunca inferida de evidencia; `cite` resuelve,
-reconstruye y valida cada cita que un bloque exige; `write` sustituye cada
-bloque escribible, en el orden que `order` deriva del grafo de bloques, pero
-nunca invocando un agente él mismo — eso lo hace un procedimiento de traslado
-(*shuttle*) que corre fuera del CLI (ver Los seguros); `render`/`place` prueban
-que el documento compila de verdad, no que "debería"; y `verify` cierra con un
-reporte de sólo lectura sobre acoplamientos, integridad de citas y vigencia del
-contrato, corrido de nuevo después de cualquier `substitute`, `render`, `place`
-o `declare`. La llegada declarada: un documento renderizado y decisión-completo
-donde nada quedó afirmado sin que una corrida lo haya chequeado.
+**The flow.** Seven stages, declared in `paper_objective.OBJECTIVE_FLOW` and read
+by the agents' tests, not by loose prose: `scaffold` creates `paper/main.tex`,
+`refs.bib` and `Figures/` idempotently, never overwriting a hand edit; `plan`
+reports read-only the class of every `guidance/` folder, the state of every
+declaration and fact, and the provenance of every block already written; `declare`
+fixes those declarations and fact resolutions — always a human decision, never
+inferred from evidence; `cite` resolves, rebuilds and validates every citation a
+block requires; `write` substitutes every writable block, in the order `order`
+derives from the block graph, but never invoking an agent itself — that is done by
+a shuttle procedure that runs outside the CLI (see The safeguards);
+`render`/`place` prove that the document actually compiles, not that it "should";
+and `verify` closes with a read-only report on couplings, citation integrity and
+contract currency, run again after any `substitute`, `render`, `place` or
+`declare`. The declared arrival: a rendered, decision-complete document in which
+nothing was asserted without a run having checked it.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `SKILL.md` | El contrato de conducta: los 19 verbos, sus refusals, el procedimiento de traslado hacia los 6 agentes. |
-| `scripts/paper_cli.py` | El front door — 19 verbos: `scaffold, status, open, substitute, contract, readiness, order, declare, observe, resolve, bib, validate, plan, write, render, verify, place, figure optimize, figure audit`. Sin dependencias externas. |
-| `scripts/paper_scaffold.py` | Crea y re-entra `paper/` sin clobbing — mismo patrón que `proposals/`/`experiments/`. |
-| `scripts/paper_block.py` | Gramática de marcadores: delimita, ubica, sustituye y rechaza sobre bloques nombrados dentro de `main.tex`, byte a byte. |
-| `scripts/paper_region.py` | La gramática compartida en la que se escriben las regiones `declarations`/`provenance`. |
-| `scripts/paper_declarations.py` | La región `declarations` — valores del operador y resoluciones de hecho, fijados una vez grabados, reabiertos sólo por nombre. |
-| `scripts/paper_provenance.py` | La región `provenance` — digest de contrato y generación de declaración con la que se escribió cada bloque, nunca reconstruida. |
-| `scripts/paper_contract.py` | Gramática del front-matter y validación de esquema sobre `sections/*.md`. |
-| `scripts/paper_graph.py` | Ensambla el corpus, el namespace plano de ids, resuelve los edges `after`, deriva el orden de escritura. |
-| `scripts/paper_readiness.py` | Por bloque: escribible o bloqueado, dados los hechos y declaraciones ya satisfechos. |
-| `scripts/paper_vocabulary.py` | Los tres vocabularios cerrados que un header de contrato puede usar — sin I/O, sin estado. |
-| `scripts/paper_guidance.py` | Clasifica cada carpeta de `guidance/` como `style-reference` o `evidence` por su marcador propio. |
-| `scripts/paper_evidence.py` | El registro claim↔fuente: un span citado verbatim de un `.md` ya ingerido, lo que vuelve una verdad de cita una medición y no una opinión. |
-| `scripts/paper_bindings.py` | El contrato de entrada del redactor y su binding map — detecta "nada afirmado fuera del evidence set", no sólo lo instruye. |
-| `scripts/paper_audit.py` | Extrae los `## Disqualifiers` verbatim y reconcilia la cuenta del auditor contra el borrador real. |
-| `scripts/paper_style.py` | Resolución y registro del bloque equivalente en cada carpeta `style-reference` — el registro, no el contenido. |
-| `scripts/paper_leak.py` | La prueba de tres borradores (distancia de registro + solapamiento de n-gramas) y el tripwire de ocho tokens — separados por firma a propósito, para que ajustar el tripwire nunca mueva la prueba. |
-| `scripts/paper_write.py` | El pipeline `write`: readiness, gate, borrador, auditoría de evidencia, auditoría de contrato, `substitute --contract` — con exactamente un re-borrador acotado, controlado por una ledger en disco. |
-| `scripts/paper_resolve.py` | Cliente `urllib` puro para resolver citas y metadata contra OpenAlex, Crossref y arXiv. Sin llave. |
-| `scripts/paper_bib.py` | Reconstruye `paper/refs.bib` exclusivamente desde metadata cacheada y resuelta — "nunca a mano" es una propiedad chequeada. |
-| `scripts/paper_validate.py` | El único gate de citas: veredicto, colocación por régimen, y un loop de búsqueda acotado a tres rondas que nunca deja pasar un bloque a medio citar. |
-| `scripts/paper_obligation.py` | Qué debe contener un diagrama, leído de la declaración `figure:` del contrato — nunca hardcodeado contra un id de sección o bloque. |
-| `scripts/paper_figure.py` | Layout de fuente/manifiesto de diagramas, el cruce de dos vías del manifiesto, y la ledger de presupuesto de reparación por figura. |
-| `scripts/paper_tikz.py` | Optimizador de código TikZ: poda librerías no usadas, detecta librerías faltantes y factoriza estilos repetidos en `\tikzset`. |
-| `scripts/paper_figure_audit.py` | Auditor semántico de figuras: compara nodos del manifiesto contra la prosa de la sección y las pipeline steps. |
-| `scripts/paper_latex.py` | El único módulo al que esta skill le permite importar `subprocess` — descubrimiento de toolchain, la única llamada a `latexmk`, parseo de log, veredicto de tres señales. |
-| `scripts/paper_coupling_evidence.py` | Toda lectura de disco que `verify` necesita, aislada aquí y en ningún otro lado. |
-| `scripts/paper_verify.py` | Ocho chequeos puros sobre esa evidencia (incluyendo `figure-semantics`) — cero I/O propio, reporte de sólo lectura. |
-| `scripts/paper_objective.py` | El norte declarado: `OBJECTIVE_FLOW`, leído por `tests/test_agents.py` vía `ast.literal_eval` — literales puros, sin llamadas ni imports. |
-| `sections/*.md` | Los diez contratos reales, versionados: front-matter JSON + prosa. Entrada real, no fixture. |
-| `.claude/agents/insumos-observer.md` | Lee las **cuatro fuentes declaradas** del paper —`proposals/`, `experiments/`, el código del repo destino y lo que devolvieron sus corridas— y reporta, por cada hecho observable, si está satisfecho y **con qué evidencia**. `Read`, `Glob`, `Grep`. **Nunca decide un valor y nunca corre `declare`**: su informe es lo que una persona lee antes de correrlo ella. El informe se pasa por archivo y `observe` lo valida contra el esquema — nunca se le cree a un agente su propia cuenta. |
-| `.claude/agents/style-sampler.md` | Resuelve el bloque equivalente, **entero**, de cada carpeta de `guidance/` que el registro clasifica como `style-reference`, y lo devuelve **verbatim, nunca recortado**. `Read`, `Glob`, `Grep`. Lo que devuelve es el único material contra el cual una prueba posterior de solapamiento puede comparar un borrador con estilo: si recortara, la prueba compararía contra algo que nadie escribió. |
-| `.claude/agents/figure-auditor.md` | Audita diagramas TikZ contra la prosa de su sección y el manifiesto declarado; corre `figure audit` y reporta el veredicto estructurado. |
+| `SKILL.md` | The conduct contract: the 19 verbs, their refusals, the shuttle procedure to the 6 agents. |
+| `scripts/paper_cli.py` | The front door — 19 verbs: `scaffold, status, open, substitute, contract, readiness, order, declare, observe, resolve, bib, validate, plan, write, render, verify, place, figure optimize, figure audit`. No external dependencies. |
+| `scripts/paper_scaffold.py` | Creates and re-enters `paper/` without clobbering — the same pattern as `proposals/`/`experiments/`. |
+| `scripts/paper_block.py` | Marker grammar: delimits, locates, substitutes and refuses over named blocks inside `main.tex`, byte by byte. |
+| `scripts/paper_region.py` | The shared grammar in which the `declarations`/`provenance` regions are written. |
+| `scripts/paper_declarations.py` | The `declarations` region — operator values and fact resolutions, fixed once recorded, reopened only by name. |
+| `scripts/paper_provenance.py` | The `provenance` region — contract digest and declaration generation with which each block was written, never reconstructed. |
+| `scripts/paper_contract.py` | Front-matter grammar and schema validation over `sections/*.md`. |
+| `scripts/paper_graph.py` | Assembles the corpus, the flat id namespace, resolves the `after` edges, derives the writing order. |
+| `scripts/paper_readiness.py` | Per block: writable or blocked, given the facts and declarations already satisfied. |
+| `scripts/paper_vocabulary.py` | The three closed vocabularies a contract header may use — no I/O, no state. |
+| `scripts/paper_guidance.py` | Classifies every `guidance/` folder as `style-reference` or `evidence` by its own marker. |
+| `scripts/paper_evidence.py` | The claim↔source record: a span quoted verbatim from an already-ingested `.md`, which makes a citation truth a measurement rather than an opinion. |
+| `scripts/paper_bindings.py` | The redactor's input contract and its binding map — detects "nothing asserted outside the evidence set", rather than only instructing it. |
+| `scripts/paper_audit.py` | Extracts `## Disqualifiers` verbatim and reconciles the auditor's account against the real draft. |
+| `scripts/paper_style.py` | Resolution and recording of the equivalent block in every `style-reference` folder — the record, not the content. |
+| `scripts/paper_leak.py` | The three-draft test (register distance + n-gram overlap) and the eight-token tripwire — separated by signature on purpose, so that adjusting the tripwire can never move the test. |
+| `scripts/paper_write.py` | The `write` pipeline: readiness, gate, draft, evidence audit, contract audit, `substitute --contract` — with exactly one bounded re-draft, controlled by an on-disk ledger. |
+| `scripts/paper_resolve.py` | Pure `urllib` client for resolving citations and metadata against OpenAlex, Crossref and arXiv. No key. |
+| `scripts/paper_bib.py` | Rebuilds `paper/refs.bib` exclusively from cached, resolved metadata — "never by hand" is a checked property. |
+| `scripts/paper_validate.py` | The only citation gate: verdict, placement by regime, and a search loop bounded to three rounds that never lets a half-cited block through. |
+| `scripts/paper_obligation.py` | What a diagram has to contain, read from the contract's `figure:` declaration — never hardcoded against a section or block id. |
+| `scripts/paper_figure.py` | Diagram source/manifest layout, the manifest's two-way cross-check, and the per-figure repair-budget ledger. |
+| `scripts/paper_tikz.py` | TikZ code optimizer: prunes unused libraries, detects missing libraries and factors repeated styles into `\tikzset`. |
+| `scripts/paper_figure_audit.py` | Semantic figure auditor: compares manifest nodes against the section's prose and the pipeline steps. |
+| `scripts/paper_latex.py` | The only module this skill permits to import `subprocess` — toolchain discovery, the single `latexmk` call, log parsing, three-signal verdict. |
+| `scripts/paper_coupling_evidence.py` | Every disk read `verify` needs, isolated here and nowhere else. |
+| `scripts/paper_verify.py` | Eight pure checks over that evidence (including `figure-semantics`) — zero I/O of its own, read-only report. |
+| `scripts/paper_objective.py` | The declared north: `OBJECTIVE_FLOW`, read by `tests/test_agents.py` via `ast.literal_eval` — pure literals, no calls and no imports. |
+| `sections/*.md` | The ten real contracts, versioned: JSON front matter + prose. Real input, not a fixture. |
+| `.claude/agents/insumos-observer.md` | Reads the paper's **four declared sources** — `proposals/`, `experiments/`, the target repo's code and what its runs returned — and reports, for each observable fact, whether it is satisfied and **with what evidence**. `Read`, `Glob`, `Grep`. **It never decides a value and never runs `declare`**: its report is what a person reads before running `declare`. The report is passed by file and `observe` validates it against the schema — an agent's own account is never trusted. |
+| `.claude/agents/style-sampler.md` | Resolves the equivalent block, **whole**, from every `guidance/` folder the record classifies as `style-reference`, and returns it **verbatim, never trimmed**. `Read`, `Glob`, `Grep`. What it returns is the only material against which a later overlap test can compare a styled draft: if it trimmed, the test would compare against something no one wrote. |
+| `.claude/agents/figure-auditor.md` | Audits TikZ diagrams against their section's prose and the declared manifest; runs `figure audit` and reports the structured verdict. |
 
-**Los seguros.**
+**The safeguards.**
 
-- **El CLI nunca invoca un agente.** Un AST scan (`NoSubprocessScanTests`) certifica
-  que ningún módulo bajo `scripts/` importa `subprocess`, `os.system`, `os.popen`,
-  `os.exec*` ni `multiprocessing` — con una única excepción nombrada y hoy sin uso,
-  reservada para `latexmk`. `write` no puede correr desatendido por construcción: el
-  agente orquestador arma los cuatro insumos del redactor, delega, escribe el JSON a
-  un archivo, y solo entonces corre `write --draft <path> --audit <path>`.
-- **Un solo re-borrador, contado en disco.** `AUDIT_EXHAUSTED` refuta un tercer
-  intento bajo el mismo contrato/evidencia/mode — el conteo vive en una ledger de
-  archivo, no en memoria del proceso que podría reiniciarse.
-- **La prueba de estilo y su tripwire están separados por firma a propósito**
-  (`paper_leak.py`, Decision D6): ajustar el tripwire de ocho tokens nunca puede
-  mover la prueba de tres borradores. Un canal de estilo todo-`noEquivalent`
-  reporta `unmeasured`, no un pase silencioso.
-- **`paper_verify.py` es puro:** cero `Path(`, `open(` ni `.read_` en el archivo —
-  confirmado por grep directo, no por confiar en su docstring.
-- **Descubrimiento de citas falla por nombre, no en silencio.** Con
-  `paper_writing.roles.discovery: []` en `papersmith.yaml` y
-  `.mcp.json`→`"mcpServers": {}`, cualquier intento de descubrimiento se rechaza
-  `DISCOVERY_UNAVAILABLE`; un rol de resolución vacío se rechaza `RESOLVER_ROLE_EMPTY`.
-  Nunca degrada a "no encontré nada" indistinguible de "no busqué".
-- **Resolución de citas hoy anda:** `resolution` en `papersmith.yaml` trae
-  `openalex`, `crossref` y `arxiv` cableados — verificado en vivo arriba, no sólo
-  declarado.
+- **The CLI never invokes an agent.** An AST scan (`NoSubprocessScanTests`)
+  certifies that no module under `scripts/` imports `subprocess`, `os.system`,
+  `os.popen`, `os.exec*` or `multiprocessing` — with one named exception, currently
+  unused, reserved for `latexmk`. `write` cannot run unattended by construction: the
+  orchestrating agent assembles the redactor's four inputs, delegates, writes the
+  JSON to a file, and only then runs `write --draft <path> --audit <path>`.
+- **A single re-draft, counted on disk.** `AUDIT_EXHAUSTED` refuses a third attempt
+  under the same contract/evidence/mode — the count lives in a file ledger, not in
+  the memory of a process that might restart.
+- **The style test and its tripwire are separated by signature on purpose**
+  (`paper_leak.py`, Decision D6): adjusting the eight-token tripwire can never move
+  the three-draft test. An all-`noEquivalent` style channel reports `unmeasured`,
+  not a silent pass.
+- **`paper_verify.py` is pure:** zero `Path(`, `open(` or `.read_` in the file —
+  confirmed by direct grep, not by trusting its docstring.
+- **Citation discovery fails by name, not silently.** With
+  `paper_writing.roles.discovery: []` in `papersmith.yaml` and
+  `.mcp.json`→`"mcpServers": {}`, any discovery attempt is refused
+  `DISCOVERY_UNAVAILABLE`; an empty resolution role is refused `RESOLVER_ROLE_EMPTY`.
+  It never degrades to "found nothing" indistinguishable from "did not search".
+- **Citation resolution works today:** `resolution` in `papersmith.yaml` ships
+  `openalex`, `crossref` and `arxiv` wired in — verified live above, not merely
+  declared.
 
-**Limitaciones conocidas.**
+**Known limitations.**
 
-*`SKILL.md` afirma un conteo que ya no es cierto sobre sus propios datos
-shipeados.* `SKILL.md:453-454` dice hoy: *"A header declaring neither is
-schema-valid — none of the ten shipped contracts carry `mode` yet"*. Medido
-directamente: los 10 de 10 `sections/*.md` ya cargan `mode` en la forma exacta
-que el mismo documento describe dos párrafos antes (`rg -n '"mode"' sections/*.md`
-da diez matches). La deriva viene de dos commits (`d99ee93`, `9986e11`) que
-llevaron la cobertura a 10/10 antes de que un commit posterior enfocado
-explícitamente en "stale `SKILL.md` content" (`eab6496`) tocara ese mismo archivo
-sin corregir esta frase.
-**Cómo se arregla:** corregir la oración a "los 10 shipped contracts ya cargan
-`mode`" y, si se quiere que no vuelva a driftear, que un test lea el conteo real
-de `sections/*.md` en vez de que `SKILL.md` lo repita a mano.
+*`SKILL.md` states a count that is no longer true about its own shipped data.*
+`SKILL.md:453-454` says today: *"A header declaring neither is
+schema-valid — none of the ten shipped contracts carry `mode` yet"*. Measured
+directly: 10 of 10 `sections/*.md` already carry `mode` in the exact form the same
+document describes two paragraphs earlier (`rg -n '"mode"' sections/*.md`
+returns ten matches). The drift comes from two commits (`d99ee93`, `9986e11`) that
+took coverage to 10/10 before a later commit explicitly focused on "stale
+`SKILL.md` content" (`eab6496`) touched that same file without correcting this
+sentence.
+**How it is fixed:** correct the sentence to "the 10 shipped contracts already
+carry `mode`" and, if it is not to drift again, have a test read the real count
+from `sections/*.md` rather than have `SKILL.md` repeat it by hand.
 
-*El build acumula símbolos sin un llamador de producción, y el conteo de cuántos
-hay ya no es confiable ni citando el propio historial de commits.* Cuatro casos
-recientes (`Verdict.__post_init__`, `register_distance_holds`,
-`relative_overlap_holds`, `RedactorInput`) se auditaron y **no son defectos**:
-son pruebas de mecanismo o contratos de forma para un fixture, documentados así
-en su propio código. Pero el patrón es real y tiene historia: el commit
-`eab6496` registró a `paper_contract.install_header` como *"la undécima
-instancia de esa forma"* — sin embargo esa misma función ya había sido
-**eliminada** en el commit `ab10c21`, anterior al que la citó como viva. El
-número "once" quedó fosilizado en un mensaje de commit que ya estaba
-desactualizado el día que se escribió.
-**Cómo se arregla:** no volver a citar un conteo de un mensaje de commit; una
-barrida por ocurrencia de identificador (`def`/`class` de nivel superior que no
-aparece fuera de su propia línea de definición, sobre los 27 scripts + los
-`tests/test_paper_*.py`) da el número real en el momento en que se corre, y ese
-es el único número que vale la pena escribir.
+*The build accumulates symbols with no production caller, and the count of how
+many there are is no longer reliable even by citing the commit history itself.*
+Four recent cases (`Verdict.__post_init__`, `register_distance_holds`,
+`relative_overlap_holds`, `RedactorInput`) were audited and **are not defects**:
+they are mechanism tests or shape contracts for a fixture, documented as such in
+their own code. The pattern is real and has a history: commit `eab6496` recorded
+`paper_contract.install_header` as *"the eleventh instance of that shape"* — yet
+that same function had already been **deleted** in commit `ab10c21`, earlier than
+the one that cited it as live. The number "eleven" was left fossilized in a commit
+message that was already out of date the day it was written.
+**How it is fixed:** stop citing a count from a commit message; a sweep by
+identifier occurrence (top-level `def`/`class` that does not appear outside its own
+definition line, over the 27 scripts + the `tests/test_paper_*.py`) gives the real
+number at the moment it is run, and that is the only number worth writing.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["scaffold: crea paper/main.tex, refs.bib, Figures/"] --> B["plan: clases de guidance/,\nestado de declaraciones/hechos, procedencia"]
-    B --> C{"¿Algún bloque bloqueado?"}
-    C -- Sí --> D["declare: fija declaración o hecho\n(siempre decisión humana)"]
+    A["scaffold: creates paper/main.tex, refs.bib, Figures/"] --> B["plan: guidance/ classes,\ndeclaration/fact state, provenance"]
+    B --> C{"Any block blocked?"}
+    C -- Yes --> D["declare: fixes declaration or fact\n(always a human decision)"]
     D --> B
-    C -- No --> E{"¿Alguna cita pendiente?"}
-    E -- Sí --> F["resolve contra OpenAlex/Crossref/arXiv"]
-    F --> G["bib build: refs.bib desde cache resuelta"]
-    G --> H["validate: veredicto + colocación,\n3 rondas acotadas"]
+    C -- No --> E{"Any citation pending?"}
+    E -- Yes --> F["resolve against OpenAlex/Crossref/arXiv"]
+    F --> G["bib build: refs.bib from the resolved cache"]
+    G --> H["validate: verdict + placement,\n3 bounded rounds"]
     H --> E
-    E -- No --> I["order: deriva el orden de escritura del grafo"]
-    I --> J["Procedimiento de traslado (shuttle) --\nel CLI nunca invoca un agente"]
-    J --> K["redactor arma el LaTeX + binding map"]
-    K --> L["contract-auditor reconcilia contra ## Disqualifiers"]
-    L --> M["write --draft --audit: reconcilia"]
-    M -- audit-fired, 1er intento --> K
-    M -- AUDIT_EXHAUSTED, 3er intento --> N["Refuse: no se sustituye"]
-    M -- written --> O{"¿Bloque tiene figura?"}
-    O -- Sí --> P["diagram-author: TikZ + render (latexmk)"]
-    P --> Q["place: figura ya medida"]
-    O -- No --> R["Siguiente bloque en el orden"]
+    E -- No --> I["order: derives the writing order from the graph"]
+    I --> J["Shuttle procedure --\nthe CLI never invokes an agent"]
+    J --> K["redactor assembles the LaTeX + binding map"]
+    K --> L["contract-auditor reconciles against ## Disqualifiers"]
+    L --> M["write --draft --audit: reconciles"]
+    M -- audit-fired, 1st attempt --> K
+    M -- AUDIT_EXHAUSTED, 3rd attempt --> N["Refuse: not substituted"]
+    M -- written --> O{"Does the block have a figure?"}
+    O -- Yes --> P["diagram-author: TikZ + render (latexmk)"]
+    P --> Q["place: figure already measured"]
+    O -- No --> R["Next block in the order"]
     Q --> R
-    R -- quedan bloques --> J
-    R -- ninguno queda --> S["render/place: compila el documento entero"]
-    S --> T["verify: acoplamientos, integridad de citas,\nvigencia del contrato"]
-    T -- falla --> D
-    T -- ok --> U["Documento decisión-completo,\nnada afirmado sin corrida que lo cheque"]
+    R -- blocks remain --> J
+    R -- none remain --> S["render/place: compiles the whole document"]
+    S --> T["verify: couplings, citation integrity,\ncontract currency"]
+    T -- fail --> D
+    T -- ok --> U["Decision-complete document,\nnothing asserted without a run that checked it"]
 ```
 
 ---
