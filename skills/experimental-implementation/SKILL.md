@@ -263,7 +263,15 @@ narrowed to what this domain actually has:
    the proposal declares that no experiment cites -- refuses once, naming
    both kinds together, never a verdict on which side should change.
    Resolve each named discrepancy in conversation (`--acknowledge <exact
-   id>` clears only the ids echoed back exactly) before continuing.
+   id>` clears only the ids echoed back exactly, for that one call) before
+   continuing. A claim the experiments document deliberately does not test
+   is declared there instead, once, with the shared convention's
+   `[out-of-scope:<id>]` marker: `agree` subtracts it from `untested` on
+   every later call and echoes it under `outOfScope` (see
+   `references/usage.md`). Deciding that a claim is out of scope is the
+   user's call, made in the experiments document through
+   `experimental-deliberation`, never something to write in to make `agree`
+   pass.
 
    - **A third kind `agree` never checks, and never will:** whether an
      experiment's declared metric or protocol actually corresponds to

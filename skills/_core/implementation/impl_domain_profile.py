@@ -612,6 +612,25 @@ def _resolve() -> Mapping[str, Any]:
                 f"{configured} declares documents[{index}].cross_citation."
                 f"pattern with {crossing_groups} capturing group(s); exactly "
                 "1 is required.")
+        # Optional third sub-key: the form this document uses to mark an
+        # entry of the target out of its own scope. Held to the pattern's
+        # own one-group rule when declared; absent, the crossing reads as it
+        # always did.
+        out_of_scope = crossing.get("out_of_scope")
+        if out_of_scope is not None:
+            try:
+                out_of_scope_groups = re.compile(out_of_scope).groups
+            except (re.error, TypeError) as exc:
+                raise ImplementationProfileError(
+                    f"IMPLEMENTATION_DOMAIN_PROFILE_INVALID_CROSS_CITATION_PATTERN: "
+                    f"{configured} declares documents[{index}].cross_citation."
+                    f"out_of_scope that does not compile: {exc}.") from exc
+            if out_of_scope_groups != 1:
+                raise ImplementationProfileError(
+                    f"IMPLEMENTATION_DOMAIN_PROFILE_INVALID_CROSS_CITATION_PATTERN: "
+                    f"{configured} declares documents[{index}].cross_citation."
+                    f"out_of_scope with {out_of_scope_groups} capturing group(s); "
+                    "exactly 1 is required.")
         target = crossing["resolves_against"]
         if target not in declared_labels or target == entry["label"]:
             raise ImplementationProfileError(

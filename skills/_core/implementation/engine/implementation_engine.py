@@ -6264,6 +6264,11 @@ _CROSS_CITATIONS: tuple[dict | None, ...] = tuple(
         {
             "pattern": re.compile(DOCUMENTS[index]["cross_citation"]["pattern"]),
             "resolves_against": DOCUMENTS[index]["cross_citation"]["resolves_against"],
+            # Optional: the form this document uses to say a target entry is
+            # out of its scope. Absent, nothing is ever subtracted.
+            **({"out_of_scope": re.compile(
+                    DOCUMENTS[index]["cross_citation"]["out_of_scope"])}
+               if DOCUMENTS[index]["cross_citation"].get("out_of_scope") else {}),
         }
         if DOCUMENTS[index]["cross_citation"] is not None else None
     )
@@ -9519,7 +9524,16 @@ def crossing_state(index: int, revision: str | None) -> dict:
     `documents[index].cross_citation` being `None` keeps every
     membership blank: a document declaring no crossing participates in
     no discrepancy, in either direction (design.md's own Open Question,
-    settled)."""
+    settled).
+
+    `outOfScope` (only when it names any): entries `documents[index]` marks
+    with its own optional `cross_citation.out_of_scope` form, that the
+    target declares and that no citation reaches. They drop out of `untested`
+    -- the document said, in its own bytes, that it does not cover them.
+    The marker clears nothing else: an `absent` citation stays absent, a
+    marker naming an entry the target does not declare subtracts nothing,
+    and a cited entry is crossed whatever a marker says. A crossing that
+    declares no such form reads exactly as it always did."""
     crossing = document_cross_citation(index)
     if crossing is None:
         return {"crossed": [], "declared": [], "absent": [], "untested": []}
@@ -9531,9 +9545,13 @@ def crossing_state(index: int, revision: str | None) -> dict:
     declared = sorted(set(
         document_block_locator(target_index)["pattern"].findall(target_source or "")))
     absent = sorted(set(crossed) - set(declared))
-    untested = sorted(set(declared) - set(crossed))
+    marked = (set(crossing["out_of_scope"].findall(source or ""))
+              if "out_of_scope" in crossing else set())
+    out_of_scope = sorted((marked & set(declared)) - set(crossed))
+    untested = sorted(set(declared) - set(crossed) - set(out_of_scope))
     return {"crossed": crossed, "declared": declared,
-            "absent": absent, "untested": untested}
+            "absent": absent, "untested": untested,
+            **({"outOfScope": out_of_scope} if out_of_scope else {})}
 
 
 def _impact_class(remedy_loci: list, introduces: int, source: str,
@@ -10243,7 +10261,10 @@ def cmd_agree(args: argparse.Namespace) -> dict:
             f"no citation anywhere in document 0. Unacknowledged: "
             f"{unacknowledged!r}.")
     return {"command": "agree", "target": str(target), "revision": args.revision,
-            "status": "agreed", "crossed": crossed, "declared": declared}
+            "status": "agreed", "crossed": crossed, "declared": declared,
+            # What document 0 itself marks out of scope, echoed only when it
+            # marks an entry -- every other payload is unchanged.
+            **({"outOfScope": state["outOfScope"]} if "outOfScope" in state else {})}
 
 
 def admissibility_ruling(target: Path, revision: str | None) -> dict:

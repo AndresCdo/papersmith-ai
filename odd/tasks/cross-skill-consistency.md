@@ -78,7 +78,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C9 — explicit empty ruling `admit --no-findings` (D, writer trigger: engine + test + 2 docs + 2 re-anchored tests)
   - [x] C8 — prose findings via `remedy_in_prose` (D, writer trigger: engine + 2 kit files + test + 3 docs)
   - [x] C10 — remedy control detection follows attributes and helpers (D, writer trigger: engine + test + doc)
-  - [ ] C14 — out-of-scope declaration for `agree`: verified missing; blocked on edit surface (implementation engine)
+  - [x] C14 — `[out-of-scope:<id>]` subtracted from `agree`'s untested (D, writer trigger: engine + resolver + profile + convention + test + 3 docs)
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
@@ -863,3 +863,20 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Verification: focused 2 passed; engine suites (proposal, experimental, both seals, pair) `-n 8 --dist loadfile`
   2020 passed, 2 skipped.
   Commit: `fix(implementation): remediesWithoutControl follows attribute calls and same-file helpers` (the commit carrying this line)
+
+- C14 (real; unblocked by the widened surface): `crossing_state` computed `untested = declared - crossed` with no
+  machine-readable exclusion. Fix: convention key `outOfScope: "out-of-scope"` in
+  `skills/_core/conventions/experiments.json`; experimental `impl_profile.py` builds `cross_citation.out_of_scope`
+  (`[out-of-scope:<id>]`) from it; `impl_domain_profile.py` validates the optional sub-key (compiles, exactly one
+  group -> `..._INVALID_CROSS_CITATION_PATTERN`); engine compiles it in `_CROSS_CITATIONS`, `crossing_state`
+  subtracts `(marked & declared) - crossed` from `untested` and returns `outOfScope` only when non-empty; `cmd_agree`
+  echoes it on an agreed payload only when present. Absent marker = today's behaviour (all seals unchanged).
+  Docs: experimental-deliberation SKILL.md (`[claims:N]` section), experimental-implementation SKILL.md step 4,
+  usage.md (new `agree` section). Tests: `tests/test_experimental_out_of_scope.py` (10) RED 3F (+1 validation RED
+  with the resolver change stashed) -> GREEN; mutations (no subtraction, no `& declared`, no `- crossed`) each red.
+  Re-anchored: `AgreeSuggestionKeyZ11MutationTests` (its anchor pinned the agreed return literal, which gained the
+  conditional spread). No pin moved. Additive: no migration.
+  Verification: focused 10 passed; experiments seal 29 passed; profile/experimental suites 224 passed; node
+  experimental-deliberation-references 9 passed; `npm run test:fast` 3373 passed, 1 failed (the Z11 anchor, then
+  re-anchored and green).
+  Commit: `feat(experimental-implementation): an experiments document can mark a proposal claim out of scope` (the commit carrying this line)

@@ -99,6 +99,11 @@ _IDENTIFIER = EXPERIMENT_CONVENTION["identifier"]
 _DECLARES = re.escape("[" + EXPERIMENT_CONVENTION["declares"] + ":")
 _PROSE_REFERENCE = EXPERIMENT_CONVENTION["proseReference"].replace(
     "{identifier}", _IDENTIFIER)
+#: `[<outOfScope>:<id>]`: the convention's marker an experiments document uses
+#: to say a proposal claim is deliberately not tested here. `agree` subtracts
+#: what it marks from `untested` (`cross-skill-consistency`, C14).
+_OUT_OF_SCOPE = (re.escape("[" + EXPERIMENT_CONVENTION["outOfScope"] + ":")
+                 + f"({_IDENTIFIER})" + re.escape("]"))
 
 #: WHY THIS SKILL WAS INVOKED, AND WHERE IT HAS TO ARRIVE.
 #:
@@ -298,6 +303,7 @@ PROFILE = {
             "cross_citation": {
                 "pattern": r"\[claims:([A-Za-z0-9][A-Za-z0-9._-]*)\]",
                 "resolves_against": "proposal",
+                "out_of_scope": _OUT_OF_SCOPE,
             },
         },
         {

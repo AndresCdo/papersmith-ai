@@ -147,3 +147,35 @@ When more than one candidate markdown file exists and neither is the
 declared name, the write instead refuses the unchanged
 `POSITION_HOLDER_AMBIGUOUS` — a human, not a flag, has to choose which file
 receives the section.
+
+## `agree`, and claims declared out of scope
+
+```bash
+python3 skills/experimental-implementation/scripts/implementation_cli.py agree \
+  --target implementations/<repo> --name <Name> --revision <experiments revision>
+```
+
+`agree` compares the experiments document's `[claims:<id>]` citations with the
+`\tag{<id>}` claims the proposal declares. A citation to a claim the proposal
+does not declare is `absent:<id>`; a declared claim no experiment cites is
+`untested:<id>`. Both refuse together as `AGREEMENT_DOCUMENTS_DISAGREE`.
+`--acknowledge <id>` clears exactly that id for that one call and writes
+nothing, so it has to be repeated on every call.
+
+A claim the plan deliberately leaves untested is declared in the experiments
+document itself, with the marker the shared convention registers
+(`skills/_core/conventions/experiments.json`, key `outOfScope`):
+
+```markdown
+Out of scope for this plan: [out-of-scope:12] [out-of-scope:14]
+```
+
+A declared claim marked this way, and cited nowhere, leaves `untested` on every
+call, and an agreed payload lists it under `outOfScope` (the key is present only
+when something is marked). The marker clears nothing else: a citation to an
+undeclared claim stays `absent`, a marker naming a claim the proposal does not
+declare subtracts nothing, and a cited claim is crossed whatever a marker says.
+A document with no marker reads exactly as before. The marker lives in a
+published experiments revision, so adding or removing one goes through
+`experimental-deliberation` like any other edit.
+

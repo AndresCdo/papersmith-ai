@@ -593,6 +593,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   field and `test_audit.py` accepts it. Shared by `experimental-implementation`.
   Documented in both implementation skills' `SKILL.md` and
   `proposal-implementation`'s `references/usage.md`.
+- **An experiments document can declare a proposal claim out of scope.**
+  `agree` reported every declared claim no experiment cites as
+  `untested:<id>`, and the only way past one was `--acknowledge
+  untested:<id>`, request-scoped by design and so retyped on every call, with
+  nothing in either document recording the decision. The shared experiment
+  convention (`skills/_core/conventions/experiments.json`) now registers an
+  `outOfScope` marker, `[out-of-scope:<id>]`; the experimental profile's
+  crossing reads it (an optional `cross_citation.out_of_scope` pattern, held to
+  the one-group rule), and `agree` subtracts a declared, uncited claim marked
+  that way from `untested` and echoes it under `outOfScope`. The marker clears
+  nothing else: a citation to an undeclared claim stays `absent`, a marker
+  naming an undeclared claim subtracts nothing, and a document without one
+  reads exactly as before. Documented in `experimental-deliberation`'s
+  `SKILL.md` (where the document is written) and `experimental-implementation`'s
+  `SKILL.md` and `references/usage.md`.
 
 ### Changed
 
@@ -918,6 +933,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   same-file helper is no longer listed, so such a target can move from
   `audit: incomplete` to its next state. Nothing on disk changes; no migration
   is needed.
+
+- An experiments document carrying `[out-of-scope:<id>]` markers now gets
+  those claims subtracted from `agree`'s `untested` list, and an agreed `agree`
+  payload gains an `outOfScope` key when any is marked. Published experiments
+  revisions without the marker read and agree exactly as before, and
+  `--acknowledge` is unchanged. The convention file gains one additive key; no
+  migration is needed.
 
 
 ## 0.13.0

@@ -256,6 +256,8 @@ An experiment may also cite a claim the mathematical proposal declares, as `[cla
 
 The check this form feeds — a citation to a claim the proposal no longer declares, or a declared claim no experiment cites — is `implementation-cross-document-agreement`'s, run through `agree`, not through anything in this skill. It refuses and names the discrepancy; it computes no verdict over which document is right, exactly `implementation-cross-document-agreement`'s own boundary.
 
+A claim the plan deliberately does not test is declared here, in the document, with `[out-of-scope:N]` — the marker `skills/_core/conventions/experiments.json` registers as `outOfScope`. `agree` subtracts a declared claim marked that way from its untested list on every call, instead of the operator retyping `--acknowledge untested:N` each time; it never clears a citation to a claim the proposal does not declare. Like `[claims:N]`, `cites()` never reads it, so it is invisible to this document's own reference-integrity check. Write it only when the user has decided that claim is outside this plan, and say which claim in the change summary.
+
 ## The bound on claims
 
 The data paper is declared as this domain's `sourceAuthority`, at **advisory** severity. What it asserts, always, is that this document plans work rather than reports it — so the detectable conflict is an **achieved result**.
