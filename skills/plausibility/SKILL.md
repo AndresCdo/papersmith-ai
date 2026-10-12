@@ -43,16 +43,16 @@ What each resolver can and cannot give the pool, measured from
   abstract (rebuilt in reading order from its inverted index).
 - **Crossref** never returns an abstract: publishers ship it as JATS markup,
   and stripping tags would mint a quote no source printed, so the resolver
-  reports `abstract: null`. It also reports `year: null`. Resolve a DOI
+  reports `abstract: null`. Its `year` is the record's `issued` year (else
+  its `published` year), `null` when Crossref gives neither. Resolve a DOI
   through OpenAlex for its abstract; when neither resolver has one, the
   candidate stays out of the pool (it cannot be quoted,
   and the checker's `--pool` run refuses any planet citing it with
   `EVIDENCE_ABSTRACT_MISSING`).
 - **arXiv** returns the abstract (the entry's own `<summary>`, whitespace
-  collapsed) with `venue: "arXiv"` and `year: null`: the resolver does not
-  read the feed's `<published>` date today. Take the year from the arXiv
-  identifier's own `YYMM` prefix or from an OpenAlex resolution, and say
-  which in the candidate; never guess one.
+  collapsed) with `venue: "arXiv"` and the year of the entry's `<published>`
+  stamp (the first version's submission date, not a later venue's). An entry
+  without a readable stamp reports `year: null`; never guess one.
 
 Each candidate carries the `identifier` it was resolved by and its
 `source_url`; a planet's `evidence.origin` names one of those two, which is

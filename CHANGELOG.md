@@ -598,6 +598,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   OpenCode, Pi and `.agents` projections are regenerated from it, and a test
   reads every agent definition that runs the checker on the atlas.
 
+- **`resolve` reads the year arXiv and Crossref send.** `paper_resolve.py`
+  hard-coded `year: None` for both, although an arXiv entry carries
+  `<published>` and a Crossref record carries `issued`/`published`
+  date-parts, so every `refs.bib` entry resolved through them lacked a year
+  and the plausibility pool had to derive one by hand. arXiv now reports the
+  year of `<published>`; Crossref reports `issued`'s year, else
+  `published`'s. A missing, `null` or non-integer date still reports `null`.
+  Documented in `plausibility`'s `SKILL.md`.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1114,6 +1123,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   OpenCode/Pi/`.agents` projections, so the grapher's checker run now
   refuses an atlas whose quotes are not verbatim in the pool's abstracts
   (verified on a scratch workspace initialized from the previous commit).
+
+- Metadata caches written before this release keep their `year: null` and
+  keep reading: the cache key is the digest of the raw response, which
+  reading one more field does not change, and `bib` checks only that key.
+  Re-resolving the same identifier rewrites the same cache file with the
+  year filled, and the next `refs.bib` rebuild gains a `year` field.
 
 
 ## 0.13.0

@@ -309,6 +309,30 @@ def _deinvert_abstract(index) -> str | None:
     return " ".join(word for _, word in ordered)
 
 
+def _crossref_year(message: dict):
+    """The year of Crossref's `issued` date, else of `published`, read off
+    the record actually received. Crossref spells a date as
+    `{"date-parts": [[year, month?, day?]]}` and an unknown one as
+    `[[null]]`; anything that is not an integer year there parses to
+    `None`, never to a guess."""
+    for field in ("issued", "published"):
+        date = message.get(field)
+        parts = date.get("date-parts") if isinstance(date, dict) else None
+        first = parts[0] if isinstance(parts, list) and parts else None
+        year = first[0] if isinstance(first, list) and first else None
+        if isinstance(year, int) and not isinstance(year, bool):
+            return year
+    return None
+
+
+def _arxiv_year(entry, namespace: dict):
+    """The year of the entry's own `<published>` stamp (`YYYY-MM-DDT...`),
+    or `None` when the entry carries no readable one."""
+    published = entry.find("atom:published", namespace)
+    text = (published.text or "").strip() if published is not None else ""
+    return int(text[:4]) if len(text) >= 4 and text[:4].isdigit() else None
+
+
 def _parse_crossref(raw: bytes) -> dict:
     obj = json.loads(raw)
     message = obj.get("message", {})
@@ -333,7 +357,8 @@ def _parse_crossref(raw: bytes) -> dict:
     # same fabrication this module refuses for reachability above. A scout
     # that needs citable prose resolves through OpenAlex or arXiv instead.
     return {
-        "title": titles[0] if titles else None, "doi": message.get("DOI"), "year": None,
+        "title": titles[0] if titles else None, "doi": message.get("DOI"),
+        "year": _crossref_year(message),
         "full_text_url": None, "authors": authors,
         "venue": containers[0] if containers else None, "abstract": None,
     }
@@ -370,7 +395,8 @@ def _parse_arxiv(raw: bytes) -> dict:
         name_el = author.find("atom:name", namespace)
         if name_el is not None and name_el.text:
             authors.append(name_el.text.strip())
-    return {"title": title, "doi": None, "year": None, "full_text_url": full_text_url,
+    return {"title": title, "doi": None, "year": _arxiv_year(entry, namespace),
+            "full_text_url": full_text_url,
             "authors": authors, "venue": "arXiv", "abstract": abstract}
 
 

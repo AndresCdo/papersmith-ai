@@ -83,11 +83,12 @@ Route legend: D = delegated writer, I = inline.
 - [ ] E1–E10
   - [x] E4 — `walk --commit-template` (D, writer trigger: engine + new test file + 3 docs)
   - [x] E5 — `status`/`audit` collect projection notes; `--verbose` prints them (D, writer trigger: 3 src files + new test file + README)
-  - [ ] E6 — partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
+  - [x] E6 — (completed by E6a/E6b below) partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
   - [x] E2 — holder name in proposal-implementation docs (inline: 2 doc files + drift test)
   - [x] E3 — sealed set documented + refusal lists it (inline: engine + 2 docs + test)
   - [x] E1, E7, E8 — implement bridge coverage + alias note; absolute profile; session ids (inline/serial: bridge + test + 4 docs)
   - [x] E6b — grapher agent runs check_atlas with --pool (inline: agent + projections + test)
+  - [x] E6a — arXiv/Crossref year (inline: resolver + test + SKILL.md)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -1016,3 +1017,11 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   passed). Upgrade verified: workspace `init` from the stashed (previous) tree had 0 `--pool` lines; `papersmith
   upgrade --allow-dirty-kit` rewrote `.claude/`, `.pi/`, `.opencode/` grapher files (2 lines each).
   Commit: `fix(plausibility): the grapher agent checks quotes against the pool` (the commit carrying this line)
+- E6 remainder (a) (real): `_parse_arxiv`/`_parse_crossref` hard-coded `"year": None`. Cache check first: the cache
+  key (`metadata_digest`) is sha256 of the raw response; `paper_bib.entry_from_record` verifies only that the blob's
+  own digest equals its key; nothing else digests `year` -> old `year: null` caches keep reading, no invalidation, no
+  migration. Fix: `_arxiv_year` (first 4 digits of `<published>`), `_crossref_year` (`issued`, else `published`,
+  integer `date-parts[0][0]` only). Tests: `PublicationYearTests` in `tests/test_paper_resolve.py` (arXiv 4 cases,
+  Crossref 10 cases incl. `[[null]]`, strings, bools; cache key == raw digest and a legacy `year: null` blob reads
+  back unchanged) RED 6F -> GREEN; resolver/evidence/writing/cache files 768 passed. Doc: plausibility SKILL.md.
+  Commit: `fix(paper-writing): resolve reads the year arXiv and Crossref send` (the commit carrying this line)

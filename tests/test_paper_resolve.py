@@ -7,7 +7,10 @@ and these pin the corrected behavior.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
+import tempfile
 import unittest
 import urllib.parse
 from pathlib import Path
@@ -87,6 +90,75 @@ class ArxivIdentifierTests(unittest.TestCase):
         assert result["full_text_url"] == "https://arxiv.org/pdf/1512.03385", result
         assert result["authors"] == ["Kaiming He"], result
 
+
+
+def arxiv_feed(published: bytes | None) -> bytes:
+    stamp = b"" if published is None else b"<published>" + published + b"</published>"
+    return (
+        b"<?xml version='1.0' encoding='UTF-8'?>\n"
+        b'<feed xmlns="http://www.w3.org/2005/Atom">\n'
+        b"<entry><title>Deep Residual Learning</title>" + stamp +
+        b"<summary>We present a residual learning framework.</summary></entry>\n"
+        b"</feed>"
+    )
+
+
+def crossref_message(**dates) -> bytes:
+    message = {"DOI": "10.1000/example", "title": ["Example"], **dates}
+    return json.dumps({"status": "ok", "message": message}).encode()
+
+
+class PublicationYearTests(unittest.TestCase):
+    """The year is read off the response actually received -- arXiv's
+    `<published>`, Crossref's `issued` (else `published`) date-parts -- and
+    stays `None` when the response carries no readable one, never guessed."""
+
+    def test_arxiv_year_comes_from_published(self) -> None:
+        cases = {b"2015-12-10T17:38:12Z": 2015, None: None, b"": None,
+                 b"not a date": None}
+        for published, expected in cases.items():
+            with self.subTest(published=published):
+                self.assertEqual(paper_resolve._parse_arxiv(arxiv_feed(published))["year"],
+                                 expected)
+
+    def test_crossref_year_comes_from_issued_then_published(self) -> None:
+        cases = [
+            ({"issued": {"date-parts": [[2016, 6, 27]]}}, 2016),
+            ({"issued": {"date-parts": [[2016]]},
+              "published": {"date-parts": [[2015, 1]]}}, 2016),
+            ({"published": {"date-parts": [[2014, 3]]}}, 2014),
+            ({"issued": {"date-parts": [[None]]},
+              "published": {"date-parts": [[2013]]}}, 2013),
+            ({"issued": {"date-parts": [[None]]}}, None),
+            ({"issued": {"date-parts": []}}, None),
+            ({"issued": "2016"}, None),
+            ({"issued": {"date-parts": [["2016"]]}}, None),
+            ({"issued": {"date-parts": [[True]]}}, None),
+            ({}, None),
+        ]
+        for dates, expected in cases:
+            with self.subTest(dates=dates):
+                self.assertEqual(paper_resolve._parse_crossref(crossref_message(**dates))["year"],
+                                 expected)
+
+    def test_the_cache_key_is_the_response_digest_not_the_parsed_record(self) -> None:
+        """A cache written before the year was read (`year: null`) keeps
+        reading under the same key: the key is the digest of the raw
+        response, which reading one more field does not move."""
+        raw = arxiv_feed(b"2015-12-10T17:38:12Z")
+        original = paper_resolve._get
+        paper_resolve._get = lambda url, *, config: raw
+        self.addCleanup(setattr, paper_resolve, "_get", original)
+        fresh = paper_resolve.resolve_identifier(
+            "1512.03385", resolver="arxiv", role="resolution", config=CONFIG)
+        self.assertEqual(fresh["metadata_digest"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(fresh["year"], 2015)
+        with tempfile.TemporaryDirectory() as box:
+            paper_dir = Path(box)
+            legacy = {**fresh, "year": None}
+            paper_resolve.cache_metadata(paper_dir, legacy)
+            read = paper_resolve.read_cached_metadata(paper_dir, fresh["metadata_digest"])
+            self.assertEqual(read, legacy)
 
 if __name__ == "__main__":
     unittest.main()
