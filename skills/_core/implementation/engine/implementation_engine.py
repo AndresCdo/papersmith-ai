@@ -5377,6 +5377,64 @@ def _kit_structure_gaps(target: Path, destinations: list[str]) -> dict:
     return {"drift": sorted(drift), "unrecorded": sorted(unrecorded)}
 
 
+#: The receipt `kind` the engine's own stage copies carry -- unlike
+#: `adopted` and `authored`, which name a person as the bytes' owner. Every
+#: stage copy is a `materialized` entry; spelled once, here.
+RECEIPT_KIND_ENGINE = "materialized"
+
+
+def kit_owned_package_files(name: str) -> set[str]:
+    """The scaffold paths inside `src/<Package>/` that the kit supplies,
+    derived from `scaffold_destinations` and `scaffold_kit_source` and never a
+    hand list. Today that is the seal alone: the package's `__init__.py` has
+    no kit source. These files prove nothing, so they declare no
+    `__provenance__`, and `verify` reads every other file of the package for
+    one.
+    """
+    package = f"src/{package_name(name)}/"
+    return {path for path in scaffold_destinations(name)
+            if path.startswith(package)
+            and scaffold_kit_source(path, name) is not None}
+
+
+def is_unmodified_kit_file(target: Path, name: str, rel: str) -> bool:
+    """Whether `rel` is still the kit's own file, and so owes no provenance.
+
+    Fail-closed on both halves. The path must be one of
+    `kit_owned_package_files`, and its bytes must be the kit's: either the
+    kit source as the scaffold stage would copy it today, or exactly the
+    bytes an engine-kind scaffold receipt entry names -- which keeps a target
+    set up by an earlier release, carrying that release's seal, from reading
+    as drift. An `adopted` or `authored` entry is not enough: either names a
+    person as the owner of the bytes. A changed copy matches neither and is
+    read like any other file.
+    """
+    if rel not in kit_owned_package_files(name):
+        return False
+    full = target / rel
+    try:
+        current = full.read_bytes()
+        entry = receipt_entry(read_materialization_receipt(target), rel)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if (isinstance(entry, dict) and entry.get("kind") == RECEIPT_KIND_ENGINE
+            and entry.get("stage") == "scaffold"
+            and entry.get("writtenSha256")
+            == hashlib.sha256(current).hexdigest()):
+        return True
+    source = scaffold_kit_source(rel, name)
+    try:
+        text = source.read_text(encoding="utf-8")
+        written = full.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    if "{{SEED}}" in text:
+        # The seed is the operator's answer; without a receipt naming it the
+        # kit body cannot be reproduced here, so nothing is assumed.
+        return False
+    return written == scaffold_substitute_body(text, name, "")
+
+
 def scaffold_structure_gaps(target: Path, name: str) -> dict:
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD` over the scaffold
     destinations only — never the two merge anchors, whose correctness is
@@ -17335,6 +17393,11 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             continue
         prov = read_provenance(file)
         if prov is None or "__error__" in prov:
+            # The kit's own seal proves nothing and says so; it owes no
+            # provenance while it is still the kit's bytes, and reports like
+            # any other file the moment it is not.
+            if prov is None and is_unmodified_kit_file(target, name, rel):
+                continue
             missing_provenance.append(rel)
             continue
         declared_invariants.update(prov.get("invariants", []))
@@ -18154,7 +18217,7 @@ def _stage_scaffold(target: Path, name: str, seed: str) -> dict:
         source = scaffold_kit_source(destination, name)
         set_receipt_entry(receipt, {
             "path": destination,
-            "kind": "materialized",
+            "kind": RECEIPT_KIND_ENGINE,
             "stage": "scaffold",
             "kitSource": (str(source.relative_to(SKILL_ROOT)) if source else None),
             "sourceSha256": (hashlib.sha256(source.read_bytes()).hexdigest()
@@ -18311,7 +18374,7 @@ def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str
         source = kit_source_fn(destination, name)
         set_receipt_entry(receipt, {
             "path": destination,
-            "kind": "materialized",
+            "kind": RECEIPT_KIND_ENGINE,
             "stage": stage,
             "kitSource": (str(source.relative_to(SKILL_ROOT)) if source else None),
             "sourceSha256": (hashlib.sha256(source.read_bytes()).hexdigest()

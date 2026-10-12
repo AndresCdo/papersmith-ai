@@ -549,6 +549,15 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py verify \
 }
 ```
 
+`missingProvenance` never lists the kit's own seal,
+`src/<Package>/report_digest.py`, while it is still the kit's file: its path
+is a scaffold destination with a kit source and its bytes equal either today's
+kit source or the `writtenSha256` of the scaffold receipt's `materialized`
+entry for it (so a seal written by an earlier release still counts). An
+`adopted` or `authored` entry does not count, and any other bytes are reported
+like any other module. A freshly scaffolded target therefore reports no
+provenance gap until it has modules of its own.
+
 ### `--shards` — the refusal a split campaign needs
 
 A campaign divided across machines comes back as a directory of shards, one

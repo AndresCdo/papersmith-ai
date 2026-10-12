@@ -265,6 +265,12 @@ CLI, one directory over). Consequence, stated rather than discovered:
   destinations reads `assets/kit/`, which this skill does not ship. A target
   scaffolded under this domain needs its object-to-module map approved and
   written by hand, or from a kit a later change adds.
+- **A target the sibling scaffolded carries the sibling's seal**,
+  `src/<Package>/report_digest.py`, which declares no `__provenance__`.
+  `verify` here does not list it under `missingProvenance` while its bytes are
+  exactly the ones the scaffold receipt's `materialized` entry recorded; a
+  modified copy, an adopted one, or one with no receipt entry is reported
+  like any other module.
 
 Every other published command runs exactly as `proposal-implementation`'s own
 doctrine describes it, against this domain's own profile leaves instead of the

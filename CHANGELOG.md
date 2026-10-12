@@ -66,6 +66,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   once the pilot is complete and a step is undecided, and
   `nothing-to-compare` only after both are settled. Shared by
   `experimental-implementation`.
+- **A freshly scaffolded target no longer fails its own `verify`.**
+  `materialize --stage scaffold` writes the kit's seal,
+  `src/<Package>/report_digest.py`, which implements no claim and so declares
+  no `__provenance__`; `verify` listed it under `missingProvenance` and read
+  `fidelity: drift` on a target nobody had touched, under both implementation
+  skills. The seal is now exempt only while it is still the kit's file: its
+  path is a scaffold destination with a kit source (derived from the scaffold
+  table, not a hand list), and its bytes equal today's kit source or the
+  `writtenSha256` the scaffold receipt's `materialized` entry recorded (so a
+  seal written by an earlier release still counts). An `adopted` or
+  `authored` entry does not count, and a modified copy is reported as before.
 
 ### Behaviour changes
 
@@ -100,6 +111,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   in `resolve` and `toDiscuss`. Targets that declare no flow, or whose pilot
   is complete and every step decided, still read `nothing-to-compare`. No
   stored artefact changes shape; no migration is needed.
+- `verify`'s `fidelity.missingProvenance` no longer names
+  `src/<Package>/report_digest.py` while it is unmodified, so a target whose
+  only provenance gap was the seal now reads a non-`drift` fidelity status.
+  Existing 0.13.0 targets benefit without any action: the exemption also
+  accepts the bytes their own scaffold receipt recorded. The receipt shape is
+  unchanged; no migration is needed.
 
 ## 0.13.0
 

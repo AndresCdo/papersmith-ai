@@ -2445,6 +2445,86 @@ class PilotLadderWithoutBaselinesTests(unittest.TestCase):
             self.assertIn("on a remote worker, or locally", asked[index])
 
 
+class SiblingScaffoldSealProvenanceTests(unittest.TestCase):
+    """The kit's seal owes no provenance under this profile either.
+
+    This domain ships no kit, so a target it reads was scaffolded by the
+    sibling: `src/<Package>/report_digest.py` is the sibling's seal, written
+    by `materialize --stage scaffold` and recorded in the receipt as such.
+    `verify` here used to list it under `missingProvenance`; it is exempt
+    while its bytes are the ones that receipt entry names, and reports the
+    moment they are not.
+    """
+
+    NAME = "Seal-Target"
+    PACKAGE = "Seal_Target"
+
+    def _git(self, box, *args):
+        env = dict(os.environ)
+        env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "seal-tests"
+        env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = (
+            "seal-tests@example.invalid")
+        subprocess.run(["git", *args], cwd=box, env=env, check=True,
+                       capture_output=True)
+
+    def _cli(self, launcher, profile, *args):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(profile)
+        proc = subprocess.run([sys.executable, str(launcher), *args],
+                              capture_output=True, text=True, cwd=FORGE,
+                              env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def _sibling(self, *args):
+        return self._cli(SIBLING_LAUNCHER,
+                         FORGE / "skills/proposal-implementation/impl_profile.py",
+                         *args)
+
+    def _plan_file(self, box):
+        plan = self._sibling("plan", "--target", str(box), "--name", self.NAME)
+        path = Path(tempfile.mkdtemp(prefix="seal-plan-")) / "plan.json"
+        self.addCleanup(shutil.rmtree, path.parent, ignore_errors=True)
+        path.write_text(json.dumps(plan), encoding="utf-8")
+        return str(path)
+
+    def _scaffolded_by_the_sibling(self, tag):
+        box = FORGE / "implementations" / f"_exp_seal_{tag}_{os.getpid()}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        box.mkdir(parents=True)
+        self._git(box, "init", "-q")
+        self._sibling("apply", "--target", str(box), "--name", self.NAME,
+                      "--plan", self._plan_file(box))
+        for directory in box.rglob("*"):
+            if directory.is_dir() and ".git" not in directory.parts:
+                (directory / ".gitkeep").touch()
+        self._git(box, "add", "-A")
+        self._git(box, "commit", "-q", "-m", "initial")
+        self._sibling("materialize", "--target", str(box), "--name",
+                      self.NAME, "--stage", "scaffold", "--plan",
+                      self._plan_file(box), "--seed", "7")
+        return box
+
+    def _missing(self, box):
+        payload = self._cli(LAUNCHER, PROFILE_FILE, "verify", "--target",
+                            str(box), "--name", self.NAME)
+        return payload["fidelity"]["missingProvenance"]
+
+    def test_the_siblings_unmodified_seal_owes_no_provenance_here(self):
+        box = self._scaffolded_by_the_sibling("fresh")
+        self.assertTrue((box / "src" / self.PACKAGE / "report_digest.py")
+                        .is_file())
+        self.assertEqual(self._missing(box), [])
+
+    def test_a_modified_seal_still_reports_here(self):
+        box = self._scaffolded_by_the_sibling("edited")
+        seal = box / "src" / self.PACKAGE / "report_digest.py"
+        seal.write_text(seal.read_text(encoding="utf-8") + "\nEXTRA = 1\n",
+                        encoding="utf-8")
+        self.assertEqual(self._missing(box),
+                         [f"src/{self.PACKAGE}/report_digest.py"])
+
+
 class ShippedHolderObligationsTests(unittest.TestCase):
     """`experimental-implementation-skill`'s own requirement that this skill
     SHIPS `references/usage.md` carrying the holder's obligations.

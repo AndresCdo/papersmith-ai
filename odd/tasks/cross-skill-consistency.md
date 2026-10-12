@@ -39,7 +39,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A1 — adopted finding terminal state (D, writer trigger: engine + tests + docs + goldens)
 - [x] A2 — sibling holder collision (D, writer trigger: engine + profile loader + tests + docs)
 - [x] A3 — probe pilot ladder with in-package baselines (D, writer trigger: engine + 2 test files + docs)
-- [ ] A4 — scaffold seal file provenance exemption
+- [x] A4 — scaffold seal file provenance exemption (D, writer trigger: engine + 2 test files + docs)
 - [ ] A5 — close for proposal-only targets / witness-less agreements
 - [ ] A6 — deliberation validation parity (code spans)
 - [ ] A7 — shared experiment heading convention
@@ -100,7 +100,20 @@ Route legend: D = delegated writer, I = inline.
   question via its own `discuss` command and returns to `nothing-to-compare`. Mutation (decisions
   branch disabled) -> 2 red. Domain-lock pins unchanged (two comment rewordings). Seals unchanged.
   Commit: `fix(implementation): comparability no longer hides the pilot ladder` (the commit carrying this line)
+- A4 (real): `cmd_verify` exempted only `__init__.py`, so the kit seal `src/<Package>/report_digest.py`
+  (no `__provenance__` by design) fed `missingProvenance` -> `fidelity: drift` on a fresh scaffold.
+  Fix: `kit_owned_package_files(name)` derives the set from `scaffold_destinations` x
+  `scaffold_kit_source` (inside `src/<Package>/`); `is_unmodified_kit_file` exempts a file only when
+  its bytes equal today's kit source (scaffold substitutions; refuses if the kit carries `{{SEED}}`)
+  OR the `writtenSha256` of a `materialized`/`scaffold` receipt entry (covers seals written by an
+  earlier release, and the experimental skill, which ships no kit). `adopted`/`authored` entries do
+  not count; any other bytes report. New constant `RECEIPT_KIND_ENGINE` replaces the two writer
+  literals (same value; receipt shape unchanged; no migration).
+  Tests: `ScaffoldSealProvenanceTests` (6) RED 4F -> GREEN; `SiblingScaffoldSealProvenanceTests`
+  (experimental, 2) RED 1F -> GREEN. Mutations: drop byte check -> 2 red; drop kind check -> 1 red;
+  drop kit-bytes path -> 1 red. Domain-lock pins unchanged. Seals unchanged.
+  Commit: `fix(implementation): the kit's own seal owes no provenance` (the commit carrying this line)
 
 ## Next step
 
-A4 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+A5 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

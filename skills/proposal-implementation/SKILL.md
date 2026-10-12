@@ -275,7 +275,12 @@ proposal itself — that is `proposal-deliberation`.
   the suite proves the code *does* it. Never treat a clean `verify` as a green
   repository, and never compare, benchmark or publish from one that was not run.
 - Every module under `src/<Name>/` declares `__provenance__`; every id in its
-  `invariants` has a matching `test_<id>`. No provenance, no merge.
+  `invariants` has a matching `test_<id>`. No provenance, no merge. The one
+  exception is the kit's own seal, `src/<Package>/report_digest.py`: it
+  implements no claim, so `verify` does not list it under `missingProvenance`
+  while its bytes are still the kit's (today's kit source, or the bytes the
+  scaffold receipt recorded writing). A modified copy is read like any other
+  module and reported. Never stamp a provenance on it.
 - Never fabricate mathematics. A test whose claim is not traceable to the
   proposal does not belong in the suite.
 - **A sentence ages without anything failing.** Every other check here reads a

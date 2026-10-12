@@ -14605,6 +14605,106 @@ class MaterializeVerifyScaffoldDriftTests(MaterializeCommandFixture, unittest.Te
         self.assertEqual(structure["unrecordedScaffold"], [])
 
 
+class ScaffoldSealProvenanceTests(MaterializeCommandFixture, unittest.TestCase):
+    """A freshly scaffolded target passes its own `verify`'s provenance read.
+
+    `materialize --stage scaffold` writes the seal (`report_digest.py`) into
+    `src/<Package>/`, and the kit source says why it declares no
+    `__provenance__`: it implements no claim. `verify` scanned every module of
+    the package and reported the engine's own seal under `missingProvenance`,
+    so `fidelity` read `drift` on a target nobody had touched. Fabricating a
+    provenance for it would be the wrong fix.
+
+    Exempt only while the file is still the kit's: its path is a scaffold
+    destination with a kit source, and its bytes are either the kit's own
+    (after the scaffold's substitutions) or the bytes a `materialized` receipt
+    entry recorded writing there. A modified copy reports, and so does an
+    adopted one -- adoption records who wrote the bytes, not that the kit did.
+    """
+
+    def _fidelity(self, box):
+        proposals = Path(tempfile.mkdtemp(prefix="pp-seal-provenance-"))
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box),
+             "--name", self.NAME, "--revision", "r01.md"],
+            capture_output=True, text=True, cwd=FORGE,
+            env={**os.environ, "IMPLEMENTATION_PROPOSALS": str(proposals)})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)["fidelity"]
+
+    def _seal(self, box):
+        return box / "src" / self.PACKAGE / "report_digest.py"
+
+    def _rewrite_receipt(self, box, **fields):
+        path = box / impl.MATERIALIZATION_RECEIPT
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        entry = impl.receipt_entry(
+            receipt, f"src/{self.PACKAGE}/report_digest.py")
+        entry.update(fields)
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    def test_a_fresh_scaffold_reports_no_missing_provenance(self):
+        box = self._fully_materialized("_seal_fresh")
+        self.assertTrue(self._seal(box).is_file())
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["missingProvenance"], [])
+        self.assertNotEqual(fidelity["status"], "drift")
+
+    def test_a_modified_seal_still_reports(self):
+        box = self._fully_materialized("_seal_edited")
+        seal = self._seal(box)
+        seal.write_text(seal.read_text(encoding="utf-8") + "\nEXTRA = 1\n",
+                        encoding="utf-8")
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["missingProvenance"],
+                         [f"src/{self.PACKAGE}/report_digest.py"])
+        self.assertEqual(fidelity["status"], "drift")
+
+    def test_bytes_an_earlier_kit_wrote_are_still_the_kits(self):
+        """A target scaffolded by an earlier release carries that release's
+        seal, which need not hash-equal today's kit source. The receipt's own
+        `writtenSha256` for a `materialized` entry is what the engine wrote
+        there, so those bytes stay exempt."""
+        box = self._fully_materialized("_seal_older")
+        seal = self._seal(box)
+        older = seal.read_text(encoding="utf-8") + "\n# an earlier kit\n"
+        seal.write_text(older, encoding="utf-8")
+        self._rewrite_receipt(
+            box, writtenSha256=hashlib.sha256(seal.read_bytes()).hexdigest())
+        self.assertEqual(self._fidelity(box)["missingProvenance"], [])
+
+    def test_the_kits_bytes_need_no_receipt(self):
+        """A seal byte-identical to today's kit source is the kit's even with
+        no receipt entry at all -- a hand copy of the kit, or a receipt lost
+        to a clean checkout (`.implementation/` is not committed)."""
+        box = self._fully_materialized("_seal_noreceipt")
+        (box / impl.MATERIALIZATION_RECEIPT).unlink()
+        self.assertEqual(self._fidelity(box)["missingProvenance"], [])
+
+    def test_an_adopted_seal_is_not_the_kits(self):
+        box = self._fully_materialized("_seal_adopted")
+        seal = self._seal(box)
+        seal.write_text(seal.read_text(encoding="utf-8") + "\n# mine\n",
+                        encoding="utf-8")
+        self._rewrite_receipt(
+            box, kind="adopted",
+            writtenSha256=hashlib.sha256(seal.read_bytes()).hexdigest())
+        self.assertEqual(self._fidelity(box)["missingProvenance"],
+                         [f"src/{self.PACKAGE}/report_digest.py"])
+
+    def test_the_exemption_is_derived_from_the_scaffold_table(self):
+        """No hand list: every scaffold destination with a kit source under
+        the package is the set, and nothing else in the package is in it."""
+        owned = impl.kit_owned_package_files(self.NAME)
+        self.assertEqual(owned, {
+            d for d in impl.scaffold_destinations(self.NAME)
+            if d.startswith(f"src/{self.PACKAGE}/")
+            and impl.scaffold_kit_source(d, self.NAME) is not None})
+        self.assertIn(f"src/{self.PACKAGE}/report_digest.py", owned)
+        self.assertNotIn(f"src/{self.PACKAGE}/__init__.py", owned)
+
+
 class MaterializeAuthoredTests(MaterializeCommandFixture, unittest.TestCase):
     """`--authored`: release the drift seal after a declared edit."""
 
