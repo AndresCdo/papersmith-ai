@@ -187,17 +187,16 @@ class ReportTests(unittest.TestCase):
         findings = manual.anchor_parity(original, current)
         self.assertEqual(findings, [], [f.detail for f in findings])
 
-    def test_nothing_translated_carries_inverted_punctuation(self):
-        original = _pinned_original(self)
+    def test_the_live_manual_has_no_errors_left(self):
+        """The gate the record calls T9, arriving as soon as it can hold. While the
+        translation was in flight this test bounded its own scope by the first
+        untranslated heading, so it skipped once there were none; the manual being
+        English end to end is now the invariant, and it is asserted directly."""
         current = (FORGE / "README.md").read_text(encoding="utf-8")
-        heads = [f.line for f in manual.residue(current, original=original)
-                 if f.code == "untranslated-heading"]
-        if not heads:
-            self.skipTest("every heading is translated; nothing to bound the scope")
-        boundary = min(heads)
-        late = [f for f in manual.residue(current, original=original)
-                if f.code == "inverted-punctuation" and f.line < boundary]
-        self.assertEqual(late, [], f"translated lines above {boundary} carry Spanish")
+        errors = [f for f in manual.report(current, original=_pinned_original(self))
+                  if f.severity == "error"]
+        self.assertEqual(errors, [],
+                         [f"line {f.line}: {f.code} {f.detail}" for f in errors])
 
 
 class CommandLineTests(unittest.TestCase):
