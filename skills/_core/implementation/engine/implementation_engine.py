@@ -5419,7 +5419,110 @@ def set_receipt_entry(receipt: dict, entry: dict) -> None:
     entries.append(entry)
 
 
-def _kit_structure_gaps(target: Path, destinations: list[str]) -> dict:
+def notebook_source_sha256(data: bytes) -> str | None:
+    """The digest of a notebook's source content: each cell's type and source,
+    in order, and nothing else. Running a notebook where it lies rewrites its
+    outputs, execution counts, cell and kernel metadata and often its
+    serialization, none of which is what was sealed; a changed cell source or
+    cell type is. `None` when the bytes are not a readable notebook (not JSON,
+    no `cells` list, a cell without a string `cell_type`, a source that is
+    neither a string nor a list of strings): nothing about the source is
+    known, so a caller falls back to the full bytes."""
+    try:
+        notebook = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    cells = notebook.get("cells") if isinstance(notebook, dict) else None
+    if not isinstance(cells, list):
+        return None
+    content = []
+    for cell in cells:
+        if not isinstance(cell, dict) or not isinstance(cell.get("cell_type"), str):
+            return None
+        source = cell.get("source", "")
+        if isinstance(source, list) and all(isinstance(p, str) for p in source):
+            source = "".join(source)
+        if not isinstance(source, str):
+            return None
+        content.append([cell["cell_type"], source])
+    return hashlib.sha256(
+        json.dumps(content, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _is_notebook_path(path: str) -> bool:
+    return path.endswith(".ipynb")
+
+
+def _legacy_notebook_source_sha256(entry: dict, destination: str,
+                                   name: str | None) -> str | None:
+    """The source digest of what a receipt entry sealed when that entry
+    predates `writtenSourceSha256`, and only when it can be KNOWN: an engine
+    (`RECEIPT_KIND_ENGINE`) entry names the stage that wrote it, the stage's kit body
+    is rebuilt from today's kit with the substitutions the entry records, and
+    it is trusted only when it hashes to the entry's own `writtenSha256`. Any
+    other entry (re-sealed by hand, adopted), a kit that has moved since, or
+    a stage the entry carries no substitutions for gives `None`, and the
+    caller reads full bytes only -- the reading those receipts always had.
+    """
+    if name is None or entry.get("kind") != RECEIPT_KIND_ENGINE:
+        return None
+    stage = entry.get("stage")
+    try:
+        if stage == "scaffold":
+            seed = (entry.get("substitutions") or {}).get("SEED")
+            source = scaffold_kit_source(destination, name)
+            if source is None or not isinstance(seed, str):
+                return None
+            body = scaffold_substitute_body(
+                source.read_text(encoding="utf-8"), name, seed)
+        elif stage == "harness":
+            source = harness_kit_source(destination, name)
+            if source is None:
+                return None
+            body = harness_substitute_body(source.read_text(encoding="utf-8"), name)
+        else:
+            return None
+    except (OSError, UnicodeDecodeError):
+        return None
+    data = body.encode("utf-8")
+    if hashlib.sha256(data).hexdigest() != entry.get("writtenSha256"):
+        return None
+    return notebook_source_sha256(data)
+
+
+def recorded_bytes_match(entry: dict, destination: str, current: bytes,
+                         name: str | None = None) -> bool:
+    """Whether `current` is still what the receipt entry sealed.
+
+    The full bytes always count (every receipt ever written records them).
+    For a notebook, the source content counts too: the entry's own
+    `writtenSourceSha256`, or, for an entry older than that key,
+    the source digest `_legacy_notebook_source_sha256` can establish."""
+    if hashlib.sha256(current).hexdigest() == entry.get("writtenSha256"):
+        return True
+    if not _is_notebook_path(destination):
+        return False
+    current_source = notebook_source_sha256(current)
+    if current_source is None:
+        return False
+    sealed = entry.get("writtenSourceSha256")
+    if not isinstance(sealed, str):
+        sealed = _legacy_notebook_source_sha256(entry, destination, name)
+    return sealed is not None and sealed == current_source
+
+
+def notebook_source_fields(destination: str, data: bytes) -> dict:
+    """The receipt key a notebook destination carries next to `writtenSha256`;
+    `{}` for every other file, and for a notebook with a source it cannot read
+    (it is then sealed on its full bytes alone)."""
+    if not _is_notebook_path(destination):
+        return {}
+    digest = notebook_source_sha256(data)
+    return {} if digest is None else {"writtenSourceSha256": digest}
+
+
+def _kit_structure_gaps(target: Path, destinations: list[str],
+                        name: str | None = None) -> dict:
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD`, generalized over any one
     stage's own destination list — never a merge anchor, whose correctness is
     re-derived presence (`ignore_gaps`/`pytest_anchor_missing`), not a hash,
@@ -5443,8 +5546,7 @@ def _kit_structure_gaps(target: Path, destinations: list[str]) -> dict:
         if entry is None:
             unrecorded.append(destination)
             continue
-        current_sha256 = hashlib.sha256(full.read_bytes()).hexdigest()
-        if current_sha256 != entry.get("writtenSha256"):
+        if not recorded_bytes_match(entry, destination, full.read_bytes(), name):
             drift.append(destination)
     return {"drift": sorted(drift), "unrecorded": sorted(unrecorded)}
 
@@ -5514,7 +5616,7 @@ def scaffold_structure_gaps(target: Path, name: str) -> dict:
     and never a destination absent from disk, which is a gap `scaffold_gaps`
     already reports, not drift or an unrecorded write.
     """
-    return _kit_structure_gaps(target, scaffold_destinations(name))
+    return _kit_structure_gaps(target, scaffold_destinations(name), name)
 
 
 def object_structure_gaps(target: Path, name: str) -> dict:
@@ -5526,14 +5628,14 @@ def object_structure_gaps(target: Path, name: str) -> dict:
     — `scaffold_gaps`/`scaffold_structure_gaps` stay scoped to the scaffold
     destinations, as every existing caller and test already assumes.
     """
-    return _kit_structure_gaps(target, object_destinations(name))
+    return _kit_structure_gaps(target, object_destinations(name), name)
 
 
 def harness_structure_gaps(target: Path, name: str) -> dict:
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD` over the `harness`
     destinations only — see `object_structure_gaps` for why this is a
     sibling function rather than a widening of the scaffold one."""
-    return _kit_structure_gaps(target, harness_destinations(name))
+    return _kit_structure_gaps(target, harness_destinations(name), name)
 
 
 # --------------------------------------------------------------------------
@@ -18479,6 +18581,7 @@ def _stage_scaffold(target: Path, name: str, seed: str) -> dict:
             "sourceSha256": (hashlib.sha256(source.read_bytes()).hexdigest()
                              if source else None),
             "writtenSha256": hashlib.sha256(full.read_bytes()).hexdigest(),
+            **notebook_source_fields(destination, full.read_bytes()),
             "substitutions": {"PKG": package_name(name), "SEED": seed},
             "recordedAt": recorded_at,
         })
@@ -18636,6 +18739,7 @@ def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str
             "sourceSha256": (hashlib.sha256(source.read_bytes()).hexdigest()
                              if source else None),
             "writtenSha256": hashlib.sha256(full.read_bytes()).hexdigest(),
+            **notebook_source_fields(destination, full.read_bytes()),
             "recordedAt": recorded_at,
         })
     write_materialization_receipt(target, receipt)
@@ -18818,10 +18922,15 @@ def _materialize_authored(target: Path, name: str, path: str) -> dict:
                       f"{path} carries no receipt entry; the engine never wrote "
                       "it, so there is no seal to release. Use --adopt instead.")
 
-    new_sha256 = hashlib.sha256(full.read_bytes()).hexdigest()
+    current = full.read_bytes()
+    new_sha256 = hashlib.sha256(current).hexdigest()
     entry = dict(entry)
     entry["kind"] = "authored"
     entry["writtenSha256"] = new_sha256
+    # Replaced, never kept: a source digest left over from the bytes this
+    # releases would accept their source content again.
+    entry.pop("writtenSourceSha256", None)
+    entry.update(notebook_source_fields(path, current))
     entry["recordedAt"] = _now_iso8601()
     set_receipt_entry(receipt, entry)
     write_materialization_receipt(target, receipt)
@@ -18845,10 +18954,12 @@ def _materialize_adopt(target: Path, name: str, path: str) -> dict:
                       f"{path} already carries a receipt entry; adoption is not "
                       "a re-seal. Use --authored to release a drifted seal.")
 
-    new_sha256 = hashlib.sha256(full.read_bytes()).hexdigest()
+    current = full.read_bytes()
+    new_sha256 = hashlib.sha256(current).hexdigest()
     set_receipt_entry(receipt, {
         "path": path, "kind": "adopted", "stage": _kit_destination_stage(path, name),
-        "writtenSha256": new_sha256, "recordedAt": _now_iso8601(),
+        "writtenSha256": new_sha256, **notebook_source_fields(path, current),
+        "recordedAt": _now_iso8601(),
         # Stated where the operator reads it: adoption records who is
         # responsible for the bytes, not that the bytes came from the kit.
         # For an adopted destination the guarantee is "the record names who

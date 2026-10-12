@@ -14615,6 +14615,191 @@ class MaterializeAnchorTests(MaterializeCommandFixture, unittest.TestCase):
                          text_after_first)
 
 
+def _execute_notebook_in_place(path):
+    """What running a notebook in place does to its bytes, without a kernel:
+    every code cell gains an `execution_count` and outputs, the notebook's
+    metadata gains the kernel's own `language_info`, and the file is
+    re-serialized with a different indent. Cell sources and cell types are
+    untouched -- the property B7 rests on."""
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    count = 0
+    for cell in notebook["cells"]:
+        if cell.get("cell_type") == "code":
+            count += 1
+            cell["execution_count"] = count
+            cell["outputs"] = [{"output_type": "stream", "name": "stdout",
+                                "text": [f"ran cell {count}\n"]}]
+            cell.setdefault("metadata", {})["execution"] = {"iopub.status.idle": "x"}
+    notebook.setdefault("metadata", {})["language_info"] = {
+        "name": "python", "version": "3.12.3", "mimetype": "text/x-python"}
+    notebook["metadata"]["kernelspec"] = {
+        "display_name": "target venv", "language": "python", "name": "target"}
+    path.write_text(json.dumps(notebook, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8")
+
+
+class ExecutedKitNotebookIsNotDriftTests(MaterializeCommandFixture, unittest.TestCase):
+    """B7: executing a kit-placed notebook in place rewrites its bytes, and
+    `verify` read that as structure drift until `materialize --authored`
+    re-sealed it. A notebook's seal compares its source content -- each
+    cell's type and source, in order -- so outputs, execution counts and
+    kernel metadata never drift it. A changed cell source still drifts.
+    Receipts written before this change carry only the full-byte digest and
+    keep reading."""
+
+    def _notebook(self, box):
+        return box / self.NAME / "Notebooks" / "verification.ipynb"
+
+    def _strip_source_digest(self, box):
+        """The receipt a 0.13.0 materialize wrote: no source-content digest."""
+        receipt = impl.read_materialization_receipt(box)
+        for entry in receipt["entries"]:
+            entry.pop("writtenSourceSha256", None)
+        impl.write_materialization_receipt(box, receipt)
+
+    def test_a_fresh_stage_records_the_notebook_source_digest(self):
+        box = self._fully_materialized("_nb_records")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        entry = impl.receipt_entry(impl.read_materialization_receipt(box), rel)
+        self.assertEqual(entry["writtenSourceSha256"],
+                         impl.notebook_source_sha256(self._notebook(box).read_bytes()))
+        # Only notebooks carry it: every other destination is compared on
+        # its full bytes, exactly as before.
+        other = impl.receipt_entry(impl.read_materialization_receipt(box),
+                                   "tests/findings.py")
+        self.assertNotIn("writtenSourceSha256", other)
+
+    def test_an_executed_notebook_is_not_drift(self):
+        box = self._fully_materialized("_nb_executed")
+        before = self._notebook(box).read_bytes()
+        _execute_notebook_in_place(self._notebook(box))
+        self.assertNotEqual(before, self._notebook(box).read_bytes())
+
+        structure = self._verify(box)
+        self.assertNotIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                         structure["scaffoldDrift"])
+
+    def test_a_changed_cell_source_is_still_drift(self):
+        box = self._fully_materialized("_nb_source")
+        path = self._notebook(box)
+        _execute_notebook_in_place(path)
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        code = next(c for c in notebook["cells"] if c["cell_type"] == "code")
+        code["source"] = list(code["source"]) + ["print('edited')\n"]
+        path.write_text(json.dumps(notebook, indent=1) + "\n", encoding="utf-8")
+
+        structure = self._verify(box)
+        self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                      structure["scaffoldDrift"])
+
+    def test_a_changed_cell_type_is_still_drift(self):
+        box = self._fully_materialized("_nb_type")
+        path = self._notebook(box)
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        markdown = next(c for c in notebook["cells"] if c["cell_type"] == "markdown")
+        markdown["cell_type"] = "raw"
+        path.write_text(json.dumps(notebook, indent=1) + "\n", encoding="utf-8")
+
+        structure = self._verify(box)
+        self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                      structure["scaffoldDrift"])
+
+    def test_an_unreadable_notebook_is_drift(self):
+        """Fail-closed: no source content can be read, so only the full
+        bytes count. Read through the drift reader directly: `verify` as a
+        whole does not yet survive a notebook that is not JSON (recorded
+        separately), which is not what this test is about."""
+        box = self._fully_materialized("_nb_unreadable")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        for broken in ("{ not json", "[]", '{"cells": "x"}',
+                       '{"cells": [{"source": "s"}]}'):
+            with self.subTest(broken=broken):
+                self.assertIsNone(impl.notebook_source_sha256(broken.encode()))
+                self._notebook(box).write_text(broken, encoding="utf-8")
+                self.assertIn(rel, impl._kit_structure_gaps(box, [rel])["drift"])
+
+    def test_a_legacy_receipt_keeps_its_full_byte_reading(self):
+        box = self._fully_materialized("_nb_legacy_bytes")
+        self._strip_source_digest(box)
+        structure = self._verify(box)
+        self.assertEqual(structure["scaffoldDrift"], [])
+
+    def test_a_legacy_engine_receipt_reads_an_executed_notebook_as_sealed(self):
+        """A 0.13.0 `materialized` entry names the kit body it wrote, and the
+        engine can rebuild that body and check it against `writtenSha256`
+        before trusting its source content."""
+        box = self._fully_materialized("_nb_legacy_exec")
+        self._strip_source_digest(box)
+        _execute_notebook_in_place(self._notebook(box))
+        structure = self._verify(box)
+        self.assertNotIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                         structure["scaffoldDrift"])
+
+    def test_a_legacy_engine_receipt_still_drifts_on_a_source_edit(self):
+        box = self._fully_materialized("_nb_legacy_edit")
+        self._strip_source_digest(box)
+        path = self._notebook(box)
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        code = next(c for c in notebook["cells"] if c["cell_type"] == "code")
+        code["source"] = ["print('edited')\n"]
+        path.write_text(json.dumps(notebook, indent=1) + "\n", encoding="utf-8")
+        structure = self._verify(box)
+        self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                      structure["scaffoldDrift"])
+
+    def test_a_legacy_entry_whose_kit_body_cannot_be_rebuilt_reads_bytes_only(self):
+        """Fail-closed: when the rebuilt body does not hash to `writtenSha256`,
+        nothing about the written source is known, and only the full bytes
+        count. The case it guards: the entry sealed bytes from an older kit,
+        and the file on disk was later edited, unsealed, to today's kit
+        source. Today's rebuilt body matches that edit; only its hash check
+        tells the two apart."""
+        box = self._fully_materialized("_nb_legacy_unknown")
+        self._strip_source_digest(box)
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        receipt = impl.read_materialization_receipt(box)
+        entry = impl.receipt_entry(receipt, rel)
+        older = json.loads(self._notebook(box).read_text(encoding="utf-8"))
+        older["cells"].append({"cell_type": "code", "execution_count": None,
+                               "metadata": {}, "outputs": [],
+                               "source": ["print('an older kit cell')\n"]})
+        entry["writtenSha256"] = hashlib.sha256(
+            (json.dumps(older, indent=1) + "\n").encode("utf-8")).hexdigest()
+        impl.write_materialization_receipt(box, receipt)
+        _execute_notebook_in_place(self._notebook(box))
+        structure = self._verify(box)
+        self.assertIn(rel, structure["scaffoldDrift"])
+
+    def test_authored_records_the_source_digest_so_a_later_run_is_not_drift(self):
+        box = self._fully_materialized("_nb_authored")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        self._strip_source_digest(box)
+        receipt = impl.read_materialization_receipt(box)
+        impl.receipt_entry(receipt, rel)["kind"] = "authored"
+        impl.write_materialization_receipt(box, receipt)
+        _execute_notebook_in_place(self._notebook(box))
+        self.assertIn(rel, self._verify(box)["scaffoldDrift"])
+
+        payload, code, proc = self._run_cli(
+            "materialize", "--target", str(box), "--name", self.NAME,
+            "--authored", rel)
+        self.assertEqual(code, 0, proc.stderr)
+        entry = impl.receipt_entry(impl.read_materialization_receipt(box), rel)
+        self.assertEqual(entry["writtenSourceSha256"],
+                         impl.notebook_source_sha256(self._notebook(box).read_bytes()))
+        _execute_notebook_in_place(self._notebook(box))
+        self.assertNotIn(rel, self._verify(box)["scaffoldDrift"])
+
+    def test_an_executed_probe_notebook_is_not_harness_drift(self):
+        box = self._fully_materialized_all_stages("_nb_probe")
+        rel = f"{self.NAME}/Notebooks/probe.ipynb"
+        self.assertEqual(self._verify(box)["harnessDrift"], [])
+        _execute_notebook_in_place(box / rel)
+        self.assertNotIn(rel, self._verify(box)["harnessDrift"])
+        self._strip_source_digest(box)
+        self.assertNotIn(rel, self._verify(box)["harnessDrift"])
+
+
 class MaterializeVerifyScaffoldDriftTests(MaterializeCommandFixture, unittest.TestCase):
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD`, scoped to the eleven scaffold
     destinations, reported through `structure` and never raised -- the same

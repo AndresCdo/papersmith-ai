@@ -286,6 +286,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   copy of the engine tree and runs a copy of the launcher against it; the
   shipped file is asserted unchanged. Test-only: nothing a workspace runs
   changes.
+- **Executing a kit-placed notebook is no longer structure drift.** Running
+  `verification.ipynb` or `probe.ipynb` in place rewrites its outputs,
+  execution counts and kernel metadata, and `verify` reported the notebook in
+  `structure.scaffoldDrift`/`harnessDrift` until `materialize --authored`
+  re-sealed it. A notebook destination's seal now also reads its source
+  content (each cell's type and source, in order): the materialize stages,
+  `--authored` and `--adopt` record it as `writtenSourceSha256`, and a match
+  on either the full bytes or the source content is sealed. A changed cell
+  source or cell type still drifts, and a notebook that is not readable JSON
+  is compared on its full bytes only. Receipts written by 0.13.0 keep
+  reading: an engine-written entry's source content is rebuilt from the kit
+  and trusted only when it hashes to the entry's `writtenSha256`.
 
 ### Added
 
@@ -492,6 +504,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` instead of running under that
   profile. Unset the variable. Nothing stored changes and no migration is
   needed.
+- `verify` no longer lists an executed kit notebook under
+  `structure.scaffoldDrift` or `structure.harnessDrift`, and new receipt
+  entries for notebook destinations carry an extra `writtenSourceSha256` key.
+  The key is additive: receipts without it keep reading (full bytes, or the
+  source content rebuilt from the kit for an engine-written entry), so no
+  migration is needed. A legacy `authored` or `adopted` notebook entry still
+  drifts on execution until its next `materialize --authored`.
 
 ## 0.13.0
 

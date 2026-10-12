@@ -57,6 +57,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B10 — prose check skips engine-written holder structures (D, writer trigger: engine + test + doc)
   - [x] X8 — launchers refuse a sibling's inherited profile; profile test stops leaking it (D, writer trigger: 2 launchers + test + 3 docs)
   - [x] X3 — D5 mutation test runs on a scratch engine copy (D, same writer: 1 test file + CHANGELOG)
+  - [x] B7 — executed kit notebooks are not structure drift (D, writer trigger: engine + test + 2 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -82,6 +83,8 @@ Route legend: D = delegated writer, I = inline.
   `AGREED.md`): a profile test leaves `IMPLEMENTATION_DOMAIN_PROFILE` in `os.environ`, the fixture test passes
   `os.environ` to the experimental CLI, and the launcher only `setdefault`s it. Each file passes alone; the
   change-selected `npm run test:fast` tier hits it. Not fixed (outside B1/B4/B8/B10).
+- X9 — `verify` crashes (traceback, exit 1) when a file under `<Name>/Notebooks/` is not valid JSON:
+  `notebooks_state` calls `notebook_seals(json.loads(...))` unguarded (found in B7). Not fixed.
 
 ## Progress / evidence
 
@@ -444,6 +447,18 @@ Route legend: D = delegated writer, I = inline.
   `pytest tests/test_implementation_pair.py -n 8 --dist loadfile`: 39 passed, `git diff skills` empty.
   Test-only; no migration.
   Commit: `test(implementation): the D5 mutation runs on a scratch copy of the engine` (the commit carrying this line)
+
+- B7 (real; the drift reader `_kit_structure_gaps` compared full bytes, so an in-place execution of
+  `verification.ipynb`/`probe.ipynb` drifted). Fix: `notebook_source_sha256` (ordered cell type + joined
+  source; `None` when unreadable); stages, `--authored`, `--adopt` record `writtenSourceSha256` for `.ipynb`
+  destinations; `recorded_bytes_match` accepts the full-byte digest OR the source digest; a legacy entry
+  (no key) of kind `materialized` rebuilds its kit body (scaffold: recorded SEED; harness) and trusts its
+  source digest only if the body hashes to `writtenSha256`; anything else = full bytes only.
+  Tests: `ExecutedKitNotebookIsNotDriftTests` (11). RED 6F -> GREEN. Mutations: source dropped from digest
+  -> 2 red; cell type dropped -> 1 red; `--authored` not recording -> 1 red; legacy rebuild off -> 2 red;
+  rebuild hash check off -> 1 red. `pytest tests/test_proposal_implementation.py -n 8 --dist loadfile`:
+  1791 passed, 2 skipped. Domain-lock pins unchanged (reworded). Seals unchanged. Additive key: no migration.
+  Commit: `fix(implementation): executing a kit notebook is not structure drift` (the commit carrying this line)
 
 ## Next step
 
