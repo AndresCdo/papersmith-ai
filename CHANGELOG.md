@@ -48,7 +48,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   nothing, so its file still refuses). A target holding only the sibling's
   holder resolves create-on-absent and the skill writes its own holder beside
   it. A checklist no skill declares still refuses, and the refusal and its
-  question never name a sibling's holder as a file to rename.
+  question never name a sibling's holder as a file to rename. The read side
+  follows the same rule: the agreements reader (`verify`, `close`)
+  and the position reader (`verify`, `probe`, `gate`, `close`, `discuss`, `settle`, `offer`, `step`) no
+  longer read the sibling's holder as this skill's, so its open items stop
+  appearing as this skill's open agreements and its position block stops
+  standing in for this skill's position.
 
 ### Behaviour changes
 
@@ -68,10 +73,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   holder of this skill's own) no longer refuses `HOLDER_UNDECLARED` on
   `position --sequence`, `position --reconcile` or `settle`: the write creates
   this skill's declared holder with its scaffold and leaves the sibling's file
-  byte-identical. `holder_resolution` gains `siblings` and `candidates` keys.
-  Workspaces that already created their own holder by hand keep resolving it
-  as declared; no migration is needed. Reads are unchanged: `verify`'s
-  agreement count still reads every checklist under `<Name>/` by shape.
+  byte-identical. Workspaces that already created their own holder by hand
+  keep resolving it as declared; no migration is needed.
+- `verify`'s `agreements` (and the same reader in `close`) no
+  longer counts the other implementation skill's declared holder: a target
+  whose only checklist is the sibling's now reads `agreements: absent` instead
+  of the sibling's items, and a new `siblingHolders` list names the skipped
+  file. The key is present only when such a file exists, so other targets read
+  byte-identically. The position section likewise reads `absent` until this
+  skill installs its own block, instead of the sibling's.
 
 ## 0.13.0
 

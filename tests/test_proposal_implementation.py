@@ -2931,7 +2931,7 @@ class HolderResolutionTests(unittest.TestCase):
                                encoding="utf-8")
             resolution = impl.holder_resolution(root, "Method")
             self.assertEqual(resolution["action"], "create")
-            self.assertEqual(resolution["byShape"], ["Method/Experimental_AGREED.md"])
+            self.assertEqual(resolution["byShape"], [])
             self.assertEqual(resolution["siblings"], ["Method/Experimental_AGREED.md"])
             self.assertEqual(resolution["write"], root / "Method" / "AGREED.md")
 
@@ -2956,6 +2956,67 @@ class HolderResolutionTests(unittest.TestCase):
             self.assertEqual(resolution["action"], "undeclared")
             self.assertEqual(resolution["read"], root / "Method" / "TASKS.md")
             self.assertIsNone(resolution["write"])
+
+
+class SiblingHolderReadTests(unittest.TestCase):
+    """The READ face of the sibling-holder collision, in this direction:
+    before this skill has a holder of its own, the experimental sibling's
+    declared `Experimental_AGREED.md` is never read as this skill's
+    agreements or as this skill's position."""
+
+    SIBLING_BLOCK = (
+        "# Agreed\n\n## Ladder\n\n"
+        "<!-- position revision=r1.md sha256=" + "a" * 64 +
+        " derivedAt=2026-08-27T00:00:00Z session=s0 target=final -->\n"
+        "- [x] 1. Rehearse the job. `@rehearsal job1`\n"
+        "<!-- /position -->\n"
+        "- [ ] an agreement the sibling settled\n")
+
+    def test_agreements_never_count_the_siblings_holder(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            state = impl.agreements_state(root, "Method")
+            self.assertEqual(state["status"], "absent")
+            self.assertEqual(state["holders"], [])
+            self.assertEqual(state["open"], [])
+            self.assertEqual(state["siblingHolders"],
+                             ["Method/Experimental_AGREED.md"])
+
+            (root / "Method" / "AGREED.md").write_text(
+                "# Agreed\n\n## Ladder\n\n- [x] own agreement\n",
+                encoding="utf-8")
+            state = impl.agreements_state(root, "Method")
+            self.assertEqual(state["holders"], ["Method/AGREED.md"])
+            self.assertEqual(state["status"], "settled")
+            self.assertEqual(state["open"], [])
+
+    def test_position_never_reads_the_siblings_block(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            state = impl.position_state(root, "Method", {}, None, None)
+            self.assertEqual(state["status"], "absent")
+            self.assertIsNone(state["holder"])
+
+    def test_an_undeclared_holder_beside_the_siblings_is_still_read(self):
+        """Only sibling-declared names are set aside; an arbitrarily named
+        checklist keeps being found by shape, exactly as before."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            (root / "Method" / "TASKS.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            agreements = impl.agreements_state(root, "Method")
+            self.assertEqual(agreements["holders"], ["Method/TASKS.md"])
+            position = impl.position_state(root, "Method", {}, None, None)
+            self.assertEqual(Path(position["holder"]).name, "TASKS.md")
 
 
 class CreateOnAbsentTests(unittest.TestCase):

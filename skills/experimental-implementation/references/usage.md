@@ -31,8 +31,8 @@ size. A file is this skill's declared holder iff its name is exactly
 `Experimental_AGREED.md` and it is a regular file under `<Name>/`.
 
 Reading is unaffected by this declaration: `verify` still finds a checklist
-by shape (any `*.md` under `<Name>/` holding checklist items), exactly as it
-always has. Only a WRITE — `position`'s fresh install/reconcile, or any of
+by shape (any `*.md` under `<Name>/` holding checklist items), except a
+sibling skill's own declared holder, which is never this skill's (see below). Only a WRITE — `position`'s fresh install/reconcile, or any of
 `settle`'s five modes — resolves through the declared name first.
 
 ## Create-on-absent
@@ -80,8 +80,15 @@ candidate and the refusal below still fires. A workspace that already created
 `Experimental_AGREED.md` by hand beside the sibling's holder keeps resolving
 it as this skill's declared holder.
 
-Reading is unchanged: `verify`'s agreement count still reads every checklist
-under `<Name>/` by shape, the sibling's included.
+The same rule holds for every read that picks this skill's holder: the
+`agreements` count (`verify`, `close`) and the position section
+(`verify`, `probe`, `gate`, `close`, `discuss`, `settle`, `offer`, `step`) never read the sibling's file,
+so its open items are not this skill's open agreements and its position block
+is not this skill's position. `agreements` lists the skipped file under
+`siblingHolders`, present only when one exists. The collision search `settle`
+and `discuss` run (`_agreement_collides`) still inventories every checklist
+under `<Name>/`, the sibling's included, because it reports overlap rather than
+choosing a holder.
 
 ## Write-refusal into an undeclared holder: `HOLDER_UNDECLARED`
 

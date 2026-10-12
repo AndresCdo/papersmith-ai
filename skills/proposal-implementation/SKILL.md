@@ -1023,7 +1023,10 @@ failure, because a flow that never reached a gate has nothing to record; it is
 reported either way, since a check that speaks only on failure teaches nobody what
 it was watching. A bullet written without a checkbox comes back as `unparsed`,
 because an agreement in the wrong format is one nobody counts — the same failure
-the file exists to prevent, one level down.
+the file exists to prevent, one level down. A sibling skill's own declared
+holder (`Experimental_AGREED.md`) is that skill's checklist, never this one's:
+`agreements` and the position section never read it, and `agreements` lists it
+under `siblingHolders` (present only when such a file exists).
 
 Append to it at every gate, before writing any code the gate authorized. And never
 report the work done while an item is open: say which, and why it is still open.

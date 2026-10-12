@@ -79,9 +79,17 @@ Route legend: D = delegated writer, I = inline.
   siblings_declared_holder`, `test_sequence_replace_never_overwrites_...` -- sibling bytes still
   asserted unchanged), HolderResolutionTests +2 (inverse direction). RED 9F -> GREEN; mutation
   (exclusion disabled -> 6 red; shape filter loosened -> 1 red). Seals unchanged; domain-lock pins
-  unchanged (comments reworded). Open sibling of this class, out of scope: `agreements_state` and
-  `position_state`'s by-shape fallback (outside `gate`) still read a sibling's holder.
-  Commit: `fix(implementation): sibling skills never collide on a checklist holder` (the commit carrying this line)
+  unchanged (comments reworded). Commit `b00042f`.
+  A2 follow-up (read face, coordinator-directed): `agreements_state` sets sibling-declared files
+  aside (listed under `siblingHolders`, key present only when one exists) -- covers `verify`,
+  `close`, and `holder_resolution` (`byShape` now excludes siblings; `siblings` carried from it;
+  the interim `candidates` key removed). `position_state`'s by-shape fallback skips them too
+  (covers `verify`, `probe`, `gate`, `close`, `discuss`, `settle`, `offer`, `step`). Left as
+  deliberate inventories: `_agreement_collides` (overlap report) and `cmd_position`'s write-side
+  scan (`holder_digests`, legacy `--repair-header`). Tests: `SiblingHolderReadTests` (3, proposal
+  direction), HolderCollisionTests +2 (experimental direction, one via the sibling's real launcher);
+  RED 5F -> GREEN; mutation (agreements exclusion off -> 8 red; position exclusion off -> 3 red).
+  Commit: `fix(implementation): a sibling's holder is never read as this skill's` (the commit carrying this line)
 
 ## Next step
 

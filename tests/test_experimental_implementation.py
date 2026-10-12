@@ -1995,9 +1995,9 @@ class HolderCollisionTests(unittest.TestCase):
                 encoding="utf-8")
             resolution = engine.holder_resolution(root, "Method")
             self.assertEqual(resolution["action"], "create")
-            # `byShape` stays `agreements_state`'s verbatim read; the
+            # `agreements_state` sets the sibling's holder aside; the
             # exclusion is reported, never hidden.
-            self.assertEqual(resolution["byShape"], ["Method/AGREED.md"])
+            self.assertEqual(resolution["byShape"], [])
             self.assertEqual(resolution["siblings"], ["Method/AGREED.md"])
             chosen = engine._chosen_holder(root, "Method", root / "Method")
             self.assertEqual(chosen, root / "Method" / "Experimental_AGREED.md")
@@ -2048,6 +2048,46 @@ class HolderCollisionTests(unittest.TestCase):
             self.assertNotIn("rename Method/AGREED.md", detail)
             self.assertIn("left alone: Method/AGREED.md", detail)
             self.assertFalse((root / "Method" / "Experimental_AGREED.md").exists())
+
+    def test_agreements_never_count_the_siblings_holder_as_this_skills(self):
+        """The READ face, agreements: before this skill has a holder of its
+        own, the sibling's open items are not this skill's open agreements
+        (`verify` and `close` read them through here)."""
+        engine = self._load_engine()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "AGREED.md").write_text(
+                "- [ ] an agreement the proposal skill settled here\n",
+                encoding="utf-8")
+            state = engine.agreements_state(root, "Method")
+            self.assertEqual(state["status"], "absent")
+            self.assertEqual(state["open"], [])
+            self.assertEqual(state["siblingHolders"], ["Method/AGREED.md"])
+
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                engine.HOLDER_SCAFFOLD + "\n- [x] this skill's own\n",
+                encoding="utf-8")
+            state = engine.agreements_state(root, "Method")
+            self.assertEqual(state["holders"], ["Method/Experimental_AGREED.md"])
+            self.assertEqual(state["status"], "settled")
+            self.assertEqual(state["open"], [])
+
+    def test_position_never_reads_the_siblings_block_as_this_skills(self):
+        """The READ face, position: the sibling's real block (written by its
+        own launcher) is not this skill's position for `verify`, `probe`,
+        `close`, `discuss` and the other position readers -- not only for
+        `gate`."""
+        box = self._box()
+        proposals_root = self._tmp_dir("collision-read-proposals-")
+        (proposals_root / "r1.md").write_text("## 1\ntexto\n", encoding="utf-8")
+        self._install_siblings_holder(box, proposals_root)
+        engine = self._load_engine()
+        state = engine.position_state(box, "Method", {}, None, None)
+        self.assertEqual(state["status"], "absent")
+        self.assertIsNone(state["holder"])
+        agreements = engine.agreements_state(box, "Method")
+        self.assertEqual(agreements["status"], "absent")
 
     def _box(self, suffix: str = "") -> Path:
         box = FORGE / "implementations" / f"_holder_collision_{os.getpid()}_{id(self)}{suffix}"

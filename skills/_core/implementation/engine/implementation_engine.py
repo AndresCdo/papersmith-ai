@@ -198,7 +198,9 @@ def sibling_holder_filenames() -> frozenset[str]:
     engine/`), minus this skill's own `HOLDER_FILENAME`.
 
     Derived from the sibling profiles themselves, never a hand-kept list,
-    and read lazily, once per process, by `holder_resolution` alone. A
+    and read lazily, once per process, by the two by-shape readers that
+    pick this skill's own holder: `agreements_state` (and through it
+    `holder_resolution`) and `position_state`'s fallback scan. A
     sibling profile that cannot be read contributes nothing, so its file
     stays an ordinary by-shape candidate and still refuses (fail-closed).
     """
@@ -418,8 +420,10 @@ def agreements_state(target: Path, name: str) -> dict:
     declares its own holder filename (`holder_resolution`, beside this
     function), and that declared name owns where a write lands. The engine
     still invents no *filename* of its own — it holds none to invent, the
-    skill's own `PROFILE["holder"]["filename"]` does — and this function's
-    own code, the by-shape scan above, is untouched by that change.
+    skill's own `PROFILE["holder"]["filename"]` does. The one narrowing of
+    the scan itself: a file another skill sharing this engine declares as
+    ITS holder is that skill's checklist, never this one's, so it is set
+    aside and listed under `siblingHolders` (present only when one exists).
 
     **A located position block never counts as an agreement.** Its own
     sequence items are excluded before this scan sees a single line
@@ -460,6 +464,15 @@ def agreements_state(target: Path, name: str) -> dict:
     product = target / name
     files = sorted(p for p in product.glob(AGREEMENTS_GLOB) if p.is_file()) \
         if product.is_dir() else []
+    # A sibling skill's own declared holder is that skill's checklist, never
+    # this one's (`sibling_holder_filenames`): set aside ahead of the scan,
+    # and listed under `siblingHolders` so the skip is visible, never silent.
+    # The key appears only when such a file exists, so a target without one
+    # reads exactly as it always has.
+    sibling_names = sibling_holder_filenames()
+    siblings = [str(p.relative_to(target)) for p in files if p.name in sibling_names]
+    files = [p for p in files if p.name not in sibling_names]
+    sibling_key = {"siblingHolders": siblings} if siblings else {}
 
     # Computed once per call, never per item: whether `tests/` at the
     # target's own root (the same directory `cmd_verify`'s own
@@ -527,7 +540,8 @@ def agreements_state(target: Path, name: str) -> dict:
                 "note": "no markdown file in the product folder holds checklist "
                         "items; if a gate happened, its agreements were lost",
                 "witness": {"unwitnessed": [], "unmeasured": [], "disagrees": [],
-                           "summary": "0 of 0 witnessed"}}
+                           "summary": "0 of 0 witnessed"},
+                **sibling_key}
 
     witnessed = len(unmeasured) + len(disagrees)
     return {
@@ -544,6 +558,7 @@ def agreements_state(target: Path, name: str) -> dict:
             "disagrees": disagrees,
             "summary": f"{witnessed} of {total_items} witnessed",
         },
+        **sibling_key,
     }
 
 
@@ -561,22 +576,22 @@ def holder_resolution(target: Path, name: str) -> dict:
     is what a READ falls back to when the declared name is absent; that
     function's code is not touched by this one at all.
 
-    A sibling skill's declared holder is never a candidate. Every filename
-    another profile sharing this engine declares (`sibling_holder_
-    filenames`) is set aside ahead of the count below -- listed under
-    `siblings`, never hidden, and never offered as a file to rename or
-    adopt: that file is the sibling's, exactly as `HOLDER_FILENAME` is this
-    skill's. `candidates` is `byShape` minus `siblings`.
+    A sibling skill's declared holder is never a candidate.
+    `agreements_state` already sets aside every filename another profile
+    sharing this engine declares (`sibling_holder_filenames`), so `byShape`
+    never holds one; its `siblingHolders` is carried here as `siblings`,
+    never hidden, and never offered as a file to rename or adopt: that file
+    is the sibling's, exactly as `HOLDER_FILENAME` is this skill's.
 
     Five outcomes, decided in this order:
-      declared file exists                              -> "declared"
-      declared absent, candidates == 0, product is_dir  -> "create"
-      declared absent, candidates == 0, not is_dir      -> "absent"
-      declared absent, candidates == 1                  -> "undeclared"
-      declared absent, candidates > 1                   -> "ambiguous"
+      declared file exists                          -> "declared"
+      declared absent, byShape == 0, product is_dir  -> "create"
+      declared absent, byShape == 0, not is_dir      -> "absent"
+      declared absent, byShape == 1                  -> "undeclared"
+      declared absent, byShape > 1                   -> "ambiguous"
 
-    `read`: the declared path when found; else the single candidate when
-    there is exactly one; else `None` -- there is nothing a caller may read
+    `read`: the declared path when found; else the single by-shape
+    candidate when there is exactly one; else `None` -- there is nothing a caller may read
     without a human choosing (`undeclared` needs a rename or a declaration;
     `ambiguous` needs a human pick).
 
@@ -591,16 +606,15 @@ def holder_resolution(target: Path, name: str) -> dict:
     product = target / name
     declared_path = product / HOLDER_FILENAME
     declared_is_file = declared_path.is_file()
-    by_shape = agreements_state(target, name)["holders"]
-    sibling_names = sibling_holder_filenames()
-    siblings = [path for path in by_shape if Path(path).name in sibling_names]
-    candidates = [path for path in by_shape if path not in siblings]
+    agreements = agreements_state(target, name)
+    by_shape = agreements["holders"]
+    siblings = agreements.get("siblingHolders", [])
 
     if declared_is_file:
         action = "declared"
-    elif not candidates:
+    elif not by_shape:
         action = "create" if product.is_dir() else "absent"
-    elif len(candidates) == 1:
+    elif len(by_shape) == 1:
         action = "undeclared"
     else:
         action = "ambiguous"
@@ -610,7 +624,7 @@ def holder_resolution(target: Path, name: str) -> dict:
     elif action == "create":
         read, write = None, declared_path
     elif action == "undeclared":
-        read, write = target / candidates[0], None
+        read, write = target / by_shape[0], None
     else:  # "absent" or "ambiguous"
         read, write = None, None
 
@@ -619,7 +633,6 @@ def holder_resolution(target: Path, name: str) -> dict:
         "path": declared_path if declared_is_file else None,
         "byShape": by_shape,
         "siblings": siblings,
-        "candidates": candidates,
         "read": read,
         "write": write,
         "create": action == "create",
@@ -824,8 +837,13 @@ def position_state(target: Path, name: str, evidence: dict,
         # every markdown file at the top of the product folder is a
         # candidate holder, never a fixed filename that would decide for
         # the repository.
+        # A sibling skill's own declared holder is never this skill's
+        # position (`sibling_holder_filenames`), the same exclusion
+        # `agreements_state` applies to its own by-shape scan.
+        sibling_names = sibling_holder_filenames()
         holders = []
-        for candidate in sorted(p for p in product.glob("*.md") if p.is_file()):
+        for candidate in sorted(p for p in product.glob("*.md")
+                                if p.is_file() and p.name not in sibling_names):
             candidate_block = impl_position.locate_block(candidate.read_bytes())
             if candidate_block is not None:
                 holders.append((candidate, candidate_block))
@@ -12174,14 +12192,14 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     if action == "undeclared":
         raise Refused(
             "HOLDER_UNDECLARED",
-            f"{resolution['candidates'][0]} holds checklist items under "
+            f"{resolution['byShape'][0]} holds checklist items under "
             f"{product.relative_to(target)}/, but this skill declares its "
             f"own holder as {resolution['declared']} and no skill sharing "
             "this engine declares "
-            f"{Path(resolution['candidates'][0]).name!r}; rename "
-            f"{resolution['candidates'][0]} to {resolution['declared']} in the "
+            f"{Path(resolution['byShape'][0]).name!r}; rename "
+            f"{resolution['byShape'][0]} to {resolution['declared']} in the "
             "target repository, or declare "
-            f"{Path(resolution['candidates'][0]).name!r} in this skill's own "
+            f"{Path(resolution['byShape'][0]).name!r} in this skill's own "
             "PROFILE[\"holder\"][\"filename\"] if that name should become "
             "this skill's convention for every target."
             + _sibling_holders_note(resolution))
@@ -15041,7 +15059,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         # The D3 middle row: exactly one shape-matching candidate, not the
         # declared name. Both exits fork nothing -- renaming or declaring
         # the SAME file leaves a single holder standing.
-        candidate = resolution["candidates"][0]
+        candidate = resolution["byShape"][0]
         raise Refused(
             "HOLDER_UNDECLARED",
             f"{candidate!r} holds checklist items under {name}/, but this "
@@ -15060,7 +15078,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         # to remove or rename all but one, never to create a third file.
         # Same code as "undeclared" (no new refusal code -- the pinned
         # reachable-refusal count does not move for this), distinct detail.
-        candidates = resolution["candidates"]
+        candidates = resolution["byShape"]
         listed = ", ".join(repr(candidate) for candidate in candidates)
         raise Refused(
             "HOLDER_UNDECLARED",

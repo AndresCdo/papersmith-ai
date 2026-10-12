@@ -1212,7 +1212,9 @@ block — a malformed witness is refused here, not left to surface at the next
 `POSITION_BLOCK_EXISTS` unless `--replace` is also given.
 
 The holder is found by shape, never by a fixed filename — the same rule
-`agreements_state` already applies. Refuses `POSITION_HOLDER_ABSENT` when no
+`agreements_state` already applies — except that a sibling skill's own
+declared holder (`Experimental_AGREED.md`) is never a candidate, for reading
+or for writing. Refuses `POSITION_HOLDER_ABSENT` when no
 markdown file in the product folder holds anything to append into, and
 `POSITION_HOLDER_AMBIGUOUS` when more than one candidate exists and none is
 decidable without a human choosing. A malformed existing block —  no witness,
