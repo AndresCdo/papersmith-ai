@@ -40,9 +40,11 @@ without guessing the order. The minimum path:
 1. **Install the CLI and set up the environment** — see [Getting started](#getting-started).
 2. **Create your workspace** — `papersmith init ~/papers/my-paper --title "…" --topic "…"`.
    What it leaves inside, in [Inside the workspace](#inside-the-workspace).
-3. **Put a reference PDF** in `guidance/reference-papers/` and run
+3. **Check that the idea is plausible** — with your idea in two sentences,
+   `/plausibility` tracks the SOTA and returns the constellation plus a ranked top 5.
+4. **Put a reference PDF** in `guidance/reference-papers/` and run
    `papersmith ingest <pdf>` — or ask for `/paper-ingestion` inside your harness.
-4. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
+5. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
    with the agent.
 
 You don't have to use every skill, or in this order: **each one declares what
@@ -68,8 +70,8 @@ The full path, from a PDF to a compiled paper:
 
 | # | You invoke | What it does | Where it leaves the result |
 |---|---------|----------|-------------------------|
-| 1 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
-| 2 | `/plausibility` | Explores the pre-ingestion idea in three stretches: it tracks ~25 references through their abstracts, maps the constellation in a single HTML and discusses the plausibility of the hypothesis against that SOTA | `sota-pool/` (ignored, like `guidance/`) |
+| 1 | `/plausibility` | Explores the idea before any ingestion, in three stretches: it tracks ~25 references through their abstracts, maps the constellation in a single HTML and discusses the plausibility of the hypothesis against that SOTA | `sota-pool/` (ignored, like `guidance/`) |
+| 2 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
 | 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
 | 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
 | 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
@@ -81,7 +83,7 @@ The full path, from a PDF to a compiled paper:
 | 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
 | 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `papersmith upgrade` | the workspace itself |
 
-**The minimum to start.** If you just want to try the forge, start with step 2
+**The minimum to start.** If you just want to try the forge, start with step 1
 with your idea in two sentences: `/plausibility` tracks the SOTA and returns the
 constellation plus the top-5. Only afterwards, if you want, put a PDF in
 `guidance/reference-papers/`, run `/paper-ingestion`, and deliberate with
@@ -277,7 +279,29 @@ what you send out.
 
 ## How it works — the order
 
-### Step 1 — Put each PDF in the folder according to its role
+### Step 1 — Check that the idea is plausible (`plausibility`)
+
+Before there is anything to ingest there is an idea, and this is the step that
+tests it. It needs no PDFs, which is why it comes first: all three stretches work
+from the idea and from what can be found about it.
+
+| Stretch | Runs as | Ends at |
+| --- | --- | --- |
+| **Scout** | the `sota-scout` agent | the pool — 25 candidates with abstracts, in 3 to 5 families, plus the provisional plausibility note |
+| **Constellation** | the `sota-grapher` agent | the single `atlas.html` beside `atlas.json`, with the checker's green run |
+| **Screen** | the `novelty-screener` agent | the plausibility report — graded claims, a ranked top 5, and one closing paragraph on where the proposal stands |
+
+Everything lands in `sota-pool/`, which is ignored like `guidance/`.
+**Nothing here files into `guidance/`**: this step reads the literature, it does
+not collect it. The pool it leaves behind is what `proposal-deliberation` shows
+alongside the mathematics, and its ranked top 5 is what tells the ingestion step
+which PDFs are worth having.
+
+An idea stated in fewer than two sentences is refused before the search starts:
+scouting an unstated idea invents its own question. A claim with no abstract
+passage behind it does not become a planet — a quoteless planet is a drawing.
+
+### Step 2 — Put each PDF in the folder according to its role
 
 | Folder | What goes here |
 |---------|------------|
@@ -287,7 +311,7 @@ what you send out.
 
 **All three folders travel empty.** Each one arrives in a clone with its `.gitkeep` and nothing more: `guidance/*/*` is ignored, with `!guidance/*/.gitkeep` as the only escape hatch. The scaffolding is versioned, the PDFs and their Markdown are not. `tests/test_forge_scaffolding.py` derives both halves —what the `profile.ts` declare as source against what git actually tracks— and goes red if a declared folder stops travelling.
 
-### Step 2 — Ingest the PDFs (PDF → Markdown)
+### Step 3 — Ingest the PDFs (PDF → Markdown)
 
 In **Claude Code**, invoke the skill:
 
@@ -312,7 +336,7 @@ already inside its folder is skipped. To re-ingest, delete the paper's folder
 (leaving the PDF loose) and run the skill again. The configuration lives in
 `papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
 
-### Step 3 — Deliberate over a proposal (`proposal-deliberation`)
+### Step 4 — Deliberate over a proposal (`proposal-deliberation`)
 
 In **Claude Code**, invoke the skill:
 
@@ -340,7 +364,7 @@ three to five concepts remain as nodes and edges instead of as sentences. If
 that overlay doesn't exist, the stretch reports it as pending instead of drawing
 relationships nobody agreed on.
 
-### Step 4 — Take the proposal to code (`proposal-implementation`)
+### Step 5 — Take the proposal to code (`proposal-implementation`)
 
 In **Claude Code**, invoke the skill:
 
