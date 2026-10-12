@@ -69,6 +69,7 @@ GUARDS: tuple[str, ...] = (
     "tests/test_suite_collects.py",
     "tests/test_no_personal_context_dependency.py",
     "tests/test_agents.py",
+    "tests/test_check_manual.py",
     "tests/test_proposal_implementation.py::ReportFirstSectionProseTests",
 )
 

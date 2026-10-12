@@ -164,8 +164,10 @@ breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
       `sources` citation at once and advancing `meta.repository.revision`
 - [x] T12 — Reconcile this record with the tree (2026-10-12): T5 closed, T10
       re-measured, `## Log` opened
-- [ ] T13 — The manual's mechanical rules become a checkable script,
-      `scripts/check_manual.py`, instead of a reading done by hand at every unit
+- [x] T13 — The manual's mechanical rules become a checkable script,
+      `scripts/check_manual.py`, instead of a reading done by hand at every unit.
+      It is wired into the fast tier's `GUARDS`, so the anchors and the translated
+      lines are re-checked on every fast pass, not only when someone remembers.
 
 ## Measured on 2026-10-12, mid-cycle
 
@@ -180,6 +182,21 @@ README.md                        3.852 líneas
 U0-U8 to revise for register       679 lines of already-English text
 SKILL.md + templates in Spanish      0 lines (both halves already English)
 ```
+
+And the guard's own output on the same tree, which is now the baseline every unit
+is measured against. `python3 scripts/check_manual.py --lines A-B` reports that
+range alone, so one unit's progress is one number:
+
+```
+.venv/bin/python scripts/check_manual.py
+  25 errors    21 untranslated-heading, 3 spanish-placeholder, 1 inverted-punctuation
+ 270 warnings  untranslated-line
+   0 findings anywhere in lines 1-3117, the part that is already English
+```
+
+The zero is the load-bearing number. A check that also fires on the translated
+half is a check whose output has to be read, which is the cost it was written to
+remove.
 
 ## Log
 
@@ -196,3 +213,13 @@ SKILL.md + templates in Spanish      0 lines (both halves already English)
 - **L4** — The remaining serial cost was measured at ~22 minutes per unit across
   ten commits on 2026-10-12, which is what L1 was reacting to. The guard exists
   to remove the hand-reading from every one of the units left.
+- **L5** — T13 lands with the rule that makes it safe to fail a build on: nothing
+  Spanish is detected by a word list, which is how a check starts missing, but by
+  *identity against `0d128f9`*. A heading or a prose line the manual still shares
+  byte for byte with the text it came from was not translated. Measured before
+  wiring it in: 21 headings, and nothing at all in the 3,117 lines that are
+  already English. Two rules carry a stated limitation in the script's own
+  docstring -- a Spanish question quoted as an example is reported, and a line
+  carrying a markdown link is exempt from the identity check -- and the rule a
+  machine cannot apply, the neutral register, is left where it was: with the
+  reader.
