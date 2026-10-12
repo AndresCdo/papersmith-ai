@@ -197,6 +197,30 @@ fresh report, because the agent keeps no state between passes beyond the
 conversation itself. The stretch ends at the report plus the ranked top 5
 for the later ingestion stage — never at a publication, never at a filing.
 
+## The acceptance gate
+
+The third stretch ends at the report, and the report is not handed on until the
+operator accepts it. This is the skill's one human stop, and it is a stop rather
+than a notice: the ranked top 5 that leaves here is a list of PDFs somebody is
+about to be sent looking for, and a list nobody approved sends the next stage
+after papers the operator never asked for.
+
+What acceptance covers is narrow, and stating the edges is the point:
+
+- It approves **the reading**, not the idea. The graded claims, the ranked top 5
+  and the closing paragraph on where the proposal stands are what the operator
+  accepts or sends back. The idea is the operator's own and needs no blessing.
+- It publishes nothing. This skill never publishes.
+- It files nothing. Nothing here reaches `guidance/`.
+
+Every pass is a fresh report, so every pass gets its own gate. Re-screening after
+an adjustment is a new reading, and the acceptance of the previous one does not
+carry over to it.
+
+**Presenting the report and proceeding in the same turn is the failure this
+section exists to prevent.** A gate that cannot be refused is a summary. The
+operator has to be able to say no and have that change what happens next.
+
 ## Decision gates
 
 | Situation | Action |
@@ -207,6 +231,7 @@ for the later ingestion stage — never at a publication, never at a filing.
 | The checker refuses | Fix the atlas and re-run, up to 3 repair passes; then stop with the violations quoted in `owed` |
 | A quote is not verbatim in its abstract | Copy the passage from the pool's abstract again, or drop the planet; never edit the abstract to fit the quote |
 | A claim has no abstract passage | The planet does not exist; a quoteless planet is a drawing |
+| The report is not accepted | Hand nothing to ingestion. Ask what to change and re-screen; the top 5 does not travel on an unaccepted report |
 
 ## Measure before you assert
 

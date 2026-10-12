@@ -858,6 +858,37 @@ number is `0`, breaking changes can still arrive without a major bump.
   `paper_resolve.py`, what each resolver cannot give the pool: Crossref never
   returns an abstract (and reports no year), arXiv reports `year: null` and
   `venue: "arXiv"`.
+- **`paper-writing` says which language its blocks are written in, and it is
+  English.** Nothing in that skill stated it, so the answer was whatever language
+  the session happened to be speaking. `proposal-implementation` has declared the
+  split for its own artifacts for releases — *"Every artifact stays English ...
+  The conversation does not."* — and the skill that writes the manuscript was the
+  exception. A manuscript written in a language nobody chose is a defect that
+  stays invisible until someone who was not part of the conversation reads it.
+- **A prose pass, with a list it may not touch.** A written block can be edited
+  for prose --- vocabulary, phrasing, sentence rhythm, the connective between two
+  sentences. It may not change a citation or its identifier, a number or
+  statistic, the methodology as stated, or the technical terms that block's
+  contract names; changing one of those is a **failure rather than a warning**,
+  the same class `UNBOUND_SENTENCE` and `SPAN_NOT_IN_SOURCE` already catch.
+  It is opt-in, it never writes to `main.tex` itself --- its output goes through
+  `open` and `substitute`, so the engine's proof that not one byte outside the
+  target block moved still holds for it --- and it runs as a checklist with
+  nothing installed, so an operator-wired humanizer is an accelerator inside the
+  contract rather than a prerequisite for it.
+  **What it is not:** a way to lower an AI-detection score. It adds no digressions
+  to read as humanly edited and changes no claim. A rewrite shaped so that a
+  classifier reads the text differently is shaped by something other than the
+  evidence, and this forge's invariant is that every claim is tied to its own.
+- **`plausibility` gains its acceptance gate.** The third stretch ends at the
+  plausibility report, and the ranked top 5 it hands to the ingestion stage is a
+  list of PDFs somebody is about to be sent looking for. Nothing approved that
+  list before the next stage acted on it. The gate is deliberately narrow: it
+  approves the reading and not the idea, and this skill publishes and files
+  nothing by design. Every re-screen is a new reading and carries its own gate,
+  because an earlier acceptance of an earlier report is not an acceptance of this
+  one — and presenting the report while proceeding anyway is the failure the
+  section exists to prevent.
 
 ### Changed
 
@@ -1281,7 +1312,6 @@ number is `0`, breaking changes can still arrive without a major bump.
   `SETTLE_UNWITNESSED_CONFLICT`; with `--under` it now places a line, and
   without `--under` it is refused `SETTLE_UNDER_REQUIRED`.
 
-
 ## 0.13.0
 
 ### Added
@@ -1302,6 +1332,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `--plan-migrations` must not be described as a dry run, and how to read a
   non-zero exit instead of summarizing it as done.
 
+- **The package is publishable to an index, and is not published yet.**
+  `pyproject.toml` gained what a published version needs — an SPDX licence
+  expression, project URLs, classifiers, and the manual as the long description —
+  and `.github/workflows/publish.yml` runs the Node suite, builds the kit,
+  inspects both archives and installs the built wheel into a clean virtualenv
+  before it uploads anything, because everything above that can pass on an
+  artifact that still cannot do its job. It authenticates through Trusted
+  Publishing: PyPI verifies a short-lived OIDC token naming this repository, this
+  workflow and the `pypi` environment, so no durable credential sits in the
+  repository to leak or rotate. It runs on a published release rather than on a
+  push, because a version number is spent forever, and it can be rehearsed with
+  `gh workflow run publish.yml -f dry_run=true`. The matching publisher on
+  pypi.org is configured outside the repository and does not exist yet, which is
+  why this release is a draft: the first publication stays a human step.
+
 ### Changed
 
 - **The Paper Command Center speaks the architecture diagram's visual
@@ -1321,6 +1366,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   meaning and only their hues move. On the canvas a node's role is now a full
   stroke over a translucent fill of the same hue, the way the diagram states
   it, instead of an accent bar on one edge.
+
+- **The repository lives in the LIAUNAL organization.** The install URLs and the
+  badge in the manual, the package metadata, the MCP catalogue and the release
+  guide moved from `Daprosero/papersmith-ai` in one commit. GitHub redirects the
+  old address, so existing checkouts and pinned URLs keep resolving. The flow
+  diagram's recorded source evidence still cites `Daprosero/papersmith-ai` at the
+  revision it was read from, which is provenance rather than an address.
 
 ### Added
 
