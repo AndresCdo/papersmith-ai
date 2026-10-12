@@ -21,7 +21,7 @@ remote compute, development and troubleshooting.
 3. [Getting started](#getting-started)
 4. [How it works — the order](#how-it-works--the-order)
 5. [Inside the workspace](#inside-the-workspace)
-6. [Harnesses and skill projection](#harnesses-y-proyección-de-skills)
+6. [Harnesses and skill projection](#harnesses-and-skill-projection)
 7. [The agents](#los-agentes)
 8. [Anatomy of each skill](#anatomía-de-cada-skill)
 9. [The CLI commands](#los-comandos-del-cli)
@@ -223,7 +223,7 @@ including the `llama-server` binary that the OCR needs — it is **not** Ollama
 nor a Homebrew installation. `npm run setup:harnesses` symlinks the canonical
 `skills/` tree into `.claude/skills`, `.pi/skills`, `.opencode/skills`
 and `.agents/skills`, with relative, idempotent symlinks (see
-[Harnesses and skill projection](#harnesses-y-proyección-de-skills)). The first
+[Harnesses and skill projection](#harnesses-and-skill-projection)). The first
 run of `papersmith ingest` downloads ~1.5 GB of Surya weights if the
 environment wasn't pre-provisioned.
 
@@ -492,33 +492,33 @@ migrations](#migraciones-de-artefactos), and it is also the reason
 
 ---
 
-## Harnesses y proyección de skills
+## Harnesses and skill projection
 
-`skills/` en la raíz del repositorio es la **fuente única de verdad**. Cada
-harness lee skills desde su propia carpeta, así que el script de proyección
-enlaza el árbol canónico en cada una con enlaces **relativos** e idempotentes:
-correrlo de nuevo converge al mismo layout y el checkout sigue siendo
-relocalizable.
+`skills/` at the repository root is the **single source of truth**. Each
+harness reads skills from its own folder, so the projection script symlinks
+the canonical tree into each one with **relative** and idempotent symlinks:
+running it again converges to the same layout and the checkout stays
+relocatable.
 
 ```bash
 npm run setup:harnesses      # = bash scripts/setup-harnesses.sh
 ```
 
-| Harness | Dónde lee las skills | Documento de routing (workspace) |
-|---------|----------------------|-----------------------------------|
+| Harness | Where it reads skills from | Routing document (workspace) |
+|---------|----------------------------|-------------------------------|
 | Claude Code | `.claude/skills/` | `CLAUDE.md` |
 | Pi | `.pi/skills/` | `.pi/APPEND_SYSTEM.md` |
 | OpenCode | `.opencode/skills/` | `OPENCODE.md` |
 | Google Antigravity | `.agents/skills/` | `.agents/AGENTS.md` |
 
-### Qué cablea cada harness
+### What each harness wires
 
-`papersmith init` y `papersmith upgrade` generan, por cada harness que declara el
-workspace, lo que muestra esta tabla. Es la misma matriz que
-`HARNESS_CAPABILITIES` en `src/papersmith/generators.py`, y un test
-(`tests/test_harness_parity.py`) verifica que ambas coincidan. `wired` es lo que
-se genera; `unsupported` es lo que no se genera; `opt-in` es lo que sólo se
-documentas y activas tú.
+`papersmith init` and `papersmith upgrade` generate, for each harness the
+workspace declares, what this table shows. It is the same matrix as
+`HARNESS_CAPABILITIES` in `src/papersmith/generators.py`, and a test
+(`tests/test_harness_parity.py`) verifies that both match. `wired` is what
+gets generated; `unsupported` is what does not get generated; `opt-in` is
+only documented, and you enable it yourself.
 
 <!-- harness-capabilities:start -->
 | Harness | Skills | Comandos | Agentes | Plugins / guards |
@@ -529,81 +529,80 @@ documentas y activas tú.
 | Google Antigravity | wired | unsupported — vía skills (workflows deprecados) | wired (`.agents/agents`) | unsupported |
 <!-- harness-capabilities:end -->
 
-Al terminar, `init` y `upgrade` imprimen una línea por harness activo con el
-estado de cada capacidad (`wired`, `unsupported`, `failed` o `blocked`) y agregan
-la clave `wiring` a su resultado. Si un enlace de skills no se pudo crear, o hay
-un directorio real donde iría el enlace, lo informan como advertencia (`failed` /
-`blocked`) en lugar de omitirlo en silencio.
+When it finishes, `init` and `upgrade` print one line per active harness with
+the state of each capability (`wired`, `unsupported`, `failed` or `blocked`) and
+add the `wiring` key to its result. If a skill symlink could not be created, or
+there is a real directory where the symlink would go, they report it as a warning
+(`failed` / `blocked`) instead of silently omitting it.
 
-Lo que la tabla no promete:
+What the table does not promise:
 
-- **Pi:** los agentes de `.pi/agents` sólo los lee el paquete de terceros
-  `pi-subagents`; el núcleo de Pi no tiene subagentes. Sin ese paquete, los
-  archivos existen pero nadie los usa.
-- **Claude Code:** el guard es opt-in. Papersmith nunca escribe ni mezcla
-  `.claude/settings.json`; el fragmento para activarlo está en
+- **Pi:** the agents in `.pi/agents` are only read by the third-party package
+  `pi-subagents`; the Pi core has no subagents. Without that package, the
+  files exist but nobody uses them.
+- **Claude Code:** the guard is opt-in. Papersmith never writes or merges
+  `.claude/settings.json`; the snippet to enable it is in
   [`docs/guard-hooks.md`](docs/guard-hooks.md).
-- **Antigravity:** no hay guard hasta que se obtenga el esquema de entrada de sus
-  hooks (`.agents/hooks.json`).
-- **Antigravity, comandos:** no se generan archivos de comandos. Su único
-  mecanismo de slash commands, los workflows, está deprecado a favor de skills
-  (retiro 2026-11-01) y la ruta de workspace de los workflows no está verificada
-  (`.agents/workflows` es una suposición). Las skills ya funcionan como
-  `/<skill-name>` a través de `.agents/skills`, así que todas siguen invocables
-  como comandos.
-- **Antigravity, sólo ubicaciones documentadas:** `.antigravity/rules.md` y
-  `.antigravity/skills` ya no se generan. Antigravity usa `.agents/skills`,
-  `.agents/agents/` y `.agents/AGENTS.md` (texto plano, sin frontmatter). Los
-  workspaces existentes no se migran: ejecuta `papersmith init` en un workspace
-  nuevo.
+- **Antigravity:** there is no guard until its hooks' input schema is obtained
+  (`.agents/hooks.json`).
+- **Antigravity, commands:** no command files are generated. Its only
+  slash-command mechanism, workflows, is deprecated in favor of skills
+  (retirement 2026-11-01) and the workflows' workspace path is not verified
+  (`.agents/workflows` is an assumption). Skills already work as
+  `/<skill-name>` through `.agents/skills`, so all of them stay invocable
+  as commands.
+- **Antigravity, documented locations only:** `.antigravity/rules.md` and
+  `.antigravity/skills` are no longer generated. Antigravity uses `.agents/skills`,
+  `.agents/agents/` and `.agents/AGENTS.md` (plain text, no frontmatter). Existing
+  workspaces are not migrated: run `papersmith init` in a new workspace.
 
-#### Matriz de soporte verificada
+#### Verified support matrix
 
-Resumen de [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md),
-leída contra la documentación de cada herramienta el 2026-10-02. Es lo que la
-herramienta documenta, no lo que Papersmith genera (eso es la tabla de arriba).
-`unverified` significa que no se leyó una fuente primaria.
+Summary of [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md),
+read against each tool's documentation on 2026-10-02. It is what the
+tool documents, not what Papersmith generates (that is the table above).
+`unverified` means no primary source was read.
 
-| Harness | Skills | Comandos | Agentes | Plugins / hooks | MCP / config | Fuentes (2026-10-02) |
-|---------|--------|----------|---------|-----------------|--------------|----------------------|
+| Harness | Skills | Commands | Agents | Plugins / hooks | MCP / config | Sources (2026-10-02) |
+|---------|--------|----------|--------|-----------------|--------------|----------------------|
 | OpenCode | supported: `.opencode/skills` | supported: `.opencode/commands` | supported: `.opencode/agents` | supported: `.opencode/plugins/` | supported: `opencode.json` | <https://opencode.ai/docs/skills/>, <https://opencode.ai/docs/commands/>, <https://opencode.ai/docs/agents/>, <https://opencode.ai/docs/plugins/>, <https://opencode.ai/docs/config/> |
-| Pi | supported: `.pi/skills`, `.agents/skills` | supported: `.pi/prompts/*.md` | unsupported en el núcleo; sólo de terceros (`.pi/agents`, `pi-subagents`) | supported: `.pi/extensions/` | supported: `.pi/mcp.json` | <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/prompt-templates.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md>, <https://github.com/nicobailon/pi-subagents/blob/main/docs/agents.md> |
-| Google Antigravity | supported: `.agents/skills` | supported pero deprecado (workflows); ruta `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (esquema de entrada unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
-| Claude Code | supported: `.claude/skills` | supported (formato legado): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith nunca lo escribe) | supported: `.mcp.json` (Papersmith no lo genera) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
+| Pi | supported: `.pi/skills`, `.agents/skills` | supported: `.pi/prompts/*.md` | unsupported in the core; third-party only (`.pi/agents`, `pi-subagents`) | supported: `.pi/extensions/` | supported: `.pi/mcp.json` | <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/prompt-templates.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md>, <https://github.com/nicobailon/pi-subagents/blob/main/docs/agents.md> |
+| Google Antigravity | supported: `.agents/skills` | supported but deprecated (workflows); path `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (input schema unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
+| Claude Code | supported: `.claude/skills` | supported (legacy format): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith never writes it) | supported: `.mcp.json` (Papersmith does not generate it) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
 
-- `.antigravity/skills` y `.antigravity/rules.md`: unsupported (no source found)
-  y ya no se generan; Antigravity usa `.agents/skills`, `.agents/agents/` y
+- `.antigravity/skills` and `.antigravity/rules.md`: unsupported (no source found)
+  and no longer generated; Antigravity uses `.agents/skills`, `.agents/agents/` and
   `.agents/AGENTS.md`.
-- Antigravity deprecó los workflows a favor de skills (2026-11-01, fuente:
+- Antigravity deprecated workflows in favor of skills (2026-11-01, source:
   <https://antigravity.google/docs/ide/workflows>).
-- Pi: los nombres de herramienta `mcp` y `mcpScript` no tienen fuente
+- Pi: the tool names `mcp` and `mcpScript` have no source
   (unsupported, no source found).
-- Las docs de estas herramientas cambian rápido; vuelve a verificar una celda antes
-  de apoyarte en ella después de esa fecha.
+- The docs of these tools change fast; re-verify a cell before
+  relying on it after that date.
 
-Las fuentes de cada celda están en
+The sources of each cell are in
 [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md).
 
-Dentro de un **workspace** generado, la historia es ligeramente distinta y
-conviene saberlo: el workspace embarca el árbol `skills/` completo y el de
-agentes (`.claude/agents/`), y sus routing docs apuntan al árbol canónico
-`skills/*/SKILL.md`. Los documentos de routing son generated projections: la
-fuente real de cada agente es `.claude/agents/*.md` y la de cada skill es su
-`SKILL.md`. No edites las proyecciones a mano; se regeneran (y
-`papersmith audit --check-drift` avisa si una se desvió). `init` y `upgrade` generan un comando slash por skill
-en `.claude/commands/`, `.opencode/commands/` y `.pi/prompts/`; Antigravity no
-recibe archivos de comandos y lee las skills por sus enlaces. Los agentes se
-proyectan desde `.claude/agents/` a `.opencode/agents/`, `.pi/agents/` y
-`.agents/agents/`. Para que tu harness
-liste las skills como comandos `/`, ejecuta `npm run setup:harnesses` dentro del
-workspace: enlaza el árbol embarcado en `.claude/skills`, `.pi/skills`,
-`.opencode/skills` y `.agents/skills`, igual de relativo e idempotente que
-en el checkout. En este checkout, las proyecciones de comandos slash
-(`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`), las proyecciones de agentes
-(`.opencode/agents/`, `.pi/agents/`, `.agents/agents/`) y los guards de OpenCode y Pi
-se sincronizan con `python scripts/sync-repo-harness.py` (`--check` para CI; no
-tiene script en `package.json` porque el kit lo embarca y el script es sólo del
-repo).
+Inside a generated **workspace**, the story is slightly different and
+worth knowing: the workspace ships the full `skills/` tree and the agent
+tree (`.claude/agents/`), and its routing docs point at the canonical tree
+`skills/*/SKILL.md`. The routing documents are generated projections: the
+real source of each agent is `.claude/agents/*.md` and the source of each skill is its
+`SKILL.md`. Do not edit the projections by hand; they regenerate (and
+`papersmith audit --check-drift` warns if one drifted). `init` and `upgrade` generate one slash command per skill
+in `.claude/commands/`, `.opencode/commands/` and `.pi/prompts/`; Antigravity does not
+receive command files and reads skills through its symlinks. Agents are
+projected from `.claude/agents/` to `.opencode/agents/`, `.pi/agents/` and
+`.agents/agents/`. For your harness to
+list the skills as `/` commands, run `npm run setup:harnesses` inside the
+workspace: it symlinks the shipped tree into `.claude/skills`, `.pi/skills`,
+`.opencode/skills` and `.agents/skills`, just as relative and idempotent as
+in the checkout. In this checkout, the slash command projections
+(`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`), the agent projections
+(`.opencode/agents/`, `.pi/agents/`, `.agents/agents/`) and the OpenCode and Pi guards
+are synced with `python scripts/sync-repo-harness.py` (`--check` for CI; it
+has no script in `package.json` because the kit ships it and the script is
+repo-only).
 
 ---
 
