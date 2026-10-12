@@ -300,6 +300,14 @@ To publish, reuse the SAME `--serve` session opened at the top of this page — 
 {"operation":"CREATE_SUCCESSOR","sourceFilename":"research-concept-r05.md","instruction":"...","selectedEntryId":"...","resolvedDecisions":[{"kind":"replace","targetEntryId":"<entryId from the resolve line>","replacementText":"..."}],"acceptSuccessor":true,"successorAcceptanceToken":"<the acceptanceToken from the preview line>","acknowledgedMathRemovals":["<every mathDelta.lost[].id from the preview line>"]}
 ```
 
+To record why the change was made and who decided it, append `"rationale":"<why>","decider":"human"` (or `"agent"`) to the accept line; the successor's receipt then carries both beside its `instructionHash`:
+
+```json
+{ "instructionHash": "…", "rationale": "The old definition admitted weakly stationary processes the theorem does not cover.", "decider": "human", "…": "…" }
+```
+
+Both fields are optional, and a receipt without them validates exactly as before. A blank or over-2000-character `rationale`, or a `decider` other than `agent`/`human`, is refused `DECISION_RECORD_INVALID`; either field on another operation is refused `DECISION_RECORD_UNSUPPORTED`.
+
 The final line returns `status: "published"`, the new filename, `receiptId`, `manifestStatus: "COMMITTED"`, and `auditStatus`/`selfAuditStatus: "PASS"`. The acceptance token is single-use and lives only in that `--serve` process's memory — a preview from one process cannot be accepted by another invocation of `cli.mjs`. Keeping resolve, preview, and accept on the same stdin also means the engine's cold start is paid once for all three, not three times.
 
 ## Rejections are the safety net, not a bug

@@ -528,6 +528,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   refused `DRY_RUN_UNSUPPORTED` rather than ignored. Existing locks are neither
   removed nor reinterpreted. Documented in both deliberation skills' `SKILL.md`
   and `references/usage.md`.
+- **A successor receipt can record why the change was made and who decided
+  it.** Receipts kept only an `instructionHash`, so a published revision could
+  not say why it existed or whether a person or an agent took the call.
+  `CREATE_SUCCESSOR` accepts two optional fields, `rationale` (at most 2000
+  characters) and `decider` (`agent` or `human`), and the successor's receipt
+  records them verbatim beside the hash. Malformed values are refused
+  `DECISION_RECORD_INVALID` at the preview, and either field on another
+  operation `DECISION_RECORD_UNSUPPORTED`. Documented in both deliberation
+  skills' `SKILL.md` and `references/usage.md`.
 
 ### Changed
 
@@ -820,6 +829,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   first header cell is `Parameter(s)` or `Hyperparameter(s)`; such a document
   was refused by 0.13.0. Every other table is judged exactly as before, and
   published revisions are unaffected. No migration is needed.
+
+- Successor receipts may carry two new optional keys, `rationale` and
+  `decider`, only when the request supplied them. The change is additive:
+  receipts written by 0.13.0 carry neither and keep validating and reading
+  unchanged, so no migration is needed.
 
 ## 0.13.0
 

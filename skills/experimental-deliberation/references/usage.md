@@ -382,6 +382,8 @@ Say out loud to the user what is leaving the document before you acknowledge it.
 
 Leave a lost id out and the accept answers `MATH_REMOVALS_NOT_ACKNOWLEDGED` and writes nothing. (`acknowledgedMathRemovals` is accepted as an equivalent field name; the two are merged into one set.)
 
+To record why the change was made and who decided it, append `"rationale":"<why>","decider":"human"` (or `"agent"`) to the accept line; the successor's receipt then carries both beside its `instructionHash`, for example `"rationale": "Beta-Net's venue year was missing and its URL untagged.", "decider": "human"`. Both are optional, and a receipt without them validates exactly as before. A blank or over-2000-character `rationale`, or a `decider` other than `agent`/`human`, is refused `DECISION_RECORD_INVALID`; either field on another operation is refused `DECISION_RECORD_UNSUPPORTED`.
+
 When the successor would still name a file named after ANOTHER revision with a suffix other than `.md` (an artifact rendered for the previous version, inherited outside your locus), the preview, the published result and the receipt carry `staleCompanionReferences`, one `{ "reference", "revision", "inherited" }` per reference, absent when there is none. The engine never rewrites that line or regenerates the artifact: replace the line inside this successor as an ordinary decision, or publish with the flag and say so.
 
 The acceptance token is single-use and lives only in that `--serve` process's memory: a preview from one process cannot be accepted by another invocation.

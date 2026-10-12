@@ -5484,6 +5484,23 @@ const DIRECT_DOCUMENT_INTENTS = new Set(['MODIFY', 'INSERT', 'DELETE', 'MOVE', '
 const MAINTENANCE_OPERATION = 'MAINTENANCE';
 const CREATE_SUCCESSOR_OPERATION = 'CREATE_SUCCESSOR';
 const CREATE_INITIAL_REVISION_OPERATION = 'CREATE_INITIAL_REVISION';
+/** The longest `rationale` a successor receipt records. */
+const MAX_RATIONALE_CHARACTERS = 2_000;
+
+/**
+ * The optional decision record a successor receipt carries beside its `instructionHash`:
+ * `rationale` (why) and `decider` (`agent` or `human`, who). Validated before anything runs, so a
+ * malformed record is refused at the preview rather than published, and refused on any operation
+ * that writes no successor receipt rather than silently dropped.
+ */
+function decisionRecordBlocker(params:{operation?:string;rationale?:unknown;decider?:unknown}):{code:string;message:string}|undefined{
+ if(params.rationale===undefined&&params.decider===undefined) return undefined;
+ if(params.operation!==CREATE_SUCCESSOR_OPERATION) return {code:'DECISION_RECORD_UNSUPPORTED',message:'rationale and decider are recorded only in a CREATE_SUCCESSOR receipt; nothing was run.'};
+ if(params.rationale!==undefined&&!(typeof params.rationale==='string'&&params.rationale.trim().length>0&&params.rationale.length<=MAX_RATIONALE_CHARACTERS)) return {code:'DECISION_RECORD_INVALID',message:`rationale must be a non-blank string of at most ${MAX_RATIONALE_CHARACTERS} characters; nothing was run.`};
+ if(params.decider!==undefined&&params.decider!=='agent'&&params.decider!=='human') return {code:'DECISION_RECORD_INVALID',message:`decider must be "agent" or "human"; got ${JSON.stringify(params.decider)}. Nothing was run.`};
+ return undefined;
+}
+
 /** Operations that accept `dryRun`: the ones that publish without a preview turn of their own. */
 const DRY_RUN_OPERATIONS = new Set([CREATE_INITIAL_REVISION_OPERATION]);
 
@@ -5931,6 +5948,8 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
        },{additionalProperties:false})),
        maintenanceTaskId:Type.Optional(Type.String({minLength:13,maxLength:256,pattern:'^maintenance-[a-z0-9][a-z0-9-]{0,242}$'})),
        idempotencyKey:Type.Optional(Type.String({minLength:1,maxLength:256})),
+       rationale:Type.Optional(Type.String({minLength:1,maxLength:MAX_RATIONALE_CHARACTERS,description:'CREATE_SUCCESSOR only: why the change was made, recorded verbatim in the successor receipt. Optional.'})),
+       decider:Type.Optional(StringEnum(['agent','human'] as const,{description:'CREATE_SUCCESSOR only: who took the decision, recorded in the successor receipt. Optional.'})),
        sourceWindowBytes:Type.Optional(Type.Integer({minimum:1,maximum:MAX_SOURCE_WINDOW_BYTES,description:'CREATE_INITIAL_REVISION only: how many bytes of the declared sources, in total and in declaration order, v1 reads (default 4000). Refused on every other operation.'})),
        dryRun:Type.Optional(Type.Boolean({description:'CREATE_INITIAL_REVISION only: run every check and compose the first revision, then stop before the creation lock and any write (status preview). Refused on every other operation.'})),
   }),
@@ -5942,6 +5961,11 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
    }
    // A dry run exists only where an operation has no preview of its own; anywhere else it would
    // silently mutate a caller who believed nothing would be written, so it is refused instead.
+   const decisionRecordRefusal=decisionRecordBlocker(params as {operation?:string;rationale?:unknown;decider?:unknown});
+   if(decisionRecordRefusal){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'fix_decision_record',blockers:[decisionRecordRefusal]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
    if((params as {sourceWindowBytes?:unknown}).sourceWindowBytes!==undefined&&params.operation!==CREATE_INITIAL_REVISION_OPERATION){
     const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_source_window',blockers:[{code:'SOURCE_WINDOW_UNSUPPORTED',message:'sourceWindowBytes applies only to CREATE_INITIAL_REVISION, the one operation that reads the declared sources into a document; nothing was run.'}]};
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};

@@ -353,6 +353,8 @@ node skills/proposal-deliberation/cli.mjs --serve
 
 Never split resolve/preview/accept across separate one-shot invocations of `cli.mjs` — a fresh process has no memory of the previous one's acceptance token (and pays a fresh cold start for nothing). Keep the same `--serve` process open for the rest of the deliberation, too: resolving and applying a later version reuses it exactly the same way.
 
+**Record why, and who decided.** The receipt keeps an `instructionHash`, not the instruction, so on its own it cannot say why the revision exists. Add `"rationale": "<why, at most 2000 characters>"` and `"decider": "agent"` or `"human"` to the request and the successor's receipt (`.proposal-deliberation/receipts/<file>.json`) records both verbatim beside the hash. Both are optional: a receipt without them, including every receipt written before 0.14.0, validates exactly as before. Send them on the accept line (sending them on the preview too is harmless); `decider` states who took the decision — `human` when the user accepted the change, `agent` when you decided it yourself — and never what you would have liked it to be. A blank or over-long `rationale` or any other `decider` is refused `DECISION_RECORD_INVALID` before anything runs, and either field on an operation other than `CREATE_SUCCESSOR` is refused `DECISION_RECORD_UNSUPPORTED`.
+
 A successful accept returns `status: "published"`, the new managed filename and hash, a `receiptId`, `manifestStatus: "COMMITTED"`, and `auditStatus`/`selfAuditStatus: "PASS"`. Treat anything else — a different status, a failed audit, or a `recoveryStatus` other than `not_required` — as incomplete; do not tell the user the edit is done.
 
 ### 5. One version per homogeneous batch

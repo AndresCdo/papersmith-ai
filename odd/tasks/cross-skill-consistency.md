@@ -770,3 +770,13 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `tests/experimental-deliberation-parameters-table.test.mjs` (8) RED 5F -> GREEN (the three fail-closed/atom cases
   pass before and after by design). test:node 757/757. No migration.
   Commit: `fix(experimental-deliberation): a declared parameters table carries the plan's fixed settings` (the commit carrying this line)
+
+- C7 (real): the successor receipt (`orchestrator.ts`, `createRevisionReceipt`) recorded only `instructionHash`.
+  Fix: optional `rationale` (1..2000 chars, non-blank) and `decider` (`agent`|`human`) on CREATE_SUCCESSOR, validated
+  at the top of `execute` (`decisionRecordBlocker`: `DECISION_RECORD_INVALID`, or `DECISION_RECORD_UNSUPPORTED` on
+  other operations; nothing runs) and recorded verbatim in the receipt only when supplied (`RevisionReceipt` gains
+  the two optional fields; `validatePublicationReceipt` ignores extra keys, so old receipts validate unchanged --
+  tested with the consistency audit). Docs: both SKILL.md, both usage.md. Tests:
+  `tests/deliberation-successor-decision-record.test.mjs` (7) RED 6F -> GREEN (the no-fields case passes before and
+  after by design). Core comment reworded to keep the pinned "proposal" residue at 171. Additive shape: no migration.
+  Commit: `feat(deliberation): successor receipts record an optional rationale and decider` (the commit carrying this line)
