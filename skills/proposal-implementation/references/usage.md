@@ -647,6 +647,11 @@ section. The contract mirrors the invariant bridge: every declared finding needs
 a `test_finding_<id>` proving the defect is real and a `test_remedy_<id>`
 proving the proposed correction resolves it without breaking anything already
 established.
+A finding whose remedy the bound revision has adopted is the one exception to
+the second half: its remedy test is retired by design (see
+[After adoption](#after-adoption-the-remedy-becomes-an-invariant)), so it is
+listed under `audit.adopted` (present only when some finding is adopted)
+instead of `remediesWithoutValidation`.
 
 ```json
 {
@@ -693,6 +698,15 @@ The ruling is written into the target and the remedy suite reads it before
 measuring anything: without it every `test_remedy_<id>` fails immediately, and a
 finding ruled inadmissible is never measured while the others still run. Only
 the verdict travels — the revision's text stays in the forge.
+
+Ruled against a successor that already took a remedy in, the finding is not
+inadmissible for its adoption marker being gone — that absence is the adoption.
+Its verdict is admissible, introduces nothing, and carries
+`"adopted": {"revision": "<successor>", "matched": [<expected forms found>]}`;
+the command's output lists it under `adopted` (a key present only when some
+finding is adopted). The key is optional: a ruling
+without it reads exactly as before. A marker gone with no expected form in its
+place (`changed-unrecognized`) is still ruled inadmissible.
 
 Refuses `REVISION_UNREADABLE` when the pinned document 0 revision cannot be
 read, and, under a profile declaring more than one document,
@@ -2457,8 +2471,11 @@ the text cites three times.
 | `unknown` | the finding declares no marker |
 
 Inference is textual, so it is built to fail toward `open`. An adopted finding
-stops counting as introducing notation: the deliberation settled that when it
-published.
+stops counting as introducing notation — in `admit`'s `introducesNotation` and
+in `verify`'s `audit.compatibility` alike: the deliberation settled that when it
+published. Every reader (`admit`, `verify`'s audit, `migration`, `handoff`)
+reads adoption from the same text: the document(s) the finding names, or
+document 0 when it names none.
 
 ### After adoption: the remedy becomes an invariant
 
@@ -2478,6 +2495,11 @@ __provenance__["invariants"] declares <becomes_invariant> in the module
 `audit.status` stays `incomplete` until all three hold. The skill checks the
 move; writing it is the agent's work, as with any other code. Leaving the
 remedy in place would keep reporting a defect the revision no longer has.
+
+Once all three hold the finding is in its terminal state: `audit.adopted` names
+it with the revision and the expected form that confirmed it, it stays in
+`tests/findings.py` with its `test_finding_<id>` as evidence, and it no longer
+holds `audit.status` below `ok`.
 
 ## Guard codes
 

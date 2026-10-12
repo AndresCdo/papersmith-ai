@@ -6001,7 +6001,10 @@ def remedy_compatibility(findings: list[dict], revision: str | None,
             undefined_notation.append(f"{finding['id']}: {absent}")
         if not finding.get("uses"):
             undefined_notation.append(f"{finding['id']}: declares no notation at all")
-        if finding.get("introduces"):
+        # Once adopted, nothing is introduced any more: the deliberation
+        # settled that notation when it published (the same rule `admit` keeps).
+        if finding.get("introduces") and finding_adoption(
+                finding, source, sources_by_document)["state"] != "adopted":
             introduces.append(f"{finding['id']}: {finding['introduces']}")
 
     if unknown_loci or undefined_notation:
@@ -8984,6 +8987,31 @@ def adoption_state(finding: dict, source: str) -> dict:
                       "confirm by hand before treating it as adopted"}
 
 
+def finding_adoption(finding: dict, source: str,
+                     sources_by_document: dict | None = None) -> dict:
+    """`adoption_state` over the text the finding itself names.
+
+    The one adoption read every consumer shares -- `admit`, `verify`'s
+    `remediesWithoutValidation`, `migration`, the compatibility reader and the
+    handoff. They used to read adoption separately, and disagreed about the
+    end of the lifecycle: one reader demanded a test another demanded be
+    retired, so an adopted finding could never reach `ok`. Under one document
+    `finding_named_source` returns `source` itself, so this is
+    `adoption_state(finding, source)` byte for byte.
+    """
+    return adoption_state(finding, finding_named_source(finding, source, sources_by_document))
+
+
+def adopted_record(adoption: dict, revision: str | None) -> dict | None:
+    """The terminal state of an adopted finding: which revision took the
+    correction in, and which expected form confirmed it. `None` for every
+    other state, including `changed-unrecognized`, which stays a question for
+    a human, never an adoption."""
+    if adoption.get("state") != "adopted":
+        return None
+    return {"revision": revision, "matched": adoption["matched"]}
+
+
 def declared_invariants(package_dir: Path) -> set[str]:
     """Every invariant the implementation's modules claim."""
     invariants: set[str] = set()
@@ -8999,7 +9027,7 @@ def declared_invariants(package_dir: Path) -> set[str]:
 
 
 def migration_state(target: Path, findings: list[dict], source: str | None,
-                    package: str) -> dict:
+                    package: str, sources_by_document: dict | None = None) -> dict:
     """What an adopted remedy still owes.
 
     Once the deliberation publishes a remedy, it stops being a proposal: it is
@@ -9021,7 +9049,7 @@ def migration_state(target: Path, findings: list[dict], source: str | None,
     pending: list[str] = []
 
     for finding in findings:
-        if adoption_state(finding, source).get("state") != "adopted":
+        if finding_adoption(finding, source, sources_by_document).get("state") != "adopted":
             continue
         invariant = finding.get("becomes_invariant")
         if not invariant:
@@ -9094,7 +9122,7 @@ def cmd_handoff(args: argparse.Namespace) -> dict:
                         "Publish a revision there before this finding can be "
                         "sized.")
         impact = finding_impact(finding, source, sources_by_document)
-        adoption = adoption_state(finding, source)
+        adoption = finding_adoption(finding, source, sources_by_document)
         # Key names stay document 0's (D6, "representation only"); the
         # values are the finding's own.
         own_loci, own_remedy, own_remedy_key = finding_declared_loci(finding)
@@ -9333,11 +9361,18 @@ def cmd_admit(args: argparse.Namespace) -> dict:
                     f"{field} cites entries absent from the revision "
                     f"({DOCUMENTS[label_index]['label']}): {missing}")
         marker = (finding.get("adoption") or {}).get("absent")
+        adoption = finding_adoption(finding, source, sources_by_document)
+        adopted = adopted_record(adoption, args.revision)
         if not marker:
             reasons.append("declares no adoption marker, so adoption could never be read back")
-        elif marker not in finding_source:
+        elif marker not in finding_source and adopted is None:
             # A marker that does not describe the document today is meaningless:
-            # its absence later would be indistinguishable from adoption.
+            # its absence later would be indistinguishable from adoption. The
+            # one exception is adoption itself, read positively: the marker is
+            # gone AND an expected form is present. That is the terminal state
+            # (`adopted`), not a finding that stopped describing the document.
+            # `changed-unrecognized` (gone, nothing expected instead) still
+            # lands here and stays inadmissible.
             reasons.append("its adoption marker is not present in the revision, so the "
                            "finding does not describe this document")
         if not finding.get("uses"):
@@ -9346,15 +9381,17 @@ def cmd_admit(args: argparse.Namespace) -> dict:
             absent = [s for s in finding["uses"] if s not in finding_source]
             if absent:
                 reasons.append(f"relies on notation the revision does not define: {absent}")
-        adoption = adoption_state(finding, source)
         verdicts[finding["id"]] = {
             "admissible": not reasons,
             "reasons": reasons,
             # A remedy already taken into the revision no longer introduces
             # anything: the deliberation settled that when it published.
-            "introduces": [] if adoption["state"] == "adopted" else finding.get("introduces", []),
+            "introduces": [] if adopted else finding.get("introduces", []),
             "adoption": adoption,
             "impact": finding_impact(finding, source, sources_by_document),
+            # Additive and optional: present only on an adopted finding, so a
+            # ruling written without this key reads exactly as it always did.
+            **({"adopted": adopted} if adopted else {}),
         }
 
     record = {
@@ -9383,6 +9420,12 @@ def cmd_admit(args: argparse.Namespace) -> dict:
         "admitted": sorted(i for i, v in verdicts.items() if v["admissible"]),
         "inadmissible": {i: verdicts[i]["reasons"] for i in inadmissible},
         "introducesNotation": {i: v["introduces"] for i, v in verdicts.items() if v["introduces"]},
+        # Terminal: the revision already says what these findings proposed.
+        # They owe only the move `migration` checks, never another run.
+        # Present only when some finding is adopted, so every other ruling's
+        # output stays byte-identical to what it was.
+        **({"adopted": {i: v["adopted"] for i, v in verdicts.items() if "adopted" in v}}
+           if any("adopted" in v for v in verdicts.values()) else {}),
         "record": str(path.relative_to(target)),
         "note": "Only admitted remedies may be measured. Efficacy comes after this.",
     }
@@ -17365,7 +17408,9 @@ def cmd_verify(args: argparse.Namespace) -> dict:
     findings = read_findings(target)
     without_evidence = sorted(f["id"] for f in findings if f"test_finding_{f['id']}" not in tests)
     without_remedy = sorted(f["id"] for f in findings if not f.get("remedy"))
-    unvalidated = sorted(f["id"] for f in findings if f"test_remedy_{f['id']}" not in tests)
+    # `unvalidated` is computed below, once the revision's text is read: an
+    # adopted finding's `test_remedy_<id>` is retired by design (`migration`),
+    # so it cannot also be owed here.
     # The resolved revision, not the argument: these three ask what the proposal
     # says as it stands now, and answering them against a revision nobody named
     # left them permanently unknown on every ordinary invocation.
@@ -17434,7 +17479,20 @@ def cmd_verify(args: argparse.Namespace) -> dict:
     ruling = admissibility_record(target, revision)
     uncontrolled = remedies_without_control(target / "tests", package_name(name))
     source = revision_source(revision)
-    migration = migration_state(target, findings, source, package_name(name))
+    # One terminal state, read once and shared: an adopted finding keeps its
+    # evidence, owes no `test_remedy_<id>`, and owes only the move `migration`
+    # checks. An unreadable revision adopts nothing, so every such test stays owed.
+    adopted = {}
+    if source is not None:
+        for f in findings:
+            record = adopted_record(
+                finding_adoption(f, source, verify_sources_by_document), revision)
+            if record:
+                adopted[f["id"]] = record
+    unvalidated = sorted(f["id"] for f in findings
+                         if f"test_remedy_{f['id']}" not in tests and f["id"] not in adopted)
+    migration = migration_state(target, findings, source, package_name(name),
+                                verify_sources_by_document)
     unruled = sorted(f["id"] for f in findings
                      if f["id"] not in ruling.get("findings", {})) if findings else []
     if not findings:
@@ -17594,7 +17652,7 @@ def cmd_verify(args: argparse.Namespace) -> dict:
         f["id"] for f in findings
         if local_reach(finding_impact(f, source or "", verify_sources_by_document))
         and not f.get("remedy_block")
-        and adoption_state(f, source or "")["state"] != "adopted"
+        and f["id"] not in adopted
     ]
     to_discuss = [_local_remedy_discuss_entry(target, name, finding_id)
                   for finding_id in local_remedies_not_written]
@@ -17726,6 +17784,10 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             # that costs a session. Reported so it is a decision, not a silence.
             "localRemediesNotWritten": local_remedies_not_written,
             "remediesWithoutValidation": unvalidated,
+            # Findings the bound revision has taken in: terminal, kept as
+            # evidence, owing only `migration`. Present only when some exist,
+            # so a target with no adopted finding reads byte-identically.
+            **({"adopted": adopted} if adopted else {}),
             "remediesWithoutControl": uncontrolled,
             "migration": migration,
             "admissibility": {"status": ruling["status"],

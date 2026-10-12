@@ -18,7 +18,10 @@ The contract, checked statically by `implementation_cli.py verify`:
 - `adoption.absent` is text present in the revision today whose disappearance
   signals the remedy was taken in; `expect` are forms that confirm it;
 - `becomes_invariant` names what the remedy turns into once published: at that
-  point the remedy test retires and the claim moves to the invariant suite;
+  point the remedy test retires and the claim moves to the invariant suite.
+  The finding itself stays here, with its `test_finding_<id>`, as evidence;
+  once adopted it owes no `test_remedy_<id>` and no longer holds the audit
+  below `ok`;
 - `remedy_block` is the corrected equation written out, exactly as it should
   read in the document, carrying the same `\\tag{n}` it replaces. A finding of
   local reach that omits it cannot be settled inline: the handoff defers it to

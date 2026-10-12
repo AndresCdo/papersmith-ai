@@ -8,9 +8,9 @@
     "sha256": "87387b1645af86da56d03e6c49ffcbcd7940cda42299c85f7d7899cfbd6c6d40"
   },
   "admit-e1": {
-    "bytes": 672,
+    "bytes": 681,
     "exit": 0,
-    "sha256": "6316f58aa32308995ceb21cb8c922d55da57e300dbc1f48cf2baa87e3187dc71"
+    "sha256": "62c48f3777e6b119f30c00b528d32091bf17a240eafa02accc2027d524583185"
   },
   "adopt-same-target": {
     "bytes": 0,
@@ -128,14 +128,14 @@
     "sha256": "4813d04fbd2d68c22b5a6ccde9a577adea3c509c3837ba1c017a49ac009ace4e"
   },
   "verify-a": {
-    "bytes": 19014,
+    "bytes": 19134,
     "exit": 0,
-    "sha256": "12edb5976c5ae70a4a3a14af8317e66a4de97a146c13fa1efebd8049947325f8"
+    "sha256": "a4cc7fb5860df80e9c2c7fc1e4517dfa76d15c434ddfe7b7cffbda980b5f3fce"
   },
   "verify-b": {
-    "bytes": 19014,
+    "bytes": 19134,
     "exit": 0,
-    "sha256": "12edb5976c5ae70a4a3a14af8317e66a4de97a146c13fa1efebd8049947325f8"
+    "sha256": "a4cc7fb5860df80e9c2c7fc1e4517dfa76d15c434ddfe7b7cffbda980b5f3fce"
   },
   "verify-t": {
     "bytes": 13042,

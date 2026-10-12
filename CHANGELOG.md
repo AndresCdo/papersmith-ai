@@ -11,6 +11,46 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.14.0
+
+### Fixed
+
+- **An adopted finding reaches a terminal state instead of blocking the
+  audit forever.** Once `proposal-deliberation` published a remedy and the
+  target was re-bound to the successor revision, four readers disagreed about
+  the finding: `verify`'s `remediesWithoutValidation` still demanded the
+  `test_remedy_<id>` that `audit.migration` demands be retired, `admit
+  --revision <successor>` ruled the finding inadmissible because the text the
+  remedy replaces is gone (which is what adoption means), and the
+  compatibility audit kept reporting `needs-deliberation` for the notation the
+  remedy had introduced. The audit could only reach `ok` by deleting the
+  finding. All of them now read one shared adoption state
+  (`finding_adoption`): an adopted finding keeps its evidence
+  (`test_finding_<id>` and its entry in `tests/findings.py`), owes no remedy
+  validation, introduces no notation, and owes only the move `migration`
+  checks. `admit` rules it admissible with an `adopted` verdict naming the
+  revision and the expected form that confirmed it. `changed-unrecognized`
+  (the replaced text gone, nothing expected in its place) is not adoption and
+  stays inadmissible. Shared by `experimental-implementation`, which runs the
+  same engine. The sealed CLI corpora already carried an adopted finding and
+  had characterized the defect (ruled inadmissible, listed as unvalidated);
+  their `verify` and `admit` goldens move accordingly.
+
+### Behaviour changes
+
+- `admit` returns a new `adopted` map (present only when some finding is
+  adopted), and `tests/admissibility.json` carries
+  an optional `adopted` key on each adopted finding's verdict. Both are
+  additive: rulings written by 0.13.0 carry no such key and keep reading
+  unchanged, so no migration is needed.
+- `verify`'s `audit` gains an `adopted` map, present only when some finding is
+  adopted. A target whose only blocker was
+  an adopted finding now reads `audit: ok` instead of `incomplete` or
+  `needs-deliberation`.
+- Under a profile declaring more than one document, adoption is read from the
+  document(s) a finding names, the same text `admit` already checked the
+  marker against, instead of always from document 0.
+
 ## 0.13.0
 
 ### Added

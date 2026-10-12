@@ -10156,6 +10156,182 @@ class EquationTagRecognitionTests(unittest.TestCase):
             result["inadmissible"])
 
 
+class AdoptedFindingTerminalStateTests(unittest.TestCase):
+    """An adopted finding is a terminal state every reader agrees on.
+
+    The lifecycle: a finding is admitted against a revision, its remedy is
+    validated, the deliberation publishes the remedy into a successor, and the
+    target is re-bound to that successor with the remedy now a declared
+    invariant. Four readers used to disagree about that end state:
+    `remediesWithoutValidation` still demanded the remedy test that `migration`
+    demands be retired, `admit` on the successor ruled the finding inadmissible
+    because its replaced text is gone (which is what adoption means), and the
+    compatibility audit still counted the notation the remedy introduced. The
+    audit could therefore never reach `ok` without deleting the evidence.
+
+    Neutral fixture: one numbered equation rewritten by the remedy.
+    """
+
+    BEFORE = (
+        "## 1\n\n$$\nc = d \\tag{1}\n$$\n\n"
+        "Throughout, the estimator is written E[x].\n"
+    )
+    AFTER = (
+        "## 1\n\n$$\nc = e + \\kappa \\tag{1}\n$$\n\n"
+        "Throughout, the estimator is written E[x].\n"
+    )
+    UNRECOGNIZED = (
+        "## 1\n\n$$\nc = something else \\tag{1}\n$$\n\n"
+        "Throughout, the estimator is written E[x].\n"
+    )
+
+    FINDINGS = (
+        "FINDINGS = [\n"
+        "    {\n"
+        "        'id': 'loose_term',\n"
+        "        'kind': 'loose-constant',\n"
+        "        'equations': ['1'],\n"
+        "        'remedy_equations': ['1'],\n"
+        "        'uses': ['E[x]'],\n"
+        "        'introduces': ['\\\\kappa'],\n"
+        "        'adoption': {'absent': 'c = d', 'expect': ['c = e + \\\\kappa']},\n"
+        "        'becomes_invariant': 'term_is_bounded',\n"
+        "        'status': 'theorem',\n"
+        "        'remedy': 'replace d with e + kappa',\n"
+        "    },\n"
+        "]\n"
+    )
+
+    MODULE = (
+        "__provenance__ = {\n"
+        "    'revision': 'draft-2.md',\n"
+        "    'sections': ['1'],\n"
+        "    'equations': ['1'],\n"
+        "    'invariants': ['term_is_bounded'],\n"
+        "}\n"
+    )
+
+    # The evidence stays; the remedy test is retired; the claim lives on as
+    # an invariant test.
+    TESTS = (
+        "def test_finding_loose_term():\n    pass\n\n"
+        "def test_term_is_bounded():\n    pass\n"
+    )
+
+    def _proposals(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "draft-1.md").write_text(self.BEFORE, encoding="utf-8")
+        (root / "draft-2.md").write_text(self.AFTER, encoding="utf-8")
+        (root / "draft-3.md").write_text(self.UNRECOGNIZED, encoding="utf-8")
+        previous = os.environ.get("IMPLEMENTATION_PROPOSALS")
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(root)
+
+        def restore():
+            if previous is None:
+                os.environ.pop("IMPLEMENTATION_PROPOSALS", None)
+            else:
+                os.environ["IMPLEMENTATION_PROPOSALS"] = previous
+
+        self.addCleanup(restore)
+        return root
+
+    def _box(self, tag: str) -> Path:
+        box = FORGE / "implementations" / f"_adopted_{tag}_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text("", encoding="utf-8")
+        (box / "src" / "Method" / "term.py").write_text(self.MODULE, encoding="utf-8")
+        (box / "tests" / "findings.py").write_text(self.FINDINGS, encoding="utf-8")
+        (box / "tests" / "test_invariants.py").write_text(self.TESTS, encoding="utf-8")
+        return box
+
+    def _admit(self, box, revision):
+        return impl.cmd_admit(
+            argparse.Namespace(target=str(box), name="Method", revision=revision))
+
+    def _verify(self, box, revision):
+        return impl.cmd_verify(
+            argparse.Namespace(target=str(box), name="Method", revision=revision))
+
+    def test_admit_on_the_successor_rules_the_finding_adopted(self):
+        """The marker's absence is adoption, not a finding that stopped
+        describing the document. The verdict is terminal and names where."""
+        self._proposals()
+        box = self._box("admit")
+        result = self._admit(box, "draft-2.md")
+
+        self.assertEqual(result["status"], "admitted", result)
+        self.assertEqual(result["inadmissible"], {})
+        self.assertEqual(result["introducesNotation"], {})
+        self.assertEqual(result["adopted"],
+                         {"loose_term": {"revision": "draft-2.md",
+                                         "matched": ["c = e + \\kappa"]}})
+        verdict = json.loads(
+            (box / "tests" / "admissibility.json").read_text(encoding="utf-8")
+        )["findings"]["loose_term"]
+        self.assertTrue(verdict["admissible"])
+        self.assertEqual(verdict["adopted"],
+                         {"revision": "draft-2.md", "matched": ["c = e + \\kappa"]})
+
+    def test_an_adopted_finding_reaches_audit_ok_and_keeps_its_evidence(self):
+        """The acceptance case: nothing deleted from findings.py, the remedy
+        test retired as `migration` demands, and the audit reads `ok`."""
+        self._proposals()
+        box = self._box("verify")
+        self._admit(box, "draft-2.md")
+        audit = self._verify(box, "draft-2.md")["audit"]
+
+        self.assertEqual(audit["remediesWithoutValidation"], [])
+        self.assertEqual(audit["findingsWithoutEvidence"], [])
+        self.assertEqual(audit["migration"]["status"], "clear", audit["migration"])
+        self.assertEqual(audit["compatibility"]["status"], "ok", audit["compatibility"])
+        self.assertEqual(audit["compatibility"]["introducesNotation"], [])
+        self.assertEqual(audit["adopted"],
+                         {"loose_term": {"revision": "draft-2.md",
+                                         "matched": ["c = e + \\kappa"]}})
+        self.assertEqual([f["id"] for f in audit["findings"]], ["loose_term"])
+        self.assertEqual(audit["status"], "ok", audit)
+
+    def test_an_open_finding_still_demands_its_remedy_test(self):
+        """The guard stays: on the revision that still carries the defect, a
+        missing remedy test is still reported and the audit is not `ok`."""
+        self._proposals()
+        box = self._box("open")
+        self._admit(box, "draft-1.md")
+        audit = self._verify(box, "draft-1.md")["audit"]
+
+        self.assertEqual(audit["remediesWithoutValidation"], ["loose_term"])
+        self.assertNotIn("adopted", audit)
+        self.assertEqual(audit["status"], "incomplete")
+
+    def test_an_open_finding_still_counts_the_notation_it_introduces(self):
+        self._proposals()
+        box = self._box("open-compat")
+        result = self._admit(box, "draft-1.md")
+
+        self.assertEqual(result["introducesNotation"], {"loose_term": ["\\kappa"]})
+        self.assertNotIn("adopted", result)
+        compatibility = self._verify(box, "draft-1.md")["audit"]["compatibility"]
+        self.assertEqual(compatibility["status"], "needs-deliberation")
+
+    def test_a_changed_but_unrecognized_locus_stays_inadmissible(self):
+        """Fail-closed: the replaced text is gone but no expected form took its
+        place. That is not adoption, and `admit` still refuses it."""
+        self._proposals()
+        box = self._box("unrecognized")
+        result = self._admit(box, "draft-3.md")
+
+        self.assertEqual(result["status"], "inadmissible")
+        self.assertIn("loose_term", result["inadmissible"])
+        self.assertNotIn("adopted", result)
+        audit = self._verify(box, "draft-3.md")["audit"]
+        self.assertEqual(audit["remediesWithoutValidation"], ["loose_term"])
+        self.assertNotEqual(audit["status"], "ok")
+
+
 class AdmissibilityDualShapeReadTests(unittest.TestCase):
     """Cut 3 (`a-revision-is-two-documents`, Phase 8, design.md D5, C3):
     `admissibility_record`'s dual-shape read.

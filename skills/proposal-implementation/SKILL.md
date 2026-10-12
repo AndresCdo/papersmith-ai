@@ -350,6 +350,13 @@ proposal itself — that is `proposal-deliberation`.
   invariant. Until it does, `audit` stays `incomplete` — leaving it in the
   remedy suite would keep reporting a defect the revision no longer has, and
   would keep its claim outside the contract every other claim is held to.
+- Adoption is terminal, and every reader agrees on it. An adopted finding stays
+  in `tests/findings.py` with its `test_finding_<id>` as evidence; it is never
+  listed in `remediesWithoutValidation`, never counts as introducing notation,
+  and `admit --revision <successor>` rules it admissible with an `adopted`
+  verdict naming the revision. What it still owes is only the move above, so
+  the audit reaches `ok` without deleting anything. `changed-unrecognized` is
+  not adoption: `admit` keeps it inadmissible until a human confirms.
 - Comparison against a baseline happens only after the implementation is faithful
   and only through `probe`, never improvised mid-implementation. It reports
   `nextStep` and that order is binding: an implementation computing with numpy
