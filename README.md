@@ -1346,510 +1346,501 @@ flowchart TD
 
 ### 4. `proposal-implementation` — from the mathematics to code that tests itself
 
-**Para qué está.** Una propuesta publicada es un documento. Esta skill la convierte en
-un repositorio Python que funciona, y después **demuestra mecánicamente** —no por
-afirmación— que ese código es fiel a la matemática: que corre, que sus invariantes se
-cumplen, que los defectos que reporta son reales, que las correcciones que propone
-están validadas, y que sus informes dicen lo que los números dicen.
+**What it is for.** A published proposal is a document. This skill turns it into a
+working Python repository, and then **proves mechanically** —not by assertion— that the
+code is faithful to the mathematics: that it runs, that its invariants hold, that the
+defects it reports are real, that the corrections it proposes are validated, and that
+its reports say what the numbers say.
 
-#### La conexión con `proposal-deliberation`
+#### The connection with `proposal-deliberation`
 
-Es la costura más importante de la forja, va en los dos sentidos, y **se comporta
-distinto en cada uno de los dos flujos**. Vale la pena verla entera antes que nada.
+It is the most important seam of the forge, it runs in both directions, and **it behaves
+differently in each of the two flows**.
 
-**De deliberación hacia aquí, tres cosas distintas entran:**
+**From deliberation to here, three different things enter:**
 
-1. **Cuál es la revisión vigente.** Paso 1 de **los dos** flujos, sin excepción:
+1. **Which revision is current.** Step 1 of **both** flows, without exception:
    `node .claude/skills/proposal-deliberation/cli.mjs '{ "operation": "STATUS" }'`
-   → se toma `latest`. La skill **nunca adivina la base y nunca mira `proposals/` a
-   simple vista**.
-2. **El texto de la revisión.** El motor sí lee el archivo: `revision_source()` lo
-   levanta del directorio de propuestas. Lo usa para juzgar **admisibilidad**: cada
-   hallazgo declara qué notación *usa* —que tiene que aparecer textualmente en la
-   revisión— y qué notación *introduce*. Una corrección que cita una ecuación que no
-   existe, o que se apoya en notación que el documento nunca definió, no es un defecto
-   a validar con un barrido: es una decisión que le pertenece a la deliberación, y la
-   skill tiene prohibido reportarla como resuelta. (La ruta es configurable por entorno
-   con `IMPLEMENTATION_PROPOSALS`, y la razón está escrita en el código: *una forja de
-   papers no puede tener su suite de tests atada a la investigación de alguien*.)
-3. **El sello de procedencia.** Cada módulo escrito declara contra qué revisión se
-   escribió, y ese string tiene que ser igual a `latest`. Ese sello es lo que hace que
-   la deriva sea **medible** en vez de opinable.
+   → `latest` is taken. The skill **never guesses the base and never reads `proposals/`
+   by eye**.
+2. **The text of the revision.** The engine does read the file: `revision_source()`
+   lifts it from the proposals directory. It uses it to judge **admissibility**: each
+   finding declares which notation it *uses* —which has to appear verbatim in the
+   revision— and which notation it *introduces*. A correction that cites an equation
+   that does not exist, or that rests on notation the document never defined, is not a
+   defect to validate with a sweep: it is a decision that belongs to deliberation, and
+   the skill is forbidden to report it as resolved. (The path is configurable by
+   environment with `IMPLEMENTATION_PROPOSALS`, and the reason is written in the code:
+   *a paper forge must not have its test suite depend on one paper*.)
+3. **The provenance seal.** Each module written declares which revision it was written
+   against, and that string has to equal `latest`. That seal is what makes drift
+   **measurable** rather than a matter of opinion.
 
-**De aquí hacia deliberación, una sola vía, y con compuerta:** cuando la auditoría
-encuentra un defecto real en la matemática y lo valida, la corrección vuelve al
-documento. Detrás de una autorización explícita, esta sesión **maneja el motor de
-deliberación**: `handoff` dimensiona cada hallazgo, se ubica la entrada, `compose` arma
-el texto de reemplazo empatando por el `\tag{n}` de la ecuación, y se publica el
-sucesor. Está detrás de compuerta porque **publicar avanza tu linaje real**. Y no hay
-atajo: la corrección entra por la misma vista previa, la misma puerta de integridad
-matemática y la misma auditoría que cualquier otro cambio.
+**From here to deliberation, a single route, and gated:** when the audit finds a real
+defect in the mathematics and validates it, the correction returns to the document.
+Behind an explicit authorization, this session **drives the deliberation engine**:
+`handoff` sizes each finding, the entry is located, `compose` assembles the replacement
+text by matching on the equation's `\tag{n}`, and the successor is published. It is
+gated because **publishing advances the real lineage**. There is no shortcut: the
+correction goes through the same preview, the same mathematical-integrity gate and the
+same audit as any other change.
 
-**Y ahora lo que distingue a los dos flujos.** La skill enruta por **existencia, no por
-fidelidad**: mira si `src/` tiene una implementación, y nada más. Eso es deliberado —
-preguntar por fidelidad aquí mandaría un repositorio atado a `r14`, con `latest` en
-`r16`, a una primera pasada completa, reimplementando desde cero algo que sólo necesita
-ponerse al día. **La deriva es el cuarto paso del flujo B, no una razón para empezar de
-nuevo.**
+**And now what distinguishes the two flows.** The skill routes by **existence, not by
+fidelity**: it looks at whether `src/` has an implementation, and nothing more. That is
+deliberate — asking about fidelity here would send a repository bound to `r14`, with
+`latest` at `r16`, into a full first pass, reimplementing from scratch something that
+only needs to be brought up to date. **Drift is the fourth step of flow B, not a reason
+to start over.**
 
-| | **Flujo A — primera pasada** | **Flujo B — toda pasada posterior** |
+| | **Flow A — first pass** | **Flow B — every later pass** |
 |---|---|---|
-| Cuándo | `src/` no tiene implementación | `src/` ya tiene una, atada a la revisión que sea |
-| Qué hace con `latest` | **Ata**: se estampa como procedencia en cada módulo que se escribe | **Mide**: `verify` cruza lo declarado contra lo vigente y reporta la distancia |
-| La vuelta a deliberación | Paso 14, detrás de compuerta: se publican las correcciones que salieron de la auditoría | Paso 5, si hay diferencias, y primero pregunta de quién son |
-| Cómo termina | Paso 16: si es fiel, **no para** — sigue en el paso 3 del flujo B | En `probe`, que dice qué es lo siguiente |
+| When | `src/` has no implementation | `src/` already has one, bound to whatever revision |
+| What it does with `latest` | **Binds**: it is stamped as provenance in each module written | **Measures**: `verify` crosses what is declared against what is current and reports the distance |
+| The return to deliberation | Step 14, gated: the corrections that came out of the audit are published | Step 5, if there are differences, and it first asks whose they are |
+| How it ends | Step 16: if it is faithful, **it does not stop** — it continues at step 3 of flow B | In `probe`, which says what is next |
 
-Ese último renglón importa: **el flujo A desemboca en el flujo B**. Terminar en A haría
-que la respuesta dependa de cómo llegaste en vez de qué hay en el repositorio.
+**Flow A leads into flow B.** Ending at A would make the answer depend on how the
+operator arrived rather than on what the repository holds.
 
-**Y la compuerta más importante de toda la skill está en el flujo B**, cuando la
-fidelidad no da: se te pregunta **si esos cambios los hiciste tú**.
+**And the most important gate of the whole skill is in flow B**, when fidelity does not
+hold: the question is **whether those changes are the operator's**.
 
-- **Los hiciste tú** → el código va *adelante* de la propuesta. Se te recuerda
-  actualizar la matemática y se te entrega el prompt que lo hace. **Nunca se edita tu
-  código para que coincida con una propuesta vieja.**
-- **No los hiciste tú** → el código derivó. Se corrige y se revalida, con un tope de
-  tres pasadas.
+- **The changes are the operator's** → the code runs *ahead* of the proposal. The
+  operator is reminded to update the mathematics and handed the prompt that does it.
+  **The operator's code is never edited to match an old proposal.**
+- **The changes are not the operator's** → the code drifted. It is corrected and
+  revalidated, with a cap of three passes.
 
-Con un matiz fino que evita trabajo inventado: el reporte de deriva cruza qué secciones
-cambiaron de verdad con qué secciones declara cada módulo. Un módulo atado a una
-revisión vieja **cuyas propias secciones nunca se movieron** necesita **re-atarse, no
-reescribirse** — contabilidad, no matemática. Decir "nueve módulos están viejos" cuando
-cambió una ecuación informa que hay trabajo y nada sobre dónde.
+A fine distinction avoids invented work: the drift report crosses which sections
+actually changed against which sections each module declares. A module bound to an old
+revision **whose own sections never moved** needs **re-binding, not rewriting** —
+bookkeeping, not mathematics. Saying "nine modules are old" when one equation changed
+reports that there is work and nothing about where.
 
-#### La conexión con `remote-execution`
+#### The connection with `remote-execution`
 
-Mucho más angosta y de una sola dirección: **sólo lectura**. La skill importa por ruta
-exactamente dos módulos —el registro y la puerta de entrada— y **nunca** el adaptador
-ni nada bajo `adapters/`, que es el único lugar de aquella skill que nombra un
-servicio. Con eso pliega el registro y reporta qué se mandó, qué volvió y qué quedó en
-cuarentena. **Nunca envía, nunca reconcilia**: reconciliar es territorio de un humano
-corriendo el comando de aquella skill, jamás de `verify`. Y nunca nombra un worker: sólo
-reporta un conteo. De ese pliegue sale el peldaño `poll-first`.
+Much narrower and one-way: **read only**. The skill imports by path exactly two
+modules —the ledger and the entry gate— and **never** the adapter or anything under
+`adapters/`, which is the only place in that skill that names a service. With that it
+folds the ledger and reports what was sent, what came back and what stayed in
+quarantine. **It never sends, never reconciles**: reconciling is the territory of a
+human running that skill's command, never of `verify`. And it never names a worker: it
+reports only a count. The `poll-first` rung comes out of that fold.
 
-**Qué necesita antes.** Una revisión publicada, y un repositorio destino bajo
-`implementations/` que ya sea un repositorio git.
+**What it needs beforehand.** A published revision, and a target repository under
+`implementations/` that is already a git repository.
 
-**El flujo, por etapas.** Esta sección no tenía ninguno. Las etapas están leídas
-de `OBJECTIVE_FLOW`, que un test mantiene igual al `SKILL.md`, y son
-deliberadamente **independientes de lo que haya en disco**: tienen que leerse
-igual en un repositorio vacío que en uno a mitad de campaña. Existen para el
-momento en que algo se rompe — una sesión que choca con un error se ubica aquí,
-resuelve lo que la bloquea y se reengancha, en vez de improvisar hacia adelante.
+**The flow, by stages.** This section had none. The stages are read from
+`OBJECTIVE_FLOW`, which a test holds equal to the `SKILL.md`, and they are
+deliberately **independent of what is on disk**: they have to read the same in an
+empty repository as in one mid-campaign. They exist for the moment something breaks
+— a session that hits an error locates itself here, resolves what blocks it and
+rejoins, instead of improvising forward.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | Behind the operator when |
 |---|---|---|
-| `standing` | Un repositorio donde escribir la matemática: aislado bajo `implementations/`, con intérprete propio, con la disposición que esta skill espera, los destinos del kit materializados, y **aprobado el mapa** de objeto matemático a módulo | `structure` no reporta huecos de andamiaje y la declaración del benchmark lleva la revisión y las premisas con las que se aprobó el mapa — que es lo que `materialize --stage objects` se niega a hacer sin ellas |
-| `fidelity` | El código dice lo que dice la revisión ligada, y cada afirmación lleva un invariante con su test | `fidelity` está limpio y la suite propia del destino está verde bajo su propio intérprete |
-| `audit` | Qué cosas la formulación hace mal, establecido sobre el barrido declarado, **cada remedio juzgado admisible antes de medirlo** y validado después | `audit` deja de estar `incomplete` |
-| `declaration` | Qué compara el experimento, sobre qué unidad estadística, con qué métrica, y qué produce | la declaración del benchmark está contestada en vez de sentada en su valor vacío de andamiaje |
-| `rehearsal` | El flujo declarado corre punta a punta con sus propios notebooks, y el documento que lee una persona coincide con la corrida | el piloto está completo y `report` da `ok` |
-| `full-scale` | Cada paso ruteado a donde se decidió que corra, y ejecutado ahí a la escala que declara el protocolo | es la llegada; no está detrás de nadie |
+| `standing` | A repository to write the mathematics into: isolated under `implementations/`, with an interpreter of its own, laid out the way this skill expects, the kit's destinations materialized, and **the map** from mathematical object to module **approved** | `structure` reports no scaffold gaps and the benchmark declaration carries the revision and the premises with which the map was approved — which is what `materialize --stage objects` refuses to do without them |
+| `fidelity` | The code says what the bound revision says, and every claim carries an invariant with its test | `fidelity` is clean and the target's own suite is green under its own interpreter |
+| `audit` | What the formulation gets wrong, established over the declared sweep, **each remedy judged admissible before it is measured** and validated afterwards | `audit` is no longer `incomplete` |
+| `declaration` | What the experiment compares, over which statistical unit, by which metric, and what it produces | the benchmark declaration is answered rather than sitting at its scaffolded empty value |
+| `rehearsal` | The declared flow runs end to end with its own notebooks, and the document a person reads agrees with the run | the pilot is complete and `report` gives `ok` |
+| `full-scale` | Every step routed to where it was decided it should run, and executed there at the scale the protocol declares | this is the arrival; it is behind nobody |
 
-**Llegada:** corridas completas a la escala declarada, locales o remotas según
-lo declare cada paso, con el registro que dejan. **No** una verificación verde,
-**no** un ensayo que pasó.
+**Arrival:** complete runs at the declared scale, local or remote as each step declares,
+with the record they leave. **Not** a green verification, **not** a rehearsal that
+passed.
 
-**Cuatro paradas son de una persona, y ninguna es un defecto a reparar.** Dos
-están en la primera etapa y una sesión que arranca de cero las encuentra antes
-que nada: **autorizar que se escriba código**, sin lo cual nada debajo de esa
-compuerta puede empezar, y **aprobar el mapa** de objeto matemático a módulo,
-con la revisión y las premisas anotadas al lado. Las otras dos están al final:
-**publicar el commit** que un worker clonaría, y **autorizar un lanzamiento**.
-Un agente que lea cualquiera de ellas como un bloqueo se va a trabar o la va a
-saltear — las dos cosas están mal.
+**Four stops belong to a person, and none is a defect to repair.** Two stand in the
+first stage and a session that starts from zero meets them before anything else:
+**authorizing that code be written**, without which nothing below that gate can begin,
+and **approving the map** from mathematical object to module, with the revision and the
+premises recorded beside it. The other two stand at the end: **publishing the commit** a
+worker would clone, and **authorizing a launch**. An agent that reads any of them as a
+blocker will stall on it or skip it — both are wrong.
 
-**Los comandos.** Todos con la misma forma:
-`python3 .../implementation_cli.py <comando> --target implementations/<repo> [--name <Name>] [--revision research-concept-rNN.md]`.
-**Ese `python3` tiene que ser 3.10 o más nuevo** — y no está forzado: bajo uno más viejo,
-`verify` alcanza el adaptador de `remote-execution`, que evalúa `tuple[int, int] | None` al
-importar, y el comando muere con un `TypeError` en vez de negarse. Peor: `main()` anota esa
-excepción como un defecto abierto, y un defecto abierto niega otros ocho comandos hasta que
-alguien lo cierre. No se cuentan aquí a propósito: un número escrito a mano al lado de un
-roster que la máquina publica envejece la primera vez que alguien agrega un comando, y esta
-tabla decía nueve cuando ya eran veinte.
+**The commands.** All with the same form:
+`python3 .../implementation_cli.py <command> --target implementations/<repo> [--name <Name>] [--revision research-concept-rNN.md]`.
+**That `python3` has to be 3.10 or newer** — and it is not enforced: under an older one,
+`verify` reaches the `remote-execution` adapter, which evaluates `tuple[int, int] | None`
+at import, and the command dies with a `TypeError` instead of refusing. Worse: `main()`
+records that exception as an open defect, and an open defect denies eight other commands
+until someone closes it. They are not counted here on purpose: a number written by hand
+beside a roster the machine publishes ages the first time someone adds a command, and
+this table said nine when it was already twenty.
 
-| Comando | Qué hace |
+| Command | What it does |
 |---------|----------|
-| `env` | Crea y verifica el entorno virtual **del repositorio destino** (se niega si lo ejecutas desde un intérprete de la forja). Reporta también el estado de los punteros de Git LFS — aquí, porque es el primer comando después de un clon, justo cuando un repositorio lleno de marcadores parece completo. |
-| `name` | Función pura, sin repositorio. Normaliza lo que escribiste a la forma de carpeta `<Name>/` y a la forma importable `src/<Package>/`. **Rechaza cualquier carácter que no sea ASCII alfanumérico** (`NAME_NOT_ALPHANUMERIC`, nombrando el carácter): antes esos caracteres se caían en silencio y el nombre salía mutilado — `Ñandú` daba `And`. Separadores y camelCase siguen funcionando igual. |
-| `plan` | Plan de migración de **sólo lectura**: qué se renombra, qué se mueve, qué directorios faltan, qué referencias hay que reescribir, qué conflictos hay y qué archivos no sabe clasificar. Se niega sobre un árbol sucio. |
-| `apply` | Ejecuta un plan **ya aprobado** como un único commit atómico. Revalida que el plan no haya quedado viejo; ante cualquier falla revierte duro y reporta. Nunca deja un árbol a medio migrar. |
-| `admit` | Decide la **admisibilidad** de una corrección antes de medir si funciona: comprueba contra el texto de la revisión que la notación que cita exista de verdad. El veredicto se escribe en el destino; el texto de la propuesta se queda en la forja. |
-| `handoff` | Mide cuánto alcance tiene cada hallazgo dentro del documento y decide si se puede resolver en el momento o si merece su propia sesión de deliberación. |
-| `compose` | Arma el texto de reemplazo para llevar una corrección de vuelta a la propuesta, empatando por el `\tag{n}` de la ecuación. |
-| `probe` | Informe de sólo lectura de qué falta para poder correr el benchmark. Aquí vive la escalera de `nextStep`. |
-| `verify` | El gran lector estático: cumplimiento del layout, fidelidad a la revisión, integridad del trabajo previo, acuerdos, prosa desactualizada, declaraciones de búsqueda, estado de la ejecución remota, contrato del informe, auditoría y escalera de validación. Todo en un solo JSON. |
+| `env` | Creates and verifies the virtual environment **of the target repository** (it refuses if run from a forge interpreter). It also reports the state of the Git LFS pointers — here, because it is the first command after a clone, just when a repository full of markers looks complete. |
+| `name` | Pure function, no repository. It normalizes what was typed to the folder form `<Name>/` and the importable form `src/<Package>/`. **It rejects any character that is not ASCII alphanumeric** (`NAME_NOT_ALPHANUMERIC`, naming the character): before, those characters fell silently and the name came out mutilated — `Ñandú` gave `And`. Separators and camelCase still work the same. |
+| `plan` | **Read-only** migration plan: what is renamed, what is moved, which directories are missing, which references have to be rewritten, which conflicts exist and which files it cannot classify. It refuses on a dirty tree. |
+| `apply` | Runs an **already approved** plan as a single atomic commit. It revalidates that the plan has not gone stale; on any failure it reverts hard and reports. It never leaves a half-migrated tree. |
+| `admit` | Decides the **admissibility** of a correction before measuring whether it works: it checks against the text of the revision that the notation it cites really exists. The verdict is written in the target; the text of the proposal stays in the forge. |
+| `handoff` | Measures how much reach each finding has within the document and decides whether it can be resolved on the spot or deserves its own deliberation session. |
+| `compose` | Assembles the replacement text to take a correction back to the proposal, matching on the equation's `\tag{n}`. |
+| `probe` | Read-only report of what is missing to be able to run the benchmark. The `nextStep` ladder lives here. |
+| `verify` | The great static reader: layout compliance, fidelity to the revision, integrity of prior work, agreements, stale prose, search declarations, remote-execution state, report contract, audit and validation ladder. All in a single JSON. |
 
-**Las dos fases.** Están separadas a propósito:
+**The two phases.** They are separated on purpose:
 
-1. **Estructura.** `plan` → `apply`: puramente mecánico. Renombres, creación de
-   directorios, reescritura de referencias, un commit. **No toca la semántica del
-   código.** Y si la reorganización necesita más decisiones de las que alguien puede
-   leer de verdad, se niega a aplicarla directo y te la entrega como trabajo para una
-   sesión aparte — porque una lista así de larga se aprueba sin leerla, y una
-   aprobación sin lectura no es una aprobación. Lo que cuenta son las decisiones que
-   lees tú, no los archivos arrastrados: renombrar una carpeta de doscientos archivos
-   es **una** línea para leer y **un** comando para deshacer.
-2. **Materialización.** Solo entonces se escribe la matemática, con aprobación
-   humana en cada bisagra: el mapa de objeto a módulo, el nombre, y la autorización
-   para implementar.
+1. **Structure.** `plan` → `apply`: purely mechanical. Renames, directory creation,
+   reference rewriting, one commit. **It does not touch the semantics of the code.** And
+   if the reorganization needs more decisions than someone can actually read, it refuses
+   to apply it directly and hands it over as work for a separate session — because a list
+   that long gets approved without being read, and an approval without reading is not an
+   approval. What counts is the decisions the operator reads, not the files dragged
+   along: renaming a folder of two hundred files is **one** line to read and **one**
+   command to undo.
+2. **Materialization.** Only then is the mathematics written, with human approval at each
+   hinge: the object-to-module map, the name, and the authorization to implement.
 
-**La escalera de `nextStep`.** `probe` responde una sola pregunta: *¿qué es lo
-siguiente?* Los peldaños base, en orden:
+**The `nextStep` ladder.** `probe` answers a single question: *what is next?* The base
+rungs, in order:
 
-1. `nothing-to-compare` — no hay línea base. Y sin línea base el backend no es asunto
-   de nadie: numpy es donde la matemática se prueba —sin autograd, sin dispositivo, sin
-   optimizador que tape una fórmula equivocada— y para una propuesta que nadie va a
-   entrenar, ahí es donde pertenece y donde puede quedarse. Es un estado legítimo, no
-   un error.
-2. `convert` — hay línea base pero la implementación calcula en numpy, o sea no es
-   entrenable, o sea la comparación no puede ocurrir. Proponer el benchmark primero
-   sería pedirte que apruebes una corrida que no puede pasar.
-3. `piloted` — hay resultados, pero sólo a escala piloto. **Nunca se lee como
-   "listo"**, y tampoco se te ofrece un menú de tres botones: el piloto existe
-   justamente para que alguien mire, agregue un test, mueva una proporción y lo vuelva
-   a correr corto.
-4. `already-benchmarked` — hay un registro completo y vigente.
-5. `benchmark` — el caso por defecto cuando todo lo demás está limpio.
+1. `nothing-to-compare` — there is no baseline. And without a baseline the backend is
+   nobody's concern: numpy is where the mathematics is tested —without autograd, without
+   a device, without an optimizer that hides a wrong formula— and for a proposal nobody
+   is going to train, that is where it belongs and where it can stay. It is a legitimate
+   state, not an error.
+2. `convert` — there is a baseline but the implementation computes in numpy, that is, it
+   is not trainable, that is, the comparison cannot happen. Proposing the benchmark first
+   would mean asking for approval of a run that cannot pass.
+3. `piloted` — there are results, but only at pilot scale. **It never reads as "ready"**,
+   and no three-button menu is offered either: the pilot exists precisely so that someone
+   looks, adds a test, moves a proportion and runs it short again.
+4. `already-benchmarked` — there is a complete and current record.
+5. `benchmark` — the default case when everything else is clean.
 
-Encima de eso se aplican cuatro bloqueos, y **el orden entre ellos está argumentado, no
-es una preferencia**:
+Over that, four blockages apply, and **the order among them is argued, not a
+preference**:
 
-- `wiring-first` — un brazo declara matemática que nunca llama. Va primero porque
-  cualquier número producido bajo un cableado roto está contestando la pregunta
-  equivocada desde el arranque.
-- `poll-first` — ya hay un envío afuera, en un worker remoto, sin nada terminal
-  registrado. Existe para que no se mande un duplicado quemando cuota real por una
-  pregunta que ya está en vuelo. Va *después* de `wiring-first` (esperar no arregla un
-  cableado roto) y *antes* de `search-first` (el envío en vuelo puede ser justamente la
-  búsqueda que ese peldaño te mandaría a repetir).
-- `search-first` — la búsqueda declarada no tiene su registro en el disco: una corrida
-  cuyo escalar de gobierno todavía no se eligió no tiene configuración con la cual
-  arrancar.
-- `report-first` — el informe no concuerda con la corrida. Va último porque es la falla
-  más angosta —describe mal una corrida sana, se arregla con una frase— pero igual
-  bloquea, porque una frase equivocada impresa con la autoridad de treinta repeticiones
-  atrás es peor que ninguna frase.
+- `wiring-first` — an arm declares mathematics it never calls. It goes first because any
+  number produced under broken wiring is answering the wrong question from the start.
+- `poll-first` — there is already a submission out, on a remote worker, with nothing
+  terminal recorded. It exists so that a duplicate is not sent, burning real quota for a
+  question already in flight. It goes *after* `wiring-first` (waiting does not fix broken
+  wiring) and *before* `search-first` (the in-flight submission may be precisely the
+  search that this rung would send the operator to repeat).
+- `search-first` — the declared search has no record on disk: a run whose governing scalar
+  has not yet been chosen has no configuration with which to start.
+- `report-first` — the report does not agree with the run. It goes last because it is the
+  narrowest failure —it describes a healthy run badly, it is fixed with a sentence— but it
+  still blocks, because a wrong sentence printed with the authority of thirty repetitions
+  behind it is worse than no sentence.
 
-**La escalera de validación, cinco niveles.** Del más barato al más caro, y ese orden
-**es** el diseño: cada nivel falla más barato de diagnosticar que el siguiente, así que
-la plata se gasta sólo cuando lo barato ya está limpio.
+**The validation ladder, five levels.** From the cheapest to the most expensive, and that
+order **is** the design: each level fails more cheaply to diagnose than the next, so money
+is spent only when the cheap part is already clean.
 
-| Nivel | Qué prueba | Por qué está donde está |
+| Level | What it tests | Why it is where it is |
 |-------|------------|-------------------------|
-| 1. Smoke | ¿Arranca? Sólo que el paquete importe y que cada módulo declare su procedencia. | No afirma nada matemático. Cuesta cero y agarra roturas de andamiaje antes de intentar nada serio. |
-| 2. Invariantes | Un test por cada afirmación matemática de la propuesta, atado por nombre a la procedencia declarada del módulo. | Deterministas y baratos. `verify` cruza que toda invariante declarada tenga su test. |
-| 3. Sintéticos | Deterministas, semilla fija, verdad conocida por construcción. La expectativa se escribe en el docstring **antes** de la afirmación. | Así un test que pasa no se puede confundir con una hipótesis ajustada después de ver el resultado. |
-| 4. Auditoría | Que cada hallazgo declarado sea un defecto real: un barrido de **200 configuraciones** independientes por hallazgo, desplazadas por corrida para que dos corridas auditen configuraciones disjuntas. | El primer paso genuinamente caro. Sólo corre cuando ya se sabe que el código al menos importa y cumple lo que declara. |
-| 5. Remedios | Cada corrección validada con el mismo rigor, y obligada a mostrar **los dos polos**: que el remedio cumple el criterio *y* que la formulación original no lo cumple. | Cerrado detrás de `admit`: nada caro se mide sobre un remedio inadmisible. Sin el polo de control, un test de remedio se estaría midiendo a sí mismo. |
+| 1. Smoke | Does it start? Only that the package imports and that each module declares its provenance. | It asserts nothing mathematical. It costs zero and catches scaffold breaks before anything serious is attempted. |
+| 2. Invariants | One test per mathematical claim of the proposal, bound by name to the module's declared provenance. | Deterministic and cheap. `verify` crosses that every declared invariant has its test. |
+| 3. Synthetic | Deterministic, fixed seed, truth known by construction. The expectation is written in the docstring **before** the claim. | That way a passing test cannot be mistaken for a hypothesis fitted after seeing the result. |
+| 4. Audit | That every declared finding is a real defect: a sweep of **200 configurations** independent per finding, shifted per run so that two runs audit disjoint configurations. | The first genuinely expensive step. It runs only once it is known that the code at least imports and does what it declares. |
+| 5. Remedies | Every correction validated with the same rigor, and required to show **both poles**: that the remedy meets the criterion *and* that the original formulation does not. | Closed behind `admit`: nothing expensive is measured on an inadmissible remedy. Without the control pole, a remedy test would be measuring itself. |
 
-Y hay una regla que `verify` no puede reemplazar: **correr la suite y verificar son dos
-preguntas distintas**. `verify` *lee* —que cada módulo declare su revisión, que cada
-invariante tenga test, que ninguna afirmación sea infalsificable, que el cuaderno se
-haya ejecutado de verdad—; lo que no puede decirte es si alguno de esos tests **pasa**.
-Saltear la corrida es exactamente cómo un repositorio llega a un benchmark con una
-invariante rota: toda la procedencia intacta, todos los ids empatados, fidelidad limpia,
-y una afirmación fallando abajo. Esa brecha es más ancha que nunca justo después de un
-cambio de backend, que reescribe cómo se computa cada número dejando cada declaración
-igual.
+And there is a rule that `verify` cannot replace: **running the suite and verifying are
+two different questions**. `verify` *reads* —that each module declares its revision, that
+each invariant has a test, that no claim is unfalsifiable, that the notebook really was
+executed—; what it cannot say is whether any of those tests **passes**. Skipping the run
+is exactly how a repository reaches a benchmark with a broken invariant: all the
+provenance intact, all the ids matched, fidelity clean, and one claim failing below. That
+gap is wider than ever just after a backend change, which rewrites how every number is
+computed while leaving every declaration the same.
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `scripts/implementation_cli.py` | El motor entero. Biblioteca estándar solamente, keyless, offline. **Nunca importa ni ejecuta el código del destino**: lee las declaraciones estáticamente con `ast`. |
-| `scripts/materialize.py` | El andamiero **de la propia forja**, no un paso del Flujo A: el agente rellena los huecos leyendo el paso 5, y este script hace lo mismo para que la suite pueda examinar un destino recién andamiado. Copia el kit sustituyendo los marcadores, y sólo escribe las plantillas que ya se pueden escribir: las del paso 9 esperan al mapa de objetos. Acepta un kit alternativo, y la razón está escrita en su docstring: *una forja de papers no puede cargar con el contenido de un paper*. |
-| `references/usage.md` | Invocaciones reales, copiables, de cada comando, con salidas de ejemplo y la tabla de códigos de rechazo. Existe para que el agente no invente banderas. |
-| `assets/pyproject.template.toml` | El marcador de aislamiento. Sin su configuración de `pythonpath`, la suite del destino no puede importar su propio paquete offline. |
-| `assets/requirements-dev.txt` | Lo que se instala en el `.venv` **del destino**, nunca en el de la forja. |
-| `assets/kit/src/module.py` | Plantilla de un módulo: docstring, procedencia declarada (revisión, secciones, ecuaciones, invariantes) y un stub. La procedencia es lo que hace detectable la deriva contra la revisión. |
-| `assets/kit/tests/*` | La escalera de cinco niveles completa, más sus fixtures compartidas y la compuerta de admisibilidad. Cada archivo que falte quita exactamente un peldaño. |
-| `assets/kit/nb/benchmark.py` | Entrena las dos implementaciones bajo una misma reducción acotada. Se niega a correr bajo un intérprete ajeno —porque el tiempo de pared y la memoria pico **son** la medición— y se niega a correr sin cableado declarado. |
-| `assets/kit/nb/verdict.py` | La lógica de juicio: sólo concede un ganador cuando las medias difieren más que el error estándar combinado, y por debajo de tres repeticiones **no da veredicto**, sólo imprime una estimación puntual. |
-| `assets/kit/nb/report_digest.py` | Hashea todo `src/` en un sello que el informe imprime y que `verify` recalcula, para poder probar que un informe está atado al código exacto que lo produjo. |
-| `.claude/agents/implementation-build.md` | El tramo **entre dos compuertas tuyas**: del mapa objeto-a-módulo aprobado al informe de hallazgos que decides. Materializa el andamiaje, escribe un módulo por objeto matemático con su procedencia y sus tests de invariante, barre las configuraciones declaradas, y **falla sobre la admisibilidad de cada remedio ANTES de medirlo**. `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. No decide ni pregunta: termina reportando qué encontró y cuánto costó establecerlo. |
-| `.claude/agents/implementation-walk.md` | El tramo **de las colocaciones ya decididas al lanzamiento que tienes que autorizar**: camina el flujo declarado acto por acto en su propio orden, corre los pasos locales, commitea el producto de cada uno, refresca la posición, y genera las carpetas de trabajo que un paso remoto necesita. `Read`, `Bash`, `Glob`, `Grep` — sin `Write`. **Se detiene en el lanzamiento y no tiene camino para enviar una campaña**, ni para ejecutar un ensayo: ningún acto del motor realiza un ensayo, y `walk` dejó de prometerlo — se detiene ahí y te dice que lo corras a mano, que es lo que la doctrina prescribió siempre. |
-| `walk` | Camina el flujo declarado hacia el rung al que apunta el encabezado de posición. Ejecuta los pasos locales, commitea el producto de cada uno y genera las carpetas de trabajo que un paso remoto necesita. **Se detiene en el lanzamiento**, y también en un ensayo: ningún acto del motor realiza uno. |
-| `step` | Corre **un** paso local declarado, aislado, bajo el venv del propio destino. Nunca el intérprete de la forja. |
-| `position` | El único escritor de la sección de posición de `<Name>/AGREED.md`. Marca qué se midió, qué falta y qué quedó sin medir, y ata cada marca a la revisión y a su sha256 — porque una revisión puede reescribirse en su lugar bajo el mismo nombre de archivo, y sólo el hash lo detecta. |
-| `discuss` | La discusión como una operación con valor de retorno: publica una pregunta y devuelve el bucket en el que cae, en vez de dejarla en la conversación. |
-| `settle` | Coloca **un** acuerdo saldado, y sólo uno, bajo un rótulo que nombra el llamador. |
-| `close` | La precondición de cierre: escribe la posición y deja el ciclo cerrado. Una segunda llamada no vuelve a cerrar. |
-| `propose` | La propuesta de campaña: qué trabajos, con qué workers, con qué justificación. Registra, no envía. |
-| `gate` | El registro de autorización de lanzamiento. Es la compuerta que separa "listo para correr" de "corriendo", y la abre una persona. |
-| `offer` | El menú de acciones derivado del estado: un conjunto cerrado de lo que puede pasar a continuación, calculado y no ofrecido de memoria. |
-| `defect` | Declara que algún archivo de la forja está roto ahora mismo. Mientras siga abierto, ocho comandos se niegan con `FORGE_DEFECT_OPEN`; `probe`, `verify`, `position`, `plan`, `compose`, `handoff`, `discuss` y `propose` siguen alcanzables. `main()` también lo anota solo, cuando cualquier otra excepción lo alcanza. |
-| `materialize` | Escribe el andamiaje aprobado por etapas (`scaffold`, `objects`, `harness`). `--plan` es una aprobación que da una persona, y `--seed` el número del que saca el experimento: ninguna skill elige eso por un repositorio. |
+| `scripts/implementation_cli.py` | The whole engine. Standard library only, keyless, offline. **It never imports or runs the target code**: it reads declarations statically with `ast`. |
+| `scripts/materialize.py` | **The forge's own** scaffolder, not a step of Flow A: the agent fills the gaps by reading step 5, and this script does the same so that the suite can examine a freshly scaffolded target. It copies the kit substituting the markers, and writes only the templates that can already be written: those of step 9 wait for the object map. It accepts an alternative kit, and the reason is written in its docstring: *a paper forge must not carry one paper's content*. |
+| `references/usage.md` | Real, copyable invocations of each command, with example output and the table of refusal codes. It exists so that the agent does not invent flags. |
+| `assets/pyproject.template.toml` | The isolation marker. Without its `pythonpath` configuration, the target's suite cannot import its own package offline. |
+| `assets/requirements-dev.txt` | What gets installed in the **target's** `.venv`, never in the forge's. |
+| `assets/kit/src/module.py` | Template of a module: docstring, declared provenance (revision, sections, equations, invariants) and a stub. Provenance is what makes drift against the revision detectable. |
+| `assets/kit/tests/*` | The complete five-level ladder, plus its shared fixtures and the admissibility gate. Each missing file removes exactly one rung. |
+| `assets/kit/nb/benchmark.py` | Trains both implementations under the same bounded reduction. It refuses to run under a foreign interpreter —because wall time and peak memory **are** the measurement— and refuses to run without declared wiring. |
+| `assets/kit/nb/verdict.py` | The judging logic: it grants a winner only when the means differ by more than the pooled standard error, and below three repetitions **it gives no verdict**, it prints only a point estimate. |
+| `assets/kit/nb/report_digest.py` | Hashes all of `src/` into a seal that the report prints and that `verify` recomputes, so that a report can be proved to be bound to the exact code that produced it. |
+| `.claude/agents/implementation-build.md` | The stretch **between two of the operator's gates**: from the approved object-to-module map to the findings report the operator decides on. It materializes the scaffolding, writes one module per mathematical object with its provenance and its invariant tests, sweeps the declared configurations, and **fails on the admissibility of each remedy BEFORE measuring it**. `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. It decides nothing and asks nothing: it ends by reporting what it found and what it cost to establish. |
+| `.claude/agents/implementation-walk.md` | The stretch **from the placements already decided to the launch the operator has to authorize**: it walks the declared flow act by act in its own order, runs the local steps, commits each one's product, refreshes the position, and generates the working folders a remote step needs. `Read`, `Bash`, `Glob`, `Grep` — no `Write`. **It stops at the launch and has no path to submit a campaign**, nor to run a rehearsal: no engine act performs a rehearsal, and `walk` stopped promising it — it stops there and tells the operator to run it by hand, which is what the doctrine always prescribed. |
+| `walk` | Walks the declared flow toward the rung the position header points at. It runs the local steps, commits each one's product and generates the working folders a remote step needs. **It stops at the launch**, and at a rehearsal too: no engine act performs one. |
+| `step` | Runs **one** declared local step, isolated, under the target's own venv. Never the forge interpreter. |
+| `position` | The only writer of the position section of `<Name>/AGREED.md`. It marks what was measured, what is missing and what went unmeasured, and binds each mark to the revision and its sha256 — because a revision can be rewritten in place under the same file name, and only the hash detects it. |
+| `discuss` | Discussion as an operation with a return value: it publishes a question and returns the bucket it falls into, instead of leaving it in the conversation. |
+| `settle` | Places **one** settled agreement, and only one, under a label that names the caller. |
+| `close` | The closing precondition: it writes the position and leaves the cycle closed. A second call does not close again. |
+| `propose` | The campaign proposal: which jobs, with which workers, with which justification. It records, it does not send. |
+| `gate` | The launch authorization record. It is the gate that separates "ready to run" from "running", and a person opens it. |
+| `offer` | The action menu derived from the state: a closed set of what can happen next, computed and not offered from memory. |
+| `defect` | Declares that some forge file is broken right now. While it stays open, eight commands refuse with `FORGE_DEFECT_OPEN`; `probe`, `verify`, `position`, `plan`, `compose`, `handoff`, `discuss` and `propose` remain reachable. `main()` also records it on its own, when any other exception reaches it. |
+| `materialize` | Writes the scaffolding approved by stages (`scaffold`, `objects`, `harness`). `--plan` is an approval given by a person, and `--seed` the number the experiment draws from: no skill chooses that for a repository. |
 
-**Qué escribe en el disco.**
+**What it writes to disk.**
 
 ```
-implementations/<repo>/           git propio, .venv propio, ignorado por la forja
+implementations/<repo>/           its own git, its own .venv, ignored by the forge
 ├── <Name>/                       Notebooks/  Data/  Results/  Models/
-├── src/<Package>/                una implementación por objeto matemático, cada una con su procedencia,
-│                                 más __implementation__ (revisión/premisas) y las declaraciones propias
-│                                 del flujo (__levels__/__steps__/__records__)
-├── src/<Package>_Benchmark/      el arnés de la comparación — sólo existe una vez aceptada
-├── tests/                        la escalera de cinco niveles
-├── tools/                        sólo si hace falta: opera corridas, no implementa ecuaciones
+├── src/<Package>/                one implementation per mathematical object, each with its provenance,
+│                                 plus __implementation__ (revision/premises) and the flow's own
+│                                 declarations (__levels__/__steps__/__records__)
+├── src/<Package>_Benchmark/      the comparison harness — it exists only once accepted
+├── tests/                        the five-level ladder
+├── tools/                        only if needed: it operates runs, it does not implement equations
 └── pyproject.toml
 ```
 
-`src/<Package>_Benchmark/` **no** es un destino del andamiaje inicial (`materialize --stage
-scaffold`): un destino recién andamiado no tiene ese directorio. Lo escribe únicamente
-`materialize --stage harness`, y sólo después de que se acepta una comparación —nunca
-si se la rechaza, y nunca por correr el ensayo de validación de un solo brazo en su
-lugar—. Declara qué secciones y ecuaciones ejercita cada brazo. **No declara
-procedencia a propósito**: no implementa ninguna ecuación, y estamparle una
-falsificaría justamente el chequeo que ata código a matemática. Lo escribe el agente
-al cablear; lo leen `verify` y `probe`, siempre de forma estática. Contra qué revisión
-se construyó el método, y bajo qué premisas, vive aparte, en `__implementation__`
-dentro de `src/<Package>/__init__.py` —son hechos sobre el MÉTODO, no sobre la
-comparación.
+`src/<Package>_Benchmark/` is **not** a destination of the initial scaffolding (`materialize
+--stage scaffold`): a freshly scaffolded target does not have that directory. It is written
+only by `materialize --stage harness`, and only after a comparison is accepted —never if it
+is rejected, and never by running the single-arm validation rehearsal in its place—. It
+declares which sections and equations each arm exercises. **It declares no provenance on
+purpose**: it implements no equation, and stamping one on it would falsify precisely the
+check that binds code to mathematics. The agent writes it when wiring; `verify` and `probe`
+read it, always statically. Which revision the method was built against, and under which
+premises, lives apart, in `__implementation__` inside `src/<Package>/__init__.py` —these are
+facts about the METHOD, not about the comparison.
 
-**Los seguros.**
+**The safeguards.**
 
-- **Nunca ejecuta el código del destino** para inspeccionarlo. Todo se lee con `ast`.
-- **Guardia de ruta.** El destino tiene que resolver dentro de `implementations/` y ya
-  ser un repositorio git.
-- **Nunca migra un árbol sucio.** Ni aplica un plan que quedó viejo.
-- **Entorno aislado.** Se niega a construir el venv del destino desde un intérprete de
-  la forja.
-- **Un hallazgo sin remedio validado no se reporta.** Está impuesto estructuralmente: la
-  auditoría queda `incomplete` mientras haya hallazgos sin remedio o sin test que lo
-  valide.
-- **Nunca escribe en `proposals/`.** Publicar es territorio exclusivo de
-  `proposal-deliberation`, y sólo se llega ahí por la puerta descrita arriba.
-- **Nunca nombra un worker remoto.** Sólo reporta un conteo.
+- **It never runs the target code** to inspect it. Everything is read with `ast`.
+- **Path guard.** The target has to resolve inside `implementations/` and already be a git
+  repository.
+- **It never migrates a dirty tree.** Nor does it apply a plan that has gone stale.
+- **Isolated environment.** It refuses to build the target's venv from a forge
+  interpreter.
+- **A finding without a validated remedy is not reported.** This is enforced
+  structurally: the audit stays `incomplete` while there are findings without a remedy or
+  without a test that validates it.
+- **It never writes to `proposals/`.** Publishing is the exclusive territory of
+  `proposal-deliberation`, and it is reached only through the gate described above.
+- **It never names a remote worker.** It reports only a count.
 
 **Limitaciones conocidas.**
 
-*Los archivos bajo Git LFS llegan vacíos.* Clonás un repositorio que usa Git LFS y
-parece completo: todas las rutas están, todos los archivos existen. Pero cada archivo
-bajo LFS pesa unos cientos de bytes — es un marcador de texto, no el archivo. Lo primero
-que lo abra como datos falla con un error sobre el **formato del archivo**, que no se
-parece en nada a la causa real. **Por qué es a propósito:** el clon salta el filtro que
-materializa esos archivos, y el salto queda fijado en la configuración local del clon.
-Los marcadores alcanzan para reorganizar el repositorio y leer el código, y bajar
-gigabytes sólo para moverlos de carpeta gasta una cuota de LFS que no vuelve. **Qué hace
-la forja:** `env` te los reporta apenas termina el clon —el momento en que la ilusión es
-más fuerte— y `verify` lo repite en cada pasada posterior, porque lo único peor que no
-saberlo es olvidarlo. Cada marcador declara el tamaño del archivo real, así que el
-reporte trae **un total, no una advertencia**. En este repositorio, por ejemplo: 18
-marcadores, **5,09 GiB** si se bajaran. Nada del flujo los lee, ninguna prueba ni
-cuaderno se escribe contra ellos, y **la descarga nunca se hace sola**: el comando se
-imprime en vez de ejecutarse. **Ojo con el atajo que no existe:** bajarlos desde la
-página de GitHub con el botón de descarga **cuesta exactamente lo mismo**. GitHub cuenta
-todas las descargas contra el ancho de banda del dueño del repositorio, por cualquier
-vía — el comando, el navegador, y hasta el zip del código fuente si contiene esos
-objetos. La franquicia gratuita es de 1 GiB por mes. No hay ruta que la evite, y creer
-que la hay es la forma más común de gastarse el mes sin querer. **Qué puedes hacer antes
-de gastarla:** mira lo que `probe` reporta bajo `acquisition` — el material que el
-repositorio se baja, clona o desempaqueta **por su cuenta** no cuesta cuota, y lo que
-salió de un entrenamiento se vuelve a producir entrenando. La cuota se gasta sólo en lo
-que de verdad no existe en ningún otro lado. **Qué no hace:** no puede impedir que un
-cableado escrito a mano intente cargar uno —si pasa, el error habla del formato y el
-reporte de `env` es donde está la razón— y no distingue un marcador de un archivo
-genuinamente corrupto: los dos se leen como material ausente, que es la lectura
-conservadora.
+*Files under Git LFS arrive empty.* A cloned repository that uses Git LFS looks complete:
+every path is there, every file exists. But each file under LFS weighs a few hundred bytes
+— it is a text marker, not the file. The first code that opens it as data fails with an
+error about the **file format**, which resembles the real cause in nothing. **Why it is on
+purpose:** the clone skips the filter that materializes those files, and the skip is fixed
+in the clone's local configuration. The markers are enough to reorganize the repository and
+read the code, and downloading gigabytes only to move them between folders spends an LFS
+quota that does not come back. **What the forge does:** `env` reports them as soon as the
+clone finishes —the moment the illusion is strongest— and `verify` repeats it on every
+later pass, because the only thing worse than not knowing it is forgetting it. Each marker
+declares the size of the real file, so the report carries **a total, not a warning**. In
+this repository, for example: 18 markers, **5.09 GiB** if they were downloaded. Nothing in
+the flow reads them, no test or notebook is written against them, and **the download never
+happens on its own**: the command is printed instead of run. **The shortcut that does not
+exist:** downloading them from the GitHub page with the download button **costs exactly the
+same**. GitHub counts every download against the repository owner's bandwidth, by any
+route — the command, the browser, and even the source-code zip if it contains those
+objects. The free allowance is 1 GiB per month. There is no route that avoids it, and
+believing there is one is the most common way to spend the month without meaning to.
+**What can be done before spending it:** look at what `probe` reports under `acquisition`
+— material that the repository downloads, clones or unpacks **on its own** costs no quota,
+and what came out of a training run is produced again by training. Quota is spent only on
+what genuinely does not exist anywhere else. **What it does not do:** it cannot stop a
+hand-written wiring from trying to load one —if that happens, the error speaks of the
+format and the `env` report is where the reason is— and it does not distinguish a marker
+from a genuinely corrupt file: both read as absent material, which is the conservative
+reading.
 
-*Una corrida larga en esta máquina es invisible mientras corre.* `probe` sabe decir
-que hay una submisión afuera cuya respuesta no volvió —es el peldaño `poll-first`— y lo
-puede decir porque `remote-execution` mantiene un registro append-only que la forja lee.
-Consultas en mitad de un envío, te lo dice, y te vas a hacer otra cosa. **Por qué en
-local no pasa lo mismo:** una corrida en tu propia máquina deja lo que el repositorio
-destino haya decidido dejar —un parcial, un checkpoint, un lock— con un nombre que sólo
-ese repositorio conoce, y mirarlo obligaría a cablear el vocabulario de un paper dentro
-de una herramienta que tiene que servir a todos. **Qué pasa entonces:** lanzas una
-búsqueda o una campaña larga, consultas mientras corre, y `verify` lee que el registro
-declarado no existe — reporta el trabajo como no empezado y `probe` te ofrece lanzarlo
-otra vez. **Qué puedes hacer mientras tanto:** mirar si el registro que tu declaración
-nombra en `record` ya existe, o si al lado quedó un parcial; dos `ls` contestan la
-pregunta. **Qué no hace:** no borra nada ni pisa la corrida en curso, y si el
-repositorio destino sabe retomar desde su parcial el segundo lanzamiento salta lo ya
-medido. Lo que falta no es la protección: es el aviso, que es justamente para lo que uno
-consulta. **Qué necesitaría para cerrarse:** que el hecho sea **declarado y no
-adivinado** —igual que hoy se declara dónde vive el registro— y que distinga *no hay
-nada corriendo* de *este repositorio no lo declara*, porque un hecho cuyo valor vacío no
-separa esos dos casos no sirve para gatillar nada. Es la misma razón por la que
-`smokeReady` se reporta y nunca decide.
+*A long run on this machine is invisible while it runs.* `probe` can tell that there is a
+submission out whose answer has not returned —it is the `poll-first` rung— and it can tell
+because `remote-execution` keeps an append-only record that the forge reads. A query
+mid-submission returns the answer, and the operator moves on to something else. **Why the
+same does not happen locally:** a run on the operator's own machine leaves what the target
+repository decided to leave —a partial, a checkpoint, a lock— under a name only that
+repository knows, and looking at it would mean wiring a paper's vocabulary inside a tool
+that has to serve everyone. **What happens then:** an operator launches a search or a long
+campaign, queries while it runs, and `verify` reads that the declared record does not exist
+— it reports the work as not started and `probe` offers to launch it again. **What can be
+done meanwhile:** look at whether the record the declaration names in `record` already
+exists, or whether a partial was left beside it; two `ls` answer the question. **What it
+does not do:** it erases nothing and it does not overwrite the run in progress, and if the
+target repository knows how to resume from its partial, the second launch skips what was
+already measured. What is missing is not the protection: it is the notice, which is
+precisely what one queries for. **What it would need to close:** that the fact be
+**declared and not guessed** —just as today the location of the record is declared— and
+that it distinguish *nothing is running* from *this repository does not declare it*,
+because a fact whose empty value does not separate those two cases is good for triggering
+nothing. It is the same reason `smokeReady` is reported and never decides.
 
-*`verify` compara nombres de revisión, no contenido.* El sello de procedencia que cada
-módulo declara se contrasta contra la revisión vigente con una sola comparación:
-`module["stale"] = bool(revision) and module["revision"] != revision`. Es una
-comparación **de strings**, y el `__provenance__` del módulo no lleva ningún hash del
-texto contra el que se escribió. **Qué significa para ti:** si una revisión se
-reescribe **bajo su mismo nombre** —se corrige una ecuación y el archivo se sigue
-llamando igual—, `verify` no ve nada: ningún módulo queda marcado como viejo y la pasada
-sale limpia. La deriva aparece solo más tarde, en `gate` o en `close`, como
-`POSITION_STALE` —"atada a una revisión cuyos bytes ya no coinciden"—, que sí compara
-bytes. **Qué no cubre, y es lo importante:** un `verify` limpio **no significa que la
-matemática se haya sostenido**. Significa que ningún módulo nombra una revisión distinta
-de la vigente. **Cómo se arregla:** haciendo que el sello lleve también el hash del
-contenido, para que la comparación sea contra los bytes y no contra la etiqueta.
+*`verify` compares revision names, not content.* The provenance seal each module declares
+is checked against the current revision with a single comparison:
+`module["stale"] = bool(revision) and module["revision"] != revision`. It is a comparison
+**of strings**, and the module's `__provenance__` carries no hash of the text it was
+written against. **What it means for the operator:** if a revision is rewritten **under its
+same name** —an equation is corrected and the file keeps its name—, `verify` sees nothing:
+no module is marked old and the pass comes out clean. The drift appears only later, in
+`gate` or in `close`, as `POSITION_STALE` —"bound to a revision whose bytes no longer
+match"—, which does compare bytes. **What it does not cover:** a clean `verify` **does not
+mean the mathematics held**. It means that no module names a revision other than the
+current one. **How it is fixed:** by having the seal also carry the content hash, so that
+the comparison is against the bytes and not against the label.
 
-*Un testigo prueba que el test existe, nunca que pasa.* Un acuerdo puede declarar qué
-test lo respalda, con un token `test_<id>`. La CLI **no corre ninguna suite**: para
-resolver ese token hace un recorrido `ast` sobre `tests/` y junta los nombres de las
-funciones. Encontrar el nombre prueba que existe una función así, y nada más. **Qué
-significa para ti:** un testigo bien formado cuyo test existe se reporta `unmeasured`,
-y `unmeasured` es un estado **terminal** — lo único que puede sacarlo de ahí es que el
-test desaparezca, y solo entonces, con el ítem tildado, pasa a `disagrees`. Cruzar un
-testigo contra el resultado de una corrida no existe. **Qué no cubre:** un test que
-existe y falla, o que existe y no prueba lo que dice. Los dos se leen igual que uno que
-pasa. **Cómo se arregla:** con un cruce contra el resultado real de la suite, que hoy no
-tiene por dónde entrar.
+*A witness proves that the test exists, never that it passes.* An agreement can declare
+which test backs it, with a `test_<id>` token. The CLI **runs no suite**: to resolve that
+token it walks `tests/` with `ast` and collects the function names. Finding the name proves
+that such a function exists, and nothing more. **What it means for the operator:** a
+well-formed witness whose test exists is reported `unmeasured`, and `unmeasured` is a
+**terminal** state — the only thing that can take it out of there is the test disappearing,
+and only then, with the item ticked, it becomes `disagrees`. Crossing a witness against the
+result of a run does not exist. **What it does not cover:** a test that exists and fails, or
+that exists and does not prove what it says. Both read the same as one that passes. **How it
+is fixed:** with a cross-check against the real result of the suite, which today has no way
+in.
 
-*Ninguna edición a mano está impedida, y aquí ni siquiera se detecta.* Vale la misma
-observación que en `proposal-deliberation` —un solo hook `PreToolUse`, que es de
-`remote-execution`, y ninguna entrada `deny`—, pero la diferencia entre las dos skills
-importa. Allá una edición manual rompe un recibo y se nota en la operación siguiente;
-aquí no hay recibo que romper. El `SKILL.md` de esta skill lo dice sin adornos sobre el
-token de testigo: escribirlo a mano es doctrina no soportada, **no** una prevención
-técnica — el parser no puede distinguir, y no distingue, un token escrito por la skill
-de uno escrito a mano, y `verify` y `close` evalúan los dos exactamente igual. **Qué
-significa para ti:** una marca o un testigo puestos a mano en el archivo de acuerdos
-son indistinguibles de los que puso la herramienta. **Qué no cubre:** ni el momento de
-la escritura, ni ninguna lectura posterior que los separe. **Qué lo contiene:** el
-lanzamiento no depende de ese archivo. `gate` lee la escalera de posición, la
-autorización, la propuesta de campaña y la elección — el archivo de acuerdos, **cero
-veces**. Un acuerdo editado a mano corrompe el registro de lo que se decidió, pero **no
-puede provocar un lanzamiento ni un gasto**: no llega a la acción. **Cómo se arregla:**
-con una regla `deny` sobre el archivo de acuerdos, o con una contabilidad byte a byte
-como la que sí tiene la otra skill.
+*No hand edit is prevented, and here it is not even detected.* The same observation holds
+as in `proposal-deliberation` —a single `PreToolUse` hook, which belongs to
+`remote-execution`, and no `deny` entry—, but the difference between the two skills
+matters. There a manual edit breaks a receipt and shows up in the next operation; here
+there is no receipt to break. This skill's `SKILL.md` says it plainly about the witness
+token: hand-typing it is unsupported doctrine, **not** a technical prevention — the parser
+cannot distinguish, and does not distinguish, a token written by the skill from a hand-typed
+one, and `verify` and `close` evaluate both exactly the same way. **What it means for the
+operator:** a mark or a witness placed by hand in the agreements file is indistinguishable
+from the ones the tool placed. **What it does not cover:** neither the moment of writing nor
+any later read that would separate them. **What contains it:** the launch does not depend on
+that file. `gate` reads the position ladder, the authorization, the campaign proposal and
+the election — the agreements file, **zero times**. An agreement edited by hand corrupts the
+record of what was decided, but **it cannot cause a launch or a cost**: it does not reach
+the action. **How it is fixed:** with a `deny` rule over the agreements file, or with a
+byte-for-byte bookkeeping, like the one the other skill does have.
 
-*El registro no viaja en un clon.* `.implementation/` es una entrada obligatoria del
-`.gitignore` del repositorio destino (en el destino de referencia de esta forja, la
-línea 61). Para una mitad de lo que guarda eso es lo correcto: una autorización de
-lanzamiento que aparece en un clon es una autorización que nadie en ese clon dio. Para
-la otra mitad no lo es: la deliberación —lo que se preguntó, lo que se respondió, y por
-eso los acuerdos dicen lo que dicen— es historia del proyecto, y el clon no recibe nada.
-**Qué significa para ti:** un clon fresco arranca sin registro y toma el archivo de
-acuerdos tal como está, sin nada con qué contrastarlo. **Qué no cubre:** todo lo que
-dependa de haber visto la deliberación previa. **Cómo se arregla:** separando las dos
-mitades, que es un cambio en lo que todo lector del registro espera encontrar en un solo
-lugar. Está anotado en el `SKILL.md` de la skill, no resuelto.
+*The ledger does not travel in a clone.* `.implementation/` is a required entry of the
+target repository's `.gitignore` (in this forge's reference target, line 61). For one half
+of what it holds that is correct: a launch authorization that shows up in a clone is an
+authorization nobody in that clone gave. For the other half it is not: the deliberation
+—what was asked, what was answered, and why the agreements say what they say— is project
+history, and the clone receives none of it. **What it means for the operator:** a fresh
+clone starts without a ledger and takes the agreements file as it is, with nothing to check
+it against. **What it does not cover:** everything that depends on having seen the prior
+deliberation. **How it is fixed:** by splitting the two halves, which is a change in what
+every reader of the ledger expects to find in a single place. It is noted in the skill's
+`SKILL.md`, not resolved.
 
-*Nada prueba quién decidió.* La precondición de que un acuerdo haya sido discutido antes
-de colocarse se satisface con **cualquier** evento de discusión respondido. Nada
-comprueba que la respuesta haya venido de una persona. **Qué significa para ti:** vale
-lo mismo que del otro lado de la costura — un acuerdo registrado prueba que llegó al
-registro, nunca que alguien lo decidió. Un agente puede abrir la pregunta y
-contestársela solo, y nadie más adelante en la cadena puede distinguir ese caso del
-otro. **Qué no cubre:** cualquier lectura del registro como prueba de consentimiento.
-**Cómo se arregla:** hace falta un canal de confirmación que la skill no pueda originar,
-y hoy no existe.
+*Nothing proves who decided.* The precondition that an agreement was discussed before being
+placed is satisfied by **any** answered discussion event. Nothing verifies that the answer
+came from a person. **What it means for the operator:** the same holds as on the other side
+of the seam — a recorded agreement proves it reached the record, never that someone decided
+it. An agent can open the question and answer itself, and nobody further down the chain can
+distinguish that case from the other. **What it does not cover:** any reading of the ledger
+as proof of consent. **How it is fixed:** a confirmation channel the skill cannot originate
+is needed, and today none exists.
 
-**Deuda de mantenimiento.** *El inventario del `SKILL.md` nombra 5 de los 9 comandos.*
-En su sección de referencias, la línea que describe `implementation_cli.py` lista `env`,
-`plan`, `apply`, `admit` y `verify` — se quedaron afuera `name`, `handoff`, `compose` y
-`probe`. No rompe nada, y la línea inmediatamente anterior ya apunta a
-`references/usage.md`, que sí los documenta todos con ejemplos. Pero es una lista que
-envejeció sin avisar, y la próxima que se agregue va a envejecer igual. **Cómo se
-arregla:** completándola, o borrando la enumeración y dejando sólo el puntero a
-`references/usage.md` — un inventario que se mantiene solo es mejor que uno que hay que
-acordarse de actualizar.
+**Maintenance debt.** *The `SKILL.md` inventory names 5 of the 9 commands.*
+In its references section, the line describing `implementation_cli.py` lists `env`,
+`plan`, `apply`, `admit` and `verify` — `name`, `handoff`, `compose` and `probe` were left
+out. It breaks nothing, and the line immediately above already points to
+`references/usage.md`, which does document them all with examples. But it is a list that
+aged without warning, and the next one added will age the same way. **How it is fixed:**
+by completing it, or by deleting the enumeration and leaving only the pointer to
+`references/usage.md` — an inventory that maintains itself is better than one that has to
+be remembered and updated.
 
-*Resuelto: una ausencia ya no se lee como "no está vieja".* Bajo dos documentos,
-el chequeo de vigencia de `admissibility_record` hacía `continue` cuando faltaba la
-entrada de un documento declarado o cuando su fuente no se podía leer, y el registro
-incompleto caía al retorno de abajo como vigente. Ahora cada uno de esos dos casos
-responde `unknown` con su detalle. La forma de la falla es la que este repositorio
-más repite: **una ausencia que hereda el valor bueno**.
+*Resolved: an absence no longer reads as "not stale".* Under two documents,
+the staleness check of `admissibility_record` did `continue` when the entry of a declared
+document was missing or when its source could not be read, and the incomplete record fell
+to the return below as current. Now each of those two cases answers `unknown` with its
+detail. The shape of the failure is the one this repository repeats most:
+**an absence that inherits the good value**.
 
-*La rama "sin posición" devuelve una clave menos, y el candado que dice sostener la forma
-no puede verla.* `position_state` devuelve 13 claves cuando no hay posición y 14 cuando
-la hay: falta `unmeasurable`. Un consumidor que la lea directo revienta con `KeyError` —
-`sequence_block_detail` ya se defiende con `.get`, que es la pista. El docstring dice que
-la forma la sostiene una regla de acuerdo entre retornos, pero ese helper sólo lee
-retornos que son **diccionarios literales**, y esta rama devuelve un nombre. **Cómo se
-arregla:** que la rama ausente devuelva la clave, o que el candado sepa leer un `return
-<nombre>`.
+*The "no position" branch returns one key fewer, and the lock that claims to hold the shape
+cannot see it.* `position_state` returns 13 keys when there is no position and 14 when
+there is: `unmeasurable` is missing. A consumer that reads it directly blows up with
+`KeyError` — `sequence_block_detail` already defends itself with `.get`, which is the clue.
+The docstring says the shape is held by an agreement rule between returns, but that helper
+only reads returns that are **literal dictionaries**, and this branch returns a name. **How
+it is fixed:** make the absent branch return the key, or make the lock able to read a
+`return <name>`.
 
-*Resuelto: `__benchmark__` tiene un solo lector otra vez.* `resolve_benchmark_declaration`
-se llamaba a sí mismo "el único lugar del que todo lector saca `__benchmark__`" mientras
-el script `INTROSPECT`, que corre dentro del intérprete del destino, lo leía del atributo
-del módulo importado. Una declaración que vivía en `config.py` sin re-exportarse era real
-para el resolver e inexistente para `INTROSPECT`: un hecho, dos lectores, veredictos
-opuestos. `INTROSPECT` ahora sigue el mismo orden `__init__` → `config` que el resolver.
+*Resolved: `__benchmark__` has a single reader again.* `resolve_benchmark_declaration`
+called itself "the one place every reader gets `__benchmark__` from" while
+the `INTROSPECT` script, which runs inside the target interpreter, read it from the
+imported module's attribute. A declaration that lived in `config.py` without being
+re-exported was real for the resolver and nonexistent for `INTROSPECT`: one fact, two
+readers, opposite verdicts. `INTROSPECT` now follows the same `__init__` → `config` order
+as the resolver.
 
-*"El único lugar" donde se leen `accelerator`/`localBudget` era falso al nacer.*
-`cmd_gate` los arma por su cuenta desde su propio `run_config` y se los pasa al mismo
-clasificador. Los dos sitios citan el mismo cambio de diseño, así que no es deriva: el
-cuantificador nunca fue cierto. Hoy leen el mismo archivo igual, y nada los ata.
-**Cómo se arregla:** un lector, o un test que falle si se separan.
+*"The one place" where `accelerator`/`localBudget` are read was false at birth.*
+`cmd_gate` assembles them on its own from its own `run_config` and passes them to the same
+classifier. Both sites cite the same design change, so it is not drift: the quantifier was
+never true. Today they read the same file the same way, and nothing binds them.
+**How it is fixed:** one reader, or a test that fails if they separate.
 
-*Resuelto: las tres piezas sueltas del kit, cada una con su propia respuesta.*
-`ruled_revision` **se cableó**, porque cerraba una ventana real: `require_admissible`
-miraba el veredicto y nunca la revisión, así que un fallo viejo pasaba al medir y solo
-aparecía en `verify`. `resolve_device` **se borró**: cero referencias en toda la forja,
-incluidas las notebooks. Y el fixture `rng` **se cableó donde entra** —`test_synthetic.py`,
-que sí es un ítem que pytest recolecta— dejando el generador local de `sweep.py` con la
-razón escrita: es una función plana, no puede recibir un fixture, y necesita semilla por
-índice. Cablear, borrar y separar con su motivo son tres respuestas distintas a la misma
-forma, y elegir una sola habría sido el error.
+*Resolved: the kit's three loose pieces, each with its own answer.*
+`ruled_revision` **was wired in**, because it closed a real window: `require_admissible`
+looked at the verdict and never at the revision, so an old failure passed at measurement
+time and appeared only in `verify`. `resolve_device` **was deleted**: zero references in the
+whole forge, including the notebooks. And the `rng` fixture **was wired in where it
+belongs** —`test_synthetic.py`, which is indeed an item pytest collects— leaving
+`sweep.py`'s local generator with the reason written down: it is a flat function, it cannot
+receive a fixture, and it needs a seed per index. Wiring, deleting and separating with a
+reason are three different answers to the same shape, and choosing only one would have been
+the error.
 
-*Resuelto: seis justificaciones muertas y seis imports muertos.* Cuatro docstrings del
-motor justificaban un patrón apelando a `raised_refusal_codes`, un barrido que no veía un
-rechazo escondido dentro de un helper — y que ya había sido reemplazado por
-`reachable_refusal_codes`, que sí lo ve. La ubicación del patrón estaba bien; la razón
-escrita al lado estaba muerta. **Un comentario falso es un defecto con vida propia**,
-porque el próximo que pasa le cree. Queda una pieza, y es de la misma clase: el test que
-mantiene vivo a `latest_revision` se justifica con "cinco tests unitarios **y un llamador
-de producción**", y ese llamador ya no existe.
+*Resolved: six dead justifications and six dead imports.* Four engine docstrings
+justified a pattern by appealing to `raised_refusal_codes`, a sweep that did not see a
+refusal hidden inside a helper — and which had already been replaced by
+`reachable_refusal_codes`, which does see it. The location of the pattern was right; the
+reason written beside it was dead. **A false comment is a defect with a life of its own**,
+because the next person who passes believes it. One piece remains, and it is of the same
+class: the test that keeps `latest_revision` alive justifies itself with "Five unit tests
+**and one production caller**", and that caller no longer exists.
 
-*Seis imports muertos, y un test que mantiene vivo un símbolo citando un llamador que no
-existe.* Tres líneas de import del motor traen siete nombres que no usa. Y
-`latest_revision` está muerta en producción desde que un cambio reemplazó a su único
-llamador por `revision_discovery` — nada la llama, y ningún despacho dinámico la alcanza.
-Se mantiene viva a propósito, por una spec y ocho tests unitarios; el defecto está en el
-pin mismo: el test que la sostiene se justifica diciendo *"cinco tests unitarios **y un
-llamador de producción** la leen como `str | None`"*. Ese llamador se fue. Es prosa que
-sobrevivió a su mecanismo **dentro del test que mantiene vivo al símbolo**. **Cómo se
-arregla:** corregir la justificación del pin —o retirar el pin— y borrar los imports.
+*Six dead imports, and a test that keeps a symbol alive by citing a caller that does not
+exist.* Three import lines in the engine bring seven names it does not use. And
+`latest_revision` is dead in production since a change replaced its only caller with
+`revision_discovery` — nothing calls it, and no dynamic dispatch reaches it. It is kept
+alive on purpose, by a spec and eight unit tests; the defect is in the pin itself: the test
+that holds it up justifies itself by saying *"Five unit tests **and one production caller**
+read it as `str | None`"*. That caller is gone. It is prose that outlived its mechanism
+**inside the test that keeps the symbol alive**. **How it is fixed:** correct the pin's
+justification —or withdraw the pin— and delete the imports.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Usuario pide implementar o verificar"] --> B["STATUS a proposal-deliberation → latest"]
-    B --> C{"¿src/ ya tiene implementación?<br/>Se enruta por EXISTENCIA, no por fidelidad"}
-    C -- No --> D["FLUJO A: clonar, env, plan"]
-    C -- Sí --> E["FLUJO B: leer src/ y medir"]
-    D --> F{"¿El plan es revisable o grande?"}
-    F -- Grande --> G["No se aplica. Se entrega como sesión aparte"]
-    F -- Revisable --> H["apply: un commit atómico de migración"]
-    H --> I["Compuerta: confirmar Name y Package"]
-    I --> J["Paso 5: el agente rellena cada hueco del andamio<br/>desde assets/kit/, a src/, tests/ y Notebooks/"]
-    J --> K["Compuerta: autorización para implementar"]
-    K --> L["Escribe módulos ATANDO latest como procedencia"]
-    L --> M["Barrido de auditoría: 200 configuraciones"]
-    M --> N["admit: lee el texto de la revisión.<br/>¿La notación citada existe?"]
-    N --> O["Valida remedios con los dos polos"]
-    O --> P["Compuerta: ¿publicamos las correcciones?"]
-    P -- Sí --> Q["handoff → ubicar → compose → publicar sucesor<br/>VUELVE a proposal-deliberation"]
-    P -- No --> R["Corre la suite Y verify. Son preguntas distintas"]
+    A["User asks to implement or verify"] --> B["STATUS to proposal-deliberation → latest"]
+    B --> C{"Does src/ already have an implementation?<br/>It routes by EXISTENCE, not by fidelity"}
+    C -- No --> D["FLOW A: clone, env, plan"]
+    C -- Yes --> E["FLOW B: read src/ and measure"]
+    D --> F{"Is the plan reviewable or large?"}
+    F -- Large --> G["It is not applied. It is handed over as a separate session"]
+    F -- Reviewable --> H["apply: an atomic migration commit"]
+    H --> I["Gate: confirm Name and Package"]
+    I --> J["Step 5: the agent fills each scaffold gap<br/>from assets/kit/, into src/, tests/ and Notebooks/"]
+    J --> K["Gate: authorization to implement"]
+    K --> L["Writes modules BINDING latest as provenance"]
+    L --> M["Audit sweep: 200 configurations"]
+    M --> N["admit: reads the revision text.<br/>Does the cited notation exist?"]
+    N --> O["Validates remedies with both poles"]
+    O --> P["Gate: do we publish the corrections?"]
+    P -- Yes --> Q["handoff → locate → compose → publish successor<br/>RETURNS to proposal-deliberation"]
+    P -- No --> R["Runs the suite AND verify. They are different questions"]
     Q --> R
     E --> R
-    R --> S{"¿Suite verde y fidelidad limpia?"}
-    S -- "Test rojo" --> T["Ese ES el hallazgo. Se corta aquí"]
-    S -- "Hay diferencias" --> U{"Compuerta: ¿esos cambios los hiciste tú?"}
-    U -- Sí --> V["El código va adelante.<br/>Se te da el prompt para actualizar la matemática.<br/>NUNCA se edita tu código hacia atrás"]
-    U -- No --> W["El código derivó. Corregir, máximo 3 pasadas"]
+    R --> S{"Green suite and clean fidelity?"}
+    S -- "Red test" --> T["That is the finding. It stops here"]
+    S -- "There are differences" --> U{"Gate: are those changes the operator's?"}
+    U -- Yes --> V["The code runs ahead.<br/>The operator is handed the prompt to update the mathematics.<br/>The operator's code is NEVER edited backwards"]
+    U -- No --> W["The code drifted. Correct, at most 3 passes"]
     W --> R
-    S -- Sí --> X["probe: escalera de nextStep"]
-    X --> Y{"¿Qué es lo siguiente?"}
-    Y -- wiring-first --> Z["Arreglar el cableado brazo a módulo"]
+    S -- Yes --> X["probe: nextStep ladder"]
+    X --> Y{"What is next?"}
+    Y -- wiring-first --> Z["Fix the arm-to-module wiring"]
     Z --> X
-    Y -- poll-first --> AA["Hay un envío en vuelo: esperar, no duplicar"]
-    Y -- search-first --> AB["Falta el registro de la búsqueda"]
-    Y -- report-first --> AC["El informe no concuerda: reejecutar"]
+    Y -- poll-first --> AA["There is a submission in flight: wait, do not duplicate"]
+    Y -- search-first --> AB["The search record is missing"]
+    Y -- report-first --> AC["The report does not agree: rerun"]
     AC --> X
-    Y -- convert --> AD["Convertir a un backend entrenable"]
+    Y -- convert --> AD["Convert to a trainable backend"]
     AD --> X
-    Y -- benchmark --> AE["Compuerta: ¿corremos el benchmark?"]
-    AE --> AF["Entrena ambos brazos y emite veredicto"]
+    Y -- benchmark --> AE["Gate: do we run the benchmark?"]
+    AE --> AF["Trains both arms and emits a verdict"]
 ```
 
 ---
