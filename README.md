@@ -20,7 +20,7 @@ remote compute, development and troubleshooting.
 2. [Use flow — the short path](#use-flow--the-short-path)
 3. [Getting started](#getting-started)
 4. [How it works — the order](#how-it-works--the-order)
-5. [Inside the workspace](#el-workspace-por-dentro)
+5. [Inside the workspace](#inside-the-workspace)
 6. [Harnesses and skill projection](#harnesses-y-proyección-de-skills)
 7. [The agents](#los-agentes)
 8. [Anatomy of each skill](#anatomía-de-cada-skill)
@@ -39,7 +39,7 @@ without guessing the order. The minimum path:
 
 1. **Install the CLI and set up the environment** — see [Getting started](#getting-started).
 2. **Create your workspace** — `papersmith init ~/papers/my-paper --title "…" --topic "…"`.
-   What it leaves inside, in [Inside the workspace](#el-workspace-por-dentro).
+   What it leaves inside, in [Inside the workspace](#inside-the-workspace).
 3. **Put a reference PDF** in `guidance/reference-papers/` and run
    `papersmith ingest <pdf>` — or ask for `/paper-ingestion` inside your harness.
 4. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
@@ -243,7 +243,7 @@ papersmith status --json          # machine-readable snapshot
 The workspace stays decoupled from the framework checkout: the scaffolding is
 synced with `papersmith upgrade`, and your research artifacts are protected by
 contract. What `init` creates exactly —and what gets versioned— in
-[Inside the workspace](#el-workspace-por-dentro).
+[Inside the workspace](#inside-the-workspace).
 
 ### 3. Ingest literature
 
@@ -381,50 +381,50 @@ skill](#anatomía-de-cada-skill). And for the literal contract, each one's
 
 ---
 
-## El workspace por dentro
+## Inside the workspace
 
-`papersmith init` crea un directorio autocontenido —sin git inicializado y sin
-tocar tu checkout— con esta forma:
+`papersmith init` creates a self-contained directory —with no git initialized and
+without touching your checkout— with this shape:
 
 ```
 my-paper/
-├── .papersmith/                 # estado del workspace (config, manifest, ledger)
-│   ├── config.json              #   target y perfil activos, rutas del ledger
-│   ├── manifest.json            #   hashes de todo lo que generó el framework
-│   ├── runs_ledger.jsonl        #   cada corrida despachada, en orden
-│   └── version                  #   versión del framework que lo creó
-├── .claude/agents/              # los diecinueve subagentes (fuente única de verdad)
-├── skills/                      # la copia del kit: las doce skills + _core
-│   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
-├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
+├── .papersmith/                 # workspace state (config, manifest, ledger)
+│   ├── config.json              #   active target and profile, ledger paths
+│   ├── manifest.json            #   hashes of everything the framework generated
+│   ├── runs_ledger.jsonl        #   every dispatched run, in order
+│   └── version                  #   framework version that created it
+├── .claude/agents/              # the nineteen subagents (single source of truth)
+├── skills/                      # the kit copy: the twelve skills + _core
+│   └── _core/                   #   the two shared engines (deliberation, implementation)
+├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
 ├── guidance/
-│   ├── reference-papers/        # drop-zone: deja aquí los PDFs de referencia
-│   ├── paper-guide/             # papers guía de método y estilo (opcional pero recomendado)
-│   └── data-paper/              # paper de datos (obligatorio para experimental-deliberation)
-├── proposals/                   # revisiones gestionadas, plano: research-concept-rNN.md
-├── paper/                       # el LaTeX del paper (paper-writing lo escribe aquí)
-├── experiments/                 # el protocolo experimental gestionado
-├── implementations/             # repos destino; cada uno con su propio git
-├── kaggle-inbox/                # lo que vuelve de los workers remotos
-├── CLAUDE.md / OPENCODE.md / .agents/AGENTS.md   # routing de harnesses
-├── .pi/APPEND_SYSTEM.md         # routing de harnesses (Pi lo appendea al prompt de sistema)
-├── papersmith.yaml              # configuración del workspace (la tuya, editable)
-├── package.json                 # dependencias Node del workspace (jiti, typebox), la tuya, editable
+│   ├── reference-papers/        # drop-zone: leave your reference PDFs here
+│   ├── paper-guide/             # guiding papers for method and style (optional but recommended)
+│   └── data-paper/              # data paper (mandatory for experimental-deliberation)
+├── proposals/                   # managed revisions, flat: research-concept-rNN.md
+├── paper/                       # the paper's LaTeX (paper-writing writes it here)
+├── experiments/                 # the managed experimental protocol
+├── implementations/             # destination repos; each one with its own git
+├── kaggle-inbox/                # what comes back from the remote workers
+├── CLAUDE.md / OPENCODE.md / .agents/AGENTS.md   # harness routing
+├── .pi/APPEND_SYSTEM.md         # harness routing (Pi appends it to the system prompt)
+├── papersmith.yaml              # workspace configuration (yours, editable)
+├── package.json                 # workspace Node dependencies (jiti, typebox), yours, editable
 ├── requirements.txt
-├── scripts/setup_env.py         # provisión del runtime de ingestión
-└── README.md                    # descripción breve del workspace
+├── scripts/setup_env.py         # ingestion runtime provisioning
+└── README.md                    # brief description of the workspace
 ```
 
-Cada carpeta de investigación (`guidance/*/`, `proposals/`, `paper/`, `experiments/`,
-`implementations/`) llega vacía, con su propio `.gitkeep`: el `.gitignore` del
-workspace aplica la misma regla que este repositorio se aplica a sí mismo —la
-carpeta se versiona, el contenido nunca.
+Every research folder (`guidance/*/`, `proposals/`, `paper/`, `experiments/`,
+`implementations/`) arrives empty, with its own `.gitkeep`: the workspace's
+`.gitignore` applies the same rule this repository applies to itself —the
+folder is versioned, the content never is.
 
-### `papersmith.yaml` — la configuración que sí vas a tocar
+### `papersmith.yaml` — the configuration you will actually touch
 
-El archivo viene con tres targets de ejemplo y tres perfiles de ejecución. Los
-targets declaran **dónde** corre el trabajo; los perfiles, **qué** se corre y
-cómo se reparte:
+The file comes with three example targets and three execution profiles. The
+targets declare **where** the work runs; the profiles, **what** runs and how
+it is split up:
 
 ```yaml
 compute_targets:
@@ -441,55 +441,54 @@ execution_profiles:
 
 paper_ingestion:
   engine: marker
-  mode: fast            # fast (CPU) | balanced (GPU, máxima fidelidad)
+  mode: fast            # fast (CPU) | balanced (GPU, maximum fidelity)
   strip_references: true
   source_base: guidance
 ```
 
-El target y el perfil activos viven en `.papersmith/config.json`; `papersmith
-target set` los cambia. El bloque `paper_ingestion` lo posee la skill de
-ingestión y el orquestador lo trata como opaco (editalo con la skill, no a
-mano).
+The active target and profile live in `.papersmith/config.json`; `papersmith
+target set` changes them. The `paper_ingestion` block is owned by the ingestion
+skill and the orchestrator treats it as opaque (edit it with the skill, not by
+hand).
 
-### Qué se versiona y qué no
+### What is versioned and what is not
 
-El contrato de preservación de `papersmith upgrade` es explícito: nunca toca
+`papersmith upgrade`'s preservation contract is explicit: it never touches
 `guidance/`, `proposals/`, `paper/`, `experiments/`, `implementations/`,
 `kaggle-inbox/`, `papersmith.yaml`, `package.json`, `README.md`
-ni los archivos `.env*`. Todo lo demás es andamiaje del framework y `upgrade`
-lo sincroniza —con `--force` si hace falta— dejando tus artefactos intactos.
+nor the `.env*` files. Everything else is framework scaffolding and `upgrade`
+syncs it —with `--force` if needed— leaving your artifacts intact.
 
-En este repositorio la misma regla vale para Git: el andamiaje se versiona, el
-contenido no. Las carpetas de investigación viajan con su `.gitkeep` y nada
-más; `guidance/` versiona las carpetas y nunca los PDFs ni el Markdown
-ingerido. `sota-pool/` sigue el mismo contrato: la carpeta viaja, y el
-`candidates.json`, el `atlas.json` y el `atlas.html` —que inlinea el visor 3D
-completo— se quedan en la máquina que los produjo.
+In this repository the same rule holds for Git: the scaffolding is versioned,
+the content is not. Research folders travel with their `.gitkeep` and nothing
+else; `guidance/` versions the folders and never the PDFs nor the ingested
+Markdown. `sota-pool/` follows the same contract: the folder travels, and
+`candidates.json`, `atlas.json` and `atlas.html` —which inlines the full 3D
+viewer— stay on the machine that produced them.
 
-Preservar, eso sí, no es migrar. No tocar un artefacto lo protege mientras su
-forma no cambie; el día que un release la cambia, hace falta algo que lo lleve
-hasta ella. Eso es trabajo de las [migraciones de
-artefactos](#migraciones-de-artefactos), y es también la razón por la que
-`.papersmith/version` dejó de avanzar por el solo hecho de haber copiado
-archivos.
+Preserving, mind you, is not migrating. Not touching an artifact protects it while
+its shape does not change; the day a release changes that shape, something is
+needed to carry it up to it. That is the job of [artifact
+migrations](#migraciones-de-artefactos), and it is also the reason
+`.papersmith/version` stopped advancing just because files had been copied.
 
-### El estado: `.papersmith/`
+### The state: `.papersmith/`
 
-- **`manifest.json`** guarda el hash de cada archivo generado. `papersmith
-  audit --check-drift` compara contra el disco y nombra lo que se desvió; la
-  reparación es `papersmith upgrade`, nunca una edición a mano.
-- **`runs_ledger.jsonl`** es append-only: cada corrida de `papersmith run` que
-  se despacha queda registrada con su target, su perfil y su resultado.
-- **`config.json`** guarda el target activo, el perfil activo y las rutas de
-  configuración del ledger.
-- **`migrations.json`** registra qué migraciones de artefactos atadas a una
-  versión ya se aplicaron, para que `upgrade` no las repita. Las de
-  convergencia nunca se anotan: no terminan nunca. Si el archivo se daña,
-  `upgrade` se niega y `status` lo reporta; no lo edites a mano.
-- **`version`** es la versión que el workspace declara para sus **artefactos**,
-  no para sus archivos. De los dos marcadores es el que se queda atrás cuando
-  una migración falla, y por eso `status` puede decir que el workspace todavía
-  no llegó al release instalado.
+- **`manifest.json`** stores the hash of every generated file. `papersmith
+  audit --check-drift` compares against the disk and names what drifted; the
+  repair is `papersmith upgrade`, never a hand edit.
+- **`runs_ledger.jsonl`** is append-only: every `papersmith run` that gets
+  dispatched is recorded with its target, its profile and its result.
+- **`config.json`** stores the active target, the active profile and the ledger's
+  configuration paths.
+- **`migrations.json`** records which version-tied artifact migrations have
+  already been applied, so that `upgrade` does not repeat them. Convergence
+  ones are never recorded: they never end. If the file gets damaged,
+  `upgrade` refuses and `status` reports it; do not edit it by hand.
+- **`version`** is the version the workspace declares for its **artifacts**,
+  not for its files. Of the two markers it is the one that lags behind when
+  a migration fails, and that is why `status` can say the workspace has not
+  yet reached the installed release.
 
 ---
 
@@ -2973,7 +2972,7 @@ imprime nada, para no ensuciar una salida que otro programa está leyendo.
 Crea `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
 más la copia del kit y su manifest. La forma completa del árbol está en
-[El workspace por dentro](#el-workspace-por-dentro).
+[El workspace por dentro](#inside-the-workspace).
 
 ### `papersmith upgrade [<dir>]`
 
@@ -3464,7 +3463,7 @@ ensayos baratos. Bajala en orden; no la saltees:
 5. Solo entonces, la corrida real (`--consent <token>` cuando corresponda).
 
 Los targets y los perfiles son los de tu `papersmith.yaml` (ver
-[El workspace por dentro](#el-workspace-por-dentro)). El ledger
+[El workspace por dentro](#inside-the-workspace)). El ledger
 `.papersmith/runs_ledger.jsonl` es append-only: cada corrida despachada queda
 registrada con su target, su perfil y su resultado. Y `papersmith remote
 status` / `pull` es la memoria de lo que se mandó afuera y lo que volvió — el
