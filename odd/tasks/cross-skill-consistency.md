@@ -83,6 +83,7 @@ Route legend: D = delegated writer, I = inline.
 - [ ] E1–E10
   - [x] E4 — `walk --commit-template` (D, writer trigger: engine + new test file + 3 docs)
   - [x] E5 — `status`/`audit` collect projection notes; `--verbose` prints them (D, writer trigger: 3 src files + new test file + README)
+  - [ ] E6 — partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -950,3 +951,20 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   hide a warning) RED 5F -> GREEN; the fixture test asserts init still emits the note. `npm run test:fast`:
   3440 passed, 1 known failure. Docs: README `status`/`audit` reference. No migration.
   Commit: `fix(cli): status and audit keep projection notes out of every read` (the commit carrying this line)
+- E6 (real, partial): `check_atlas.py` checked shape only. Fix: `--pool <candidates.json>` adds quote fidelity:
+  `evidence.origin` must name a candidate (`identifier`/`source_url`/`url`; `EVIDENCE_ORIGIN_NOT_IN_POOL`), the
+  candidate must hold an abstract (`EVIDENCE_ABSTRACT_MISSING`), the quote must be a verbatim substring
+  (whitespace collapsed only; `EVIDENCE_QUOTE_NOT_IN_ABSTRACT`); unreadable/malformed pool exits 2.
+  `_failures(atlas)` keeps its one-arg form (command center). Opt-in flag, not auto-discovery: the merged
+  `atlas.with-proposal.json` lives beside `candidates.json` and its proposal system quotes the proposal.
+  Tests: `QuoteFidelityTests` (9) RED 8F -> GREEN. Resolver facts verified in
+  `skills/paper-writing/scripts/paper_resolve.py`: `_parse_arxiv` hard-codes `"year": None` although the Atom
+  entry carries `<published>` (real defect); `_parse_crossref` hard-codes `"year": None` (ignores
+  `issued.date-parts`) and `"abstract": None` on purpose (JATS) — Crossref abstract limit is intrinsic by design;
+  documented in plausibility SKILL.md with what the pool does then.
+  BLOCKED (outside allowed edit surfaces): (1) `skills/paper-writing/scripts/paper_resolve.py` (+ a resolver test,
+  e.g. `tests/test_paper_resolve*.py`) to read arXiv `<published>`/Crossref `issued` years — needs a check that
+  existing metadata caches/digests keep verifying; (2) `.claude/agents/sota-grapher.md` (then
+  `python scripts/sync-repo-harness.py`) so the grapher's own checker command passes
+  `--pool sota-pool/candidates.json`; until then the guard is documented in SKILL.md but not in the agent's loop.
+  Commit: `feat(plausibility): the atlas checker holds every quote to its pool abstract` (the commit carrying this line)

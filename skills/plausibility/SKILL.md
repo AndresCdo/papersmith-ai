@@ -36,6 +36,28 @@ family. A candidate without an abstract does not exist for the map — a
 title is not a territory. The pool is research content: it travels
 gitignored, like everything under `sota-pool/`.
 
+What each resolver can and cannot give the pool, measured from
+`paper_resolve.py`:
+
+- **OpenAlex** returns the year, the venue and, when OpenAlex holds one, the
+  abstract (rebuilt in reading order from its inverted index).
+- **Crossref** never returns an abstract: publishers ship it as JATS markup,
+  and stripping tags would mint a quote no source printed, so the resolver
+  reports `abstract: null`. It also reports `year: null`. Resolve a DOI
+  through OpenAlex for its abstract; when neither resolver has one, the
+  candidate stays out of the pool (it cannot be quoted,
+  and the checker's `--pool` run refuses any planet citing it with
+  `EVIDENCE_ABSTRACT_MISSING`).
+- **arXiv** returns the abstract (the entry's own `<summary>`, whitespace
+  collapsed) with `venue: "arXiv"` and `year: null`: the resolver does not
+  read the feed's `<published>` date today. Take the year from the arXiv
+  identifier's own `YYMM` prefix or from an OpenAlex resolution, and say
+  which in the candidate; never guess one.
+
+Each candidate carries the `identifier` it was resolved by and its
+`source_url`; a planet's `evidence.origin` names one of those two, which is
+how the checker finds the abstract a quote claims.
+
 The borrowed `resolve` caches every answer it gives. Both agents pass
 `--cache-dir sota-pool/metadata`, so those caches stay in the pool too, one
 `<metadata_digest>.json` per resolution. Without that flag `resolve` caches
@@ -102,8 +124,28 @@ duplicated planet id, an edge endpoint with no planet, a self-loop, a slot
 outside the table, a slot count outside its row, a `rel` outside the closed
 set, a planet without a non-empty `origin` and `quote`, fewer than 25
 systems when the pool promises 25. Exit 2 is usage or unreadable input —
-nothing was judged. The checker reads the atlas; it never reads the web,
-so a green run certifies shape, not truth.
+nothing was judged. The checker reads the atlas; it never reads the web.
+
+Run it against the pool, so a quote is held to the abstract it claims:
+
+```
+python3 skills/plausibility/scripts/check_atlas.py sota-pool/atlas.json --pool sota-pool/candidates.json
+```
+
+With `--pool`, every planet's `evidence.origin` must name a pool candidate
+(its `identifier`, `source_url` or `url`; `EVIDENCE_ORIGIN_NOT_IN_POOL`
+otherwise), that candidate must hold an abstract (`EVIDENCE_ABSTRACT_MISSING`),
+and the `quote` must be a verbatim substring of it
+(`EVIDENCE_QUOTE_NOT_IN_ABSTRACT`). Runs of whitespace compare collapsed — a
+line break is layout — and nothing else is normalized: case, punctuation and
+words must match. A pool that cannot be read as a list of candidates (or
+`{"candidates": [...]}`) exits 2 (`POOL_UNREADABLE`, `POOL_NOT_JSON`,
+`POOL_MALFORMED`). A green `--pool` run certifies that every quote is in the
+stored abstract, which is still not that the abstract supports the planet;
+without `--pool` a green run certifies shape alone. The proposal-overlaid
+atlas (`atlas.with-proposal.json`) is checked without `--pool`: its proposal
+system quotes the proposal, not the pool, and its SOTA systems are the ones
+this run already held to the pool.
 
 `scripts/render_atlas.py` (stdlib-only) turns a green atlas into the HTML:
 every system in one shared 3D sky — family neighborhoods at their own
@@ -150,6 +192,7 @@ for the later ingestion stage — never at a publication, never at a filing.
 | Fewer than 25 resolvable candidates | Report the pool short with what was tried; never pad with unquoted entries |
 | More than 5 families | Keep the 5 the abstracts lean on hardest and say which were left out |
 | The checker refuses | Fix the atlas and re-run, up to 3 repair passes; then stop with the violations quoted in `owed` |
+| A quote is not verbatim in its abstract | Copy the passage from the pool's abstract again, or drop the planet; never edit the abstract to fit the quote |
 | A claim has no abstract passage | The planet does not exist; a quoteless planet is a drawing |
 
 ## Measure before you assert

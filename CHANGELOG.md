@@ -677,6 +677,20 @@ number is `0`, breaking changes can still arrive without a major bump.
   `proposal-implementation`'s `SKILL.md` and `references/usage.md`, and in
   `experimental-implementation`'s `SKILL.md`.
 
+- **The plausibility checker can hold every quote to its abstract.**
+  `check_atlas.py` certified shape only, so a paraphrase or an invented
+  sentence dressed as a quote ran green. `check_atlas.py <atlas> --pool
+  sota-pool/candidates.json` now requires each planet's `evidence.origin` to
+  name a pool candidate (`identifier`, `source_url` or `url`;
+  `EVIDENCE_ORIGIN_NOT_IN_POOL`), that candidate to hold an abstract
+  (`EVIDENCE_ABSTRACT_MISSING`), and the quote to be a verbatim substring of
+  it (`EVIDENCE_QUOTE_NOT_IN_ABSTRACT`); whitespace runs compare collapsed,
+  nothing else is normalized. An unreadable or malformed pool exits 2. The
+  plausibility `SKILL.md` documents the invocation and, measured from
+  `paper_resolve.py`, what each resolver cannot give the pool: Crossref never
+  returns an abstract (and reports no year), arXiv reports `year: null` and
+  `venue: "arXiv"`.
+
 ### Changed
 
 - **Workspace support policy: a live workspace is upgraded, never
@@ -1042,6 +1056,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   projection notes by default; pass `--verbose` to see them. `status --json`
   gains an additive `framework.generator_notes` list. Nothing on disk changes;
   no migration is needed.
+
+- `check_atlas.py` without `--pool` behaves exactly as before; an existing
+  `atlas.json` checked with `--pool` may now fail where a quote was
+  paraphrased or cites an origin outside the pool. `_failures(atlas)` keeps
+  its one-argument form for the command center. No migration is needed.
 
 
 ## 0.13.0
