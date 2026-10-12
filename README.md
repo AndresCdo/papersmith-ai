@@ -57,62 +57,62 @@ you're going to use an AI agent as copilot, the ones already defined are in
 
 ---
 
-## Flujo de uso — el camino corto
+## Use flow — the short path
 
-Doce skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
-castellano (*"ingiere los papers"*). **No hace falta usarlas todas ni en este orden**: cada
-una declara qué necesita antes y se niega si falta, así que si empiezas por el medio te
-lo va a decir ella.
+Twelve skills. You invoke them by name in Claude Code (`/paper-ingestion`) or ask for them in
+Spanish (*"ingiere los papers"*). **You don't have to use them all, or in this order**: each
+one declares what it needs first and refuses if it's missing, so if you start in the middle it
+will tell you.
 
-El camino completo, de un PDF a un paper compilado:
+The full path, from a PDF to a compiled paper:
 
-| # | Invocás | Qué hace | Dónde deja el resultado |
+| # | You invoke | What it does | Where it leaves the result |
 |---|---------|----------|-------------------------|
-| 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
-| 2 | `/plausibility` | Explora la idea pre-ingesta en tres tramos: rastrea ~25 referencias por sus abstracts, mapea la constelación en un HTML único y discute la plausibilidad de la hipótesis contra ese SOTA | `sota-pool/` (ignorado, como `guidance/`) |
-| 3 | `/proposal-deliberation` | Discute la matemática contigo y publica cada acuerdo como una revisión gestionada, con la constelación del SOTA al lado | `proposals/` (la revisión y su `graph.html`) |
-| 4 | `/proposal-implementation` | Prueba de concepto: convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
-| 5 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
-| 6 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
-| 7 | `/kaggle-accounts` | Prueba que las credenciales de Kaggle autentican de verdad | `store/` (nunca sale del disco) |
-| 8 | `/remote-execution` | Manda trabajo a un worker remoto y lleva el registro de lo que volvió | el ledger del repo destino |
-| 9 | `/paper-writing` | Escribe el paper bloque por bloque, con cada afirmación atada a su evidencia | `paper/` |
-| 10 | `/figure-review` | Mira el render: rasteriza cada `Figures/<id>.pdf` y mide lo que un raster puede sostener (tinta fuera del canvas, colisiones) | un informe visual, nunca un cambio |
-| 11 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
-| 12 | `/upgrade-project` | Lleva el workspace a la versión del CLI que tienes instalado: sincroniza los archivos del kit y migra los artefactos, delegando todo en `papersmith upgrade` | el workspace mismo |
+| 1 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
+| 2 | `/plausibility` | Explores the pre-ingestion idea in three stretches: it tracks ~25 references through their abstracts, maps the constellation in a single HTML and discusses the plausibility of the hypothesis against that SOTA | `sota-pool/` (ignored, like `guidance/`) |
+| 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
+| 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
+| 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
+| 6 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
+| 7 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
+| 8 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
+| 9 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
+| 10 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
+| 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
+| 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `papersmith upgrade` | the workspace itself |
 
-**Lo mínimo para empezar.** Si sólo quieres probar la forja, empieza por el paso 2
-con tu idea en dos oraciones: `/plausibility` rastrea el SOTA y te devuelve la
-constelación más el top-5. Solo después, si quieres, pon un PDF en
-`guidance/reference-papers/`, ejecuta `/paper-ingestion`, y delibera con
-`/proposal-deliberation`. Los pasos 4 y 6 sólo tienen sentido cuando ya hay una propuesta
-publicada y un repositorio destino donde implementarla.
+**The minimum to start.** If you just want to try the forge, start with step 2
+with your idea in two sentences: `/plausibility` tracks the SOTA and returns the
+constellation plus the top-5. Only afterwards, if you want, put a PDF in
+`guidance/reference-papers/`, run `/paper-ingestion`, and deliberate with
+`/proposal-deliberation`. Steps 4 and 6 only make sense once there's a published proposal
+and a target repository to implement it in.
 
-**El flujo completo, dibujado.** El diagrama muestra cada etapa en este orden con
-su comando, sus agentes (con las herramientas que cada uno declara en Pi), sus
-compuertas humanas y lo que deja en disco. La versión interactiva, con enlaces a
-la fuente de cada nodo, está en
+**The full flow, drawn.** The diagram shows every stage in this order with
+its command, its agents (with the tools each one declares in Pi), its
+human gates and what it leaves on disk. The interactive version, with links to
+the source of each node, is in
 [`docs/diagrams/papersmith-pi-flow.html`](docs/diagrams/papersmith-pi-flow.html)
-(se abre en el navegador; generada con [Archify](https://github.com/tt-a1i/archify),
-y su fuente y su receta están versionadas en
+(opens in the browser; generated with [Archify](https://github.com/tt-a1i/archify),
+and its source and its recipe are versioned in
 [`docs/diagrams/`](docs/diagrams/README.md)).
 
-[![Flujo de papersmith-ai en Pi: comandos, skills y agentes](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
+[![papersmith-ai flow in Pi: commands, skills and agents](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 
-**Tres cosas que conviene saber antes de la primera corrida.**
+**Three things worth knowing before the first run.**
 
-1. **Nada de lo que produzcas se sube.** `proposals/`, `experiments/`, `paper/`,
-   `implementations/` y `sota-pool/` viajan a GitHub **como carpetas vacías** y nada más; `guidance/`
-   versiona sus carpetas y nunca los PDFs ni el Markdown de adentro. El andamiaje se
-   versiona, el contenido no. Un paper a medio escribir es material de investigación, y
-   publicarlo por accidente es una fuga.
-2. **Cada skill se niega antes de hacer algo a medias.** Si le falta una entrada, no la
-   inventa ni la saltea: sale con un código de rechazo que nombra qué falta. Un
-   `PAPER_ABSENT` o un `SECTION_CONTRACTS_UNREADABLE` no es un error tuyo, es la skill
-   diciéndote qué le falta.
-3. **La deliberación la cierras tú.** Las dos skills de deliberación proponen, discuten y
-   preparan la edición, pero ninguna publica sin que aceptes. Eso no es una cortesía:
-   está en el contrato de cada una y el motor lo hace cumplir.
+1. **Nothing you produce gets uploaded.** `proposals/`, `experiments/`, `paper/`,
+   `implementations/` and `sota-pool/` travel to GitHub **as empty folders** and nothing more; `guidance/`
+   versions its folders and never the PDFs or the Markdown inside. The scaffolding gets
+   versioned, the content doesn't. A half-written paper is research material, and
+   publishing it by accident is a leak.
+2. **Each skill refuses before doing something half-done.** If an input is missing, it
+   doesn't invent it or skip it: it exits with a rejection code that names what's missing. A
+   `PAPER_ABSENT` or a `SECTION_CONTRACTS_UNREADABLE` is not your mistake, it's the skill
+   telling you what it's missing.
+3. **You close the deliberation.** The two deliberation skills propose, discuss and
+   prepare the edit, but neither publishes without your acceptance. That's not a courtesy:
+   it's in each one's contract and the engine enforces it.
 
 ---
 
