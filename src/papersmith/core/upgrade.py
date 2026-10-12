@@ -357,6 +357,17 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     if artifacts_reached_this_version and read_workspace_version(root, "") != version:
         if fs.write_text(root / ".papersmith" / "version", version + "\n"):
             changed.append(".papersmith/version")
+            # The routing docs state the recorded version, and they were
+            # rendered above against the marker this run just moved. Left
+            # alone, every upgrade across a release ended with
+            # `audit --check-drift` reporting those docs as generator drift
+            # until a second upgrade re-rendered them.
+            skipped_again: list[str] = []
+            rerendered = apply_generated(root, context_for_workspace(root), active_tools,
+                                         skipped=skipped_again)
+            changed.extend(relpath for relpath in rerendered if relpath not in changed)
+            unsynchronized.extend(relpath for relpath in skipped_again
+                                  if relpath not in unsynchronized)
         else:
             unsynchronized.append(".papersmith/version")
 

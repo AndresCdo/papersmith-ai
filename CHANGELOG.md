@@ -172,6 +172,32 @@ number is `0`, breaking changes can still arrive without a major bump.
   `bridges.python.script_environment`; an explicit caller value still wins),
   the rule the MCP bridge and the dashboard child already followed.
 
+- **One `upgrade` across a release now ends with `audit --check-drift`
+  clean.** The routing docs (`CLAUDE.md`, `OPENCODE.md`,
+  `.pi/APPEND_SYSTEM.md`, `.agents/AGENTS.md`) state the version the workspace
+  records, and `upgrade` rendered them before it moved `.papersmith/version`.
+  So every upgrade from an older release left them naming the old version,
+  `audit --check-drift` reported them as generator drift, and only a second
+  `upgrade` cleared it. They are now rendered again once the marker moves.
+  Found by upgrading the populated 0.13.0 fixture below.
+
+### Added
+
+- **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
+  `tests/fixtures/workspace_v0_13_0/` holds a workspace produced by the
+  0.13.0 release itself (`scripts/build-v0_13_0-fixture.py` drives that
+  tree's own CLI and engines): two managed proposal revisions and one
+  experiments revision with their receipts, state and locks, and an
+  implementation target with its scaffold receipt and seal file, both
+  implementation skills' holders with settled items, and their position
+  ledger. `tests/test_upgrade_v0_13_0_workspace.py` upgrades it with the
+  current CLI and asserts that nothing it holds changes except the listed
+  `.papersmith/` records, that every registered migration applies or is
+  already satisfied, that `audit --check-drift` is clean, and that the
+  deliberation consistency audit and both implementation `verify` runs still
+  read what 0.13.0 wrote. `tests/fixtures/README.md` documents how it is built
+  and stored.
+
 ### Changed
 
 - **Workspace support policy: a live workspace is upgraded, never
@@ -298,6 +324,9 @@ number is `0`, breaking changes can still arrive without a major bump.
   `PYTHONDONTWRITEBYTECODE=1`, so the job writes no `.pyc` files (into the
   workspace or the target it imports); imports are recompiled on each run.
   No stored artefact changes; no migration is needed.
+- After an `upgrade` that moves the version marker, the routing docs name the
+  new version in the same run. No stored artefact changes; no migration is
+  needed.
 
 ## 0.13.0
 

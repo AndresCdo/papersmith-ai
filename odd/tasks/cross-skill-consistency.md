@@ -46,6 +46,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A8 — per-lineage `__implementation__` binding (verify) (D, writer trigger: engine + 2 test files + 2 docs)
 - [x] D1 — kit provenance record + dirty-kit guard (D, writer trigger: 7 src files + build-kit + 4 scripts + tests + 4 docs)
 - [x] D2 — migration support policy (I within this writer: docs only)
+- [x] F-prep — populated v0.13.0 workspace fixture + upgrade test (D, writer trigger: generator + fixture + test + src fix + docs)
 - [ ] D3 — engine state gitignore decision
 - [ ] D4 — plausibility metadata cache inside sota-pool
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
@@ -60,6 +61,15 @@ Route legend: D = delegated writer, I = inline.
 - X2 — `skills/experimental-deliberation/references/usage.md` says `## Paper Guide Reference`; renderer writes `## Reference Sources` (found in A6).
 - X3 — `tests/test_implementation_pair.py` mutates the real engine file in place; flaky under parallel runs (found in A2).
 - X4 — unguarded legacy deliberation `write` action publishes without candidate validation (found in A6; not a deliberation entry point).
+- X5 — one `upgrade` across a release left the routing docs naming the old version (rendered before the
+  marker moved), so `audit --check-drift` reported generator drift until a second upgrade (found in F-prep;
+  fixed there).
+- X6 — `settle --under "## Ladder"` (the documented example) on a fresh holder inserts the item at the first
+  non-blank line after the heading, which is inside the position block that `position` installs directly
+  under `## Ladder`; the holder then no longer parses (`verify` -> `POSITION_ITEM_MALFORMED`). Reproduced on
+  0.13.0 and on the current engine (found in F-prep; engine `skills/_core/implementation`, not fixed).
+- X7 — 0.13.0 only (fixed by A2): with `AGREED.md` holding a plain item, the experimental skill refused
+  `position` with `HOLDER_UNDECLARED`; the fixture creates both holders before settling for that reason.
 
 ## Progress / evidence
 
@@ -259,6 +269,22 @@ Route legend: D = delegated writer, I = inline.
   absent on this machine (the two known ones plus `UsageReferenceTests::
   test_every_documented_invocation_runs` subtest for the self-guarded-facts inversion, which exits 2
   with the same `.venv` error on base 0426dbc too).
+
+- F-prep (fixture, plus finding X5 fixed): `scripts/build-v0_13_0-fixture.py` extracts `git archive 55dcb4e`
+  (0.13.0, untagged) and drives that tree's own CLI/engines: `init --no-env --no-npm`, proposal v1 + one
+  successor (`--serve` resolve/preview/accept), experiments v1, target `implementations/Smoother` (`plan`,
+  `materialize --stage scaffold --seed 7`, both skills' `position --sequence` installs, `discuss` Q+A,
+  `settle`). Snapshot = workspace minus manifest-baselined untouched framework files (+ `.gitignore`,
+  version marker always kept), stored as deterministic `workspace.tar.gz` (43 KB, 54 members incl. the
+  target's `.git`) + `contents.sha256`; an archive because the workspace's own `.gitignore` would hide
+  content from this repo's git. Documented in `tests/fixtures/README.md` and `docs/releasing.md`.
+  Test `tests/test_upgrade_v0_13_0_workspace.py` (8 tests): RED on the current branch = 1 failure,
+  `audit --check-drift` -> `generator drift: CLAUDE.md, OPENCODE.md, .pi/APPEND_SYSTEM.md,
+  .agents/AGENTS.md` (also reproduced on a full, unstripped 0.13.0 workspace). Fix: `upgrade` re-renders
+  the generated files once the version marker moves. GREEN 8/8; digests: only `.papersmith/{config.json,
+  manifest.json,version}` change; both migrations satisfied; consistency audit PASS (both domains); both
+  `verify` runs read their own holder. Related upgrade files 78 passed.
+  Commit: `fix(upgrade): one upgrade of a populated 0.13.0 workspace ends drift-clean` (the commit carrying this line)
 
 ## Next step
 

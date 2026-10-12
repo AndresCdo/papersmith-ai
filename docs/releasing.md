@@ -238,6 +238,13 @@ is one of two things:
 - a compatibility read that keeps the old shape reading unchanged, with a test
   that reads the old shape.
 
+A workspace in the 0.13.0 shape already exists for those tests:
+`tests/fixtures/workspace_v0_13_0/`, produced by the 0.13.0 release itself and
+upgraded by `tests/test_upgrade_v0_13_0_workspace.py`. A migration that is
+meant to change one of its files lists that file in the test's
+`INTENDED_CHANGES`; anything else it holds must survive the upgrade
+byte-identical. `tests/fixtures/README.md` says how it is built.
+
 Either way the `## X.Y.Z` section's `### Behaviour changes` says which one, and
 when it is the second, why no migration is needed. A shape change that ships
 neither is a release defect, not a pre-1.0 privilege.
