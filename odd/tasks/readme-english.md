@@ -148,7 +148,10 @@ breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
 - [x] T3 — U4-U8
 - [x] T4 — The flow reordered: plausibility before ingestion
 - [x] T5 — U9, one commit per skill, in neutral register
-- [ ] T6 — U10-U16, in neutral register
+- [x] T6 — U10-U16, in neutral register. Eight commits, one per unit except the
+      last three, which landed together; the deviation is declared in the commit
+      that carries it. The manual is English end to end and `scripts/check_manual.py`
+      reports 0 errors over it.
 - [ ] T7 — The neutral-register revision of U0-U8, one commit per unit
 - [ ] T8 — `README.es.md` stops claiming the manual is Spanish
 - [ ] T9 — Guards, then merge
@@ -242,3 +245,10 @@ remove.
   meant to rewrite. The corrected baseline is 13 errors, not the 25 first
   written here, and the 12 difference is exactly those headings. Recorded
   because the first number is the one that would have been planned against.
+- **L8** — T6 closes on 2026-10-12 with the manual English from the title to the
+  license and the guard reporting 0 errors over the whole file. Two things are
+  worth keeping from it. The `untranslated-line` warning earned its place: it is
+  what caught three paragraphs of U11 that a commit message had already declared
+  translated. And the two warnings left standing are a `Content-Security-Policy`
+  value split across two lines, which the identity check cannot recognize as code;
+  that limitation now sits in the script rather than waiting to be rediscovered.

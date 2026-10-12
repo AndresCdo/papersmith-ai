@@ -23,6 +23,10 @@ already English, which is what makes it safe to fail a build on.
   The manual quotes Spanish invocations on purpose, and a human decides those.
 - Markdown links: a line carrying `](` is exempt from the identity check, because
   a link line changes only when the prose around it does.
+- An inline code span that wraps onto the next line is not recognized as code, so
+  its continuation lines are reported as prose still identical to the original.
+  The one place that happens in this manual is a `Content-Security-Policy` value
+  split across two lines, and it is the manual's two standing warnings.
 
 **What it checks that a link-parity check would miss.** A section heading carries
 an anchor, and the table of contents points at it by name. Renaming a section
