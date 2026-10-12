@@ -447,6 +447,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   wherever it lives; this skill's own profile, and a fixture profile naming
   this launcher, still run. A sibling in the same tree is still refused by
   path even when it cannot be loaded.
+- **A first revision's title and section heading no longer end in a full
+  stop.** `CREATE_INITIAL_REVISION` takes the title from the idea's first
+  sentence and the section heading from its second, and kept each sentence's
+  terminal punctuation, so v1 opened with `# My idea.`. Both headings now drop
+  their terminal `.`, `!` or `?` run (punctuation inside the sentence is kept);
+  the slug is unchanged. Taking the heading from the second sentence and
+  repeating the idea verbatim as the section body stay as they were and are now
+  documented as intended: the headings are labels capped at 200 characters, the
+  body is the only place the whole idea survives. Both deliberation skills'
+  `SKILL.md` and `references/usage.md` state the derivation; the proposal
+  usage example, a single sentence that `INITIAL_IDEA_SINGLE_SENTENCE` refused,
+  now has two.
 
 ### Added
 
@@ -728,6 +740,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   profile from a different skills tree now exits `2` with
   `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` where 0.13.0 ran against it.
   Nothing on disk is read differently; no migration is needed.
+
+- A v1 created by `CREATE_INITIAL_REVISION` from now on carries headings
+  without terminal punctuation (`# Title`, not `# Title.`). Existing managed
+  revisions are never rewritten and keep their headings; an idea whose two
+  sentences differ only in their terminal punctuation is now refused with
+  `INITIAL_IDEA_SINGLE_SENTENCE`. No migration is needed.
 
 ## 0.13.0
 

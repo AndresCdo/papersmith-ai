@@ -36,7 +36,8 @@ const IDEA = 'Measure the sweep across three seeds. Then compare the arms.';
 const DECLARATIONS = '**Dataset:** Synthetic-Blobs, train/test split as distributed\n\n**Validation scheme:** paired t-test, 5 seeds, 10 repetitions';
 const INLINE_CODE_GUIDE = `Each log marks its boundary with \`## Results\` inline.\n\n${DECLARATIONS}`;
 const FUSED_GUIDE = `Each log marks its boundary with ## Results inline.\n\n${DECLARATIONS}`;
-const SECTION = '## Then compare the arms.';
+// v1 derives this heading from the idea's second sentence, terminal punctuation dropped.
+const SECTION = '## Then compare the arms';
 const CLEAN_REPLACEMENT = `${SECTION}\n\nCompare the arms over three seeds.\n\n`;
 const CODE_SPAN_REPLACEMENT = `${SECTION}\n\nCompare the arms once the \`## Results\` marker appears.\n\n`;
 const FUSED_REPLACEMENT = `${SECTION}\n\nCompare the arms ## Fused heading here.\n\n`;

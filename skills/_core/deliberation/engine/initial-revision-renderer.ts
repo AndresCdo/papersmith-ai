@@ -13,11 +13,28 @@ function splitIdeaSentences(idea: string): string[] {
 	return idea.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean);
 }
 
-/** Derives title/sectionHeading directly from the caller's idea text -- never a hardcoded generic label (spec I5). */
+/**
+ * A sentence as a heading: its terminal `.`/`!`/`?` run dropped. The splitter above keeps that
+ * punctuation on each sentence (it is what ended the sentence), but a heading is a label, not a
+ * sentence, and a trailing full stop is also exactly where `RESOLVE_TARGET` truncates a query.
+ * Punctuation inside the sentence (`2.1`, `revisited...` mid-text) is untouched. A sentence that
+ * is nothing but punctuation keeps its bytes rather than collapsing to the generic fallback.
+ */
+function asHeading(sentence: string): string {
+	const bounded = sentence.slice(0, 200).trim();
+	return bounded.replace(/[.!?]+$/u, '').trim() || bounded;
+}
+
+/**
+ * Derives title/sectionHeading directly from the caller's idea text -- never a hardcoded generic
+ * label (spec I5). Title from the first sentence, section heading from the second; the idea itself
+ * is written verbatim as the section body by `renderFromIdea`, because these two are derived
+ * labels capped at 200 characters and the body is the only place the whole text survives.
+ */
 function deriveCanonicalMetadataFromIdea(idea: string): CanonicalProposalMetadata {
 	const sentences = splitIdeaSentences(idea);
-	const title = (sentences[0] ?? idea).slice(0, 200).trim() || 'Untitled Research Concept';
-	const sectionHeading = (sentences[1] ?? sentences[0] ?? idea).slice(0, 200).trim() || 'Concept Overview';
+	const title = asHeading(sentences[0] ?? idea) || 'Untitled Research Concept';
+	const sectionHeading = asHeading(sentences[1] ?? sentences[0] ?? idea) || 'Concept Overview';
 	return { schemaVersion: 1, title, sectionHeading };
 }
 

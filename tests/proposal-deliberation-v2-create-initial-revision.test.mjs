@@ -29,9 +29,11 @@ test('renderFromIdea composes v1 markdown from the idea alone, deriving title/se
 	const composed = renderer.renderFromIdea({ idea: 'A tutor that refutes weak proofs. It should also cite prior work.' });
 	assert.equal(
 		composed.markdown,
-		'# A tutor that refutes weak proofs.\n\n## It should also cite prior work.\n\nA tutor that refutes weak proofs. It should also cite prior work.\n',
+		'# A tutor that refutes weak proofs\n\n## It should also cite prior work\n\nA tutor that refutes weak proofs. It should also cite prior work.\n',
 	);
-	assert.deepEqual(composed.canonicalMetadata, { schemaVersion: 1, title: 'A tutor that refutes weak proofs.', sectionHeading: 'It should also cite prior work.' });
+	// Headings drop their sentence's terminal punctuation; the body keeps the idea verbatim
+	// (`tests/deliberation-initial-title-derivation.test.mjs`).
+	assert.deepEqual(composed.canonicalMetadata, { schemaVersion: 1, title: 'A tutor that refutes weak proofs', sectionHeading: 'It should also cite prior work' });
 	assert.equal(composed.slug, 'a-tutor-that-refutes-weak-proofs');
 });
 

@@ -275,7 +275,9 @@ When `STATUS` reports zero managed revisions, create v1 explicitly with `CREATE_
 So the concrete consequence: because v1 has no skeleton and injects no placeholder, **both of this domain's declared labels must already exist in your idea text or in a required source** (`proposals/`, `guidance/data-paper/`) before `CREATE_INITIAL_REVISION` can succeed at all — a `**Validation scheme:** TBD` skeleton would block every v1 forever, since the denylist refuses it too. The same discipline applies to a filled results table pasted verbatim from the area benchmark's guide: it fails `report-table-fabricated-value` at v1 exactly as it would on any successor. Strip it to headers with empty cells, or cite the source instead of pasting it. The same applies to any URL arriving from a source without a verification tag.
 
 **Your idea needs at least two sentences.** The engine derives the document's
-title from the first sentence and its section heading from the second. With no
+title from the first sentence and its section heading from the second, each
+without its terminal `.`, `!` or `?`, and then writes the whole idea verbatim
+as that section's body: the headings are labels, the body keeps your full text. With no
 second sentence both resolve to the same text, `# X` and `## X` come out
 byte-identical, and every later attempt to name a place in that document is
 ambiguous. `CREATE_INITIAL_REVISION` refuses that outright --

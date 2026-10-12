@@ -714,3 +714,15 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   declaring the sibling's launcher, own profile from another tree) RED 3F -> GREEN; mutation (declared clause off ->
   3 red). test:fast 3218 passed, 3 skipped. No migration.
   Commit: `fix(implementation): the launcher refuses a sibling's profile from any skills tree` (the commit carrying this line)
+
+- C4 (real, one part; two parts intended): `renderFromIdea` kept each sentence's terminal punctuation in the
+  derived headings (`# Idea.`). Fix (`initial-revision-renderer.ts` `asHeading`): title and section heading drop
+  their terminal `.!?` run; an all-punctuation sentence keeps its bytes (slug unchanged, `'???'` -> `concept`).
+  Intended and now documented (both SKILL.md, both usage.md): heading from the second sentence (the
+  single-sentence refusal depends on it) and the verbatim idea body (the headings are capped labels). The
+  proposal usage example was a single sentence the engine refuses; now two (driven: created). Experimental
+  usage response re-driven (title/heading/sha). Tests: `tests/deliberation-initial-title-derivation.test.mjs`
+  (5) RED 4F -> GREEN; re-anchored `renderFromIdea composes v1 markdown...` (pinned `# ... .`) and the parity
+  test's `SECTION` (`## Then compare the arms.`). test:node 729/729 after re-anchor; test:fast 3262 passed.
+  Route: delegated writer (engine + 3 test files + 4 docs). No migration (existing revisions never rewritten).
+  Commit: `fix(deliberation): v1 headings drop their sentence's terminal punctuation` (the commit carrying this line)

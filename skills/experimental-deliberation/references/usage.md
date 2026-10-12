@@ -66,7 +66,7 @@ node skills/experimental-deliberation/cli.mjs '{
 }'
 ```
 
-Driven verbatim (2026-09-13), against a fixture carrying both required sources:
+Driven verbatim (2026-10-12), against a fixture carrying both required sources:
 
 ```json
 {
@@ -74,8 +74,8 @@ Driven verbatim (2026-09-13), against a fixture carrying both required sources:
   "operation": "CREATE_INITIAL_REVISION",
   "targetFilename": "experiments-domain-shift-baseline-sweep-v01.md",
   "targetRevision": "v01",
-  "targetSha256": "1a792177fd2a918c25c26310e482d2b27ba5240ea0b8060cef1a144c78fb2264",
-  "canonicalMetadata": { "schemaVersion": 1, "title": "Domain shift baseline sweep.", "sectionHeading": "Testing whether the proposed adaptation term improves held-out accuracy under domain shift without target labels." },
+  "targetSha256": "2a4f6a8bcacbed91bb374cca99636e1af4cb66a4cd7e28c567e8da4620cb9211",
+  "canonicalMetadata": { "schemaVersion": 1, "title": "Domain shift baseline sweep", "sectionHeading": "Testing whether the proposed adaptation term improves held-out accuracy under domain shift without target labels" },
   "mutations": 1,
   "receiptId": "experiments-domain-shift-baseline-sweep-v01.md:v01",
   "manifestStatus": "NOT_TRACKED",
@@ -83,7 +83,7 @@ Driven verbatim (2026-09-13), against a fixture carrying both required sources:
 }
 ```
 
-Two things to read carefully in that response. The **filename slug is derived from the first sentence of your idea** — the title and section heading come from the idea text too, never from a fixed skeleton — so write that first sentence as the lineage name you want; a short, standalone first sentence (`"Domain shift baseline sweep."`) is what produced the clean `domain-shift-baseline-sweep` slug above. And `targetRevision` reports **`v01`, the same label the filename carries** — `artifact.revisionLabel(1)`, read from this domain's own profile, never a hardcoded `r01`: the filename is the authority and the label agrees with it.
+Two things to read carefully in that response. The **filename slug is derived from the first sentence of your idea** — the title and section heading come from the idea text too, never from a fixed skeleton — so write that first sentence as the lineage name you want; a short, standalone first sentence (`"Domain shift baseline sweep."`) is what produced the clean `domain-shift-baseline-sweep` slug above. The derivation is fixed: the title is the first sentence and the section heading the second, each with its terminal `.`, `!` or `?` dropped (punctuation inside the sentence is kept), both capped at 200 characters; the whole idea is then written verbatim as the section body, so the two sentences appear twice on purpose — the headings are labels, the body is the only place your full text survives. And `targetRevision` reports **`v01`, the same label the filename carries** — `artifact.revisionLabel(1)`, read from this domain's own profile, never a hardcoded `r01`: the filename is the authority and the label agrees with it.
 
 If a required source directory is absent:
 
