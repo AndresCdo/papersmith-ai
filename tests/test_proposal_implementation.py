@@ -34574,6 +34574,9 @@ _ENGLISH_COUNTS = {
     # running the derivation, never predicted.
     72: "Seventy-two",
     127: "One hundred and twenty-seven",
+    # `cross-skill-consistency` (C9): `FINDINGS_DECLARED` (admit --no-findings with findings declared), one invocation-defect code -- 55 -> 56, 127 -> 128, measured by running the derivation.
+    56: "Fifty-six",
+    128: "One hundred and twenty-eight",
 }
 
 
@@ -34992,7 +34995,7 @@ class GatingRefusalRosterTests(unittest.TestCase):
         `SETTLE_REASON_REQUIRED` and `SETTLE_WITNESS_PRESENT`, all three
         raised inside `cmd_settle` -- measured here at exactly +3.
         """
-        self.assertEqual(len(reachable_refusal_codes()), 127)
+        self.assertEqual(len(reachable_refusal_codes()), 128)
 
     def test_agree_joins_gating_commands_unconditionally_never_this_profiles_own_commands(self):
         """`the-agreement-nothing-computes` (Slice D, design.md D9, tasks.md

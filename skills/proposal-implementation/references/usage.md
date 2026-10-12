@@ -784,6 +784,25 @@ finding is adopted). The key is optional: a ruling
 without it reads exactly as before. A marker gone with no expected form in its
 place (`changed-unrecognized`) is still ruled inadmissible.
 
+An audit that found nothing is ruled on explicitly, never by default:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py admit \
+  --target implementations/<repo> --name <Name> --revision research-concept-r05.md \
+  --no-findings
+```
+
+With `tests/findings.py` declaring `FINDINGS = []`, plain `admit` still
+refuses `NO_FINDINGS` (its detail names `--no-findings`): a list nobody has
+filled in yet reads exactly like an audit that found nothing, so only the flag
+records the second. It writes an empty ruling (`"findings": {}`,
+`"noFindings": true`) bound to the revision's bytes, and answers
+`"status": "no-findings"`. `verify` then reads `audit.status` as `ok` and adds
+`"noFindings": true` to `audit`. The ruling voids itself like any other: a new
+revision makes it `stale` (`audit` back to `incomplete` until it is ruled
+again), and a finding declared afterwards is unruled. With findings declared,
+`--no-findings` refuses `FINDINGS_DECLARED` and writes nothing.
+
 Refuses `REVISION_UNREADABLE` when the pinned document 0 revision cannot be
 read, and, under a profile declaring more than one document,
 `DOCUMENT_REVISION_UNREADABLE` when a declared document beyond it has no
@@ -2676,7 +2695,9 @@ state, alongside the scenarios — not verified by hand once.
 | `DIRTY_WORKTREE` | Uncommitted or untracked changes. Commit or stash first. |
 | `FORGE_INTERPRETER` | The CLI is running from a forge venv. Use system `python3`. |
 | `PLAN_STALE` | The repository changed after approval — a rename, a move, a directory **or a reference update**. Re-plan, re-approve. |
-| `MALFORMED_FINDINGS` | `tests/findings.py` exists but cannot be read as a list of mappings each carrying an `id`. Reading it as empty would answer `audit: none`, which is what an audited, clean repository answers. |
+| `MALFORMED_FINDINGS` | `tests/findings.py` exists but cannot be read as a list of mappings each carrying an `id`. Reading it as empty would answer `audit: none`, which is what a repository that declares no finding answers. |
+| `NO_FINDINGS` | `admit` was run while `tests/findings.py` declares no finding. Write the findings, or, when the audit found nothing, record that with `admit --no-findings`. |
+| `FINDINGS_DECLARED` | `admit --no-findings` was run while `tests/findings.py` declares findings. The flag records an empty audit only; drop it to rule on the findings. |
 | `DESTINATION_CONFLICT` | A destination is taken, or two sources target one path. For `materialize --stage`, a destination appeared between the destination set's computation and the write; the whole stage refuses before any byte lands. |
 | `UNCLASSIFIED_FILES` | No rule covers some files. Ask where they belong. |
 | `APPLY_ABORTED` | Something failed mid-migration, or mid-`materialize`. Nothing was committed/written and the tree was restored; re-run `plan`. |
@@ -2711,7 +2732,7 @@ them. Which refusals carry the extra key is itself the answer to a question:
 > the repository?
 
 **Yes — an invocation defect.** The detail already names the flag, the token or
-the mutual exclusion. Fifty-five codes, and nothing is published beside them:
+the mutual exclusion. Fifty-six codes, and nothing is published beside them:
 `SETTLE_STDIN_CONFLICT`, `OFFER_ANSWER_NOT_A_TOKEN`, `MATERIALIZE_MODE_REQUIRED`,
 `NOT_A_GIT_REPO`, `GATE_ELECTION_REQUIRED` and the rest. Retype the call.
 

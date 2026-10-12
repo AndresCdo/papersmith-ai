@@ -829,7 +829,10 @@ date. Drift is Flow B's fourth step, not a reason to start over.
 10. Audit: sweep 200 configurations, declare each finding in `tests/findings.py`
     with its kind, status, measured rate and proposed remedy.
 11. `admit --revision <latest>`: rule on admissibility before anything is
-    measured. Only admitted remedies proceed.
+    measured. Only admitted remedies proceed. When the audit found nothing,
+    `FINDINGS = []` refuses `NO_FINDINGS` until that outcome is recorded
+    explicitly with `admit --revision <latest> --no-findings`; only then does
+    `verify` read the audit as `ok` instead of `none`.
 12. Validate every admitted remedy over the same sweep: it must resolve its
     finding and preserve the properties already established.
 13. **Report the findings and say what they cost to establish.** For each one:
@@ -3195,7 +3198,7 @@ me to do that now?". That is the failure this section exists to make
 impossible. **The engine publishes what happens next. The agent never composes
 it.**
 
-One hundred and twenty-seven distinct codes are reachable from the ten gating
+One hundred and twenty-eight distinct codes are reachable from the ten gating
 commands — `apply`, `admit`, `gate`, `offer`, `close`, `step`, `settle`,
 `materialize`, `position`, `agree` (`GATING_COMMANDS`). **Reachable from, not
 raised inside**, and the difference cost a live session: the roster was first
@@ -3213,7 +3216,7 @@ decision somebody made rather than a shape somebody noticed:
 > Can the caller clear this by changing the invocation alone, without touching
 > the repository?
 
-- **Yes — an *invocation* defect** (55 codes). The detail already names the
+- **Yes — an *invocation* defect** (56 codes). The detail already names the
   flag, the token or the mutual exclusion. Nothing is published beside it: a
   `resolve` key on every refusal is the shape a reader learns to skip, and that
   is how a real one stops being read.

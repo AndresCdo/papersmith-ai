@@ -75,6 +75,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C3 — declared parameters table (D, writer trigger: preservation + test + 2 docs)
   - [x] C7 — successor receipt `rationale`/`decider` (D, writer trigger: workspace + orchestrator + types + test + 4 docs)
   - [x] C5 — `ADOPT_INITIAL_REVISION` rename + record (D, writer trigger: creation + renderer + receipt + workspace + cli + 2 tests + 4 docs)
+  - [x] C9 — explicit empty ruling `admit --no-findings` (D, writer trigger: engine + test + 2 docs + 2 re-anchored tests)
   - [ ] C14 — out-of-scope declaration for `agree`: verified missing; blocked on edit surface (implementation engine)
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -820,3 +821,16 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   both re-anchored to 10 with the reason (the adoption operation), without spelling the operation name (the file
   forbids operation literals). `tests/test_skill_audit.py`: 385 passed, 2 failed = the known `.venv` cases.
   Commit: `test(skill-audit): the deliberation roster counts the adoption operation` (the commit carrying this line)
+
+- C9 (real): `cmd_admit` refused `NO_FINDINGS` on `FINDINGS = []`, so `verify` could only read `audit: none`.
+  Fix: `admit --no-findings` (explicit, never default) writes an empty ruling (`findings: {}`, additive
+  `noFindings: true`) bound to the revision bytes (`_admit_no_findings`); `verify` reads it through
+  `admissibility_ruling` as `audit: ok` + additive `noFindings`, and as `incomplete` once stale. Without the flag
+  `NO_FINDINGS` still refuses (detail names the flag); the flag with findings declared refuses `FINDINGS_DECLARED`
+  (invocation defect). Docs: proposal-implementation SKILL.md step 11, usage.md (`admit` section + refusal table;
+  also corrected the `MALFORMED_FINDINGS` row, which said `audit: none` is what an audited clean repository answers).
+  Tests: `tests/test_implementation_empty_ruling.py` (6) RED 6F -> GREEN. Re-anchored: roster counts
+  (`GatingRefusalRosterTests` 127 -> 128, invocation 55 -> 56, doctrine sentences), domain-lock pins `command`
+  275->276 and `incomplete` 28->29 (payload key and status literal). Additive shape: no migration.
+  Verification: focused 6 passed; domain lock 28 passed; roster 19 passed; `npm run test:fast` 3367 passed.
+  Commit: `feat(implementation): admit --no-findings records an audit that found nothing` (the commit carrying this line)

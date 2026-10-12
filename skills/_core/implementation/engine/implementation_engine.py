@@ -9955,8 +9955,23 @@ def cmd_admit(args: argparse.Namespace) -> dict:
 
     tags = set(TAG_RE.findall(source))
     findings = read_findings(target)
-    if not findings:
-        raise Refused("NO_FINDINGS", "tests/findings.py declares no finding to rule on.")
+    # Finding nothing is a ruling too, but only when somebody says so:
+    # `--no-findings` is the explicit act, never the default. A bare `[]`
+    # keeps refusing, because a file nobody has filled in yet reads exactly
+    # like one that found nothing.
+    no_findings = bool(getattr(args, "no_findings", False))
+    if no_findings and findings:
+        raise Refused("FINDINGS_DECLARED",
+                      f"tests/findings.py declares {sorted(f['id'] for f in findings)}; "
+                      "--no-findings records that nothing was found and cannot "
+                      "stand in for ruling on a declared finding. Drop the flag.")
+    if not findings and not no_findings:
+        raise Refused("NO_FINDINGS",
+                      "tests/findings.py declares no finding to rule on. If the "
+                      "revision was looked over and nothing was found, say so "
+                      "explicitly with `admit --no-findings`.")
+    if no_findings:
+        return _admit_no_findings(target, args.revision, source)
 
     # Cut 3 (`a-revision-is-two-documents`, C7/D6): additive, `None` under
     # one document -- `finding_impact`'s own per-document reshape never
@@ -10061,6 +10076,40 @@ def cmd_admit(args: argparse.Namespace) -> dict:
     }
 
 
+def _admit_no_findings(target: Path, revision: str, source: str) -> dict:
+    """`admit --no-findings`: record that `revision` was looked over and
+    nothing was found, bound to the revision's bytes exactly like any other
+    ruling -- a later revision turns it `stale` and it is owed again.
+
+    `noFindings` is additive: a ruling written without it reads exactly as
+    it always did, and `verify` reads no findings as `ok` only when this
+    key is present on a ruling that is still `present`.
+    """
+    record = {
+        "revision": revision,
+        "revisionSha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "findings": {},
+        "noFindings": True,
+        **({"documents": _admissibility_extra_documents(revision)}
+           if len(DOCUMENTS) > 1 else {}),
+    }
+    path = target / "tests" / "admissibility.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "command": "admit",
+        "target": str(target),
+        "revision": revision,
+        "status": "no-findings",
+        "admitted": [],
+        "inadmissible": {},
+        "introducesNotation": {},
+        "record": str(path.relative_to(target)),
+        "note": "Written on request: nothing was found in this revision. "
+                "Declaring a finding later, or a new revision, voids this ruling.",
+    }
+
+
 def cmd_agree(args: argparse.Namespace) -> dict:
     """Whether document 0's own crossing form (`documents[0].cross_citation`)
     still agrees with what the target document currently declares --
@@ -10112,6 +10161,25 @@ def cmd_agree(args: argparse.Namespace) -> dict:
             f"{unacknowledged!r}.")
     return {"command": "agree", "target": str(target), "revision": args.revision,
             "status": "agreed", "crossed": crossed, "declared": declared}
+
+
+def admissibility_ruling(target: Path, revision: str | None) -> dict:
+    """`admissibility_record`, plus `noFindings: True` when the ruling on
+    file came from `admit --no-findings` -- whatever its freshness, so a
+    stale one still reads as owed again, not as one nobody ever wrote.
+    Absent on every other ruling.
+    """
+    result = admissibility_record(target, revision)
+    if result["status"] in ("missing", "unreadable"):
+        return result
+    try:
+        record = json.loads((target / "tests" / "admissibility.json")
+                            .read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return result
+    if isinstance(record, dict) and record.get("noFindings") is True:
+        result["noFindings"] = True
+    return result
 
 
 def admissibility_record(target: Path, revision: str | None) -> dict:
@@ -18225,7 +18293,7 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             })
 
     compatibility = remedy_compatibility(findings, revision, verify_sources_by_document)
-    ruling = admissibility_record(target, revision)
+    ruling = admissibility_ruling(target, revision)
     uncontrolled = remedies_without_control(target / "tests", package_name(name))
     source = revision_source(revision)
     # One terminal state, read once and shared: an adopted finding keeps its
@@ -18244,7 +18312,18 @@ def cmd_verify(args: argparse.Namespace) -> dict:
                                 verify_sources_by_document)
     unruled = sorted(f["id"] for f in findings
                      if f["id"] not in ruling.get("findings", {})) if findings else []
-    if not findings:
+    # No findings read `ok` only on a ruling somebody wrote with
+    # `admit --no-findings` that still applies to this revision's bytes;
+    # anything else about no findings stays `none`, as it always was.
+    nothing_found = (not findings and ruling["status"] == "present"
+                     and ruling.get("noFindings") is True)
+    if nothing_found:
+        audit_status = "ok"
+    elif not findings and ruling.get("noFindings") is True:
+        # The bytes that ruling named have since moved: it is owed again,
+        # which is not the same as never having been looked at.
+        audit_status = "incomplete"
+    elif not findings:
         audit_status = "none"
     elif without_evidence or without_remedy or unvalidated:
         audit_status = "incomplete"
@@ -18543,6 +18622,9 @@ def cmd_verify(args: argparse.Namespace) -> dict:
                               "detail": ruling.get("detail"),
                               "unruled": unruled},
             "compatibility": compatibility,
+            # Additive: present only when no findings were declared and
+            # `admit --no-findings` said so, so every other verify reads unchanged.
+            **({"noFindings": True} if nothing_found else {}),
         },
         "validation": {
             # Every notebook of the product, not one with a reserved name, and each
@@ -19886,6 +19968,7 @@ GATING_REFUSALS: dict[str, str] = {
     # --- admit -------------------------------------------------------------
     "REVISION_UNREADABLE": INVOCATION_DEFECT,  # name a revision that reads
     "NO_FINDINGS": WORK_STATE,               # the findings have to be written
+    "FINDINGS_DECLARED": INVOCATION_DEFECT,  # drop --no-findings
     # --- gate --------------------------------------------------------------
     "GATE_WORKER_UNIT_CONFLICT": INVOCATION_DEFECT,
     "GATE_WORKER_REQUIRED": INVOCATION_DEFECT,
@@ -20684,8 +20767,9 @@ _WORK_STATE_RESOLUTIONS = {
               "why?"),
     "NO_FINDINGS": lambda args: _refusal_question(
         args, "tests/findings.py declares no finding to rule on; write the "
-              "findings now, or record why admissibility is deferred, and "
-              "why?"),
+              "findings now, record that nothing was found with "
+              "`admit --no-findings`, or record why admissibility is "
+              "deferred, and why?"),
     "GATE_AUTHORIZATION_REQUIRED": lambda args: _refusal_question(
         args, "this launch carries no authorization, and one is minted only "
               "by a prior `offer` publish over exactly this binding; does "
@@ -21477,6 +21561,15 @@ def main(argv: list[str] | None = None) -> int:
                                 "in the plan's own boundTo key and re-read "
                                 "from there by apply and materialize -- "
                                 "never re-typed on either command")
+        if name == "admit":
+            p.add_argument("--no-findings", dest="no_findings",
+                           action="store_true",
+                           help="record that nothing was found in "
+                                "--revision: writes a ruling with no findings, "
+                                "bound to the revision's bytes. Only when "
+                                "tests/findings.py declares no finding "
+                                "(FINDINGS_DECLARED otherwise); without it "
+                                "`FINDINGS = []` still refuses NO_FINDINGS")
         if name == "agree":
             # `the-agreement-nothing-computes` (Slice D, design.md D9):
             # agree's own site, mirroring plan's -- the shared eight-name

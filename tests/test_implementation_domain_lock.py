@@ -562,14 +562,20 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: `--reverse`; the first reversal opens the heading). Five words SHRANK,
 #: deliberately: `against` 197->196, `command` 278->275, `measured`
 #: 145->143, `rather` 387->384, `something` 77->76.
+#: `cross-skill-consistency` (C9): `admit --no-findings` returns its own
+#: result payload and `verify` reads a stale no-findings ruling as owed
+#: again. Two literals the shapes require, not prose: the payload's
+#: `"command"` key (`command` 275->276) and the `"incomplete"` status
+#: (`incomplete` 28->29). The surrounding comments were worded to move
+#: nothing else.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
     "audit": 19, "before": 263, "benchmark": 108, "beside": 111,
-    "check": 168, "checkable": 3, "claim": 41, "command": 275,
+    "check": 168, "checkable": 3, "claim": 41, "command": 276,
     "commands": 18, "compares": 25, "declaration": 212,
     "destinations": 39, "empty": 132, "established": 5, "experiment": 25,
-    "experiments": 6, "implementations": 4, "incomplete": 28,
+    "experiments": 6, "implementations": 4, "incomplete": 29,
     "invariant": 22, "isolated": 5, "leave": 11, "leaves": 38,
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
     "measured": 143, "measurement": 43, "module": 195, "notebooks": 110,

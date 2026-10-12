@@ -554,6 +554,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   bytes untouched, and refuses one that already has a receipt
   (`ADOPTION_ALREADY_RECORDED`). Accepts `--dry-run`. Documented in both
   deliberation skills' decision trees, operation tables and usage.
+- **An audit that found nothing can be ruled on.** `admit` refused
+  `NO_FINDINGS` whenever `tests/findings.py` declared an empty list, so a
+  target whose audit found no defect could never record it and `verify` stayed
+  at `audit: none`, the answer a never-audited target gets. `admit
+  --no-findings` now records an empty ruling (`"findings": {}`,
+  `"noFindings": true`) bound to the revision's bytes; `verify` reads it as
+  `audit: ok` with an additive `noFindings` key, and as `incomplete` once the
+  revision moves. Plain `admit` on an empty list still refuses `NO_FINDINGS`
+  (its detail now names the flag), and the flag with findings declared refuses
+  `FINDINGS_DECLARED`. Shared by `experimental-implementation`, which runs the
+  same engine. Documented in `proposal-implementation`'s `SKILL.md` step 11
+  and `references/usage.md`.
 
 ### Changed
 
@@ -858,6 +870,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   on it explicitly, which writes the state and a receipt carrying
   `adoptedFrom`. `ADOPT_INITIAL_REVISION` joins the CLI's accepted operations.
   No migration is needed.
+
+- `admit` accepts `--no-findings`, and `tests/admissibility.json` may carry an
+  additive `noFindings` key; `verify`'s `audit` reports `ok` (with
+  `"noFindings": true`) for an empty audit ruled that way. Without the flag an
+  empty findings list still refuses `NO_FINDINGS` and still reads
+  `audit: none`; existing rulings carry no such key and read unchanged, so no
+  migration is needed.
+
 
 ## 0.13.0
 
