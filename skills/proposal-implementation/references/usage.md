@@ -1919,7 +1919,10 @@ While it is `"incomplete"` the answer is `pilot-first` and the offer of the
 declared scale is withheld: the outputs are what anybody reads to know the agreed
 thing is there, and there are none yet. Once it is `"complete"` the answer is
 `pilot-decisions` until every step has been decided — one `discuss` bucket per
-step, asking how the full run carries it. Read `remoteExecution.necessity`
+step, asking how the full run carries it. Both rungs fire with nothing to
+compare as well: a target with no prior-work package under `src/` answers
+`pilot-first` and then `pilot-decisions` while either condition holds, and
+`nothing-to-compare` only after both are settled. Read `remoteExecution.necessity`
 alongside those questions; it classifies job folders rather than steps, so it
 informs the decisions and never makes them.
 

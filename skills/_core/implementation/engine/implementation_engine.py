@@ -3879,7 +3879,8 @@ def cmd_probe(args) -> dict:
     # wrong formula, and for a proposal nobody is going to train it can be the last
     # stage. The conversion exists to make a comparison possible — asking for it when
     # there is nothing to compare would demand work with no purpose and read as though
-    # the implementation were unfinished when it is done.
+    # the implementation were unfinished when it is done. It settles the
+    # comparison only: the declared flow's own rungs still fire below.
     if not baselines:
         next_step = "nothing-to-compare"
     elif not backend["trainable"]:
@@ -4045,6 +4046,13 @@ def cmd_probe(args) -> dict:
     # computed once and reused both for the override near the bottom and for
     # the `decisions.comparison` payload member (D16/D9).
     comparison_question = _benchmark_offer_question(target, name, baselines)
+    # The flow's own two conditions, computed once and read twice: by the
+    # ladder below when a comparison is possible, and past its end when
+    # nothing is comparable -- one reading, so the two never disagree.
+    flow_status = pilot["status"]
+    flow_short = flow_status == "incomplete"
+    flow_undecided = flow_status == "complete" and bool(
+        pilot_undecided or report_unacknowledged)
     # The one construction site for the acid-test offer's own text (D14),
     # computed the identical "once, reused" way -- both for the three-way
     # branch near the bottom and for the `decisions.validation` payload
@@ -4111,10 +4119,9 @@ def cmd_probe(args) -> dict:
     # was validated at pilot", and nothing had been produced for anybody to
     # read. A question that offers the expensive run at that point is an
     # invitation to say yes.
-    elif next_step in ("benchmark", "piloted") and (
-            pilot["status"] == "incomplete"):
+    elif next_step in ("benchmark", "piloted") and flow_short:
         next_step = "pilot-first"
-    # And what a finished pilot unlocks is NOT permission to launch. The flow
+    # And what a finished flow unlocks is NOT permission to launch. The flow
     # returns to its first step and each one owes its own decision about how
     # it is carried out in the full run; only once every one of those is on
     # the record does the ladder fall through to the rung that offers the
@@ -4130,9 +4137,7 @@ def cmd_probe(args) -> dict:
     # would be two answers for one state. `report-first` below is unchanged and
     # still fires on any report that is not `ok`; this only says, before the
     # decisions are taken, what that rung would otherwise say after them.
-    elif next_step in ("benchmark", "piloted") and (
-            pilot["status"] == "complete"
-            and (pilot_undecided or report_unacknowledged)):
+    elif next_step in ("benchmark", "piloted") and flow_undecided:
         next_step = "pilot-decisions"
     elif next_step in ("benchmark", "piloted") and (
             search["recordFound"] is False
@@ -4155,6 +4160,20 @@ def cmd_probe(args) -> dict:
     elif next_step in ("benchmark", "piloted") and (
             resolved["status"] != "absent" and report["status"] != "ok"):
         next_step = "report-first"
+    # Comparability does not gate the declared flow. `nothing-to-compare`
+    # is about the comparison -- no prior-work package under `src/` -- and
+    # says nothing about whether the flow this target declared has run short
+    # or whether each step has been placed. The defect that named this: a
+    # target with its comparison arms inside its own package finished every
+    # declared step short, and this ladder still said `nothing-to-compare`,
+    # so neither the rung question nor one placement question per step was
+    # ever published. `flow_short` and `flow_undecided` are the identical
+    # conditions the ladder above reads; once neither holds the comparison's
+    # terminal answer stands.
+    if next_step == "nothing-to-compare" and flow_short:
+        next_step = "pilot-first"
+    elif next_step == "nothing-to-compare" and flow_undecided:
+        next_step = "pilot-decisions"
     # The comparison and the acid test, checked LAST among the overrides
     # (design D13's own stated placement -- "last among the overrides, after
     # `report-first`"): neither a declined comparison nor an open acid test

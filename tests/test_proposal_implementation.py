@@ -35929,11 +35929,17 @@ class PilotGatesTheDeclaredScaleTests(unittest.TestCase):
                 "}\n" + (self.STEPS if steps is None else steps))
 
     def build(self, suffix, *, ran=(), notebook_executed=False,
-              notebook_current=True, steps=None, notebooks=("one.ipynb",)):
+              notebook_current=True, steps=None, notebooks=("one.ipynb",),
+              comparable=True):
+        # `comparable=False` writes neither the prior package nor the
+        # benchmark package, so nothing under `src/` is a baseline
+        # (`PilotLadderWithoutBaselinesTests`).
         box = FORGE / "implementations" / f"_pilotgate_{suffix}_{os.getpid()}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
-        for directory in ("src/Method", "src/Method_Benchmark", "src/Prior",
-                          "Method/Notebooks"):
+        directories = (("src/Method", "src/Method_Benchmark", "src/Prior",
+                        "Method/Notebooks") if comparable
+                       else ("src/Method", "Method/Notebooks"))
+        for directory in directories:
             (box / directory).mkdir(parents=True)
         subprocess.run(["git", "init", "-q", str(box)], check=True,
                        capture_output=True)
@@ -35945,11 +35951,13 @@ class PilotGatesTheDeclaredScaleTests(unittest.TestCase):
         (box / "src/Method/never_called.py").write_text(
             _module("r01.md", ["3"], ["12"], imports="import torch\n"),
             encoding="utf-8")
-        (box / "src/Prior/model.py").write_text("import torch\n", encoding="utf-8")
-        (box / "src/Method_Benchmark/__init__.py").write_text(
-            self._declaration(), encoding="utf-8")
-        (box / "src/Method_Benchmark/wiring.py").write_text(
-            self.WIRING, encoding="utf-8")
+        if comparable:
+            (box / "src/Prior/model.py").write_text("import torch\n",
+                                                    encoding="utf-8")
+            (box / "src/Method_Benchmark/__init__.py").write_text(
+                self._declaration(), encoding="utf-8")
+            (box / "src/Method_Benchmark/wiring.py").write_text(
+                self.WIRING, encoding="utf-8")
 
         # Written after every file under `src/` and before the notebook, so
         # the stamp is the digest of the sources as they finally stand.
@@ -36222,6 +36230,94 @@ class PilotGatesTheDeclaredScaleTests(unittest.TestCase):
         shutil.rmtree(box, ignore_errors=True)
         self.assertEqual(
             list((FORGE / "implementations").glob("_pilotgate_cleanup_*")), [])
+
+
+class PilotLadderWithoutBaselinesTests(unittest.TestCase):
+    """Comparability does not gate the declared flow.
+
+    A target whose comparison arms live inside its own package has no separate
+    prior-work package under `src/`, so `previous_implementations` finds
+    nothing and the ladder starts at `nothing-to-compare`. That answer is about
+    the comparison only. The declared flow still owes its pilot and, once the
+    pilot has finished, one placement decision per step -- and before this
+    class existed neither rung was ever reached on such a target, so neither
+    question was ever published.
+
+    Built from `PilotGatesTheDeclaredScaleTests`' own fixture with neither
+    the prior package nor the benchmark package written, and the steps declared inside
+    the method's own package: the only difference from the fixture that
+    already reaches both rungs is that nothing else is comparable.
+    """
+
+    STEPS = PilotGatesTheDeclaredScaleTests.STEPS.replace(
+        "Method_Benchmark.steps", "Method.steps")
+
+    def build(self, suffix, **kwargs):
+        return PilotGatesTheDeclaredScaleTests.build(
+            self, f"nobase_{suffix}", steps=self.STEPS, comparable=False,
+            **kwargs)
+
+    def probe(self, box):
+        return PilotGatesTheDeclaredScaleTests.probe(self, box)
+
+    def answer(self, box, entry):
+        return PilotGatesTheDeclaredScaleTests.answer(self, box, entry)
+
+    # `PilotGatesTheDeclaredScaleTests.build` reads these off `self`.
+    SEARCH = PilotGatesTheDeclaredScaleTests.SEARCH
+    WIRING = PilotGatesTheDeclaredScaleTests.WIRING
+    SEQUENCE = PilotGatesTheDeclaredScaleTests.SEQUENCE
+    _declaration = PilotGatesTheDeclaredScaleTests._declaration
+    _implementation = PilotGatesTheDeclaredScaleTests._implementation
+
+    def test_an_unfinished_pilot_is_asked_for_with_nothing_to_compare(self):
+        box = self.build("short", ran=("first",), notebook_executed=True)
+        probe = self.probe(box)
+        self.assertEqual(probe["baselines"], [])
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "incomplete")
+        self.assertEqual(probe["nextStep"], "pilot-first")
+        question = probe["resolve"]["question"]
+        self.assertIn("'second'", question)
+        self.assertIn("deliberately deferred", question)
+        self.assertEqual([entry["question"] for entry in probe["toDiscuss"]],
+                         [question])
+
+    def test_a_finished_pilot_publishes_every_placement_question(self):
+        box = self.build("complete", ran=("first", "second", "aside"),
+                         notebook_executed=True)
+        probe = self.probe(box)
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "complete")
+        self.assertEqual(probe["nextStep"], "pilot-decisions")
+        asked = [entry["question"] for entry in probe["toDiscuss"]]
+        self.assertEqual(len(asked), 4, asked)
+        for index, step in enumerate(("first", "second", "aside"), start=1):
+            self.assertIn(f"'{step}'", asked[index])
+            self.assertIn("on a remote worker, or locally", asked[index])
+
+    def test_the_placement_questions_are_answerable_and_then_retire(self):
+        """End to end through the published commands: each question opens a
+        `discuss` bucket the operator answers, and once every step is decided
+        the ladder returns to the comparison's own terminal answer -- the
+        pilot rungs gate nothing beyond the flow they describe."""
+        box = self.build("decided", ran=("first", "second", "aside"),
+                         notebook_executed=True)
+        probe = self.probe(box)
+        for entry in probe["toDiscuss"][1:]:
+            self.answer(box, entry)
+        final = self.probe(box)
+        self.assertEqual(final["nextStep"], "nothing-to-compare")
+        self.assertEqual(final["toDiscuss"], [])
+
+    def test_a_target_that_declares_no_flow_still_has_nothing_to_compare(self):
+        box = self.build("noflow")
+        (box / "src/Method/__init__.py").write_text(
+            self._implementation(steps=""), encoding="utf-8")
+        probe = self.probe(box)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "undeclared")
+        self.assertEqual(probe["nextStep"], "nothing-to-compare")
+        self.assertIsNone(probe["resolve"])
 
 
 class ReportDriftHoldsTheDecisionPassTests(unittest.TestCase):

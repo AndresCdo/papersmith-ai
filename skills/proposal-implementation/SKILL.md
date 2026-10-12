@@ -1156,6 +1156,13 @@ design decisions.
    or `already-benchmarked`, **ask the user what they want to do next** and invent
    no work.
 
+   **Nothing to compare does not hide the declared flow.** A target with no
+   prior-work package under `src/` (its comparison arms may live inside
+   `<Package>` itself) still owes its pilot and its per-step decisions:
+   `probe` answers `pilot-first` while a declared step is short at pilot, and
+   `pilot-decisions` once the pilot is complete and a step is undecided, and
+   only then `nothing-to-compare`.
+
    **`piloted` is its own state and never reads as finished.** A record whose scale
    sits below the one the protocol declares is neither absent nor done. Report it
    precisely — how many repetitions and how long it ran, what the protocol asks for,
@@ -1578,7 +1585,9 @@ fresh one.
 `__steps__` entry is one of its steps, and an `advances` ordinal says where a
 step goes in the order rather than whether it counts. This rung fires while any
 of those steps has not finished, and it withholds the offer of the declared
-scale until they all have.
+scale until they all have. It fires whether or not anything is comparable: a
+target with no prior-work package under `src/` reaches it, and the next rung,
+exactly as one with a baseline does.
 
 **Every declared step, never the ordered subset**, and that is a measured
 correction rather than a preference. The rung read only the entries carrying an

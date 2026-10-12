@@ -2355,6 +2355,96 @@ class HolderCollisionTests(unittest.TestCase):
         self.assertFalse((box / "Method" / "Experimental_AGREED.md").exists())
 
 
+class PilotLadderWithoutBaselinesTests(unittest.TestCase):
+    """Comparability does not gate the declared flow, under this profile too.
+
+    The ladder lives in the shared engine, so the proposal skill's own
+    `PilotLadderWithoutBaselinesTests` covers its logic; this class proves the
+    same answer through this skill's own launcher and its own holder
+    (`Experimental_AGREED.md`): a target with no prior-work package under
+    `src/` whose declared steps all finished at pilot reaches
+    `pilot-decisions` and publishes one placement question per step.
+    """
+
+    STEPS = ("__steps__ = {\n"
+             "    'first': {'module': 'Method.steps', 'function': 'a',"
+             " 'advances': 1},\n"
+             "    'second': {'module': 'Method.steps', 'function': 'b',"
+             " 'advances': 2},\n"
+             "}\n")
+    SEQUENCE = ("- [ ] 1. The first step's evidence. "
+                "`@notebook Notebooks/one.ipynb`\n"
+                "- [ ] 2. The second step's evidence. `@record`\n")
+
+    def build(self, ran):
+        engine = HolderCollisionTests._load_engine(self)
+        box = (FORGE / "implementations"
+               / f"_exp_pilot_nobase_{len(ran)}_{os.getpid()}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "Method/Notebooks"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__implementation__ = {'revision': 'r01.md'}\n" + self.STEPS,
+            encoding="utf-8")
+        (box / "src/Method/steps.py").write_text(
+            "def a():\n    return 1\n\n\ndef b():\n    return 2\n",
+            encoding="utf-8")
+        digest = engine.source_digest(box, engine.package_name("Method"))
+        (box / "Method/Notebooks/one.ipynb").write_text(json.dumps({
+            "cells": [{"cell_type": "code", "execution_count": 1,
+                       "metadata": {},
+                       "outputs": [{"output_type": "stream", "name": "stdout",
+                                    "text": [f"{engine.DIGEST_MARKER} "
+                                             f"{digest}\n"]}],
+                       "source": ["print('measured')\n"]}],
+            "metadata": {}, "nbformat": 4, "nbformat_minor": 5,
+        }), encoding="utf-8")
+        self.assertEqual(engine.HOLDER_FILENAME, "Experimental_AGREED.md")
+        (box / "Method" / engine.HOLDER_FILENAME).write_text(
+            "<!-- position revision=r01.md sha256=" + "a" * 64
+            + " derivedAt=2026-08-27T00:00:00Z session=s0 target=pilot -->\n"
+            + self.SEQUENCE + "<!-- /position -->\n", encoding="utf-8")
+        ledger = box / "Method" / ".implementation" / "position.jsonl"
+        ledger.parent.mkdir(parents=True)
+        live = engine.suite_digest(box)
+        with ledger.open("w", encoding="utf-8") as handle:
+            for step in ran:
+                handle.write(json.dumps({
+                    "kind": "step", "step": step, "outcome": "returned",
+                    "suiteDigest": live, "at": "2026-08-27T00:00:00Z"}) + "\n")
+        return box
+
+    def probe(self, box):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(PROFILE_FILE)
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "probe", "--target", str(box),
+             "--name", "Method", "--revision", "r01.md"],
+            capture_output=True, text=True, cwd=FORGE, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_an_unfinished_pilot_is_asked_for_with_nothing_to_compare(self):
+        probe = self.probe(self.build(ran=("first",)))
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "incomplete")
+        self.assertEqual(probe["nextStep"], "pilot-first")
+        self.assertIn("deliberately deferred", probe["resolve"]["question"])
+
+    def test_a_finished_pilot_publishes_every_placement_question(self):
+        probe = self.probe(self.build(ran=("first", "second")))
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "complete")
+        self.assertEqual(probe["nextStep"], "pilot-decisions")
+        asked = [entry["question"] for entry in probe["toDiscuss"]]
+        self.assertEqual(len(asked), 3, asked)
+        for index, step in enumerate(("first", "second"), start=1):
+            self.assertIn(f"'{step}'", asked[index])
+            self.assertIn("on a remote worker, or locally", asked[index])
+
+
 class ShippedHolderObligationsTests(unittest.TestCase):
     """`experimental-implementation-skill`'s own requirement that this skill
     SHIPS `references/usage.md` carrying the holder's obligations.

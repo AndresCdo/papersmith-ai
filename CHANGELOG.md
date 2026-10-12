@@ -54,6 +54,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   longer read the sibling's holder as this skill's, so its open items stop
   appearing as this skill's open agreements and its position block stops
   standing in for this skill's position.
+- **`probe` no longer hides the pilot ladder when nothing is comparable.** A
+  target whose comparison arms live inside its own package has no prior-work
+  package under `src/`, so `probe` answered `nothing-to-compare` before any
+  other rung, even with declared steps still short at pilot and, later, with
+  every step finished at pilot and none placed. `pilot-first` and
+  `pilot-decisions` never fired, so neither the rung question nor one
+  per-step placement question was ever published. Comparability now answers
+  the comparison only: with no baseline, `probe` returns `pilot-first` while a
+  declared step is short and `pilot-decisions` (with its per-step questions)
+  once the pilot is complete and a step is undecided, and
+  `nothing-to-compare` only after both are settled. Shared by
+  `experimental-implementation`.
 
 ### Behaviour changes
 
@@ -82,6 +94,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   file. The key is present only when such a file exists, so other targets read
   byte-identically. The position section likewise reads `absent` until this
   skill installs its own block, instead of the sibling's.
+- `probe` on a target with no prior-work package under `src/` and a declared
+  `__steps__` flow now answers `pilot-first` or `pilot-decisions` where it
+  used to answer `nothing-to-compare`, and publishes those rungs' questions
+  in `resolve` and `toDiscuss`. Targets that declare no flow, or whose pilot
+  is complete and every step decided, still read `nothing-to-compare`. No
+  stored artefact changes shape; no migration is needed.
 
 ## 0.13.0
 

@@ -38,7 +38,7 @@ Route legend: D = delegated writer, I = inline.
   Key map: engine `skills/_core/implementation/engine/implementation_engine.py` (E); migrations `src/papersmith/core/migrations.py` REGISTRY; no populated old-workspace fixture exists yet; full py suite ~20 min.
 - [x] A1 — adopted finding terminal state (D, writer trigger: engine + tests + docs + goldens)
 - [x] A2 — sibling holder collision (D, writer trigger: engine + profile loader + tests + docs)
-- [ ] A3 — probe pilot ladder with in-package baselines
+- [x] A3 — probe pilot ladder with in-package baselines (D, writer trigger: engine + 2 test files + docs)
 - [ ] A4 — scaffold seal file provenance exemption
 - [ ] A5 — close for proposal-only targets / witness-less agreements
 - [ ] A6 — deliberation validation parity (code spans)
@@ -90,7 +90,17 @@ Route legend: D = delegated writer, I = inline.
   direction), HolderCollisionTests +2 (experimental direction, one via the sibling's real launcher);
   RED 5F -> GREEN; mutation (agreements exclusion off -> 8 red; position exclusion off -> 3 red).
   Commit: `fix(implementation): a sibling's holder is never read as this skill's` (the commit carrying this line)
+- A3 (real): `cmd_probe` set `nothing-to-compare` first and the pilot rungs fired only from
+  `benchmark`/`piloted`. Fix: `flow_short`/`flow_undecided` computed once from `pilot` and read by
+  the existing rungs and by a new post-ladder branch that turns `nothing-to-compare` into
+  `pilot-first`/`pilot-decisions` while either holds (rung literals kept so the next-step scrapers
+  still derive the set). Publication path unchanged (roster + per-step `toDiscuss`), now reached.
+  Tests: `PilotLadderWithoutBaselinesTests` (proposal 4, experimental 2 via its own launcher and
+  `Experimental_AGREED.md`): RED 2F + 2F -> GREEN; the e2e test answers each published placement
+  question via its own `discuss` command and returns to `nothing-to-compare`. Mutation (decisions
+  branch disabled) -> 2 red. Domain-lock pins unchanged (two comment rewordings). Seals unchanged.
+  Commit: `fix(implementation): comparability no longer hides the pilot ladder` (the commit carrying this line)
 
 ## Next step
 
-A3 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+A4 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
