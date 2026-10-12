@@ -24,7 +24,7 @@ remote compute, development and troubleshooting.
 6. [Harnesses and skill projection](#harnesses-and-skill-projection)
 7. [The agents](#the-agents)
 8. [Anatomy of each skill](#anatomy-of-each-skill)
-9. [The CLI commands](#los-comandos-del-cli)
+9. [The CLI commands](#the-cli-commands)
 10. [Remote compute, carefully](#cómputo-remoto-con-cuidado)
 11. [Architecture](#arquitectura)
 12. [Development and testing](#desarrollo-y-pruebas)
@@ -493,7 +493,7 @@ viewer— stay on the machine that produced them.
 Preserving, mind you, is not migrating. Not touching an artifact protects it while
 its shape does not change; the day a release changes that shape, something is
 needed to carry it up to it. That is the job of [artifact
-migrations](#migraciones-de-artefactos), and it is also the reason
+migrations](#artifact-migrations), and it is also the reason
 `.papersmith/version` stopped advancing just because files had been copied.
 
 ### The state: `.papersmith/`
@@ -3115,26 +3115,26 @@ symlink, and a recorded version that did not advance. Exit codes are `0` success
 printed a migration failure and exited 4 did not succeed, and a summary that calls
 it done is the outcome this skill must never produce.
 
-## Los comandos del CLI
+## The CLI commands
 
-Todos los comandos corren como `papersmith <comando> [opciones] [<dir>]`. `<dir>`
-es el directorio actual por defecto y debe apuntar a un workspace inicializado
-(salvo `init`). Flag global: `--version`.
+Every command runs as `papersmith <command> [options] [<dir>]`. `<dir>` defaults
+to the current directory and has to point at an initialized workspace, except for
+`init`. Global flag: `--version`.
 
-| Comando | Qué hace |
+| Command | What it does |
 |---------|----------|
-| `init` | Crea un workspace de investigación standalone |
-| `upgrade` | Sincroniza el andamiaje del framework preservando tu investigación |
-| `status` | Muestra salud del workspace, propuestas, corridas e inbox |
-| `ingest` | Ingesta un PDF o una URL de literatura a Markdown |
-| `deliberate` | Habla con el motor de `proposal-deliberation` |
-| `implement` | Delega al harness de `proposal-implementation` |
-| `run` | Ejecuta un perfil de cómputo (local / Kaggle / Slurm) |
-| `remote` | Empaca, envía y sigue trabajos remotos directamente |
-| `target` | Lista, selecciona y chequea targets de cómputo |
-| `audit` | Audita la estructura y detecta drift de lo generado |
-| `ui` | Sirve el Paper Command Center local (DAG, compuertas, secciones, wiring) |
-| `mcp` | Expone el orquestador y los verbos del paper por Model Context Protocol |
+| `init` | Creates a standalone research workspace |
+| `upgrade` | Syncs the framework's scaffolding while preserving the research |
+| `status` | Reports workspace health, proposals, runs and inbox |
+| `ingest` | Ingests a literature PDF or URL into Markdown |
+| `deliberate` | Talks to the `proposal-deliberation` engine |
+| `implement` | Delegates to the `proposal-implementation` harness |
+| `run` | Runs a compute profile (local / Kaggle / Slurm) |
+| `remote` | Packs, pushes and follows remote jobs directly |
+| `target` | Lists, selects and checks compute targets |
+| `audit` | Audits the structure and detects drift in what was generated |
+| `ui` | Serves the local Paper Command Center (DAG, gates, sections, wiring) |
+| `mcp` | Exposes the orchestrator and the paper verbs over Model Context Protocol |
 
 ### `papersmith init <dir>`
 
@@ -3145,30 +3145,30 @@ papersmith init ~/papers/sparse-ae \
   --remote kaggle
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--title TEXT` | Título del paper, escrito en los documentos del workspace |
-| `--topic TEXT` | Tema de investigación |
-| `--tools TEXT` | Runtimes a provisionar, separados por coma |
-| `--remote {kaggle,local,slurm}` | Target de cómputo por defecto (por defecto: `kaggle`) |
-| `--no-npm` | Saltea el `npm install` best-effort (uso offline/hermético) |
-| `--no-env` | Saltea el aprovisionamiento del entorno Python del workspace; `papersmith ui` se niega hasta que corras `python3 scripts/setup_env.py install` |
-| `--progress` | Fuerza un log de progreso en texto plano, con estimación del tiempo restante; útil en CI, donde la barra es ruido pero el log es lo importante |
-| `--no-progress` | No dibuja progreso aunque la salida sea un terminal |
+| `--title TEXT` | Paper title, written into the workspace documents |
+| `--topic TEXT` | Research topic |
+| `--tools TEXT` | Runtimes to provision, comma-separated |
+| `--remote {kaggle,local,slurm}` | Default compute target (default: `kaggle`) |
+| `--no-npm` | Skips the best-effort `npm install` (offline/hermetic use) |
+| `--no-env` | Skips provisioning the workspace's Python environment; `papersmith ui` refuses until `python3 scripts/setup_env.py install` is run |
+| `--progress` | Forces a plain-text progress log with an estimate of the time left; useful in CI, where the bar is noise and the log is what matters |
+| `--no-progress` | Draws no progress even when the output is a terminal |
 
-El paso que domina el tiempo es el aprovisionamiento del entorno, y hasta la
-0.9.0 corría con la salida capturada: varios minutos sin ninguna señal. Ahora
-`init` dibuja una barra con estimación del tiempo restante en un terminal, e
-imprime el log de los dos procesos hijos que ejecuta. La estimación arranca de
-unos valores declarados y se recalibra con el ritmo que la propia corrida mide;
-si un paso se pasa de su parte, el número sube en vez de contradecirse. Cuando
-la salida no es un terminal — una tubería, el servidor MCP, la suite — no se
-imprime nada, para no ensuciar una salida que otro programa está leyendo.
+The step that dominates the run is environment provisioning, and until 0.9.0 it
+ran with its output captured: several minutes with no signal at all. `init` now
+draws a bar with an estimate of the time left on a terminal, and prints the log of
+the two child processes it runs. The estimate starts from declared values and
+recalibrates against the pace the run itself measures; a step that overruns its
+share moves the number up rather than contradicting itself. When the output is not
+a terminal — a pipe, the MCP server, the suite — nothing is printed, so a stream
+another program is reading stays clean.
 
-Crea `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
+Creates `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
-más la copia del kit y su manifest. La forma completa del árbol está en
-[El workspace por dentro](#inside-the-workspace).
+plus the kit copy and its manifest. The full shape of the tree is in
+[Inside the workspace](#inside-the-workspace).
 
 ### `papersmith upgrade [<dir>]`
 
@@ -3176,77 +3176,75 @@ más la copia del kit y su manifest. La forma completa del árbol está en
 papersmith upgrade ~/papers/sparse-ae
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--tools TEXT` | Reemplaza los generators de runtime activos |
-| `--force` | Fuerza la escritura de archivos del framework |
-| `--allow-downgrade` | Permite instalar una versión del framework anterior a la que registra el workspace |
-| `--no-migrate` | Sincroniza los archivos del framework sin migrar artefactos; la versión registrada no avanza |
-| `--plan-migrations` | Informa las migraciones de artefactos pendientes y termina sin escribir nada |
+| `--tools TEXT` | Replaces the active runtime generators |
+| `--force` | Forces framework files to be written |
+| `--allow-downgrade` | Allows installing a framework version older than the one the workspace records |
+| `--no-migrate` | Syncs the framework files without migrating artifacts; the recorded version does not advance |
+| `--plan-migrations` | Reports the pending artifact migrations and exits without writing anything |
 
-Sólo toca archivos gestionados por el framework — jamás `guidance/`,
+It only touches files the framework manages — never `guidance/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
-`papersmith.yaml`, `package.json`, `README.md` ni los `.env*`.
-Contra un checkout del kit sin reinstalar:
-`PAPERSMITH_KIT_ROOT=/ruta/al/papersmith-ai papersmith upgrade <dir>`.
+`papersmith.yaml`, `package.json`, `README.md` or the `.env*` files.
+Against a kit checkout without reinstalling:
+`PAPERSMITH_KIT_ROOT=/path/to/papersmith-ai papersmith upgrade <dir>`.
 
-#### Migraciones de artefactos
+#### Artifact migrations
 
-Sincronizar archivos no alcanza. Un release puede cambiar la forma de un
-artefacto que el workspace ya produjo, y entonces el andamiaje nuevo queda
-leyendo estado viejo sin que nada lo note. Por eso `upgrade` corre migraciones
-de artefactos en un único lugar: después de copiar el kit, porque una migración
-puede necesitar los scripts y los assets del release que acaba de llegar, y
-antes de escribir `.papersmith/version`.
+Syncing files is not enough. A release can change the shape of an artifact the
+workspace already produced, and the new scaffolding is then left reading old
+state with nothing to notice. That is why `upgrade` runs artifact migrations in
+a single place: after copying the kit, because a migration may need the scripts
+and assets of the release that just arrived, and before writing
+`.papersmith/version`.
 
-De ese orden sale una regla sin excepciones. **La versión registrada avanza
-cuando las migraciones de esa versión están hechas.** Si una falla, el marcador
-se queda donde estaba, el comando termina con código distinto de cero y la
-corrida siguiente reintenta. `--no-migrate` tampoco mueve el marcador cuando
-algo quedaba pendiente: avanzarlo ahí convertiría el flag en una forma de
-registrar un release que tus artefactos nunca alcanzaron, y el `version_match`
-de `status` reportaría esa mentira como acuerdo.
+One rule with no exceptions follows from that order. **The recorded version
+advances when that version's migrations are done.** If one fails, the marker
+stays where it was, the command exits non-zero and the next run retries.
+`--no-migrate` does not move the marker either when something was left pending:
+advancing it there would turn the flag into a way of recording a release the
+artifacts never reached, and `status`'s `version_match` would report that as
+agreement.
 
-El manifest es el caso opuesto y se escribe siempre. Describe archivos, y los
-archivos sí se movieron; retenerlo haría que `status` reportara como deriva
-todo lo que acababa de sincronizar.
+The manifest is the opposite case and is written every time. It describes files,
+and the files did move; withholding it would make `status` report everything it
+had just synced as drift.
 
-Hay dos clases de migración. Una está **atada a una versión** y corre una sola
-vez, cuando el workspace está por debajo de su compuerta y el kit instalado en
-ella o más arriba; queda registrada en `.papersmith/migrations.json` y no se
-repite. La otra es de **convergencia**: no tiene compuerta, pregunta al
-sistema de archivos mediante una sonda de sólo lectura y se evalúa en cada
-corrida, porque el release siguiente puede cambiar aquello hacia lo que hay que
-converger. Un workspace que ya la satisface no escribe nada.
+There are two classes of migration. One is **version-bound** and runs once, when
+the workspace sits below its gate and the installed kit at it or above; it is
+recorded in `.papersmith/migrations.json` and does not repeat. The other is a
+**convergence** migration: it has no gate, asks the file system through a
+read-only probe and is evaluated on every run, because the next release can
+change what there is to converge on. A workspace that already satisfies it writes
+nothing.
 
-La versión actual trae dos migraciones de convergencia:
+The current version ships two convergence migrations:
 
-- **`sota-pool-scaffold`** crea `sota-pool/.gitkeep` en los workspaces
-  anteriores al release que empezó a andamiar el pool de grafos.
-- **`atlas-render-refresh`** vuelve a renderizar `sota-pool/atlas.html` cuando
-  su atlas, su renderizador o el bundle del visor que inlinea cambiaron. La
-  decisión se toma con hashes guardados en `sota-pool/.atlas-render.json`, no
-  con fechas de modificación: el mtime de una copia dice cuándo se escribió el
-  archivo, y `upgrade` lo reescribe por razones que nada tienen que ver con la
-  página.
+- **`sota-pool-scaffold`** creates `sota-pool/.gitkeep` in workspaces older than
+  the release that began scaffolding the graph pool.
+- **`atlas-render-refresh`** re-renders `sota-pool/atlas.html` when its atlas,
+  its renderer or the viewer bundle it inlines changed. The decision is taken
+  from hashes stored in `sota-pool/.atlas-render.json`, not from modification
+  dates: the mtime of a copy says when the file was written, and `upgrade`
+  rewrites it for reasons that have nothing to do with the page.
 
-Cuando la versión registrada no se puede ordenar —el marcador se perdió, o
-dice algo sin número— una migración atada a versión no se puede ubicar a
-ninguno de los dos lados de su compuerta. Se reporta como `undetermined` y no
-se aplica nunca: migrar artefactos bajo una relación que nadie estableció es
-exactamente el silencio que el guardia de downgrade ya elimina del lado de los
-archivos. Las de convergencia no se ven afectadas, porque preguntan al disco.
+When the recorded version cannot be ordered — the marker was lost, or it says
+something without a number — a version-bound migration cannot be placed on
+either side of its gate. It is reported as `undetermined` and never applied:
+migrating artifacts under a relation nobody established is exactly the silence
+the downgrade guard already removes on the file side. Convergence migrations are
+unaffected, because they ask the disk.
 
-`--plan-migrations` no se llama `--dry-run` a propósito. Ese nombre sugeriría
-que también previsualiza la copia del kit, las proyecciones por harness y la
-limpieza de huérfanos, y no lo hace: un flag no debe exagerar su alcance.
+`--plan-migrations` is not called `--dry-run` on purpose. That name would suggest
+it also previews the kit copy, the per-harness projections and the orphan sweep,
+and it does not: a flag should not overstate its scope.
 
-Un `.papersmith/migrations.json` dañado hace que `upgrade` se niegue antes de
-escribir un byte, junto al guardia de downgrade y por el mismo motivo. Leerlo
-como vacío volvería a aplicar cada migración que estaba registrando. `status`
-responde distinto a propósito: lo reporta como advertencia, porque un comando
-que sólo informa y además revienta deja al workspace sin forma de preguntar
-qué le pasa.
+A damaged `.papersmith/migrations.json` makes `upgrade` refuse before writing a
+byte, alongside the downgrade guard and for the same reason. Reading it as empty
+would re-apply every migration it was recording. `status` answers differently on
+purpose: it reports it as a warning, because a command that only informs and
+also crashes leaves the workspace with no way to ask what is wrong with it.
 
 ### `papersmith status [<dir>]`
 
@@ -3254,13 +3252,12 @@ qué le pasa.
 papersmith status --json
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--json` | Snapshot legible por máquina (versiones, propuestas, corridas, inbox) |
+| `--json` | Machine-readable snapshot (versions, proposals, runs, inbox) |
 
-Reporta los archivos desviados por nombre; el exit code queda en `0` mientras
-hay drift reportado (que sea no-cero es un gap conocido, registrado como
-follow-up).
+Reports the drifted files by name; the exit code stays `0` while drift is
+reported (a non-zero code is a known gap, recorded as a follow-up).
 
 ### `papersmith ingest <file_or_url> [<dir>]`
 
@@ -3269,14 +3266,13 @@ papersmith ingest https://arxiv.org/abs/2309.08600
 papersmith ingest ~/Downloads/reference-paper.pdf --ocr
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--ocr` | Modo de extracción orientado a OCR, balanceado (más pesado, para escaneos) |
+| `--ocr` | Balanced OCR-oriented extraction mode (heavier, for scans) |
 
-Descarga/clasifica la referencia, la extrae a Markdown con ecuaciones LaTeX y
-archivos de figuras (una carpeta por paper) y refresca el índice. La primera
-corrida descarga ~1.5 GB de pesos de Surya si el entorno no quedó
-pre-provisionado.
+Downloads/classifies the reference, extracts it to Markdown with LaTeX equations
+and figure files (one folder per paper) and refreshes the index. The first run
+downloads ~1.5 GB of Surya weights when the environment was not pre-provisioned.
 
 ### `papersmith deliberate [<dir>]`
 
@@ -3286,20 +3282,20 @@ papersmith deliberate . --action init
 papersmith deliberate . --request-file request.json
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--action ACTION` | Operación real del motor (`status`, `init`, sucesoras…) o alias soportado |
-| `--request JSON` / `--request-file FILE` | Objeto JSON crudo / archivo que lo contiene |
-| `--serve` | Modo persistente por JSON-lines |
-| `--revision FILE` | Archivo fuente gestionado al que aplica la operación |
-| `--instruction TEXT`, `--query TEXT` | Payloads de instrucción / consulta |
-| `--selected-entry-id ID`, `--decisions JSON` | Decisiones de edición resueltas, para operaciones de mutación |
-| `--accept`, `--acceptance-token TOKEN` | Aceptar un preview de `CREATE_SUCCESSOR` |
-| `--withdrawal-operation-id ID`, `--withdrawal-reason TEXT` | Retirar una revisión publicada |
-| `--prior-conclusion TEXT` | Conclusión previa para operaciones de seguimiento |
+| `--action ACTION` | The engine's real operation (`status`, `init`, successors…) or a supported alias |
+| `--request JSON` / `--request-file FILE` | Raw JSON object / the file holding it |
+| `--serve` | Persistent JSON-lines mode |
+| `--revision FILE` | Managed source file the operation applies to |
+| `--instruction TEXT`, `--query TEXT` | Instruction / query payloads |
+| `--selected-entry-id ID`, `--decisions JSON` | Resolved edit decisions, for mutation operations |
+| `--accept`, `--acceptance-token TOKEN` | Accept a `CREATE_SUCCESSOR` preview |
+| `--withdrawal-operation-id ID`, `--withdrawal-reason TEXT` | Withdraw a published revision |
+| `--prior-conclusion TEXT` | Prior conclusion for follow-up operations |
 
-Corre el motor de deliberación determinista y verificado por AST, keyless y
-local (ninguna operación de estado llama a un modelo).
+Runs the deterministic, AST-verified deliberation engine, keyless and local (no
+state operation calls a model).
 
 ### `papersmith implement [<dir>]`
 
@@ -3308,11 +3304,11 @@ papersmith implement . --action verify --target implementations/demo
 papersmith implement . --action probe --target implementations/demo
 ```
 
-`--action` es obligatorio. Acciones comunes: `env`, `plan`, `apply` (alias
+`--action` is required. Common actions: `env`, `plan`, `apply` (alias
 `materialize`), `admit`, `handoff`, `compose`, `probe` (alias `benchmark`),
-`verify`. Flags de apoyo: `--target`, `--name`, `--plan`, `--finding`,
-`--entry-text`, `--python`, `--shards`, `--revision`; lo que venga después de
-los flags conocidos se reenvía como `extra` a `implementation_cli.py`.
+`verify`. Supporting flags: `--target`, `--name`, `--plan`, `--finding`,
+`--entry-text`, `--python`, `--shards`, `--revision`; whatever follows the known
+flags is forwarded as `extra` to `implementation_cli.py`.
 
 ### `papersmith run <profile> [<dir>]`
 
@@ -3321,15 +3317,15 @@ papersmith run smoke_and_invariants --dry-run
 papersmith run sweep_training --target kaggle-gpu-pool --consent <token>
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--target NAME` | Pisa el target de cómputo del perfil |
-| `--dry-run` | Sólo planifica — registra el comando, no despacha nada |
-| `--shard VALUE` | Corre un solo shard de la campaña |
-| `--consent TOKEN` | Token de consentimiento para envío remoto (se reenvía, se hace cumplir aguas abajo) |
+| `--target NAME` | Overrides the profile's compute target |
+| `--dry-run` | Plans only — records the command, dispatches nothing |
+| `--shard VALUE` | Runs a single shard of the campaign |
+| `--consent TOKEN` | Consent token for remote submission (forwarded, enforced downstream) |
 
-Despacha según el provider (subproceso local / submit a Kaggle / `sbatch` por
-ssh) y agrega cada trabajo a `.papersmith/runs_ledger.jsonl`.
+Dispatches per provider (local subprocess / Kaggle submit / `sbatch` over ssh)
+and appends each job to `.papersmith/runs_ledger.jsonl`.
 
 ### `papersmith remote {pack,push,status,pull,sync} [<dir>]`
 
@@ -3339,14 +3335,14 @@ papersmith remote status --job <job-id>
 papersmith remote pull --job <job-id> --dest ./results
 ```
 
-Flags clave: `--target`, `--entrypoint`, `--backend`, `--account`, `--job`,
-`--submission-id`, `--dest`, `--consent`, `--smoke`, `--unit` (alcance de
-campaña, repetible), `--force`, `--resolve`, más los flags de definición de
-trabajo (`--service`, `--job-name`, `--product`, `--commit`, `--repo-url`,
-`--repo-ref`, `--run-module`, `--run-function`, `--clone-path`,
-`--regenerate`). Los tokens extra se reenvían a `remote_cli.py`. Un envío real
-gasta cuota: prefiere `--smoke` y `--dry-run` primero (ver
-[Cómputo remoto, con cuidado](#cómputo-remoto-con-cuidado)).
+Key flags: `--target`, `--entrypoint`, `--backend`, `--account`, `--job`,
+`--submission-id`, `--dest`, `--consent`, `--smoke`, `--unit` (campaign scope,
+repeatable), `--force`, `--resolve`, plus the job-definition flags (`--service`,
+`--job-name`, `--product`, `--commit`, `--repo-url`, `--repo-ref`,
+`--run-module`, `--run-function`, `--clone-path`, `--regenerate`). Extra tokens
+are forwarded to `remote_cli.py`. A real submission spends quota: prefer
+`--smoke` and `--dry-run` first (see
+[Remote compute, carefully](#cómputo-remoto-con-cuidado)).
 
 ### `papersmith target {list,set,check}`
 
@@ -3357,10 +3353,10 @@ papersmith target check
 papersmith target check slurm-cluster
 ```
 
-- `list [<dir>]` — targets configurados, marcando el activo con `*`.
-- `set <name> [<dir>]` — persiste el target por defecto en `.papersmith/config.json`.
-- `check [name] [<dir>]` — prueba de conectividad: `local` busca Python, `kaggle`
-  pasa por el helper de cuentas, `remote-ssh` intenta
+- `list [<dir>]` — configured targets, marking the active one with `*`.
+- `set <name> [<dir>]` — persists the default target in `.papersmith/config.json`.
+- `check [<name>] [<dir>]` — connectivity test: `local` looks for Python, `kaggle`
+  goes through the accounts helper, `remote-ssh` tries
   `ssh -o BatchMode=yes -o ConnectTimeout=5 <host> true`.
 
 ### `papersmith audit [<dir>]`
@@ -3369,17 +3365,17 @@ papersmith target check slurm-cluster
 papersmith audit --check-drift
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--check-drift` | Reporta también el drift de archivos generados como findings (nunca repara) |
+| `--check-drift` | Also reports drift in generated files as findings (never repairs) |
 
-Audita la estructura y consistencia del workspace. Hoy está atado al sujeto
-`skill-audit`; el drift se reporta, no se arregla.
+Audits the workspace's structure and consistency. It is bound to the `skill-audit`
+subject today; drift is reported, not fixed.
 
-> **Nota:** `kaggle-accounts` (validate/remove/list/discover/materialize) no
-> tiene todavía un subcomando `papersmith` — corre como
-> `python3 skills/kaggle-accounts/scripts/accounts_cli.py …` o indirectamente
-> vía `target check`.
+> **Note:** `kaggle-accounts` (validate/remove/list/discover/materialize) has no
+> `papersmith` subcommand yet — it runs as
+> `python3 skills/kaggle-accounts/scripts/accounts_cli.py …` or indirectly
+> through `target check`.
 
 ### `papersmith ui [<dir>]`
 
@@ -3389,242 +3385,235 @@ papersmith ui ~/papers/sparse-ae --no-browser
 papersmith ui --export-static ./dashboard-static
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--host HOST` | Dirección de bind (por defecto `127.0.0.1`) |
-| `--port PORT` | Puerto preferido; si está ocupado pasa al siguiente libre |
-| `--no-browser` | No abre el navegador |
-| `--export-static <dir>` | Copia el build del dashboard a `<dir>` y sale |
-| `--allowed-host HOST:PORT` | Acepta además ese encabezado `Host` (repetible); solo se reenvía al backend si lo das |
+| `--host HOST` | Bind address (default `127.0.0.1`) |
+| `--port PORT` | Preferred port; if it is taken, the next free one |
+| `--no-browser` | Does not open the browser |
+| `--export-static <dir>` | Copies the dashboard build to `<dir>` and exits |
+| `--allowed-host HOST:PORT` | Also accepts that `Host` header (repeatable); only forwarded to the backend when supplied |
 
-Sirve el **Paper Command Center**: un dashboard local dentro del workspace con
-sus dos flujos, las cuatro compuertas de calidad, la matriz de las diez
-secciones y la salud del wiring de harnesses. Se actualiza en vivo por
-Server-Sent Events, con un debounce de 300 ms sobre `sections/`, `openspec/`,
-`experiments/` y `papersmith.yaml`.
+Serves the **Paper Command Center**: a local dashboard inside the workspace with
+its two flows, the four quality gates, the ten-section matrix and the health of
+the harness wiring. It updates live over Server-Sent Events, with a 300 ms
+debounce on `sections/`, `openspec/`, `experiments/` and `papersmith.yaml`.
 
-El backend vive en `skills/_core/command_center/` (parte del kit, así que viaja
-con cada workspace) y corre standalone sin Node/npm:
+The backend lives in `skills/_core/command_center/` (part of the kit, so it
+travels with every workspace) and runs standalone without Node/npm:
 
 ```bash
 python -m skills._core.command_center.server --port 8080
 ```
 
-**Los dos flujos.** La pestaña *Pipeline* dibuja el flujo general: los doce
-tramos del diagrama de arquitectura, en su orden, más la vía transversal de
-auditoría donde aterrizan las cuatro compuertas. Cada tramo se enciende con lo
-que hay en disco —`sota-pool/`, `guidance/`, `proposals/`, `implementations/`,
-`.experimental-deliberation/`, `experiments/`, el store de credenciales, el
-inbox, `paper/Figures/` y `sections/`— y un tramo sin artefacto se reporta
-inactivo diciendo qué falta, nunca con un progreso inventado. La pestaña
-*Writing* dibuja el flujo de redacción: una sección por nodo, en orden de
-renderizado, cada una con su estado, sus palabras y sus bloques. Las aristas no
-viven en el frontend: el extractor las manda en el payload (`pipeline_chain` y
-`gate_links`), de modo que el tablero no puede contradecir al diagrama.
+**The two flows.** The *Pipeline* tab draws the overall flow: the twelve stages of
+the architecture diagram, in order, plus the audit path across them where the four
+gates land. Each stage lights up from what is on disk — `sota-pool/`, `guidance/`,
+`proposals/`, `implementations/`, `.experimental-deliberation/`, `experiments/`,
+the credentials store, the inbox, `paper/Figures/` and `sections/` — and a stage
+with no artifact is reported inactive saying what is missing, never with an
+invented progress. The *Writing* tab draws the writing flow: one section per node,
+in render order, each with its state, its words and its blocks. The edges do not
+live in the frontend: the extractor sends them in the payload (`pipeline_chain`
+and `gate_links`), so the dashboard cannot contradict the diagram.
 
 Endpoints: `/api/state`, `/api/health/wiring`, `/api/health/run-wiring-smoke`
-(POST) y `/api/events` (SSE); el build del dashboard se sirve en `/`. El
-frontend se construye con `npm run setup:ui` una vez (instala desde el
-lockfile) y después `npm run build:ui`, que emite en
-`skills/_core/command_center/static/`; `npm run dev:ui` levanta el servidor de
-Vite con proxy al backend para trabajar sobre la interfaz. El paso de
-instalación usa `npm ci` y no `npm install` a propósito: `install` reescribe el
-lockfile con los metadatos del npm local, y ese ruido no pertenece a ningún
-cambio de dependencias. El smoke end-to-end
-es `bash scripts/command-center-smoke.sh`.
+(POST) and `/api/events` (SSE); the dashboard build is served at `/`. The frontend
+is built once with `npm run setup:ui` (it installs from the lockfile) and then
+`npm run build:ui`, which emits into `skills/_core/command_center/static/`;
+`npm run dev:ui` starts the Vite server with a proxy to the backend for work on
+the interface. The install step uses `npm ci` and not `npm install` on purpose:
+`install` rewrites the lockfile with the local npm's metadata, and that noise does
+not belong to any dependency change. The end-to-end smoke is
+`bash scripts/command-center-smoke.sh`.
 
-**Tema claro.** El dashboard usa un único tema claro, definido por tokens de
-color en `ui/src/styles.css`; un test de Vitest rechaza cualquier color
-literal fuera de `:root` y verifica el contraste (WCAG AA) de los pares de
-tokens.
+**Light theme.** The dashboard uses a single light theme, defined by colour tokens
+in `ui/src/styles.css`; a Vitest test rejects any literal colour outside `:root`
+and checks the contrast (WCAG AA) of the token pairs.
 
-**Diagrama clicable y deep links.** Cada nodo (etapa, compuerta, sección) y cada
-arista del diagrama del pipeline se puede seleccionar con el mouse o con el
-teclado (Enter o Espacio sobre el elemento enfocado, Escape para cerrar) y abre
-un panel de detalle con sus datos, sus conexiones y su historial. La selección
-queda en la URL (`#pipeline?el=gate%3Awriting-readiness`), así que un enlace
-abre directamente ese elemento.
+**Clickable diagram and deep links.** Every node (stage, gate, section) and every
+edge of the pipeline diagram can be selected with the mouse or the keyboard
+(Enter or Space on the focused element, Escape to close) and opens a detail panel
+with its data, its connections and its history. The selection goes into the URL
+(`#pipeline?el=gate%3Awriting-readiness`), so a link opens that element directly.
 
-**Historial en memoria.** La pestaña *History* muestra lo que cambió desde que
-arrancó el dashboard: estado y bloques de las secciones, conteo de palabras,
-compuertas, etapas, salud del wiring y el smoke. Vive en memoria (un anillo de
-1.000 entradas por proceso; nada se escribe a disco), así que se pierde al
-reiniciar el servidor. `GET /api/history?boot_id=<id>&after_seq=<n>` entrega
-páginas de entradas más antiguas primero (`element`, `kind` y `limit` son
-opcionales; un `element` o `kind` inválido responde 422); la respuesta trae
-`has_more`, `reset` (otro proceso: hay que recargar) y `gap` (se descartaron
-entradas antiguas). Las entradas nuevas llegan por SSE como `history_append`.
+**History in memory.** The *History* tab shows what changed since the dashboard
+started: section state and blocks, word counts, gates, stages, wiring health and
+the smoke. It lives in memory (a ring of 1,000 entries per process; nothing is
+written to disk), so it is lost when the server restarts.
+`GET /api/history?boot_id=<id>&after_seq=<n>` returns pages of entries oldest
+first (`element`, `kind` and `limit` are optional; an invalid `element` or `kind`
+answers 422); the response carries `has_more`, `reset` (another process: a reload
+is needed) and `gap` (older entries were dropped). New entries arrive over SSE as
+`history_append`.
 
-**Lista de hosts permitidos.** En un bind a loopback el servidor solo acepta los
-encabezados `Host` `127.0.0.1:<puerto>`, `localhost:<puerto>` y `[::1]:<puerto>`
-y responde 421 a cualquier otro, lo que frena páginas de DNS-rebinding. Para
-aceptar otro host (por ejemplo al reenviar un puerto) usa el flag repetible
-`papersmith ui --allowed-host HOST:PORT`. Con `npm --prefix ui run dev` el proxy
-de Vite conserva el `Host` `localhost:5173`; arranca el backend así (el módulo
-acepta el mismo flag):
+**Allowed-host list.** On a loopback bind the server only accepts the `Host`
+headers `127.0.0.1:<port>`, `localhost:<port>` and `[::1]:<port>` and answers 421
+to any other, which stops DNS-rebinding pages. Another host (when forwarding a
+port, for instance) is accepted with the repeatable flag
+`papersmith ui --allowed-host HOST:PORT`. With `npm --prefix ui run dev` the Vite
+proxy keeps the `Host` `localhost:5173`; the backend is started like this (the
+module accepts the same flag):
 
 ```bash
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
 
-**Vista previa del paper (solo lectura).** Dos rutas GET, sin escrituras:
-`GET /api/paper/preview` devuelve las secciones en el mismo orden e ids que
-`/api/state`, con el texto plano de cada bloque de `paper/main.tex` (marcas
-`%% paper-writing block <id> begin|end`), sus claves `\cite{...}`, palabras,
-`written` y banderas `truncated`/`duplicate`, más el estado del PDF
-(`pdf.main` con `stale` si `main.tex` es más nuevo que `main.pdf`, y la lista de
-figuras; ambos llevan `mtime` en milisegundos, que la UI añade como `?v=` para
-recargar el PDF y las miniaturas al recompilar) y `sections_dir` (`status`:
-`ok`, `absent`, `unsafe` si `sections/` es un symlink que sale del workspace, y
-`truncated` si hay más de 100 secciones no canónicas; las canónicas siempre se
-resuelven por nombre). Las regiones de declaraciones y procedencia se ignoran; un bloque sin
-cierre se descarta y, con ids repetidos, gana el primero (marcado `duplicate`).
-`GET /api/paper/file?name=<n>` sirve solo `main.pdf` (`paper/main.pdf`) y
-`figures/<id>.pdf|png` (el directorio real es `paper/Figures/`, con F
-mayúscula). Regla del id: un solo segmento `[A-Za-z0-9._-]`, sin separadores,
-NUL ni punto inicial, hasta 100 caracteres (más estricta que `paper_figure.py`).
-Respuestas: 400 nombre mal formado, 404 ausente o no permitido, 413 sobre 25 MiB;
-encabezados fijos `Content-Type` por extensión, `nosniff`, `inline`,
-`X-Frame-Options: SAMEORIGIN` y `no-store`. No lleva CSP `sandbox` (rompería el
-visor de PDF) y no admite `Range` (se envía el archivo completo). Límites de
-lectura: `main.tex` 2 MiB (si lo supera, estado `too_large` y sin contenido),
-cada contrato de sección 256 KiB, 32 KiB de texto por bloque y 200 KiB de texto
-en total (con `truncated`). Cada lectura resuelve la ruta, exige que quede dentro
-del workspace (un symlink que escapa da `unsafe`/404) y que sea un archivo
-regular. papersmith no genera `main.pdf`: que no exista es lo normal. La
-protección `Host` (421) cubre estas rutas solo en un bind a loopback; con un bind
-no loopback no hay filtrado de `Host`.
+**Paper preview (read-only).** Two GET routes, no writes:
+`GET /api/paper/preview` returns the sections in the same order and with the same
+ids as `/api/state`, with the plain text of each block of `paper/main.tex`
+(markers `%% paper-writing block <id> begin|end`), its `\cite{...}` keys, words,
+`written` and the `truncated`/`duplicate` flags, plus the PDF state (`pdf.main`
+with `stale` when `main.tex` is newer than `main.pdf`, and the list of figures;
+both carry `mtime` in milliseconds, which the UI appends as `?v=` to reload the
+PDF and the thumbnails on recompile) and `sections_dir` (`status`: `ok`, `absent`,
+`unsafe` when `sections/` is a symlink pointing out of the workspace, and
+`truncated` when there are more than 100 non-canonical sections; the canonical
+ones always resolve by name). The declarations and provenance regions are
+ignored; a block with no closing marker is dropped, and with repeated ids the
+first one wins (marked `duplicate`). `GET /api/paper/file?name=<n>` serves only
+`main.pdf` (`paper/main.pdf`) and `figures/<id>.pdf|png` (the real directory is
+`paper/Figures/`, with a capital F). Id rule: a single segment `[A-Za-z0-9._-]`,
+no separators, no NUL and no leading dot, up to 100 characters (stricter than
+`paper_figure.py`). Responses: 400 for a malformed name, 404 for absent or not
+allowed, 413 above 25 MiB; fixed headers `Content-Type` by extension, `nosniff`,
+`inline`, `X-Frame-Options: SAMEORIGIN` and `no-store`. It carries no CSP
+`sandbox` (it would break the PDF viewer) and does not accept `Range` (the whole
+file is sent). Read limits: `main.tex` 2 MiB (above that, status `too_large` and
+no content), each section contract 256 KiB, 32 KiB of text per block and 200 KiB
+of text in total (with `truncated`). Every read resolves the path, requires it to
+stay inside the workspace (a symlink that escapes gives `unsafe`/404) and
+requires it to be a regular file. papersmith does not generate `main.pdf`: the
+file not existing is normal. The `Host` protection (421) covers these routes only
+on a loopback bind; on a non-loopback bind there is no `Host` filtering.
 
-**Pestaña *Preview*.** Muestra, en una sola vista, el texto de los bloques
-escritos y el PDF compilado. A la izquierda van las secciones en orden con su
-estado; cada bloque se pinta como texto plano escapado (nunca como HTML: un
-`<b>` o un `<script>` en `main.tex` se ve literal), las claves `\cite{...}`
-salen como chips, los bloques sin escribir muestran un marcador con su id y se
-avisa de cada truncado o id duplicado, de `main.tex` ausente, demasiado grande,
-inseguro o ilegible, y de "Preview truncated" cuando se alcanza el tope de la
-respuesta. A la derecha, si existe `paper/main.pdf`, se incrusta en un `<iframe>`
-con una insignia *stale* cuando `main.tex` es más nuevo que el PDF; si no existe
-se explica que papersmith no compila el paper completo y que debes construirlo
-tú. Debajo se listan las figuras de `paper/Figures/` con enlace *Open* (los PNG
-con miniatura). Se carga al abrir la pestaña (`#preview`) y se vuelve a pedir
-cuando cambia el estado del workspace por SSE, sin solapar peticiones; si falla
-muestra el error con *Retry*.
+**The *Preview* tab.** Shows the text of the written blocks and the compiled PDF
+in one view. On the left the sections appear in order with their state; each block
+is painted as escaped plain text (never as HTML: a `<b>` or a `<script>` in
+`main.tex` is shown literally), the `\cite{...}` keys come out as chips, unwritten
+blocks show a marker with their id, and every truncation or duplicate id is
+reported, along with `main.tex` absent, too large, unsafe or unreadable, and
+"Preview truncated" when the response ceiling is reached. On the right, if
+`paper/main.pdf` exists it is embedded in an `<iframe>` with a *stale* badge when
+`main.tex` is newer than the PDF; when it does not exist, the text explains that
+papersmith does not compile the full paper and that it has to be built
+separately. Below, the figures of `paper/Figures/` are listed with an *Open* link
+(PNGs with a thumbnail). It loads when the tab is opened (`#preview`) and is
+requested again when the workspace state changes over SSE, without overlapping
+requests; a failure shows the error with *Retry*.
 
-**Atlas SOTA (solo lectura, backend).** Dos rutas GET sobre
-`sota-pool/atlas.json` y `sota-pool/atlas.html` (los escribe la skill
-`plausibility`; el dashboard nunca los escribe ni los regenera).
-`GET /api/atlas` devuelve `json` y `html` con su estado (`ok`, `absent`,
-`too_large`, `unsafe`, y para el JSON también `unreadable` o `invalid`) y tamaño,
-`stale` (`atlas.json` más nuevo que `atlas.html`; `null` si falta alguno),
-`mtime` en milisegundos (la UI lo añade como `?v=` al iframe para recargarlo),
-`validation` (`ok`, `failed` con `errors`, hasta 50, o `unavailable` con
-`detail`) y `summary` (sistemas con id, título, número de planetas y familias;
-número de enlaces; conteo por `rel`; evidencia con sistema, planeta, origen y
-fecha, hasta 100) o `null`. Un JSON inválido da `json.status: invalid` y
-`validation.status: failed`, nunca un 500. `GET /api/atlas/view` sirve los bytes
-de `atlas.html` (404 si falta, es inseguro o no es un archivo regular; 413 sobre
-2 MiB) con `Content-Type: text/html; charset=utf-8`, `Content-Security-Policy:
+**SOTA atlas (read-only, backend).** Two GET routes over `sota-pool/atlas.json`
+and `sota-pool/atlas.html` (the `plausibility` skill writes them; the dashboard
+never writes or regenerates them). `GET /api/atlas` returns `json` and `html` with
+their status (`ok`, `absent`, `too_large`, `unsafe`, and for the JSON also
+`unreadable` or `invalid`) and size, `stale` (`atlas.json` newer than
+`atlas.html`; `null` when either is missing), `mtime` in milliseconds (the UI
+appends it as `?v=` to the iframe to reload it), `validation` (`ok`, `failed` with
+`errors`, up to 50, or `unavailable` with `detail`) and `summary` (systems with
+id, title, number of planets and families; number of links; count by `rel`;
+evidence with system, planet, origin and date, up to 100) or `null`. An invalid
+JSON gives `json.status: invalid` and `validation.status: failed`, never a 500.
+`GET /api/atlas/view` serves the bytes of `atlas.html` (404 when it is missing,
+unsafe or not a regular file; 413 above 2 MiB) with
+`Content-Type: text/html; charset=utf-8`, `Content-Security-Policy:
 sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src
 'unsafe-inline'; img-src data:`, `nosniff`, `no-store`,
-`X-Frame-Options: SAMEORIGIN` y `Referrer-Policy: no-referrer`. Cada lectura
-resuelve la ruta, exige que quede dentro del workspace (un symlink que escapa es
-`unsafe`) y que sea un archivo regular, y comprueba el tamaño (2 MiB para cada
-archivo) antes de leer. **Ejecución de Python del workspace:** para validar, el
-servidor carga `skills/plausibility/scripts/check_atlas.py` del propio workspace
-(ruta fija, nunca derivada de la petición) y llama a su validador dentro del
-proceso del servidor, sin escribir bytecode; es una superficie de ejecución de
-código, así que no apuntes el dashboard a un workspace en el que no confíes. Si
-el script falta, no se puede cargar o falla, `validation.status` es
-`unavailable` con el motivo. La protección `Host` (421) cubre estas rutas solo en
-un bind a loopback; con un bind no loopback no hay filtrado de `Host`.
+`X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: no-referrer`. Every read
+resolves the path, requires it to stay inside the workspace (a symlink that
+escapes is `unsafe`) and requires it to be a regular file, and checks the size
+(2 MiB per file) before reading. **Workspace Python execution:** to validate, the
+server loads `skills/plausibility/scripts/check_atlas.py` from the workspace
+itself (a fixed path, never derived from the request) and calls its validator
+inside the server process, writing no bytecode; it is a code-execution surface, so
+the dashboard should not be pointed at a workspace you do not trust. If the script
+is missing, cannot be loaded or fails, `validation.status` is `unavailable` with
+the reason. The `Host` protection (421) covers these routes only on a loopback
+bind; on a non-loopback bind there is no `Host` filtering.
 
-**Pestaña Atlas.** `#atlas` consume las rutas anteriores. A la izquierda, un
-resumen nativo (texto siempre escapado): tabla de sistemas con planetas y
-familias, número de enlaces y desglose por `rel`, una lista de evidencia acotada
-("showing N of evidence_total"), y un chip de validación (`valid`; `failed` con
-los primeros errores y "N more"; `unavailable` con el motivo). A la derecha, la
-constelación: `atlas.html` dentro de un `<iframe src="/api/atlas/view"
-sandbox="allow-scripts" referrerpolicy="no-referrer">`, sin `allow-same-origin`
-(el HTML corre en un origen opaco y no puede leer el dashboard). Los estados se
-explican en pantalla: sin atlas ("No atlas yet. Run the plausibility skill..."),
-`atlas.json` demasiado grande, inseguro, ilegible o inválido, "JSON present, HTML
-missing" (hace falta `scripts/render_atlas.py`), HTML sin JSON, y una insignia
-STALE cuando `atlas.json` es más nuevo que `atlas.html`. Los archivos del atlas
-no se vigilan: se piden al abrir la pestaña y con el botón *Refresh* (sin
-solapar peticiones; si falla muestra el error con *Retry* y conserva los datos
-anteriores). Nota: Chromium no pinta un iframe aislado que queda fuera del
-viewport en capturas `--full-page` (a 700x900 sale en blanco); dentro del
-viewport se ve completo.
+**The Atlas tab.** `#atlas` consumes the routes above. On the left, a native
+summary (text always escaped): a table of systems with planets and families, the
+number of links and a breakdown by `rel`, a bounded evidence list ("showing N of
+evidence_total"), and a validation chip (`valid`; `failed` with the first errors
+and "N more"; `unavailable` with the reason). On the right, the constellation:
+`atlas.html` inside an `<iframe src="/api/atlas/view" sandbox="allow-scripts"
+referrerpolicy="no-referrer">`, without `allow-same-origin` (the HTML runs in an
+opaque origin and cannot read the dashboard). The states are explained on screen:
+no atlas ("No atlas yet. Run the plausibility skill..."), `atlas.json` too large,
+unsafe, unreadable or invalid, "JSON present, HTML missing" (`scripts/render_atlas.py`
+is needed), HTML without JSON, and a STALE badge when `atlas.json` is newer than
+`atlas.html`. The atlas files are not watched: they are requested when the tab is
+opened and with the *Refresh* button (without overlapping requests; a failure
+shows the error with *Retry* and keeps the previous data). Note: Chromium does not
+paint an isolated iframe that falls outside the viewport in `--full-page` captures
+(at 700x900 it comes out blank); inside the viewport it is complete.
 
-**Línea de decisiones (solo lectura, backend).** `GET /api/decisions` mezcla, al
-pedirla, eventos normalizados `{ts, source, kind, summary, ref}` de registros que
-el workspace ya guarda; no escribe nada ni guarda instantáneas. Fuentes:
-`declarations` (la región `%% paper-writing declarations` de `paper/main.tex`;
-`ts` es `recorded`, y esa región solo guarda el estado ACTUAL: los valores
-anteriores no se pueden recuperar), `proposal` y `experiment` (`receipts/*.json`
-y `lifecycle/v1/transitions/*.json` de `.proposal-deliberation/` y
-`.experimental-deliberation/`) y `remote-execution` (los `ledger.jsonl` de
-`implementations/<repo>/<Nombre>/.remote-execution/`, descubiertos exactamente a
-dos niveles, sin recursión; `kaggle-inbox/` nunca se lee). Los recibos de
-edición no tienen marca de tiempo: sus eventos llevan `ts: null`, van
-después de los fechados (por nombre de archivo) y nunca se usa el mtime; el
-recibo de la revisión inicial (`CREATE_INITIAL_REVISION`) sí trae `createdAt`, que
-se usa como `ts` ("Created initial revision r01"). Las
-transiciones usan `committedAt`; cada resultado (`COMMITTED`,
-`ALREADY_COMMITTED`, `REJECTED`, `INCONSISTENT`, `RECOVERY_REQUIRED`) tiene su
-resumen. Todo se lee como JSON plano sin repetir las comprobaciones de hash y
-consistencia del ciclo de vida, así que esos eventos llevan `verified: false`
-(la UI los marcará como *unverified*). Orden: fechados de más nuevo a más
-antiguo, desempate estable por fuente; un `ts` ilegible cuenta como `null`.
-Cada fuente devuelve `status` (`ok`, `absent`, `unreadable`, `too_large`) y
-`count` en `sources`, de modo que una fuente rota no rompe la respuesta. Topes:
-500 eventos por fuente y 1000 en total (`truncated` y `total`), `main.tex` 2 MiB,
-256 KiB por recibo o transición, 500 archivos por directorio del sidecar,
-20 ledgers de hasta 2 MiB y 2000 líneas cada uno (se conservan las 2000 líneas
-más recientes y `detail` cuenta las más antiguas ignoradas; las líneas mal
-formadas se omiten y se cuentan en `detail`). Filtros opcionales: `source=` (lista separada
-por comas; 422 si hay un nombre desconocido) y `limit=` (1 a 1000). Cada lectura
-resuelve la ruta, exige que quede dentro del workspace, un archivo regular y
-comprueba el tamaño antes de leer. No hay campo de autor: nunca se registra. La
-protección `Host` (421) cubre la ruta solo en un bind a loopback.
+**Decisions line (read-only, backend).** `GET /api/decisions` mixes, when asked,
+normalized events `{ts, source, kind, summary, ref}` from records the workspace
+already keeps; it writes nothing and stores no snapshots. Sources: `declarations`
+(the `%% paper-writing declarations` region of `paper/main.tex`; `ts` is
+`recorded`, and that region only keeps the CURRENT state: earlier values cannot be
+recovered), `proposal` and `experiment` (`receipts/*.json` and
+`lifecycle/v1/transitions/*.json` in `.proposal-deliberation/` and
+`.experimental-deliberation/`) and `remote-execution` (the `ledger.jsonl` under
+`implementations/<repo>/<Name>/.remote-execution/`, discovered exactly two levels
+down, without recursion; `kaggle-inbox/` is never read). Edit receipts carry no
+timestamp: their events have `ts: null`, come after the dated ones (by file name)
+and the mtime is never used; the initial-revision receipt
+(`CREATE_INITIAL_REVISION`) does carry `createdAt`, used as `ts` ("Created initial
+revision r01"). Transitions use `committedAt`; every outcome (`COMMITTED`,
+`ALREADY_COMMITTED`, `REJECTED`, `INCONSISTENT`, `RECOVERY_REQUIRED`) has its
+summary. Everything is read as plain JSON without repeating the lifecycle's hash
+and consistency checks, so those events carry `verified: false` (the UI marks them
+as *unverified*). Order: dated ones newest first, with a stable tie-break by
+source; an unreadable `ts` counts as `null`. Each source returns `status` (`ok`,
+`absent`, `unreadable`, `too_large`) and `count` in `sources`, so a broken source
+does not break the response. Ceilings: 500 events per source and 1000 in total
+(`truncated` and `total`), `main.tex` 2 MiB, 256 KiB per receipt or transition,
+500 files per sidecar directory, 20 ledgers of up to 2 MiB and 2000 lines each
+(the most recent 2000 lines are kept and `detail` counts the older ones ignored;
+malformed lines are skipped and counted in `detail`). Optional filters: `source=`
+(comma-separated list; 422 on an unknown name) and `limit=` (1 to 1000). Every
+read resolves the path, requires it to stay inside the workspace and to be a
+regular file, and checks the size before reading. There is no author field: it is
+never recorded. The `Host` protection (421) covers the route only on a loopback
+bind.
 
-**Pestaña Decisions.** `#decisions` consume `/api/decisions` al abrirse y con el
-botón *Refresh* (las fuentes no se vigilan; sin solapar peticiones; error en
-línea con *Retry*, conserva los datos anteriores). Muestra los eventos tal como
-llegan (fechados de más nuevo a más antiguo; después, bajo el subtítulo
-*Undated*, los recibos de edición sin marca de tiempo). Cada fila lleva la fecha en texto
-UTC (`AAAA-MM-DD HH:MM:SS UTC`), una etiqueta de fuente (declarations, proposal,
-experiment, remote ledger), el tipo, el resumen y la ruta `ref` como texto (no
-es un enlace). Las filas con `verified: false` muestran *unverified* con el
-título "Read from the lifecycle files without hash or consistency checks." y las
-que traen `note` la muestran en gris (las declaraciones solo guardan el valor
-actual). Arriba, un chip de estado por fuente (`ok`, `absent`, `unreadable`,
-`too_large`, con su conteo, `detail` y la marca *truncated*), casillas para
-filtrar por fuente en el cliente y, si la respuesta se truncó, "Showing N of
-total". Todo el texto se escapa. No hay enlace a la pestaña Sections: la
-pestaña no tiene anclas por elemento y el id de una declaración no permite
-derivar la sección sin heurísticas, así que se omite a propósito.
+**The Decisions tab.** `#decisions` consumes `/api/decisions` when it opens and
+with the *Refresh* button (the sources are not watched; without overlapping
+requests; an inline error with *Retry*, keeping the previous data). It shows the
+events as they arrive (dated ones newest first; then, under the *Undated*
+subheading, the edit receipts with no timestamp). Each row carries the date as UTC
+text (`YYYY-MM-DD HH:MM:SS UTC`), a source label (declarations, proposal,
+experiment, remote ledger), the kind, the summary and the `ref` path as text (it
+is not a link). Rows with `verified: false` show *unverified* with the title "Read
+from the lifecycle files without hash or consistency checks.", and rows carrying
+`note` show it in grey (declarations only keep the current value). Above, a status
+chip per source (`ok`, `absent`, `unreadable`, `too_large`, with its count,
+`detail` and the *truncated* mark), checkboxes to filter by source in the client
+and, when the response was truncated, "Showing N of total". All text is escaped.
+There is no link to the Sections tab: the tab has no per-element anchors and a
+declaration's id does not allow deriving the section without heuristics, so it is
+omitted on purpose.
 
-**Verificador visual.** `scripts/command-center-visual-check.mjs` abre el
-dashboard en Chromium, saca capturas de cada pestaña a 1280x800, 1600x1000 y 700x900 (hoja inferior) y
-falla ante errores de consola:
+**Visual checker.** `scripts/command-center-visual-check.mjs` opens the dashboard
+in Chromium, captures every tab at 1280x800, 1600x1000 and 700x900 (bottom sheet)
+and fails on console errors:
 
 ```bash
 node scripts/command-center-visual-check.mjs --out /tmp/shots --full-page --click-check --drag-check
 ```
 
-| Flag | Efecto |
+| Flag | Effect |
 |------|--------|
-| `--out <dir>` | Carpeta de capturas (obligatoria) |
-| `--url <url>` | Dashboard a revisar (por defecto `http://127.0.0.1:8099/`) |
-| `--tabs a,b` / `--viewports 1280x800,...` | Acota pestañas o tamaños |
-| `--full-page` | Captura la página completa, no solo el viewport |
-| `--drag-check` | Verifica que arrastrar el lienzo no abre el panel |
-| `--click-check` | Hace clic en una etapa, una compuerta, una sección y una arista, y prueba el teclado |
-| `--timeout <s>` / `--chromium <path>` | Tiempo máximo y ejecutable de Chromium |
+| `--out <dir>` | Capture directory (required) |
+| `--url <url>` | Dashboard to check (default `http://127.0.0.1:8099/`) |
+| `--tabs a,b` / `--viewports 1280x800,...` | Narrows tabs or sizes |
+| `--full-page` | Captures the whole page, not only the viewport |
+| `--drag-check` | Checks that dragging the canvas does not open the panel |
+| `--click-check` | Clicks a stage, a gate, a section and an edge, and tries the keyboard |
+| `--timeout <s>` / `--chromium <path>` | Time limit and Chromium executable |
 
-Es una herramienta de desarrollo (necesita Chromium); no corre en CI. Los tests
-de la UI (`npm --prefix ui test`) sí corren en CI.
+It is a development tool (it needs Chromium); it does not run in CI. The UI tests
+(`npm --prefix ui test`) do run in CI.
 
 ### `papersmith mcp {serve,inspect,print-config}`
 
@@ -3634,14 +3623,16 @@ papersmith mcp inspect
 papersmith mcp print-config --workspace ~/papers/sparse-ae
 ```
 
-Expone el orquestador del workspace y los verbos de `paper-writing` a cualquier
-cliente del Model Context Protocol sobre `stdio` (JSON-RPC 2.0).
+Exposes the workspace orchestrator and the `paper-writing` verbs to any Model
+Context Protocol client over `stdio` (JSON-RPC 2.0).
 
-- `serve --workspace <dir>` — arranca el servidor MCP sobre `stdio`, enlazado a un único workspace.
-- `inspect` — imprime el catálogo de capacidades en JSON (fuente de verdad).
-- `print-config [--workspace <dir>]` — emite el fragmento de configuración para el host que estés configurando (Claude Code, OpenCode).
+- `serve --workspace <dir>` — starts the MCP server over `stdio`, bound to a single workspace.
+- `inspect` — prints the capability catalogue as JSON (the source of truth).
+- `print-config [--workspace <dir>]` — emits the configuration fragment for the host being configured (Claude Code, OpenCode).
 
-El catálogo completo de 38 herramientas (15 de sólo lectura y 23 mutantes), los recursos `papersmith://` y el modelo de seguridad están documentados en detalle en **[docs/mcp.md](docs/mcp.md)**.
+The full catalogue of 38 tools (15 read-only and 23 mutating), the
+`papersmith://` resources and the security model are documented in detail in
+**[docs/mcp.md](docs/mcp.md)**.
 
 ---
 
