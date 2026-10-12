@@ -34,7 +34,7 @@ remote compute, development and troubleshooting.
 
 ## If this is your first time
 
-Welcome. This forge is built so you can go from a PDF to a compiled paper
+Welcome. This forge is built to take a PDF to a compiled paper
 without guessing the order. The minimum path:
 
 1. **Install the CLI and set up the environment** — see [Getting started](#getting-started).
@@ -47,14 +47,14 @@ without guessing the order. The minimum path:
 5. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
    with the agent.
 
-You don't have to use every skill, or in this order: **each one declares what
+Not every skill has to be used, or in this order: **each one declares what
 it needs first and refuses before doing something half-done**. If an input is
 missing it doesn't invent it: it exits with a rejection code that names what's missing. A
-`PAPER_ABSENT` is not your mistake; it's the skill telling you what it's missing.
+`PAPER_ABSENT` reports a missing input, not an operator error.
 
 The full map is in [Use flow](#use-flow--the-short-path); the
-detailed route, in [How it works — the order](#how-it-works--the-order). And if
-you're going to use an AI agent as copilot, the ones already defined are in
+detailed route, in [How it works — the order](#how-it-works--the-order). If an AI
+agent is used as a copilot, the ones already defined are in
 [The agents](#the-agents).
 
 ---
