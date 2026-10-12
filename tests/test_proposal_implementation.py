@@ -31420,6 +31420,73 @@ class StepVerdictsTests(unittest.TestCase):
         self.assertIsNone(impl._step_verdicts(root, "Method")["run_suite"])
 
 
+class UnmeasuredStepNamesItsScopeTests(unittest.TestCase):
+    """B11: an `@step` witness is measured against `suite_digest`, which covers
+    every `.py` under `src/` and `tests/` plus the environment manifests. The
+    engine cannot know what a step's callable executes (it may run the suite,
+    read test files or spawn anything), so the scope is not narrowed; it is
+    stated where the reader meets an unmeasured step: on the item itself,
+    with what clears it."""
+
+    def _state(self, verdicts):
+        box = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "Method").mkdir()
+        (box / "Method" / "AGREED.md").write_text(
+            "<!-- position revision=r01.md sha256=" + "a" * 64
+            + " derivedAt=2026-08-27T00:00:00Z session=s0 target=pilot -->\n"
+            "- [x] 1. Ran once. `@step first`\n"
+            "- [ ] 2. Never ran. `@step second`\n"
+            "- [ ] 3. A notebook. `@notebook Notebooks/one.ipynb`\n"
+            "<!-- /position -->\n", encoding="utf-8")
+        return impl.position_state(box, "Method", {"stepVerdicts": verdicts},
+                                   None, None, impl._document_extra_sources(None))
+
+    def test_an_unmeasured_step_names_the_digest_scope_and_the_rerun(self):
+        state = self._state({"first": None})
+        by_ordinal = {e["ordinal"]: e for e in state["unmeasured"]}
+        first = by_ordinal[1]["reason"]
+        self.assertIn("src/", first)
+        self.assertIn("tests/", first)
+        self.assertIn("--step first --session", first)
+        self.assertEqual(by_ordinal[1]["digestScope"], impl.STEP_DIGEST_SCOPE)
+        second = by_ordinal[2]["reason"]
+        self.assertIn("--step second --session", second)
+        self.assertNotEqual(first, second,
+                            "a step that ran and one that never did are "
+                            "different facts and must read differently")
+
+    def test_only_step_witnesses_carry_it(self):
+        state = self._state({"first": None})
+        notebook = next(e for e in state["unmeasured"] if e["ordinal"] == 3)
+        self.assertNotIn("reason", notebook)
+        self.assertNotIn("digestScope", notebook)
+        sequence = {e["ordinal"]: e for e in state["sequence"]}
+        self.assertNotIn("reason", sequence[1])
+
+    def test_a_measured_step_carries_no_reason(self):
+        state = self._state({"first": True, "second": False})
+        self.assertEqual([e["ordinal"] for e in state["unmeasured"]], [3])
+
+    def test_the_scope_is_what_suite_digest_actually_walks(self):
+        """The stated scope is checked against the digest, not restated: a
+        test-only edit moves it (so the statement that it does is true), and
+        a file outside `src/` and `tests/` does not."""
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "src").mkdir()
+        (root / "tests").mkdir()
+        (root / "src" / "m.py").write_text("X = 1\n", encoding="utf-8")
+        (root / "tests" / "test_m.py").write_text("def test(): pass\n", encoding="utf-8")
+        before = impl.suite_digest(root)
+        (root / "notes.py").write_text("Y = 2\n", encoding="utf-8")
+        self.assertEqual(impl.suite_digest(root), before)
+        (root / "tests" / "test_m.py").write_text("def test(): assert 1\n", encoding="utf-8")
+        self.assertNotEqual(impl.suite_digest(root), before)
+        for fragment in ("src/", "tests/"):
+            self.assertIn(fragment, impl.STEP_DIGEST_SCOPE)
+
+
 class StepVerdictsParityTests(unittest.TestCase):
     """Spec "Step Verdicts Are Assembled By The Caller", design "All three
     evidence builders share one fold": `_position_write_evidence`'s,

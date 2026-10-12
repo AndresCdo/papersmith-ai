@@ -2510,7 +2510,20 @@ witness in `position`'s own sequence folds the ledger's latest event per
 name (latest wins) against a live digest: `True` for a current `returned`,
 `False` for a current `raised`, `unmeasured` for a stale digest, a
 pre-change event with no digest at all, or no event at all — never a false
-`True`/`False` over code nobody ran against. **Stated non-goal**: this does
+`True`/`False` over code nobody ran against.
+
+The digest is not narrowed to the code a step executes, and that is
+deliberate: a step's callable may run the suite, read a file under `tests/`
+or spawn a subprocess, and the engine cannot see which. A narrower scope
+would let a mark stay satisfied over an edit the step actually runs. The cost
+is that any edit under `src/` or `tests/` (a test-only edit included) or to
+one of the manifests makes every earlier step mark unmeasured until that
+step runs again, so commit the code and the tests before the first pilot
+step and run the steps last. Each unmeasured `@step` item in a position
+state's `unmeasured` list carries `reason`,
+which says whether the step never produced a verdict or its last run no
+longer counts and gives the exact `step` command that clears it, and
+`digestScope`, which states this scope. **Stated non-goal**: this does
 not distinguish a fully-executed suite from one that skipped tests —
 `pytest` exits 0 on skips, so `returned` grades green over a skipped suite
 exactly as a notebook report already does. An unknown `--step` name is

@@ -298,6 +298,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   is compared on its full bytes only. Receipts written by 0.13.0 keep
   reading: an engine-written entry's source content is rebuilt from the kit
   and trusted only when it hashes to the entry's `writtenSha256`.
+- **An unmeasured `@step` mark now says why, and what the step digest
+  covers.** A step's verdict counts only while `suite_digest` (every `.py`
+  under `src/` and `tests/`, plus the environment manifests) still matches,
+  so a test-only edit turned every earlier step mark unmeasured with nothing
+  saying so. The scope is kept: a step's callable may run the suite, read a
+  file under `tests/` or spawn a subprocess, and the engine cannot see which,
+  so a narrower digest could leave a mark satisfied over code the step runs.
+  Each unmeasured `@step` item in a position state's `unmeasured` list now
+  carries `reason` (no verdict yet, or the last run no longer counts, with
+  the exact `step` command that clears it) and `digestScope`. Documented in
+  `SKILL.md` and `references/usage.md`, with the advice to commit code and
+  tests before the first pilot step.
 
 ### Added
 
@@ -511,6 +523,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   source content rebuilt from the kit for an engine-written entry), so no
   migration is needed. A legacy `authored` or `adopted` notebook entry still
   drifts on execution until its next `materialize --authored`.
+- Unmeasured `@step` entries in a position state's `unmeasured` list carry
+  two new keys, `reason` and `digestScope`; the `sequence` entries and every
+  verdict are unchanged. Step events keep their digest, so marks recorded by
+  0.13.0 read exactly as before. No migration is needed.
 
 ## 0.13.0
 

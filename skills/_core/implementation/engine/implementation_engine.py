@@ -806,6 +806,29 @@ def _absent_position_state(multi: bool) -> dict:
     }
 
 
+def _step_unmeasured_entry(target: Path, name: str, entry: dict,
+                           evidence: dict) -> dict:
+    """An unmeasured `@step` item, with why and what clears it.
+
+    Two facts read differently: a step with no verdict on the ledger at all,
+    and one with a latest run that does not count now (it did not report, or
+    the code under `STEP_DIGEST_SCOPE` changed since). `_step_verdicts` folds
+    both to `None`; the operand's presence in `stepVerdicts` is what separates
+    them. A copy, so the `sequence` entry keeps its shape."""
+    operand = entry["witness"].get("operand") or ""
+    rerun = (f"`step --target {target} --name {name} --step {operand} "
+             "--session <session>`")
+    if operand in (evidence.get("stepVerdicts") or {}):
+        reason = (f"the latest run of step {operand!r} does not count now: it "
+                  "did not report a verdict, or a file in its digest scope "
+                  "(every .py under src/ and tests/, plus the environment "
+                  f"manifests) changed since it ran. Run it again: {rerun}")
+    else:
+        reason = (f"no run of step {operand!r} has a verdict on the ledger; run it: "
+                  f"{rerun}")
+    return {**entry, "reason": reason, "digestScope": STEP_DIGEST_SCOPE}
+
+
 def position_state(target: Path, name: str, evidence: dict,
                    revision: str | None, source: str | None,
                    extra_sources: list[str | None] | None = None) -> dict:
@@ -913,7 +936,8 @@ def position_state(target: Path, name: str, evidence: dict,
         if result["disagrees"]:
             disagreements.append(entry)
         if result["derived"] is None:
-            unmeasured.append(entry)
+            unmeasured.append(_step_unmeasured_entry(target, name, entry, evidence)
+                              if item["witness"]["kind"] == "step" else entry)
         # An item can be both unmeasured and unbacked -- it is unbacked only
         # BECAUSE it is unmeasured -- so it appears in both lists rather than
         # in whichever one is tested first. `unmeasured` answers "what could
@@ -8210,6 +8234,23 @@ def source_digest(target: Path, package: str) -> str:
 #: exactly as one edited does.
 SUITE_ENVIRONMENT_MANIFESTS = (
     "requirements.txt", "pyproject.toml", "setup.cfg", "tox.ini", "pytest.ini",
+)
+
+
+#: What a `kind: "step"` event's `suiteDigest` covers, carried on every
+#: unmeasured `@step` item so the reader meets the scope where it costs them.
+#: Not narrowed to what a step executes, because the engine cannot know it: a
+#: step's callable may run the suite, read files under `tests/` or spawn
+#: anything, and a scope that missed one of those would let a mark read as
+#: satisfied over code it never ran under.
+STEP_DIGEST_SCOPE = (
+    "every .py under src/ and tests/, plus the environment manifests "
+    f"({', '.join(SUITE_ENVIRONMENT_MANIFESTS)}). A step's callable may run any "
+    "of them -- the suite, a file under tests/, a subprocess -- and the engine "
+    "cannot see which, so any edit there, a test-only edit included, turns "
+    "every earlier step mark unmeasured until that step runs again. Commit "
+    "src/ and tests/ first and run each step last; a later edit costs a re-run "
+    "of each step, never a guess."
 )
 
 

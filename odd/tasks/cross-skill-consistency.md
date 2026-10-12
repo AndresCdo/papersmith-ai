@@ -58,6 +58,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] X8 — launchers refuse a sibling's inherited profile; profile test stops leaking it (D, writer trigger: 2 launchers + test + 3 docs)
   - [x] X3 — D5 mutation test runs on a scratch engine copy (D, same writer: 1 test file + CHANGELOG)
   - [x] B7 — executed kit notebooks are not structure drift (D, writer trigger: engine + test + 2 docs)
+  - [x] B11 — step digest scope kept and stated on every unmeasured `@step` item (D, writer trigger: engine + test + 2 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -459,6 +460,20 @@ Route legend: D = delegated writer, I = inline.
   rebuild hash check off -> 1 red. `pytest tests/test_proposal_implementation.py -n 8 --dist loadfile`:
   1791 passed, 2 skipped. Domain-lock pins unchanged (reworded). Seals unchanged. Additive key: no migration.
   Commit: `fix(implementation): executing a kit notebook is not structure drift` (the commit carrying this line)
+
+- B11 (real, and the scope is intended): `suite_digest` walks every `.py` under `src/` and `tests/` plus
+  `SUITE_ENVIRONMENT_MANIFESTS`; `_step_verdicts` folds a stale digest to `None`, so a test-only edit turned
+  every earlier `@step` mark unmeasured with no explanation. Narrowing is not sound: `cmd_step` runs an
+  arbitrary `module.function` (`impl_steps.run_step`, cwd = target), which may run pytest, read `tests/`
+  or spawn anything; the engine cannot derive what it executes. Kept fail-closed, documented, and stated
+  where it is met: `STEP_DIGEST_SCOPE` + `_step_unmeasured_entry` add `reason` (no verdict vs. last run no
+  longer counts, with the exact `step` command) and `digestScope` to unmeasured `@step` items (copies; the
+  `sequence` entry keeps its shape). Tests: `UnmeasuredStepNamesItsScopeTests` (4; one checks the stated
+  scope against `suite_digest` itself). RED 2F -> GREEN. Seals unchanged (no sealed case carries an
+  unmeasured `@step`). Domain-lock pins unchanged (reworded). Related files `-n 8 --dist loadfile`: 2050
+  passed, 1 failed (`test_experiments_seal.py::...stray_parent_env_var...`, passes alone and with the file;
+  a parallel flake, also passes on the stashed base). No migration (additive keys).
+  Commit: `fix(implementation): an unmeasured step mark names its digest scope` (the commit carrying this line)
 
 ## Next step
 
