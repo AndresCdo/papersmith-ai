@@ -21459,11 +21459,13 @@ def cmd_walk(args: argparse.Namespace) -> dict:
 
     Between two steps it refreshes the position, because an ordered next step
     refuses while an earlier item's mark is the one written before this run,
-    and `position` is the only writer into that section. It does not commit:
-    what belongs in the history and what the message says are the operator's,
-    and a walker authoring commit messages would be writing the record of
-    somebody else's work.
+    and `position` is the only writer into that section. It commits what
+    each step it ran here produced under a mechanical subject (`_commit_walked_step`
+    says why it has to); the subject's shape is the operator's, through
+    `--commit-template`.
     """
+    template = getattr(args, "commit_template", None) or WALK_COMMIT_TEMPLATE
+    walk_commit_subject(template, "")  # refuses a malformed one up front
     target = resolve_target(args.target)
     name = validate_name(args.name)
     _require_no_open_defect(target, name)
@@ -21514,7 +21516,7 @@ def cmd_walk(args: argparse.Namespace) -> dict:
                  "--target", str(target), "--name", args.name,
                  "--session", args.session, "--revision", args.revision],
                 capture_output=True, text=True)
-            _commit_walked_step(target, act["step"])
+            _commit_walked_step(target, act["step"], template)
     return {"command": "walk", "target": str(target), "name": name,
             "performed": performed, "stoppedAt": plan["stopsAt"],
             "reason": None if plan["stopsAt"] is None else
@@ -21522,7 +21524,29 @@ def cmd_walk(args: argparse.Namespace) -> dict:
                       or "a launch is the operator's to authorize"}
 
 
-def _commit_walked_step(target: Path, step: str) -> None:
+#: The subject `walk` commits a step's product under, unless the operator
+#: passes `--commit-template`. `{step}` is the one placeholder.
+WALK_COMMIT_TEMPLATE = "walk: {step}"
+
+
+def walk_commit_subject(template: str, step: str) -> str:
+    """Fill `{step}` into a walk commit template, or refuse the template.
+
+    Refused when it names no `{step}` (a commit nobody can trace to its
+    step), carries any other brace, spans more than one line, or is blank.
+    """
+    rest = template.replace("{step}", "")
+    if ("{step}" not in template or "{" in rest or "}" in rest
+            or "\n" in template or "\r" in template):
+        raise Refused("WALK_COMMIT_TEMPLATE_MALFORMED",
+                      f"--commit-template {template!r} must be one line holding "
+                      "the placeholder {step} and no other brace, e.g. "
+                      "'chore(walk): {step}'")
+    return template.replace("{step}", step)
+
+
+def _commit_walked_step(target: Path, step: str,
+                        template: str = WALK_COMMIT_TEMPLATE) -> None:
     """Record what one walked step produced, so the next one can run.
 
     A tension worth stating rather than hiding. `step` publishes its own next
@@ -21550,7 +21574,7 @@ def _commit_walked_step(target: Path, step: str) -> None:
                    capture_output=True, text=True)
     subprocess.run(
         ["git", "-C", str(target), "commit", "-q", "-m",
-         f"walk: {step}",
+         walk_commit_subject(template, step),
          "-m", "What this step declared it produces, recorded so the next "
                "step in the flow can run: `step` refuses on a dirty tree. "
                "The message is mechanical on purpose -- it records that an "
@@ -21896,6 +21920,9 @@ def main(argv: list[str] | None = None) -> int:
                            help="the managed revision the position binds to; "
                                 "omitted, no position refresh runs between "
                                 "steps and an ordered next step will refuse")
+            p.add_argument("--commit-template", default=None,
+                           help="subject for each walked commit, with {step} "
+                                "as the placeholder (default: 'walk: {step}')")
         if name == "step":
             p.add_argument("--step", required=True,
                            help="the declared __steps__ entry to run; no "

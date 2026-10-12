@@ -2499,6 +2499,22 @@ refuses on a dirty tree and every step dirties it with its own output; the
 message names the step and narrates nothing, which is the half that stays
 yours.
 
+The subject defaults to `walk: <step>`. A target whose history is held to a
+convention (a Conventional Commits hook, a CI lint) passes its own shape with
+`--commit-template`, where `{step}` is the one placeholder:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py walk \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --revision research-concept-r17.md --commit-template 'chore(walk): {step}'
+```
+
+A template with no `{step}`, any other brace, or more than one line is refused
+`WALK_COMMIT_TEMPLATE_MALFORMED` before anything runs: a commit nobody can
+trace back to its step is worse than the mechanical default. No receipt or
+ledger records the message, so changing it between walks changes nothing on
+disk but the history.
+
 It stops, rather than refusing, and says where: at a `launch`, at a `blocked`
 step nobody routed, or at the first act that refused -- returning `performed`
 and `stoppedAt` so the answer is what it did and what is left. It stops

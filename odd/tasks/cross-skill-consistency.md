@@ -81,6 +81,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C14 — `[out-of-scope:<id>]` subtracted from `agree`'s untested (D, writer trigger: engine + resolver + profile + convention + test + 3 docs)
   - [x] C13 — `paper-ingestion --force-ocr` / `force_ocr` (D, writer trigger: script + 2 test files + SKILL.md + README)
 - [ ] E1–E10
+  - [x] E4 — `walk --commit-template` (D, writer trigger: engine + new test file + 3 docs)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -930,3 +931,12 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   Re-anchored: `NewlyCoveredSubjectRosterTests._CASES` paper-ingestion 4->5 (the new flag in the usage line).
   Docs: SKILL.md (usage, config, "Tables from a poor text layer", gate), README (2 sites). No migration.
   Commit: `feat(paper-ingestion): force OCR on every page for a poor text layer` (the commit carrying this line)
+- E4 (real): `_commit_walked_step` hard-coded the subject `f"walk: {step}"`; nothing records it (no receipt or
+  ledger field; `cmd_walk`'s output never carried it). Fix: `WALK_COMMIT_TEMPLATE = "walk: {step}"`,
+  `walk_commit_subject(template, step)` (refuses `WALK_COMMIT_TEMPLATE_MALFORMED` on no `{step}`, any other
+  brace, a newline), `walk --commit-template`, validated before `resolve_target`. Also corrected `cmd_walk`'s
+  stale docstring ("It does not commit"). Tests: `tests/test_implementation_walk_commit_template.py` (7, 6
+  subtests) RED 11F -> GREEN. Domain lock unchanged (one draft wording moved `local` 37->38; reworded). Seals
+  unchanged (73 passed). `npm run test:fast`: 3378 passed. Docs: proposal SKILL.md (`walk` row), usage.md
+  (`walk` section), experimental SKILL.md (Flow A step 6). No migration.
+  Commit: `feat(implementation): walk commits under an operator-declared subject template` (the commit carrying this line)

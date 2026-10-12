@@ -654,6 +654,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   Documented in the skill's `SKILL.md` ("Tables from a poor text layer") and
   the manual.
 
+- **`walk` commits under a subject the target's convention accepts.** The
+  walker commits what each step produced (`step` refuses on a dirty tree), and
+  the subject was fixed at `walk: <step>`, so a target enforcing Conventional
+  Commits through a hook or a lint refused the walk's commits or carried
+  history its own policy rejects. `walk --commit-template '<subject>'` now
+  shapes it, with `{step}` as the one placeholder (`chore(walk): {step}`).
+  The default stays `walk: {step}`. A template with no `{step}`, any other
+  brace, or more than one line is refused `WALK_COMMIT_TEMPLATE_MALFORMED`
+  before anything runs. Shared by both implementation skills; documented in
+  `proposal-implementation`'s `SKILL.md` and `references/usage.md`, and in
+  `experimental-implementation`'s `SKILL.md`.
+
 ### Changed
 
 - **Workspace support policy: a live workspace is upgraded, never
@@ -1010,6 +1022,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   Existing configurations carry no such key and convert exactly as before;
   the skill-audit roster for `paper-ingestion` moves from 4 to 5 accepted
   flags. No migration is needed.
+
+- `walk` accepts `--commit-template`; without it the walked commits keep the
+  exact `walk: <step>` subject and body as before. No receipt or ledger
+  records the message, so nothing on disk changes. No migration is needed.
 
 
 ## 0.13.0

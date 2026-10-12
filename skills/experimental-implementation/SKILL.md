@@ -237,6 +237,12 @@ narrowed to what this domain actually has:
 6. Hand off to the `experiments-walk` agent once every step's placement is
    decided -- the same delegation table above names when each stretch
    begins and ends.
+   `walk` commits each step's product under the subject `walk: <step>`; a
+   target held to a commit convention passes `--commit-template
+   'chore(walk): {step}'` (`{step}` is the one placeholder; anything else is
+   refused `WALK_COMMIT_TEMPLATE_MALFORMED` before the walk starts). The
+   shared engine's `walk` is documented in `proposal-implementation`'s
+   `references/usage.md`.
 
 ## Flow B -- every later pass
 
