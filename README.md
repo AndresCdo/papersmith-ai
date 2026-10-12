@@ -309,13 +309,13 @@ passage behind it does not become a planet — a quoteless planet is a drawing.
 
 ### Step 3 — Ingest the PDFs (PDF → Markdown)
 
-In **Claude Code**, invoke the skill:
+In **Claude Code**, the skill is invoked:
 
 ```
 /paper-ingestion
 ```
 
-(or simply ask: *"ingiere los papers"*). For each **loose** PDF, it creates a
+(or, in Spanish: *"ingiere los papers"*). For each **loose** PDF, it creates a
 folder with the paper's name, moves the PDF inside and writes a lightweight
 `<name>.md` (text + LaTeX + tables, with the bibliography stripped) together
 with the images of the figures:
@@ -328,20 +328,20 @@ guidance/reference-papers/computers-13-00176-v2-1/
 ```
 
 A **loose PDF** (directly in a source root folder) is pending; a paper that's
-already inside its folder is skipped. To re-ingest, delete the paper's folder
-(leaving the PDF loose) and run the skill again. The configuration lives in
-`papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
+already inside its folder is skipped. Re-ingesting means deleting the paper's
+folder (leaving the PDF loose) and running the skill again. The configuration
+lives in `papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
 
 ### Step 4 — Deliberate over a proposal (`proposal-deliberation`)
 
-In **Claude Code**, invoke the skill:
+In **Claude Code**, the skill is invoked:
 
 ```
 /proposal-deliberation
 ```
 
 On the first turn it automatically loads the Markdown from `guidance/paper-guide/`
-as context and acts as a mathematics tutor. From there you can:
+as context and acts as a mathematics tutor. The available actions:
 
 - describe an idea and ask for a first version,
 - ask for edits to a managed proposal,
@@ -362,7 +362,7 @@ relationships nobody agreed on.
 
 ### Step 5 — Take the proposal to code (`proposal-implementation`)
 
-In **Claude Code**, invoke the skill:
+In **Claude Code**, the skill is invoked:
 
 ```
 /proposal-implementation
@@ -393,10 +393,10 @@ The ladder has five levels, from the cheapest to the most expensive: **smoke**,
 over 200 random configurations) and **remedies** (each proposed fix validated
 with the same rigour). A finding without a validated remedy isn't reported.
 
-That's all it takes to use the forge. If you want to understand **what goes on
-inside** each skill —its steps, its pieces, how they connect to each other and
-what limitations each one has— read on in [Anatomy of each
-skill](#anatomy-of-each-skill). And for the literal contract, each one's
+That is all that is needed to use the forge. **What goes on inside** each
+skill —its steps, its pieces, how they connect to each other and what
+limitations each one has— is detailed in [Anatomy of each
+skill](#anatomy-of-each-skill). For the literal contract, each one's
 `SKILL.md`.
 
 ---
