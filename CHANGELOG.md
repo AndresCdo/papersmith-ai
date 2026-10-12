@@ -278,6 +278,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   both profiles. Any other explicit value, such as a test fixture profile,
   still wins. The test that leaked this skill's profile into later tests of
   the same process now restores the environment.
+- **The engine's ambiguous-family mutation test no longer rewrites the
+  shipped engine.** `tests/test_implementation_pair.py` wrote its mutation
+  into `skills/_core/implementation/engine/implementation_engine.py` and
+  restored it on cleanup, so a parallel worker could run the mutated engine
+  and a crash could leave `MUTATED` in the tree. It now mutates a scratch
+  copy of the engine tree and runs a copy of the launcher against it; the
+  shipped file is asserted unchanged. Test-only: nothing a workspace runs
+  changes.
 
 ### Added
 

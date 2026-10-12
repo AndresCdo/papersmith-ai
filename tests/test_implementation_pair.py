@@ -752,6 +752,8 @@ class TwoDocumentAmbiguousFamilyRefusesTests(unittest.TestCase):
 
 
 ENGINE = FORGE / "skills/_core/implementation/engine/implementation_engine.py"
+#: Read once at import, before any test of this module runs.
+_REAL_ENGINE_SHA256 = hashlib.sha256(ENGINE.read_bytes()).hexdigest()
 
 #: design.md D5: the mutation a WEAKER lock survives, so it is the one that
 #: proves the refusal is reachable rather than merely present in source.
@@ -781,7 +783,8 @@ _AMBIGUITY_MUTATED = (
 
 class AmbiguousFamilyMutationProvesReachabilityTests(unittest.TestCase):
     """design.md D5: the mutation a weaker lock survives. Real engine
-    source, real subprocesses, guaranteed reverted -- never a monkeypatch
+    source copied into a scratch forge (X3: the shipped file is never
+    written), real subprocesses -- never a monkeypatch
     (a recorded scar: patching a module attribute has zero effect on a
     subprocess, and every case exercised here is one).
 
@@ -803,16 +806,32 @@ class AmbiguousFamilyMutationProvesReachabilityTests(unittest.TestCase):
         mutated = original.replace(_AMBIGUITY_OLD, _AMBIGUITY_MUTATED, 1)
         self.assertEqual(mutated.count(_AMBIGUITY_OLD), 0)
         self.assertEqual(mutated.count(_AMBIGUITY_MUTATED), 1)
-        ENGINE.write_text(mutated, encoding="utf-8")
 
-        def restore():
-            ENGINE.write_text(original, encoding="utf-8")
-            restored = ENGINE.read_text(encoding="utf-8")
-            self.assertEqual(restored, original,
-                             "the engine file was not restored byte-identical")
-            self.assertEqual(restored.count(_AMBIGUITY_OLD), 1)
-            self.assertEqual(restored.count(_AMBIGUITY_MUTATED), 0)
-        self.addCleanup(restore)
+        # X3: the mutation is written into a scratch forge, never into the
+        # shipped engine. The scratch copy keeps the real nesting
+        # (`impl_layout.FORGE_ROOT` is `parents[4]` of the engine, and a
+        # target must live under `<forge>/implementations`), carries the
+        # whole `_core/implementation` tree and the launcher this suite
+        # runs, and links `remote-execution`, which the engine path-imports
+        # read-only from `<forge>/skills`.
+        self.scratch_forge = Path(tempfile.mkdtemp(prefix="pair-d5-forge-"))
+        self.addCleanup(shutil.rmtree, self.scratch_forge, ignore_errors=True)
+        core = ENGINE.parents[1]
+        scratch_core = (self.scratch_forge
+                        / core.relative_to(FORGE))
+        shutil.copytree(core, scratch_core,
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        self.scratch_engine = scratch_core / ENGINE.relative_to(core)
+        self.scratch_engine.write_text(mutated, encoding="utf-8")
+        self.assertEqual(
+            self.scratch_engine.read_text(encoding="utf-8").count(
+                _AMBIGUITY_MUTATED), 1)
+        self.scratch_cli = self.scratch_forge / CLI.relative_to(FORGE)
+        self.scratch_cli.parent.mkdir(parents=True)
+        shutil.copy2(CLI, self.scratch_cli)
+        remote = FORGE / "skills" / "remote-execution"
+        (self.scratch_forge / "skills" / remote.name).symlink_to(
+            remote, target_is_directory=True)
 
         # A fresh two-document profile and a genuinely ambiguous document
         # 1 (the identical corpus shape `TwoDocumentAmbiguousFamilyRefuses
@@ -842,7 +861,8 @@ class AmbiguousFamilyMutationProvesReachabilityTests(unittest.TestCase):
         (self.ambiguous_doc1 / "draft-1.md").write_text("family one", encoding="utf-8")
         (self.ambiguous_doc1 / "final-2.md").write_text("family two", encoding="utf-8")
 
-        self.box = FORGE / "implementations" / f"_pair_d5_{os.getpid()}_{id(self)}"
+        self.box = (self.scratch_forge / "implementations"
+                    / f"_pair_d5_{os.getpid()}_{id(self)}")
         self.addCleanup(shutil.rmtree, self.box, ignore_errors=True)
         self.box.mkdir(parents=True)
         env = dict(os.environ)
@@ -867,8 +887,19 @@ class AmbiguousFamilyMutationProvesReachabilityTests(unittest.TestCase):
         env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.profile_roots.profile_path)
         env["IMPLEMENTATION_PROPOSALS"] = str(self.doc0)
         env["IMPLEMENTATION_PROPOSALS_1"] = str(doc1_root)
-        return subprocess.run([sys.executable, str(CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE, env=env)
+        return subprocess.run([sys.executable, str(self.scratch_cli), *args],
+                              capture_output=True, text=True,
+                              cwd=self.scratch_forge, env=env)
+
+    def test_the_real_engine_is_never_rewritten(self):
+        """X3: the mutation lives in a scratch copy only. A parallel worker
+        reading the shipped engine during this class, or a crash before the
+        cleanup, must never see `MUTATED` in the tree."""
+        self.assertEqual(
+            hashlib.sha256(ENGINE.read_bytes()).hexdigest(),
+            _REAL_ENGINE_SHA256,
+            "the shipped engine file changed while the D5 mutation was live")
+        self.assertNotIn("MUTATED", ENGINE.read_text(encoding="utf-8"))
 
     def test_the_ambiguous_case_silently_succeeds_under_the_mutation(self):
         # Under the REAL (unmutated) engine, this exact fixture refuses --

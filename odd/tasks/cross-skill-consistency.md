@@ -56,6 +56,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] B8 — attainedLevel bounded by the aim when nothing leveled ran (D, writer trigger: impl_position + engine + 2 test files + 2 docs)
   - [x] B10 — prose check skips engine-written holder structures (D, writer trigger: engine + test + doc)
   - [x] X8 — launchers refuse a sibling's inherited profile; profile test stops leaking it (D, writer trigger: 2 launchers + test + 3 docs)
+  - [x] X3 — D5 mutation test runs on a scratch engine copy (D, same writer: 1 test file + CHANGELOG)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -432,6 +433,17 @@ Route legend: D = delegated writer, I = inline.
   run is green (80 passed). Docs: proposal usage.md, experimental SKILL.md, profile docstring ("24 bytes"
   removed). Out of surface, stale: README.md:2412 calls the launcher "24 líneas". No migration.
   Commit: `fix(implementation): a launcher refuses the other skill's inherited profile` (the commit carrying this line)
+
+- X3 (real; `AmbiguousFamilyMutationProvesReachabilityTests.setUp` wrote the mutation into the shipped engine
+  and restored it in a cleanup). Fix: setUp copies `skills/_core/implementation` into a scratch forge with the
+  real nesting (`impl_layout.FORGE_ROOT` = engine `parents[4]`; target box under `<scratch>/implementations`),
+  writes the mutation there, copies the launcher, symlinks `skills/remote-execution`, and runs the scratch
+  launcher. New `test_the_real_engine_is_never_rewritten` (sha read at module import + no `MUTATED`):
+  RED on the old setUp -> GREEN. Still red under its mutation: writing the unmutated source into the scratch
+  engine reddens `test_the_ambiguous_case_silently_succeeds_under_the_mutation` (observed 1 failed).
+  `pytest tests/test_implementation_pair.py -n 8 --dist loadfile`: 39 passed, `git diff skills` empty.
+  Test-only; no migration.
+  Commit: `test(implementation): the D5 mutation runs on a scratch copy of the engine` (the commit carrying this line)
 
 ## Next step
 
