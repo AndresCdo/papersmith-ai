@@ -28,9 +28,9 @@ remote compute, development and troubleshooting.
 10. [Remote compute, carefully](#remote-compute-carefully)
 11. [Architecture](#architecture)
 12. [Development and testing](#development-and-testing)
-13. [Troubleshooting](#solución-de-problemas)
-14. [Related documentation](#documentación-relacionada)
-15. [License](#licencia)
+13. [Troubleshooting](#troubleshooting)
+14. [Related documentation](#related-documentation)
+15. [License](#license)
 
 ## If this is your first time
 
@@ -3780,63 +3780,63 @@ again.
 
 ---
 
-## Solución de problemas
+## Troubleshooting
 
-**"La skill se negó a arrancar."** Es el comportamiento esperado: cada skill
-declara qué necesita antes y sale con un código de rechazo que nombra lo que
-falta, en vez de inventarlo o saltearlo. Lee el código como una lista de
-tareas — dice exactamente qué entrada falta. No es un error tuyo.
+**"The skill refused to start."** That is the expected behaviour: each skill
+declares what it needs first and exits with a refusal code that names what is
+missing, rather than inventing it or skipping it. The code reads as a to-do list —
+it says exactly which input is missing. It is not a mistake on the reader's part.
 
-**"`node --test` a secas falla."** Por diseño: el motor de deliberación se niega
-a servir sin un perfil de dominio. Usa `npm test` (que lo fija) o el CLI de la
-skill. Lo mismo vale para los motores de implementación:
-`IMPLEMENTATION_DOMAIN_PROFILE_REQUIRED` significa que los estás invocando
-directo en vez de a través de `implementation_cli.py`, que es quien los arranca
-con su perfil.
+**"Bare `node --test` fails."** By design: the deliberation engine refuses to
+serve without a domain profile. `npm test` sets it, and so does the skill's CLI.
+The same holds for the implementation engines:
+`IMPLEMENTATION_DOMAIN_PROFILE_REQUIRED` means they are being invoked directly
+instead of through `implementation_cli.py`, which is what starts them with their
+profile.
 
-**"El workspace no tiene `.claude/skills`."** Es el estado por defecto: un
-workspace embarca el árbol `skills/` completo y `.claude/agents/`, y sus
-documentos de routing apuntan al árbol canónico `skills/*/SKILL.md`; los
-agentes leen las skills desde ahí. Si quieres que tu harness las liste como
-comandos `/`, ejecuta `npm run setup:harnesses` dentro del workspace: crea las
-proyecciones de los cuatro harness, relativas e idempotentes.
+**"The workspace has no `.claude/skills`."** That is the default state: a
+workspace ships the whole `skills/` tree and `.claude/agents/`, and its routing
+documents point at the canonical `skills/*/SKILL.md` tree; the agents read the
+skills from there. For a harness to list them as `/` commands, run
+`npm run setup:harnesses` inside the workspace: it creates the projections of the
+four harnesses, relative and idempotent.
 
-**"`papersmith audit` reporta drift."** Algún archivo generado cambió respecto
-del manifest. No lo edites a mano: ejecuta `papersmith upgrade` (y `--force` si
-hace falta) para volver a la versión del framework.
+**"`papersmith audit` reports drift."** Some generated file changed with respect
+to the manifest. It is not edited by hand: run `papersmith upgrade` (and `--force`
+if needed) to return to the framework's version.
 
-**"No puedo correr `papersmith accounts`."** Todavía no existe (follow-up
-registrado). Usa
+**"`papersmith accounts` cannot be run."** It does not exist yet (recorded
+follow-up). Use
 `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
 
-**"`status` sale con código 0 aunque haya drift."** Gap conocido y registrado:
-hoy el exit code no es estricto. Para un gate de CI, mira el JSON (`--json`) en
-vez del código de salida.
+**"`status` exits 0 even when there is drift."** A known, recorded gap: the exit
+code is not strict today. For a CI gate, read the JSON (`--json`) rather than the
+exit code.
 
-**"La primera ingesta descarga ~1.5 GB."** Son los pesos de Surya si el entorno
-no quedó pre-provisionado. `papersmith init` ya provisiona el entorno salvo que
-hayas pasado `--no-env`; en ese caso ejecuta `python3 scripts/setup_env.py install`
-antes de la primera ingesta.
+**"The first ingestion downloads ~1.5 GB."** Those are the Surya weights when the
+environment was not pre-provisioned. `papersmith init` already provisions the
+environment unless `--no-env` was passed; in that case, run
+`python3 scripts/setup_env.py install` before the first ingestion.
 
 ---
 
-## Documentación relacionada
+## Related documentation
 
-- **Cada skill, su contrato literal**: `skills/<nombre>/SKILL.md` — la fuente de
-  verdad de lo que una skill acepta y promete.
-- **Contexto del proyecto para agentes**: `openspec/project-context.md`.
-- **Lineamientos de dominio**: `guidance/paper-guide/` — la drop-zone que
-  `proposal-deliberation` carga como contexto al inicio de cada deliberación.
-- **Provisión del entorno y de los harnesses**: `scripts/setup_env.py` y
+- **Each skill, its literal contract**: `skills/<name>/SKILL.md` — the source of
+  truth for what a skill accepts and promises.
+- **Project context for agents**: `openspec/project-context.md`.
+- **Domain guidelines**: `guidance/paper-guide/` — the drop-zone that
+  `proposal-deliberation` loads as context at the start of each deliberation.
+- **Environment and harness provisioning**: `scripts/setup_env.py` and
   `scripts/setup-harnesses.sh`.
-- **Suites y gates**: `tests/` y los scripts de `package.json` (`test`,
+- **Suites and gates**: `tests/` and the `package.json` scripts (`test`,
   `test:all`, `typecheck`).
-- **Servidor MCP y catálogo de herramientas**: [docs/mcp.md](docs/mcp.md).
-- **Diagrama del flujo (comandos, skills y agentes en Pi)**:
+- **MCP server and tool catalogue**: [docs/mcp.md](docs/mcp.md).
+- **Flow diagram (commands, skills and agents in Pi)**:
   [docs/diagrams/papersmith-pi-flow.html](docs/diagrams/papersmith-pi-flow.html).
 
 ---
 
-## Licencia
+## License
 
-Apache-2.0 — el texto completo está en [`LICENSE`](LICENSE).
+Apache-2.0 — the full text is in [`LICENSE`](LICENSE).
