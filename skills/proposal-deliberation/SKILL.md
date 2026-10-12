@@ -383,7 +383,7 @@ None of this is negotiable and none of it is something you should work around �
 | Operation | Use it for |
 | --- | --- |
 | `STATUS` | Read-only, keyless inventory of `proposals/` — managed revisions, the latest, tie/ambiguity detection, non-managed files, and (with `sourceFilename`) a deterministic classification of one candidate path. Never mutates. Use it at the start of every deliberation — see [Resolving the base version](#resolving-the-base-version). |
-| `CREATE_INITIAL_REVISION` | Creates the first managed proposal (v1) from the user's idea plus the paper-guide. Only when no managed proposal exists yet; never automatic, never overwrites or duplicates one. |
+| `CREATE_INITIAL_REVISION` | Creates the first managed proposal (v1) from the user's idea plus the paper-guide. Only when no managed proposal exists yet; never automatic, never overwrites or duplicates one. A success leaves a permanent creation lock (`.proposal-deliberation/locks/initial-revision.lock`), so preview it first with `--dry-run` (or `"dryRun": true`): every check and the composed `markdown`, no lock, no write. See [usage](references/usage.md#dry-run-first-see-v1-before-it-exists). |
 | `WITHDRAW_REVISION` | Safely withdraws one eligible managed revision, preserving an audited recovery copy. Not content deletion. |
 | `RESTORE_WITHDRAWN_REVISION` | Restores a previously withdrawn managed revision from its audited recovery copy. |
 

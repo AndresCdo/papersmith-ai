@@ -99,6 +99,19 @@ If a required source directory is absent:
 
 If a managed revision already exists, it blocks with `MANAGED_PROPOSAL_ALREADY_EXISTS` — it never overwrites or duplicates one.
 
+### Dry run first: see v1 before it exists
+
+A successful `CREATE_INITIAL_REVISION` takes a project-wide creation lock (`.experimental-deliberation/locks/initial-revision.lock`) and leaves it in place for good: it is the guard that keeps two concurrent creations from both winning, so after one success every further attempt is refused `MANAGED_PROPOSAL_ALREADY_EXISTS`. The engine never removes that lock. To see what v1 would be before committing to it, add `--dry-run` (or `"dryRun": true` in the request):
+
+```bash
+node skills/experimental-deliberation/cli.mjs --dry-run '{
+  "operation": "CREATE_INITIAL_REVISION",
+  "instruction": "Domain shift baseline sweep. Testing whether the proposed adaptation term improves held-out accuracy under domain shift without target labels.\n\n**Dataset:** domain-shift-benchmark (standard train/validation/test split as distributed).\n\n**Validation scheme:** paired Wilcoxon signed-rank test, 5 seeds, 3 repetitions per seed."
+}'
+```
+
+The dry run runs every check the real call runs — required sources, an existing managed revision, the single-sentence refusal, the canonical form, the pre-publish validation — and composes the document, then stops before the lock and the write. It answers `status: "preview"`, `dryRun: true`, `mutations: 0`, the would-be `targetFilename` and `targetRevision`, `canonicalMetadata`, the composed `markdown` (without the artifact marker) and `instructionBudget`; nothing under `experiments/` or `.experimental-deliberation/` is created. Sending the same request without the flag then writes exactly that markdown. If the creation lock is already present, the dry run answers the refusal the real call would meet (`MANAGED_PROPOSAL_ALREADY_EXISTS`, naming the lock) and leaves the lock untouched. `dryRun` applies only to `CREATE_INITIAL_REVISION`; on any other operation it is refused `DRY_RUN_UNSUPPORTED` and nothing runs (`CREATE_SUCCESSOR` already previews without it; `STATUS` and `RESOLVE_TARGET` never write and ignore the flag).
+
 ### v1 is checked before it is written
 
 **v1 is checked, not exempt.** Source fragments are pasted in verbatim under a `## Reference Sources` heading (this profile's `sourceReferenceHeading`), one `### <path>` per fragment — but `CREATE_INITIAL_REVISION` runs the composed candidate through the identical `violations()` gate `CREATE_SUCCESSOR` runs, before any write (see [SKILL.md](../SKILL.md#creating-v1-checked-by-the-same-gate-as-every-successor)). If a pasted fragment carries a filled report-table cell, or a URL with no verification tag, v1 is refused outright:

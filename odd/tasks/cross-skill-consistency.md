@@ -737,3 +737,15 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   design). Observed along the way: v1 creation from a ~65k-character idea takes ~35 s (not addressed).
   test:node 734/734; typecheck clean. No migration.
   Commit: `fix(deliberation): the instruction cap is enforced on the CLI and reported` (the commit carrying this line)
+
+- C6 (real): no preview existed for v1 and a success leaves the permanent creation lock. Fix: `dryRun` on
+  `InitialRevisionCreationService.execute` returns `status: 'preview'` after every refusal and before the lock and
+  publish; `proposal-workspace.ts` projects it (`dryRun: true`, filename, metadata, `markdown`, `instructionBudget`)
+  and predicts the lock refusal via the new read-only `initialRevisionLockState` (lock never touched); `dryRun`
+  on any other operation -> `DRY_RUN_UNSUPPORTED` (fail-closed, nothing runs); `cli.mjs --dry-run` sets the field on
+  every tool request (STATUS/RESOLVE_TARGET unaffected). Docs: both SKILL.md (operations table), both usage.md
+  ("Dry run first", proposal example driven). Tests: `tests/deliberation-initial-revision-dry-run.test.mjs` (6)
+  RED 4F -> GREEN (single-sentence and STATUS cases pass before and after by design). Core comment reworded
+  ("stops" is a domain-north word, `proposal-deliberation-domain-profile-lock`). test:node 740 (739 + that fix).
+  No migration.
+  Commit: `feat(deliberation): CREATE_INITIAL_REVISION previews with --dry-run, no lock, no write` (the commit carrying this line)

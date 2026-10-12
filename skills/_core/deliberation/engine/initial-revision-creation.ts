@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, rm } from 'node:fs/promises';
+import { access, lstat, mkdir, open, realpath, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { InitialRevisionRenderer, type InitialRevisionGuideFragment } from './initial-revision-renderer.js';
@@ -38,10 +38,12 @@ export type InitialRevisionPublicationResult = { filename: string; revision: str
 /** Injectable seam (HARD test-isolation constraint): lets tests capture the rendered candidate in memory instead of writing a real proposal `.md`. */
 export type InitialRevisionPublicationPort = { publish(candidate: InitialRevisionCandidate): Promise<InitialRevisionPublicationResult> };
 
-export type CreateInitialRevisionInput = { idea: string; guideFragments?: readonly InitialRevisionGuideFragment[] };
+/** `dryRun`: run every check and the composition, then return before the creation lock and the write (`status: 'preview'`). */
+export type CreateInitialRevisionInput = { idea: string; guideFragments?: readonly InitialRevisionGuideFragment[]; dryRun?: boolean };
 
 export type CreateInitialRevisionResult =
 	| { status: 'created'; filename: string; revision: string; documentSha256: string; canonicalMetadata: CanonicalProposalMetadata; markdown: string }
+	| { status: 'preview'; filename: string; revision: string; canonicalMetadata: CanonicalProposalMetadata; markdown: string }
 	| { status: 'blocked'; code: 'INITIAL_IDEA_REQUIRED' | 'MANAGED_PROPOSAL_ALREADY_EXISTS' | 'INITIAL_IDEA_SINGLE_SENTENCE' }
 	| { status: 'blocked'; code: 'INITIAL_REVISION_CANONICAL_FORM_VIOLATION'; violations: readonly PreservationViolation[] }
 	| { status: 'blocked'; code: 'INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED'; candidateValidation: CandidateValidationFailure };
@@ -117,6 +119,9 @@ export class InitialRevisionCreationService {
 		const filename = initialRevisionFilename(composed.slug);
 		if (!isInitialRevision(filename)) throw new Error('INITIAL_REVISION_FILENAME_INVALID');
 		const candidate: InitialRevisionCandidate = { filename, revision: artifact.revisionLabel(1), markdown: composed.markdown, canonicalMetadata: composed.canonicalMetadata };
+		// The dry run ends here: every refusal above has run, and nothing below -- the creation
+		// lock, the managed file, the state and the receipt -- is touched.
+		if (input.dryRun === true) return { status: 'preview', filename: candidate.filename, revision: candidate.revision, canonicalMetadata: candidate.canonicalMetadata, markdown: candidate.markdown };
 		let published: InitialRevisionPublicationResult;
 		try {
 			published = await this.publication.publish(candidate);
@@ -153,6 +158,17 @@ async function canonicalProposalsDirectory(projectRoot: string): Promise<string>
 
 function initialRevisionLockPath(root: string): string {
 	return join(root, artifact.sidecarRoot, 'locks', 'initial-revision.lock');
+}
+
+/** The creation lock's project-relative path, and whether it is on disk. Read-only: a dry run uses it to predict the refusal a real call would meet, and never creates or removes the lock. */
+export async function initialRevisionLockState(projectRoot: string): Promise<{ path: string; present: boolean }> {
+	const relative = join(artifact.sidecarRoot, 'locks', 'initial-revision.lock');
+	try {
+		await access(initialRevisionLockPath(projectRoot));
+		return { path: relative, present: true };
+	} catch {
+		return { path: relative, present: false };
+	}
 }
 
 /**

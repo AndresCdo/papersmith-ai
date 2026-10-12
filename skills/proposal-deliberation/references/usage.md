@@ -60,6 +60,19 @@ node skills/proposal-deliberation/cli.mjs '{
 
 This is explicit and user-triggered only: it never runs automatically, and it is rejected outright when a managed proposal already exists (it never overwrites or duplicates one). The engine loads the project's `guidance/paper-guide` directory once and composes v1 from that guide content plus the supplied idea — title, section heading, and filename slug are all derived from the idea, never a fixed generic skeleton: the title is the first sentence and the section heading the second, each with its terminal `.`, `!` or `?` dropped (punctuation inside a sentence is kept) and capped at 200 characters, and the slug is the title lowercased and hyphenated. The whole idea is then written verbatim as the section body, so those two sentences appear twice on purpose: the headings are labels, and the body is the only place the full text survives. An idea with no second sentence is refused with `INITIAL_IDEA_SINGLE_SENTENCE`. A successful call returns the created filename, revision, and document hash as completion evidence. Before writing, the composed v1 runs the same structural pre-publish validation every successor's accept turn runs over the whole document (size and reserved bytes, well-formed display blocks, standalone ATX headings); a failure is refused with `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, `nextAction: "repair_candidate_markdown"`, and a message naming the rule and the offending line. A heading marker inside a backtick code span is text and passes.
 
+### Dry run first: see v1 before it exists
+
+A successful `CREATE_INITIAL_REVISION` takes a project-wide creation lock (`.proposal-deliberation/locks/initial-revision.lock`) and leaves it in place for good: it is the guard that keeps two concurrent creations from both winning, so after one success every further attempt is refused `MANAGED_PROPOSAL_ALREADY_EXISTS`. The engine never removes that lock. To see what v1 would be before committing to it, add `--dry-run` (or `"dryRun": true` in the request):
+
+```bash
+node skills/proposal-deliberation/cli.mjs --dry-run '{
+  "operation": "CREATE_INITIAL_REVISION",
+  "instruction": "Distribution-free calibration under covariate shift. A paper proposing a calibration test for conformal prediction sets when the covariates shift."
+}'
+```
+
+The dry run runs every check the real call runs — required sources, an existing managed revision, the single-sentence refusal, the canonical form, the pre-publish validation — and composes the document, then stops before the lock and the write. It answers `status: "preview"`, `dryRun: true`, `mutations: 0`, the would-be `targetFilename` and `targetRevision`, `canonicalMetadata`, the composed `markdown` (without the artifact marker) and `instructionBudget`; nothing under `proposals/` or `.proposal-deliberation/` is created. Sending the same request without the flag then writes exactly that markdown. If the creation lock is already present, the dry run answers the refusal the real call would meet (`MANAGED_PROPOSAL_ALREADY_EXISTS`, naming the lock) and leaves the lock untouched. `dryRun` applies only to `CREATE_INITIAL_REVISION`; on any other operation it is refused `DRY_RUN_UNSUPPORTED` and nothing runs (`CREATE_SUCCESSOR` already previews without it; `STATUS` and `RESOLVE_TARGET` never write and ignore the flag).
+
 ## Open one `--serve` process for the whole deliberation
 
 The engine host's own cold start (jiti compiling its TS sources) is paid once per spawned process. A single version already needs at least three calls — resolve, preview, accept — so start ONE persistent process and keep it open for the whole deliberation instead of spawning a fresh `cli.mjs` invocation per call:

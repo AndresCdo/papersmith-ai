@@ -400,7 +400,7 @@ This skill **does not run experiments**, **does not ingest real results**, and *
 | --- | --- |
 | `STATUS` | Read-only, keyless inventory of `experiments/`. Never mutates. Run it at the start of every deliberation. |
 | `RESOLVE_TARGET` | Read-only locus resolution, using the exact resolver `CREATE_SUCCESSOR` uses internally. |
-| `CREATE_INITIAL_REVISION` | Creates v1 from your idea plus the declared sources. Only when no managed revision exists; never overwrites or duplicates one. |
+| `CREATE_INITIAL_REVISION` | Creates v1 from your idea plus the declared sources. Only when no managed revision exists; never overwrites or duplicates one. A success leaves a permanent creation lock (`.experimental-deliberation/locks/initial-revision.lock`), so preview it first with `--dry-run` (or `"dryRun": true`): every check and the composed `markdown`, no lock, no write. See [usage](references/usage.md#dry-run-first-see-v1-before-it-exists). |
 | `WITHDRAW_REVISION` | Withdraws one eligible managed revision, preserving an audited recovery copy. Not content deletion. |
 | `RESTORE_WITHDRAWN_REVISION` | Restores a previously withdrawn revision from its audited copy. |
 

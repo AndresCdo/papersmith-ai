@@ -5472,7 +5472,7 @@ export function createProposalWorkspaceTool(
 	};
 }
 
-import { ChatDeliberationService, createFilesystemInitialRevisionPublicationPort, DraftMaterializationService, InitialRevisionCreationService, LifecycleV1PublicRouter, ProposalDeliberationOrchestrator, ProposalWorkspaceAdapter, defaultPiSessionDraftLifecycleAdapter, getRuntimeMetrics, getSharedPiSessionDraftRegistry, loadDocumentState, MAX_CHAT_DOCUMENT_CONTEXT_BYTES, MAX_CHAT_GUIDE_CONTEXT_BYTES, recordLifecycleMetric, recordRouteMetric, resolveIntent, resolveLatestManagedRevision, runConsistencyAudit, runProposalDeliberationSelfAudit, type ChatDocumentContext, type ChatGuideFragment, type DraftMaterializationPolicy, type EditAction, type DraftMaterializationRequest, type PiSessionDraftLifecycleAdapter, type PiSessionDraftRegistry, type ReviewerAdapter, type SemanticEditPlanner, type TutorAdapter } from './exports.js';
+import { ChatDeliberationService, createFilesystemInitialRevisionPublicationPort, initialRevisionLockState, DraftMaterializationService, InitialRevisionCreationService, LifecycleV1PublicRouter, ProposalDeliberationOrchestrator, ProposalWorkspaceAdapter, defaultPiSessionDraftLifecycleAdapter, getRuntimeMetrics, getSharedPiSessionDraftRegistry, loadDocumentState, MAX_CHAT_DOCUMENT_CONTEXT_BYTES, MAX_CHAT_GUIDE_CONTEXT_BYTES, recordLifecycleMetric, recordRouteMetric, resolveIntent, resolveLatestManagedRevision, runConsistencyAudit, runProposalDeliberationSelfAudit, type ChatDocumentContext, type ChatGuideFragment, type DraftMaterializationPolicy, type EditAction, type DraftMaterializationRequest, type PiSessionDraftLifecycleAdapter, type PiSessionDraftRegistry, type ReviewerAdapter, type SemanticEditPlanner, type TutorAdapter } from './exports.js';
 import { createSuccessorAcceptanceRegistry, type SuccessorAcceptanceRegistry } from './successor-acceptance-registry.js';
 
 type GlobalRouteStage = 'LIFECYCLE' | 'DIRECT_DOCUMENT' | 'CHAT_DELIBERATION' | 'DRAFT_MATERIALIZATION' | 'MAINTENANCE' | 'CREATE_INITIAL_REVISION' | 'EXISTING_FALLBACK';
@@ -5484,6 +5484,8 @@ const DIRECT_DOCUMENT_INTENTS = new Set(['MODIFY', 'INSERT', 'DELETE', 'MOVE', '
 const MAINTENANCE_OPERATION = 'MAINTENANCE';
 const CREATE_SUCCESSOR_OPERATION = 'CREATE_SUCCESSOR';
 const CREATE_INITIAL_REVISION_OPERATION = 'CREATE_INITIAL_REVISION';
+/** Operations that accept `dryRun`: the ones that publish without a preview turn of their own. */
+const DRY_RUN_OPERATIONS = new Set([CREATE_INITIAL_REVISION_OPERATION]);
 
 /**
  * The longest `instruction` any operation accepts, in characters (UTF-16 code units, what a
@@ -5891,11 +5893,18 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
        },{additionalProperties:false})),
        maintenanceTaskId:Type.Optional(Type.String({minLength:13,maxLength:256,pattern:'^maintenance-[a-z0-9][a-z0-9-]{0,242}$'})),
        idempotencyKey:Type.Optional(Type.String({minLength:1,maxLength:256})),
+       dryRun:Type.Optional(Type.Boolean({description:'CREATE_INITIAL_REVISION only: run every check and compose the first revision, then stop before the creation lock and any write (status preview). Refused on every other operation.'})),
   }),
   async execute(_toolCallId,params,_signal,_onUpdate,ctx){
    // The schema's `maxLength`, enforced on every host: refused before any route runs, nothing written.
    if(typeof params.instruction==='string'&&params.instruction.length>MAX_INSTRUCTION_CHARACTERS){
     const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'shorten_instruction',instructionBudget:instructionBudget(params.instruction),blockers:[{code:'INSTRUCTION_TOO_LONG',message:`instruction is ${params.instruction.length} characters; every operation accepts at most ${MAX_INSTRUCTION_CHARACTERS}. Nothing was written. Shorten it, or move long reference material into a declared source instead of the instruction.`}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
+   // A dry run exists only where an operation has no preview of its own; anywhere else it would
+   // silently mutate a caller who believed nothing would be written, so it is refused instead.
+   if(params.dryRun!==undefined&&!DRY_RUN_OPERATIONS.has(params.operation??'')){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_dry_run',blockers:[{code:'DRY_RUN_UNSUPPORTED',message:`dryRun applies only to ${[...DRY_RUN_OPERATIONS].join(', ')}; nothing was run. CREATE_SUCCESSOR previews without it; STATUS and RESOLVE_TARGET never write.`}]};
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
    }
    const openDeliberation=params.conversationId?chatDeliberation.isOpen(sessionIdentity(ctx),params.conversationId):false;
@@ -5985,7 +5994,17 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
      return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
     }
     const guideFragments=await loadGuideDirectoryFragments(projectRoot);
-    const result=await initialRevisionCreation.execute({idea:params.instruction,...(guideFragments.length?{guideFragments}:{})});
+    const dryRun=params.dryRun===true;
+    const result=await initialRevisionCreation.execute({idea:params.instruction,...(guideFragments.length?{guideFragments}:{}),...(dryRun?{dryRun}:{})});
+    if(result.status==='preview'){
+     // The real call would also take the slug-independent creation lock; predict its refusal
+     // rather than report a v1 that could never be created. The lock itself is never touched.
+     const lock=await initialRevisionLockState(projectRoot);
+     const publicResult=lock.present
+      ?{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'use_existing_managed_proposal',blockers:[{code:'MANAGED_PROPOSAL_ALREADY_EXISTS',message:`The creation lock ${lock.path} is present, so a real CREATE_INITIAL_REVISION would be refused. It records that a first revision was already created here; it is never removed by the engine.`}]}
+      :{status:'preview' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:result.filename,targetRevision:result.revision,canonicalMetadata:result.canonicalMetadata,markdown:result.markdown,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'create_initial_revision',instructionBudget:instructionBudget(params.instruction)};
+     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+    }
     const publicResult=result.status==='created'
      ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null,instructionBudget:instructionBudget(params.instruction)}
      :{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...projectInitialRevisionRefusal(result)};

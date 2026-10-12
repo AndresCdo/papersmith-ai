@@ -15,6 +15,10 @@
 //   node cli.mjs --serve               # NDJSON stdin -> NDJSON stdout, one
 //                                       # request per line; keeps in-memory
 //                                       # chat/draft session state across turns
+//   node cli.mjs --dry-run '<json>'    # sets dryRun:true on every request: the
+//                                       # first revision is composed and checked,
+//                                       # never locked or written; refused on any
+//                                       # other writing operation
 //
 // Performance note (design `sdd/proposal-deliberation-serve-resolve`, "Lever 1"): this
 // host's own jiti cold start (compiling the engine's ~63 TS files) dominates a
@@ -345,11 +349,19 @@ function validateRequest(request) {
 	}
 }
 
+// `--dry-run`: the CLI spelling of `dryRun: true`, applied to every request this process
+// reads (one-shot or `--serve`). The two host-handled operations never write, so it means
+// nothing to them; every tool operation receives the field and the engine decides -- it runs
+// the dry run where one exists and refuses DRY_RUN_UNSUPPORTED everywhere else, so a caller
+// who asked for no writes is never answered with one.
+const dryRunFlag = process.argv.slice(2).includes('--dry-run');
+
 let sequence = 0;
 async function run(request) {
 	validateRequest(request);
 	if (request.operation === 'RESOLVE_TARGET') return runResolveTarget(request);
 	if (request.operation === 'STATUS') return runStatus(request);
+	if (dryRunFlag) request = { ...request, dryRun: true };
 	const result = await tool.execute(`cli-${++sequence}`, request, undefined, undefined, ctx);
 	return result.details ?? result;
 }

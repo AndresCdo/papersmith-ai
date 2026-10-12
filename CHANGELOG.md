@@ -488,6 +488,20 @@ number is `0`, breaking changes can still arrive without a major bump.
   deliberation consistency audit and both implementation `verify` runs still
   read what 0.13.0 wrote. `tests/fixtures/README.md` documents how it is built
   and stored.
+- **`CREATE_INITIAL_REVISION --dry-run`: see the first revision before it
+  exists.** A successful creation leaves
+  `<sidecarRoot>/locks/initial-revision.lock` in place for good (the
+  slug-independent single-winner guard), so the only way to see v1's filename,
+  derived headings and canonical-form verdict was to create it, after which
+  every further attempt is refused. `cli.mjs --dry-run` (or `"dryRun": true`
+  in the request) runs every check and the composition and returns
+  `status: "preview"` with the would-be `targetFilename`, `canonicalMetadata`
+  and composed `markdown`, without taking the lock or writing anything. A
+  present lock is reported as the `MANAGED_PROPOSAL_ALREADY_EXISTS` the real
+  call would meet and is never touched. `dryRun` on any other operation is
+  refused `DRY_RUN_UNSUPPORTED` rather than ignored. Existing locks are neither
+  removed nor reinterpreted. Documented in both deliberation skills' `SKILL.md`
+  and `references/usage.md`.
 
 ### Changed
 
@@ -764,6 +778,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   where 0.13.0 accepted it. The successor preview and the first revision's
   result gain an additive `instructionBudget` key. Nothing on disk changes; no
   migration is needed.
+
+- A deliberation request carrying `dryRun` on an operation other than
+  `CREATE_INITIAL_REVISION` is now refused with `DRY_RUN_UNSUPPORTED` (nothing
+  runs); 0.13.0 ignored the unknown field and executed the operation. Existing
+  creation locks are untouched; no migration is needed.
 
 ## 0.13.0
 
