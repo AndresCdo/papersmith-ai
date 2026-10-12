@@ -2918,5 +2918,91 @@ class SharedExperimentConventionTests(unittest.TestCase):
         self.assertEqual(from_ts, json.loads(CONVENTION_FILE.read_text(encoding="utf-8")))
 
 
+class PerLineageImplementationBindingTests(unittest.TestCase):
+    """A8 (`cross-skill-consistency`): `proposal-implementation` and this
+    skill share one engine and, on one target, one `src/<Package>/__init__.py`
+    -- so one `__implementation__`. Its `revision` held a single name, which
+    each skill read as a revision of its OWN document 0: bound to the
+    proposal, this skill's `verify` discovered nothing (`fidelity: unknown`);
+    bound to the experiments document, the sibling's did the same. Keyed by
+    document label, each skill reads its own lineage; a bare string keeps
+    meaning this skill's document 0, exactly as before."""
+
+    PROPOSAL = "$$a = b \\tag{1}$$\n"
+    EXPERIMENTS = "## Experiment [exp:E1] — sweep\n\nBody.\n"
+
+    def _engine(self):
+        engine = HolderCollisionTests._load_engine(self)
+        doc0 = Path(tempfile.mkdtemp(prefix="lineage-doc0-"))
+        doc1 = Path(tempfile.mkdtemp(prefix="lineage-doc1-"))
+        for directory in (doc0, doc1):
+            self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        (doc0 / "experiments-x-v01.md").write_text(self.EXPERIMENTS, encoding="utf-8")
+        (doc1 / "r01.md").write_text(self.PROPOSAL, encoding="utf-8")
+        saved = {key: os.environ.get(key)
+                 for key in ("IMPLEMENTATION_PROPOSALS", "IMPLEMENTATION_PROPOSALS_1")}
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(doc0)
+        os.environ["IMPLEMENTATION_PROPOSALS_1"] = str(doc1)
+
+        def _restore():
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore)
+        return engine
+
+    def _box(self, revision) -> Path:
+        box = FORGE / "implementations" / f"_lineage_{os.getpid()}_{id(self)}_{next(_counter)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "tests").mkdir()
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text(
+            f"__implementation__ = {{'revision': {revision!r}, "
+            "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+        return box
+
+    def _fidelity(self, engine, box) -> dict:
+        return engine.cmd_verify(argparse.Namespace(
+            target=str(box), name="Method", revision=None))["fidelity"]
+
+    def test_a_keyed_binding_reads_this_skills_own_lineage(self):
+        engine = self._engine()
+        box = self._box({"proposal": "r01.md", "experiments": "experiments-x-v01.md"})
+        fidelity = self._fidelity(engine, box)
+        self.assertEqual(fidelity["latestRevision"], "experiments-x-v01.md")
+        self.assertEqual(fidelity["benchmark"]["revision"], "experiments-x-v01.md")
+        self.assertFalse(fidelity["benchmark"]["staleRevision"])
+        self.assertNotEqual(fidelity["status"], "unknown")
+
+    def test_the_siblings_lineage_alone_is_never_read_as_this_one(self):
+        """Measured before 0.14.0 with the bare string `r01.md`: this skill
+        searched `experiments/` for a family named by a proposal file."""
+        engine = self._engine()
+        box = self._box({"proposal": "r01.md"})
+        resolved = engine.resolve_implementation_declaration(box, "Method")
+        self.assertEqual(resolved["contract"]["revision"], "")
+        self.assertIsNone(self._fidelity(engine, box)["benchmark"]["revision"] or None)
+
+    def test_a_bare_string_still_means_this_skills_document_zero(self):
+        engine = self._engine()
+        box = self._box("experiments-x-v01.md")
+        fidelity = self._fidelity(engine, box)
+        self.assertEqual(fidelity["latestRevision"], "experiments-x-v01.md")
+        self.assertEqual(fidelity["benchmark"]["revision"], "experiments-x-v01.md")
+
+    def test_the_scaffold_template_names_this_skills_own_document(self):
+        """The template's comment used to name `proposals/` under both
+        skills; it now names this skill's own document directory and label."""
+        engine = HolderCollisionTests._load_engine(self)
+        template = engine._DEFAULT_PACKAGE_DECLARATIONS
+        self.assertIn("# experiments/, asked for by the flow", template)
+        self.assertIn('"revision": {"experiments": "<filename>"', template)
+        self.assertNotIn("proposals/", template)
+
+
 if __name__ == "__main__":
     unittest.main()

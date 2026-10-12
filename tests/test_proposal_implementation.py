@@ -4921,6 +4921,74 @@ class ResolveImplementationDeclarationTests(unittest.TestCase):
         self.assertIn("empty", resolved["detail"])
         self.assertEqual(resolved["contract"], {})
 
+    # A8 (`cross-skill-consistency`): two implementation skills share one
+    # package and therefore one `__implementation__`. `revision` may name
+    # one revision per document label; each skill reads its own document 0's
+    # label, and a bare string keeps meaning exactly what it meant before.
+
+    def test_a_revision_keyed_by_document_label_reads_this_skills_own(self):
+        label = impl.DOCUMENTS[0]["label"]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {"
+                f"{label!r}: 'r01.md', 'other-lineage': 'other-v07.md'}}, "
+                "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "declared")
+        self.assertEqual(resolved["contract"]["revision"], "r01.md")
+        self.assertEqual(resolved["contract"]["revisionByDocument"],
+                         {label: "r01.md", "other-lineage": "other-v07.md"})
+
+    def test_a_keyed_revision_without_this_skills_label_is_unanswered(self):
+        """Fail-closed: another lineage's binding is never read as this
+        skill's. With premises blank the whole declaration is undeclared,
+        and the detail names the label that is missing."""
+        label = impl.DOCUMENTS[0]["label"]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {'other-lineage': 'other-v07.md'}, "
+                "'premises': {}}\n", encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "undeclared")
+        self.assertIn(repr(label), resolved["detail"])
+        self.assertEqual(resolved["contract"], {})
+
+    def test_a_keyed_revision_without_this_label_but_with_premises_owes_the_revision(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {'other-lineage': 'other-v07.md'}, "
+                "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "declared")
+        self.assertEqual(resolved["contract"]["revision"], "")
+
+    def test_a_keyed_revision_whose_value_is_not_a_name_is_undeclared(self):
+        label = impl.DOCUMENTS[0]["label"]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {"
+                f"{label!r}: 3}}, 'premises': {{'metric': 'm'}}}}\n",
+                encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "undeclared")
+        self.assertIn(repr(label), resolved["detail"])
+        self.assertEqual(resolved["contract"], {})
+
+    def test_the_object_map_gate_names_the_revision_this_lineage_still_owes(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {'other-lineage': 'other-v07.md'}, "
+                "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+            with self.assertRaises(impl.Refused) as caught:
+                impl._stage_objects(root, "Method", "1")
+        self.assertEqual(caught.exception.code, "OBJECT_MAP_NOT_APPROVED")
+        self.assertIn("declares no revision.", str(caught.exception))
+
     def test_premises_answered_alone_is_declared(self):
         """`revision` need not be the one that is answered first -- either
         block alone is enough to leave `undeclared` behind."""

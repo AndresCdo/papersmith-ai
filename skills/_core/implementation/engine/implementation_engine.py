@@ -5110,9 +5110,11 @@ def scaffold_kit_source(destination: str, name: str) -> Path | None:
 #: instruction to remember four field names by heart.
 _DEFAULT_PACKAGE_DECLARATIONS = (
     "__implementation__ = {\n"
-    '    # The managed revision this declaration is bound to, e.g. "r01.md" --\n'
-    "    # a filename under proposals/,\n"
-    "    # asked for by the flow, never invented here.\n"
+    "    # The managed revision this declaration is bound to -- a filename under\n"
+    f"    # {Path(DOCUMENTS[0]['directory']).name}/, asked for by the flow, never invented here.\n"
+    "    # When another skill shares this package, name one revision per\n"
+    "    # document label instead, so each skill reads its own lineage:\n"
+    f'    #     "revision": {{"{DOCUMENTS[0]["label"]}": "<filename>", "<label>": "<filename>"}},\n'
     '    "revision": "",\n'
     "\n"
     "    # What kind of prediction the protocol assumes, over which unit,\n"
@@ -7599,6 +7601,37 @@ IMPLEMENTATION_DECLARATION = "__implementation__"
 IMPLEMENTATION_BLOCKS = {"revision": "", "premises": {}}
 
 
+def _unbound_after_lineage(contract: dict) -> str | None:
+    """Narrow `contract["revision"]` to this host's own lineage (mutating it)
+    and say why the result binds nothing -- or `None` when it binds.
+
+    One package, one literal, possibly more than one engine host reading it:
+    `revision` may name one revision per document label, and this host reads
+    only its own document 0's (the mapping is kept as `revisionByDocument`).
+    A bare string keeps its old meaning, this host's document 0. A label
+    missing from the mapping reads as unanswered, never as another lineage's
+    name; anything under it that is not a string refuses outright.
+    """
+    label = DOCUMENTS[0]["label"]
+    keyed = contract.get("revision")
+    if isinstance(keyed, dict):
+        own = keyed.get(label, "")
+        if not isinstance(own, str):
+            return (f"{IMPLEMENTATION_DECLARATION}['revision'][{label!r}] is "
+                    f"{own!r}, not a revision filename string")
+        contract["revision"] = own
+        contract["revisionByDocument"] = keyed
+    if not _declaration_is_blank(contract, IMPLEMENTATION_BLOCKS):
+        return None
+    if isinstance(keyed, dict) and label not in keyed:
+        return (f"{IMPLEMENTATION_DECLARATION}['revision'] names no revision "
+                f"under {label!r} (it names {sorted(keyed)}), and premises are "
+                "still unanswered: nothing binds this skill's own document yet")
+    return (f"{IMPLEMENTATION_DECLARATION} parses, but both blocks "
+            "are still at their empty value: neither a revision "
+            "nor premises have been answered yet")
+
+
 def resolve_implementation_declaration(target: Path, name: str) -> dict:
     """The one place every reader gets `__implementation__` from.
 
@@ -7641,14 +7674,10 @@ def resolve_implementation_declaration(target: Path, name: str) -> dict:
     if "__error__" in declaration:
         return {"status": "undeclared", "path": str(found.relative_to(target)),
                 "detail": declaration["__error__"], "contract": {}}
-    if _declaration_is_blank(declaration, IMPLEMENTATION_BLOCKS):
-        return {
-            "status": "undeclared", "path": str(found.relative_to(target)),
-            "detail": f"{IMPLEMENTATION_DECLARATION} parses, but both blocks "
-                      "are still at their empty value: neither a revision "
-                      "nor premises have been answered yet",
-            "contract": {},
-        }
+    detail = _unbound_after_lineage(declaration)
+    if detail is not None:
+        return {"status": "undeclared", "path": str(found.relative_to(target)),
+                "detail": detail, "contract": {}}
     return {"status": "declared", "path": str(found.relative_to(target)),
             "detail": None, "contract": declaration}
 

@@ -98,6 +98,20 @@ declaration marker `exp`, the citation marker `tests`, and the prose form
   the proposal's `\tag{N}` and is resolved by `agree`'s crossing check
   against the proposal, never against this document's own experiments.
 
+## Sharing `__implementation__` with `proposal-implementation`
+
+On a target both implementation skills work on, `src/<Package>/__init__.py`
+holds one `__implementation__`, and its `revision` names one revision per
+document label: `{"proposal": "r03.md", "experiments": "experiments-<slug>-v02.md"}`.
+This skill reads only `experiments` (its document 0); the sibling reads only
+`proposal`. A bare string still means this skill's experiments revision,
+exactly as before 0.14.0. Bound to a single proposal filename, this skill's
+`verify` used to look for that family under `experiments/`, find nothing and
+report `fidelity: unknown`. A mapping with no `experiments` entry reads as an
+unanswered revision, never as the proposal's name. The details, and the
+`undeclared` cases, are in `proposal-implementation`'s SKILL.md under "The
+implementation declaration".
+
 ## `Data/` is demandable, per product folder
 
 `documents[0]`'s own `dataset_marker` leaf (`**Dataset:**`) makes a

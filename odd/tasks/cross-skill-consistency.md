@@ -43,7 +43,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A5 — close for proposal-only targets / witness-less agreements (D, writer trigger: engine + 2 test files + 4 docs + seals)
 - [x] A6 — deliberation validation parity (code spans) (D, writer trigger: 3 engine files + 5 test files + 4 docs)
 - [x] A7 — shared experiment heading convention (D, writer trigger: 2 profiles + engine + resolver + 2 TS + 3 test files + 4 docs)
-- [ ] A8 — per-lineage `__implementation__` binding (verify)
+- [x] A8 — per-lineage `__implementation__` binding (verify) (D, writer trigger: engine + 2 test files + 2 docs)
 - [ ] D1 — kit provenance record + dirty-kit guard
 - [ ] D2 — migration support policy
 - [ ] D3 — engine state gitignore decision
@@ -187,7 +187,24 @@ Route legend: D = delegated writer, I = inline.
   (pinned the old literal). Domain-lock pins unchanged (two comments reworded). Seals unchanged.
   Checks: typecheck clean; test:node 703/703; test:fast 3262 passed.
   Commit: `fix(experimental): one experiment heading convention shared by both experimental skills` (the commit carrying this line)
+- A8 (real, verified by reproduction): both hosts read `src/<Package>/__init__.py`'s single
+  `__implementation__`; `revision` was read as the loading host's document 0. Measured on a generic
+  target: bound to `r01.md`, experimental `verify` -> `fidelity: unknown`, `latestRevision: None`;
+  bound to `experiments-x-v01.md`, proposal `verify` -> the same. The "benchmark" binding is not a
+  separate declaration (`benchmark.revision` = `__implementation__["revision"]`). Engine never writes
+  the value (agent/human authors it). Fix: `_unbound_after_lineage` in the one reader
+  (`resolve_implementation_declaration`) narrows a mapping to `DOCUMENTS[0]["label"]` (mapping kept as
+  `revisionByDocument`); bare string = this host's document 0 (unchanged under both hosts); missing
+  label -> unanswered revision (undeclared with empty premises, detail names the label; else
+  `OBJECT_MAP_NOT_APPROVED` names `revision`); non-string under the label -> undeclared. Template
+  comment derives directory and label from the profile (was hardcoded `proposals/`); value stays
+  `""`. No workspace migration (declarations live in targets under `implementations/`).
+  Tests: `PerLineageImplementationBindingTests` (4, experimental; RED 3F against HEAD),
+  `ResolveImplementationDeclarationTests` +5 (proposal; RED 5F against HEAD). Domain-lock pins unchanged
+  (wording adjusted). Seals unchanged. No re-anchored tests in A8.
+  Checks: related suites 2047 passed; test:fast 3268 passed.
+  Commit: `fix(implementation): each skill binds its own document lineage in __implementation__` (the commit carrying this line)
 
 ## Next step
 
-A8 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+D1 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

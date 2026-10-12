@@ -130,6 +130,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   block running to the next heading of the same or a higher level, and counts
   `(Exp. <id>)` citations. `[claims:N]` crossings into the proposal are
   unchanged.
+- **Each implementation skill binds its own document lineage.** On a target
+  both `proposal-implementation` and `experimental-implementation` work on, the
+  two read the same `src/<Package>/__init__.py`, and `__implementation__`'s
+  `revision` held one name that each skill read as a revision of its own
+  document. Bound to the proposal, the experimental skill's `verify` searched
+  `experiments/` for a proposal family, discovered nothing and reported
+  `fidelity: unknown` (and the reverse for the proposal skill); keeping one
+  skill current meant re-binding away from the other. `revision` may now name
+  one revision per document label, `{"proposal": "r03.md", "experiments":
+  "experiments-<slug>-v02.md"}`; each skill reads only its own document 0's
+  label. The scaffold template's comment named `proposals/` under both skills;
+  it now names the loading skill's own document directory and label.
 
 ### Behaviour changes
 
@@ -213,6 +225,19 @@ number is `0`, breaking changes can still arrive without a major bump.
   `proposal-implementation` does not declare it and is unchanged). The
   migration is a compatibility read; no workspace artefact changes shape and
   no `upgrade` migration is needed.
+- `__implementation__["revision"]` accepts a mapping keyed by document label.
+  A bare string keeps its meaning (the reading skill's own document) and reads
+  exactly as before under both skills; nothing rewrites existing declarations,
+  and the engine still writes `"revision": ""` into new scaffolds (only the
+  comment above it changed). A mapping without the reading skill's label
+  leaves that skill's revision unanswered (never another lineage's name): with
+  empty `premises` the declaration reads `undeclared` with a detail naming the
+  label, otherwise `materialize --stage objects` refuses
+  `OBJECT_MAP_NOT_APPROVED` naming `revision`. A non-string value under the
+  label reads `undeclared`. The reader's contract carries the full mapping as
+  `revisionByDocument`. Declarations live in target repositories under
+  `implementations/`, not in the workspace kit, so no `upgrade` migration
+  applies.
 
 ## 0.13.0
 

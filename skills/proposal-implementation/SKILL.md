@@ -1288,6 +1288,31 @@ nothing downstream validates its content — it is written for a person
 reading a drift report beside changed sections, not for a check to parse.
 This is Flow A's ask for `revision` and `premises`, at step 8, above.
 
+**One package, two skills: key `revision` by document label.** When
+`experimental-implementation` works on the same target it reads the same
+`src/<Package>/__init__.py`, and a single name cannot be both a proposal
+revision and an experiments revision: each skill would read the other's name
+as its own (`verify` then discovers nothing for that skill and reports
+`fidelity: unknown`). Name one revision per document label instead; each
+skill reads only its own document's label (`proposal` here, `experiments`
+there) and neither goes stale because the other moved:
+
+    __implementation__ = {
+        "revision": {"proposal": "r03.md", "experiments": "experiments-<slug>-v02.md"},
+        "premises": {...},
+    }
+
+A bare string keeps its old meaning (this skill's own document), so existing
+targets read exactly as before and nothing rewrites them; switch to the keyed
+form by hand when a second skill starts binding the package. A mapping with no
+entry under this skill's label leaves its revision unanswered: with empty
+`premises` the declaration is `undeclared` and its detail names the missing
+label; with `premises` answered, `materialize --stage objects` refuses
+`OBJECT_MAP_NOT_APPROVED` naming `revision`. Any other lineage's name is never
+read here. A value under the label that is not a string makes
+the declaration `undeclared`. `verify` and `probe` read the narrowed name; the
+full mapping travels as `revisionByDocument` on the reader's contract.
+
 | Literal | Filled by | When |
 | --- | --- | --- |
 | `revision` | Flow A step 8 | Proposed as step 1's `latest` and confirmed inside the authorization approval, before any code that approval authorized is written |
