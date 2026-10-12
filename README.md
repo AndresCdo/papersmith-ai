@@ -628,12 +628,12 @@ repo-only).
 
 ## The agents
 
-A workspace ships **nineteen subagents** in `.claude/agents/`. They are not
-replacements for the CLI: they are short bursts of work your harness launches (for
-example, with the Task tool) when you ask for them. The shape is always the
+A workspace ships **nineteen subagents** in `.claude/agents/`. They are short
+bursts of work that a harness launches (for example, with the Task tool) on
+request, not replacements for the CLI. The shape is always the
 same — **one burst between two operator gates**: the agent decides
 nothing, asks nothing, and ends up reporting what it found and how much it cost
-to establish it. You open and close the gates.
+to establish it. The operator opens and closes the gates.
 
 | Agent | What it is for | Skill it loads |
 |-------|----------------|----------------|
@@ -661,15 +661,15 @@ Three rules that order everything else:
 - **The source of truth is `.claude/agents/`.** Each harness's routing docs
   (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
   `.agents/AGENTS.md`) list
-  all nineteen, and they are generated: if you want to change an agent, you change it
+  all nineteen, and they are generated: an agent is changed
   there, not in the projection.
 - **Each agent declares the skill it loads** (`skills/<name>/SKILL.md`), and that
   binding is verified: an agent that points at a skill the workspace does not
   ship does not get there.
 - **Some agents are not invoked by any code path**
-  (`contract-auditor`, `redactor`, `style-sampler`): you launch them, and it is the
-  `write` verb that judges what they return — it never trusts your account nor the
-  draft on their own.
+  (`contract-auditor`, `redactor`, `style-sampler`): they are launched manually, and
+  it is the `write` verb that judges what they return — it never trusts the
+  operator's account nor the draft on their own.
 
 ---
 
