@@ -1011,333 +1011,335 @@ flowchart TD
 
 ### 3. `proposal-deliberation` — discuss the mathematics and publish revisions
 
-**Para qué está.** Escribir una propuesta de paper matemático es un ida y vuelta
-largo: se discute una idea, se corrige una ecuación, se reordena una sección. El
-riesgo es que en ese ida y vuelta un modelo reescriba una ecuación "de paso", sin que
-nadie lo note. Esta skill hace dos cosas a la vez: convierte al agente en tutor
-matemático que discute contigo, y pone un motor determinista entre esa discusión y el
-archivo, para que **nada cambie salvo lo que aprobaste**.
+**What it is for.** Writing a mathematical paper proposal is a long back-and-forth:
+an idea is discussed, an equation is corrected, a section is reordered. The risk is
+that during that back-and-forth a model rewrites an equation in passing, without
+anyone noticing. This skill does two things at once: it turns the agent into a
+mathematical tutor that discusses the proposal, and it places a deterministic engine
+between that discussion and the file, so that **nothing changes except what was
+approved**.
 
-**De dónde recibe y a quién le entrega.**
+**What it receives and what it hands on.**
 
-*Recibe de `paper-ingestion`:* los Markdown de `guidance/paper-guide/`, y **sólo en
-la creación de la v1**. El motor los carga él mismo en esa única operación; el agente
-no se los pasa. Para cualquier revisión que ya existe, esa carga **no se repite** — el
-`SKILL.md` lo dice sin matices: ese ingreso se gasta una sola vez, en la creación
-verdadera de la v1.
+*It receives from `paper-ingestion`:* the Markdown files in `guidance/paper-guide/`,
+and **only on the creation of v1**. The engine loads them itself in that single
+operation; the agent does not pass them in. For any revision that already exists,
+that load **is not repeated** — the `SKILL.md` states it without qualification: that
+ingest is spent only once, at the true creation of v1.
 
-*Recibe de `proposal-implementation`:* correcciones. Cuando la implementación
-encuentra un defecto en la matemática y lo valida, vuelve aquí a publicarlo. Pero
-**entra por la puerta normal**, sin atajo: ubica la sección, arma el reemplazo, y pasa
-por la misma vista previa, la misma puerta de integridad matemática y la misma
-auditoría que cualquier otro cambio. Que la corrección venga de una medición no la
-exime de nada.
+*It receives from `proposal-implementation`:* corrections. When the implementation
+finds a defect in the mathematics and validates it, it comes back here to publish it.
+But **it enters through the normal door**, with no shortcut: it locates the section,
+builds the replacement, and passes through the same preview, the same mathematical
+integrity gate and the same audit as any other change. That the correction comes from
+a measurement exempts it from nothing.
 
-*Le entrega a todo el resto:* dos cosas. El archivo publicado
-(`proposals/research-concept-rNN.md`) y —tanto o más importante— la operación
-`STATUS`, que es de dónde **toda la forja** saca la respuesta a "cuál es la revisión
-vigente". Nadie inspecciona el directorio a simple vista. Esa es una regla dura, y existe porque el
-listado del directorio puede mostrar archivos que el motor considera inválidos.
+*It hands to everything else:* two things. The published file
+(`proposals/research-concept-rNN.md`) and —just as important— the `STATUS` operation,
+which is where **the whole forge** gets the answer to which revision is current.
+Nobody inspects the directory by eye. That is a hard rule, and it exists because the
+directory listing can show files the engine considers invalid.
 
-**Qué necesita antes.** Nada más que Node. No usa claves de API ni llama a ningún
-modelo: el motor es keyless. El "modelo" de esta skill es el agente que ya está en la
-conversación — por eso el motor no necesita uno propio.
+**What it needs first.** Nothing but Node. It uses no API keys and calls no model:
+the engine is keyless. The "model" of this skill is the agent already in the
+conversation — which is why the engine needs no model of its own.
 
-**Las etapas que declara.** Leídas del campo `objective` de su propio
-`profile.ts`, que un test mantiene igual al `SKILL.md`. `STATUS` las reporta
-arriba del inventario, y las dos rutas de error del motor también las llevan.
+**The stages it declares.** Read from the `objective` field of its own
+`profile.ts`, which a test keeps equal to the `SKILL.md`. `STATUS` reports them
+above the inventory, and both of the engine's error paths carry them too.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | It is passed when |
 |---|---|---|
-| `bound` | Cuál revisión es la actual y cuál entrada de ella toca el cambio | `STATUS` nombró la última y el objetivo resolvió a una entrada |
-| `deliberated` | El cambio se **discutió**, no se tipeó | **lo dijiste tú** — aquí nada lo mide, y nada puede medirlo |
-| `composed` | El reemplazo existe escrito COMO matemática —la ecuación, con su tag— y no como una descripción de ella | existe un bloque que lleva la ecuación y el tag donde aterriza |
-| `published` | La sucesora existe con el marcador del artefacto y es la revisión actual | es la llegada; no está detrás de nadie |
+| `bound` | Which revision is current and which entry of it the change touches | `STATUS` named the latest and the target resolved to an entry |
+| `deliberated` | The change was **argued through**, not typed | **the user said so** — nothing here measures it, and nothing may |
+| `composed` | The replacement exists written AS mathematics —the equation, with its tag— and not as a description of it | a block exists carrying the equation and the tag it lands on |
+| `published` | The successor exists carrying the artifact marker and is the current revision | it is the arrival; it is behind no one |
 
-**Llegada:** la revisión sucesora publicada y actual, que es la única forma en la
-que viaja la matemática.
+**Arrival:** the successor revision published and current, which is the only form the
+mathematics travels in.
 
-**`deliberated` es la parada de una persona, y es deliberado que no se pueda
-medir.** El motor puede comprobar que existe un bloque; no puede comprobar que
-lo discutiste. Por eso esa etapa avanza sólo cuando lo dices.
+**`deliberated` is a person's stop, and being unmeasurable is deliberate.** The
+engine can check that a block exists; it cannot check that the change was argued
+through. That is why that stage advances only when the user says so.
 
-**El flujo, paso a paso.**
+**The flow, step by step.**
 
-1. **Arranque.** Lo primero que hace el agente es pedirle al motor `STATUS` —una
-   operación de sólo lectura— para saber cuál es la revisión vigente. No abre
-   `proposals/` por su cuenta.
-2. **Bifurcación.** Si no hay ninguna revisión gestionada, el camino es *crear la v1*.
-   Si ya hay una (`r01`, `r05`, `r17`…), el camino es *editar*.
-3. **Crear la v1.** El agente te pide la idea y manda la creación inicial. **Tu idea
-   necesita al menos dos oraciones**: el motor saca el título de la primera y el
-   encabezado de sección de la segunda, y con una sola los dos salen idénticos byte a
-   byte — lo que dejaría el documento imposible de editar después, porque toda consulta
-   que nombre un lugar sería ambigua. Con una sola oración se niega en el acto
-   (`INITIAL_IDEA_SINGLE_SENTENCE`) y no escribe nada. Una oración termina en `.`, `!`
-   o `?`; un salto de línea no alcanza. El motor
-   carga los papers de `guidance/paper-guide/` **una sola vez** —aquí y nunca más—,
-   redacta el documento a partir de tu idea, toma un candado único de proyecto (para
-   que dos ideas en paralelo no puedan crear dos v1) y escribe
-   `proposals/research-concept-r01.md`. La v1 se publica directo: no hay nada previo
-   que proteger.
-4. **Deliberar.** Con una revisión ya existente, la discusión pasa **en la
-   conversación**, no en el motor. El agente propone, refuta, exige necesidad
-   matemática antes de formalizar. El motor no se entera de nada de esto, y así debe
-   ser: el estado de la charla vive donde puedes verlo.
-5. **Ubicar el cambio.** Cuando algo queda aprobado hay que decirle al motor *dónde*
-   aplica. Se lo nombra con palabras del encabezado, y el motor las puntúa contra la
-   estructura real del documento. Si los dos mejores candidatos quedan demasiado
-   cerca, **se bloquea y pregunta** en vez de elegir. Nunca adivina.
-6. **Vista previa.** El agente arma la decisión concreta —`replace`, `insert`,
-   `delete`, `move` o `copy`— y pide el sucesor. Aquí el motor **no publica**: compila
-   el documento candidato pegando los bytes aprobados en el offset exacto, lo revalida
-   entero, y devuelve un token de un solo uso junto con —lo importante— la lista de
-   **qué matemática desaparecería**.
-7. **La puerta.** El agente te muestra en castellano llano cada ecuación, cada `\tag`
-   y cada cita `(Ec. N)` que se perdería. Tú confirmas. Solo entonces se reenvía la
-   misma operación con el token y con cada pérdida reconocida por nombre. Si falta una
-   sola, se rechaza y no se escribe nada.
-8. **Publicar.** El motor vuelve a leer el archivo fuente, verifica que su hash no
-   cambió desde el paso 6, aplica los parches, valida el resultado, verifica el fuente
-   **una segunda vez** justo antes de escribir, y solo entonces escribe
-   `research-concept-r<N+1>.md` de forma atómica.
-9. **Contabilidad.** Reconstruye los índices derivados y escribe un **recibo** con el
-   sha256 del documento antes y después.
-10. **Auditoría.** Después de cada publicación se releen *todas* las revisiones y se
-    comprueba que cada archivo siga coincidiendo byte a byte con su recibo. Si algo no
-    cuadra, el resultado se degrada a `blocked` aunque los bytes ya estén escritos — y
-    eso es a propósito: el trabajo no está terminado hasta que la contabilidad cierra.
+1. **Start.** The first thing the agent does is ask the engine for `STATUS` —a
+   read-only operation— to learn which revision is current. It does not open
+   `proposals/` on its own.
+2. **Branch.** If no managed revision exists, the path is *create v1*. If one already
+   exists (`r01`, `r05`, `r17`…), the path is *edit*.
+3. **Create v1.** The agent asks the user for the idea and sends the initial creation.
+   **The idea needs at least two sentences**: the engine takes the title from the
+   first and the section heading from the second, and with only one the two come out
+   byte-identical — which would leave the document impossible to edit afterwards,
+   because every query that names a place would be ambiguous. With a single sentence
+   it refuses on the spot (`INITIAL_IDEA_SINGLE_SENTENCE`) and writes nothing. A
+   sentence ends in `.`, `!` or `?`; a line break is not enough. The engine loads the
+   papers from `guidance/paper-guide/` **only once** —here and never again—, renders
+   the document from the idea, takes a single project lock (so that two parallel ideas
+   cannot create two v1s) and writes `proposals/research-concept-r01.md`. v1 is
+   published directly: there is nothing previous to protect.
+4. **Deliberate.** With an existing revision, the discussion happens **in the
+   conversation**, not in the engine. The agent proposes, refutes, and demands
+   mathematical necessity before formalizing. The engine learns nothing of this, and
+   that is how it should be: the state of the conversation lives where it can be seen.
+5. **Locate the change.** When something is approved, the engine has to be told
+   *where* it applies. It is named with words from the heading, and the engine scores
+   them against the document's real structure. If the two best candidates are too
+   close, **it blocks and asks** instead of choosing. It never guesses.
+6. **Preview.** The agent builds the concrete decision —`replace`, `insert`, `delete`,
+   `move` or `copy`— and asks for the successor. Here the engine **does not publish**:
+   it compiles the candidate document by pasting the approved bytes at the exact
+   offset, revalidates the whole of it, and returns a single-use token together with
+   —the important part— the list of **what mathematics would disappear**.
+7. **The gate.** The agent shows the operator, in plain language, every equation,
+   every `\tag` and every `(Ec. N)` citation that would be lost. The operator
+   confirms. Only then is the same operation resent with the token and with each loss
+   acknowledged by name. If even one is missing, it is refused and nothing is written.
+8. **Publish.** The engine reads the source file again, verifies that its hash has not
+   changed since step 6, applies the patches, validates the result, verifies the
+   source **a second time** just before writing, and only then writes
+   `research-concept-r<N+1>.md` atomically.
+9. **Accounting.** It rebuilds the derived indexes and writes a **receipt** with the
+   document's sha256 before and after.
+10. **Audit.** After every publication *all* revisions are reread and each file is
+    checked to still match its receipt byte for byte. If something does not add up,
+    the result is downgraded to `blocked` even though the bytes are already written —
+    and that is intentional: the work is not finished until the accounting closes.
 
-Además existe un **ciclo de vida de revisiones**: retirar una revisión la copia a una
-cuarentena inmutable, mueve los artefactos públicos, marca la operación como pendiente
-de auditoría y sólo la confirma si la auditoría pasa; restaurar es el espejo exacto.
-La `r01` no se puede retirar nunca, ni tampoco una revisión que tenga descendientes.
+A **revision lifecycle** also exists: withdrawing a revision copies it to an immutable
+quarantine, moves the public artifacts, marks the operation as pending audit and
+confirms it only if the audit passes; restoring is the exact mirror. `r01` can never
+be withdrawn, nor can a revision that has descendants.
 
-**Los módulos.** El motor son unos 50 archivos TypeScript. Agrupados por trabajo:
+**The modules.** The engine is about 50 TypeScript files. Grouped by job:
 
-| Grupo | Archivos | Qué hace y por qué existe |
+| Group | Files | What it does and why it exists |
 |-------|----------|---------------------------|
-| Puerta de entrada | `engine/cli.mjs` | El único punto de acceso al motor. Atiende `STATUS` y la resolución de objetivo él mismo, y despacha el resto. Se levanta una vez por deliberación para no pagar el arranque en cada llamada. |
-| Enrutador público | `proposal-workspace.ts` | Registra la herramienta que el agente llama y decide a qué etapa va cada pedido. Contiene además las primitivas de escritura segura en disco. |
-| Coordinador | `orchestrator.ts` | La máquina de estados: resuelve, previsualiza, acepta y publica. Su `publish()` es el **único** lugar del sistema por donde puede pasar una escritura. |
-| Ubicación | `target-resolver.ts`, `ambiguity-gate.ts`, `document-index.ts` | Convierten "la sección de normalización" en un rango de bytes exacto. `ambiguity-gate` es el que se niega cuando hay empate. |
-| Aplicación de bytes | `patch-compiler.ts`, `successor-composite-engine.ts`, `ambient-supplied-planner.ts` | Pegan el texto aprobado en el offset exacto y verifican, por separado, que todo lo que quedó afuera del cambio siga idéntico. |
-| Puerta de preservación | `preservation.ts` (neutral) + `proposal-deliberation/preservation-math.ts` (extractor matemático) | Enumera los átomos que el perfil del dominio reconoce (para matemática: ecuaciones, `\tag`, macros y citas) antes y después. Reporta lo perdido, y **bloquea por su cuenta** ante violaciones de forma canónica: `$$` desbalanceado, delimitadores `\(...\)`, un símbolo Unicode de matemática metido adentro de un `$...$`. |
-| Validación del candidato | `candidate-validator.ts` | Re-parsea el documento entero resultante: Markdown bien formado, etiquetas únicas, referencias que resuelven, símbolos sin conflicto, bytes de afuera intactos. |
-| Auditoría | `consistency-audit.ts`, `self-audit.ts` | Recalculan el sha256 de cada revisión y lo cruzan contra su manifiesto y su recibo. De aquí salen `RECEIPT_SHA_MISMATCH`, `ORPHAN_STATE` y compañía. |
-| Recibos y estado | `revision-receipt.ts`, `derived-state-store.ts`, `derived-state-builder.ts` | Escriben y releen la contabilidad: qué se publicó, desde qué, con qué hash. |
-| Ciclo de vida | `revision-lifecycle-store.ts`, `revision-lifecycle-transaction.ts` | Retiro y restauración transaccionales, con reversión en orden inverso si algo falla a mitad. |
-| Concurrencia | `mutation-lock.ts` | Impide dos publicaciones simultáneas sobre el mismo archivo. |
-| Token de aceptación | `successor-acceptance-registry.ts` | Ata una vista previa a su aceptación. Vive en memoria, es de un solo uso y muere con el proceso: no se puede aceptar mañana una previa de hoy. |
-| Agente delegado | `.claude/agents/deliberation-publish.md` | El tramo **terminal**, y arranca solo después de que aceptaste: resuelve la entrada, compone el reemplazo sustituyendo **adentro** de ella en vez de devolver un bloque pelado, y publica. `Read`, `Bash`, `Glob`, `Grep` — **sin `Write` ni `Edit`**, porque sólo el motor escribe. La deliberación misma no está en su tramo y no puede estarlo: eso no lo cierra nadie más que tú. |
+| Entry point | `engine/cli.mjs` | The only access point to the engine. It handles `STATUS` and target resolution itself, and dispatches the rest. It starts once per deliberation so as not to pay the startup cost on every call. |
+| Public router | `proposal-workspace.ts` | Registers the tool the agent calls and decides which stage each request goes to. It also contains the primitives for safe writes to disk. |
+| Coordinator | `orchestrator.ts` | The state machine: resolves, previews, accepts and publishes. Its `publish()` is the **only** place in the system through which a write can pass. |
+| Location | `target-resolver.ts`, `ambiguity-gate.ts`, `document-index.ts` | They turn "the normalization section" into an exact byte range. `ambiguity-gate` is the one that refuses when there is a tie. |
+| Byte application | `patch-compiler.ts`, `successor-composite-engine.ts`, `ambient-supplied-planner.ts` | They paste the approved text at the exact offset and verify, separately, that everything left outside the change remains identical. |
+| Preservation gate | `preservation.ts` (neutral) + `proposal-deliberation/preservation-math.ts` (mathematical extractor) | It enumerates the atoms the domain profile recognizes (for mathematics: equations, `\tag`, macros and citations) before and after. It reports what was lost, and **blocks on its own** on canonical-form violations: unbalanced `$$`, `\(...\)` delimiters, a Unicode math symbol placed inside a `$...$`. |
+| Candidate validation | `candidate-validator.ts` | Re-parses the whole resulting document: well-formed Markdown, unique tags, references that resolve, symbols with no conflict, untouched outside bytes. |
+| Audit | `consistency-audit.ts`, `self-audit.ts` | They recompute the sha256 of each revision and cross-check it against its manifest and its receipt. `RECEIPT_SHA_MISMATCH`, `ORPHAN_STATE` and company come out of here. |
+| Receipts and state | `revision-receipt.ts`, `derived-state-store.ts`, `derived-state-builder.ts` | They write and reread the accounting: what was published, from what, with which hash. |
+| Lifecycle | `revision-lifecycle-store.ts`, `revision-lifecycle-transaction.ts` | Transactional withdrawal and restoration, with reverse-order rollback if something fails halfway. |
+| Concurrency | `mutation-lock.ts` | Prevents two simultaneous publications on the same file. |
+| Acceptance token | `successor-acceptance-registry.ts` | Ties a preview to its acceptance. It lives in memory, is single-use and dies with the process: a preview from today cannot be accepted tomorrow. |
+| Delegated agent | `.claude/agents/deliberation-publish.md` | The **terminal** stretch, and it starts only after the change has been accepted: it resolves the entry, composes the replacement substituting **inside** it instead of returning a bare block, and publishes. `Read`, `Bash`, `Glob`, `Grep` — **no `Write` or `Edit`**, because only the engine writes. The deliberation itself is not in its stretch and cannot be: nobody but the operator closes it. |
 
-**Qué escribe en el disco.**
+**What it writes to disk.**
 
 ```
-proposals/research-concept-rNN.md           la revisión, con un marcador de artefacto al inicio
+proposals/research-concept-rNN.md           the revision, with an artifact marker at the top
 .proposal-deliberation/
-├── state/research-concept-rNN.md.json      índices derivados + hashes
-├── receipts/research-concept-rNN.md.json   el recibo: sha antes, sha después, qué parches
-├── withdrawn/<uuid>/                       cuarentena inmutable de una revisión retirada
-└── locks/initial-revision.lock             candado de creación de la v1
+├── state/research-concept-rNN.md.json      derived indexes + hashes
+├── receipts/research-concept-rNN.md.json   the receipt: sha before, sha after, which patches
+├── withdrawn/<uuid>/                       immutable quarantine of a withdrawn revision
+└── locks/initial-revision.lock             v1 creation lock
 ```
 
-**Los seguros.**
+**The safeguards.**
 
-- **Nada se pierde en silencio.** Una ecuación que desaparece exige que la reconozcas
-  por nombre antes de publicar.
-- **Se bloquea antes que adivinar.** Un objetivo ambiguo pregunta; no elige el más
-  probable.
-- **La auditoría es byte a byte.** Editar a mano una revisión publicada rompe su
-  recibo, y el motor lo dice en la siguiente operación.
-- **Sin claves.** Ninguna operación del motor sale a la red.
-- **Falla cerrado.** Una operación desconocida se rechaza; no cae al camino por
-  defecto.
+- **Nothing is lost silently.** An equation that disappears requires the operator to
+  acknowledge it by name before publishing.
+- **It blocks before guessing.** An ambiguous target asks; it does not pick the most
+  likely one.
+- **The audit is byte for byte.** Manually editing a published revision breaks its
+  receipt, and the engine says so on the next operation.
+- **No keys.** No engine operation goes out to the network.
+- **It fails closed.** An unknown operation is refused; it does not fall through to
+  the default path.
 
-**Limitaciones conocidas.** Vienen en tres grupos, y no las cuento aquí a propósito: un
-número escrito a mano al lado de una lista envejece la primera vez que alguien agrega una,
-y este documento ya tuvo tres casos así. Primero las del **motor de edición** —qué pasa,
-qué puedes hacer igual, qué no, y cómo se arreglaría—; después las del **alcance de las
-garantías**, o sea qué es lo que esta skill, medida, no puede afirmar; y al final las del
-**motor compartido**, que valen igual para el otro dominio que lo usa.
+**Known limitations.** They come in three groups, and they are deliberately not
+counted here: a number written by hand next to a list ages the first time someone
+adds one, and this document has already had three such cases. First those of the
+**editing engine** —what happens, what can still be done, what cannot, and how it
+would be fixed—; then those of the **scope of the guarantees**, that is, what this
+skill, measured, cannot assert; and finally those of the **shared engine**, which
+apply equally to the other domain that uses it.
 
-*La consulta que ubica un cambio es sensible a cómo la escribes.* Para aplicar un
-cambio hay que decirle a qué sección apunta. Esa consulta se compara **por substring
-contra la línea del encabezado**, y eso tiene dos filos. Las **tildes cuentan**:
-`Normalizacion terminos adaptacion` no encuentra `## 5. Normalización de los términos
-de adaptación`, aunque sea la misma frase. Solo molesta cuando la palabra acentuada es
-justo la que distingue: si quedan otras palabras distintivas sin tilde, resuelve
-igual. Y la consulta se **corta en el primer signo de puntuación**, así que `Sección
-3. Formulación…` se reduce a `3` antes de buscar nada. **Qué puedes hacer:** escribir
-la consulta como **palabras distintivas del encabezado**, sin puntuación, sin el
-número de sección, y con las tildes tal como están escritas. `Normalización términos
-adaptación` funciona; la frase completa con puntuación, no. Las palabras vacías (`de`,
-`los`, `la`) ya se filtran solas. **Cómo se arregla:** comparando sin tildes de los dos
-lados, y quedándose con la consulta completa en vez de cortarla en la puntuación.
+*The query that locates a change is sensitive to how it is written.* To apply a
+change, the section it points at has to be named. That query is compared **by
+substring against the heading line**, and that has two edges. **Accents count**:
+`Normalizacion terminos adaptacion` does not find `## 5. Normalización de los términos
+de adaptación`, even though it is the same phrase. It only matters when the accented
+word is exactly the one that distinguishes: if other distinctive unaccented words
+remain, it still resolves. And the query is **cut at the first punctuation mark**, so
+`Sección 3. Formulación…` reduces to `3` before searching for anything. **What can be
+done:** write the query as **distinctive words from the heading**, without
+punctuation, without the section number, and with the accents exactly as they are
+written. `Normalización términos adaptación` works; the full sentence with
+punctuation does not. Stopwords (`de`, `los`, `la`) are filtered out on their own.
+**How it is fixed:** by comparing without accents on both sides, and by keeping the
+full query instead of cutting it at punctuation.
 
-*Mover o copiar nombrando una sección puede quedar ambiguo.* En un `move` o un `copy`,
-la sección se busca con un puntuador distinto al de las ediciones normales: ese mira el
-**cuerpo entero** de cada entrada, no solo su encabezado. Como los párrafos de una
-sección contienen las mismas palabras que su título, la sección y sus propios párrafos
-empatan y la operación se bloquea pidiéndote que desambigües. **Qué puedes hacer y qué
-no:** se bloquea, no se equivoca — nunca vas a mover algo distinto de lo que pediste
-sin enterarte. Para desambiguar, nombra el bloque concreto que quieres mover en vez de
-la sección completa. **Cómo se arregla:** haciendo que `move`/`copy` puntúe la línea
-del encabezado, igual que ya lo hacen las ediciones normales.
+*Moving or copying by naming a section can be ambiguous.* In a `move` or a `copy`,
+the section is searched with a different scorer than normal edits: that one looks at
+the **whole body** of each entry, not only its heading. Since a section's paragraphs
+contain the same words as its title, the section and its own paragraphs tie and the
+operation blocks, asking for disambiguation. **What can be done and what cannot:** it
+blocks, it does not err — a different piece from the one requested is never moved
+without notice. To disambiguate, name the concrete block to be moved instead of the
+whole section. **How it is fixed:** by making `move`/`copy` score the heading line,
+as normal edits already do.
 
-*Un cambio se aplica sobre la sección completa.* La unidad mínima que se puede apuntar
-es una sección `##`. Para corregir una sola ecuación, la skill entrega la sección
-entera reescrita. Nada dentro de esa sección está protegido byte a byte: la garantía de
-bytes idénticos cubre lo que queda **fuera** del cambio. **Qué puedes hacer y qué no:**
-lo que sí protege lo de adentro es la puerta de integridad matemática — antes de
-publicar, la skill te lista cada ecuación, cada símbolo, cada `\tag` y cada cita `(Ec.
-N)` que existía antes y ya no está, y **no publica** hasta que esa desaparición se
-reconozca explícitamente. Una ecuación no se puede perder en silencio; sí puede cambiar
-prosa alrededor sin que nadie lo señale. **Cómo se arregla:** con loci más finos —
-poder apuntar a un párrafo o a una ecuación concreta, no solo a la sección que la
-contiene.
+*A change is applied over the whole section.* The smallest unit that can be targeted
+is a `##` section. To correct a single equation, the skill returns the entire
+section rewritten. Nothing inside that section is protected byte for byte: the
+identical-bytes guarantee covers what remains **outside** the change. **What can be
+done and what cannot:** what does protect the inside is the mathematical integrity
+gate — before publishing, the skill lists every equation, every symbol, every `\tag`
+and every `(Ec. N)` citation that existed before and is now gone, and **does not
+publish** until that disappearance is explicitly acknowledged. An equation cannot be
+lost silently; prose around it can change with no one pointing it out. **How it is
+fixed:** with finer loci — being able to target a paragraph or a concrete equation,
+not only the section that contains it.
 
-*Mover contenido al lugar equivocado no lo detecta nadie.* La puerta de integridad
-matemática compara qué había antes y qué hay después. Un `move` que se lleva el bloque
-equivocado **no pierde** matemática: la reubica intacta. Como no falta nada, la puerta
-no tiene nada que objetar. **Qué puedes hacer y qué no:** el riesgo real bajó bastante
-—hoy una consulta ambigua se bloquea en vez de resolver a lo que no era— pero aun así,
-revisa el resultado de un `move` antes de seguir construyendo encima. **Cómo se
-arregla:** comparando también **dónde** está cada bloque, no solo si sigue existiendo.
+*Moving content to the wrong place is detected by no one.* The mathematical
+integrity gate compares what was there before and what is there after. A `move` that
+takes the wrong block **does not lose** mathematics: it relocates it intact. Since
+nothing is missing, the gate has nothing to object to. **What can be done and what
+cannot:** the real risk dropped considerably —today an ambiguous query blocks instead
+of resolving to what it was not— but even so, the result of a `move` should be
+reviewed before continuing to build on top of it. **How it is fixed:** by also
+comparing **where** each block is, not only whether it still exists.
 
-*Editar una revisión publicada a mano rompe la auditoría.* Abres
-`proposals/research-concept-r14.md` en el editor, corriges una palabra, guardas. La
-próxima operación de la skill reporta `auditStatus: FAIL` y no te deja seguir. **Por
-qué:** cada publicación deja un recibo en `.proposal-deliberation/receipts/` con el
-sha256 del documento. Antes de cualquier operación, la auditoría relee el archivo, lo
-vuelve a hashear y exige que sea byte-idéntico a lo que el motor publicó
-(`consistency-audit.ts`, `RECEIPT_SHA_MISMATCH`). Una palabra distinta cambia el hash y
-el recibo deja de respaldar nada. **No es un defecto: es la garantía funcionando.** Sin
-recibos el motor no puede afirmar que una revisión sea lo que dice ser, y el linaje
-byte-exacto se queda sin respaldo. Sacarlos no es una opción. **Qué puedes hacer:** hoy,
-o reviertes la edición manual hasta que el archivo vuelva a coincidir, o reconcilias el
-recibo a mano. Lo segundo es delicado y conviene evitarlo: un recibo actualizado sin
-cuidado deja al linaje afirmando algo que nadie comprobó. **Cómo se arregla:** con una
-operación de re-base autorizada —algo como `ADOPT_MANUAL_EDIT`: *"edité esta revisión a
-propósito, adopta los bytes actuales como nueva línea base"*— que actualice el recibo
-tras confirmación explícita. Con eso, editar a mano dejaría de ser una ruptura y
-pasaría a ser un acto declarado.
+*Editing a published revision by hand breaks the audit.* Open
+`proposals/research-concept-r14.md` in the editor, correct one word, save. The next
+operation of the skill reports `auditStatus: FAIL` and does not allow continuing.
+**Why:** every publication leaves a receipt in `.proposal-deliberation/receipts/`
+with the document's sha256. Before any operation, the audit rereads the file, hashes
+it again and requires it to be byte-identical to what the engine published
+(`consistency-audit.ts`, `RECEIPT_SHA_MISMATCH`). A different word changes the hash
+and the receipt stops backing anything. **It is not a defect: it is the guarantee
+working.** Without receipts the engine cannot assert that a revision is what it says
+it is, and the byte-exact lineage is left without backing. Removing them is not an
+option. **What can be done:** today, either revert the manual edit until the file
+matches again, or reconcile the receipt by hand. The second is delicate and is best
+avoided: a receipt updated without care leaves the lineage asserting something no one
+checked. **How it is fixed:** with an authorized re-base operation —something like
+`ADOPT_MANUAL_EDIT`: *"I edited this revision on purpose, adopt the current bytes as
+the new baseline"*— that updates the receipt after explicit confirmation. With that,
+a manual edit would stop being a break and become a declared act.
 
-*Ninguna edición a mano está impedida; en el mejor caso se detecta después.* No hay en
-la forja ninguna barrera que frene a alguien —o a un agente— que abra un archivo
-gestionado y lo escriba por afuera del motor. `.claude/settings.json` tiene **un solo**
-hook `PreToolUse` (`refuse_offpath_push.py`, con matcher `Bash`, y es de
-`remote-execution`, no de esta skill), y su clave `permissions` **no tiene ninguna
-entrada `deny`**. **Qué significa para ti:** todo lo que esta skill opone a una edición
-manual llega después del hecho — la auditoría del punto anterior te avisa en la
-operación siguiente, con los bytes ya escritos. **Qué no cubre:** el momento de la
-escritura, ni nada de lo que pase entre esa escritura y la próxima vez que alguien
-invoque el motor. **Cómo se arregla:** con una regla `deny` sobre `proposals/` y sobre
-`.proposal-deliberation/`, para que la escritura por afuera del motor no llegue a
-ocurrir.
+*No manual edit is prevented; at best it is detected afterwards.* There is no
+barrier in the forge that stops someone —or an agent— from opening a managed file and
+writing it outside the engine. `.claude/settings.json` has **a single** `PreToolUse`
+hook (`refuse_offpath_push.py`, with matcher `Bash`, and it belongs to
+`remote-execution`, not to this skill), and its `permissions` key **has no `deny`
+entry**. **What it means:** everything this skill opposes to a manual edit arrives
+after the fact — the audit of the previous point warns on the next operation, with
+the bytes already written. **What it does not cover:** the moment of the write, nor
+anything that happens between that write and the next time someone invokes the
+engine. **How it is fixed:** with a `deny` rule over `proposals/` and over
+`.proposal-deliberation/`, so that writing outside the engine does not occur.
 
-*El índice persistido es un caché que se cura solo, no un guardia.* Es tentador leer
-`.proposal-deliberation/state/<archivo>.json` —un manifiesto con el `documentSha256` del
-documento entero y, por cada entrada de la estructura, su propio `textSha256` sobre un
-rango de bytes— como una defensa contra una edición manual. **No lo es.**
-`loadDocumentState` reconstruye **siempre** el estado a partir de los bytes que hay en
-el disco, y sólo usa el guardado si valida contra ese mismo documento; si no valida —que
-es exactamente lo que pasa después de una edición a mano— lo **sobrescribe en silencio**
-con la reconstrucción fresca. Ningún error, ningún reporte, nada que llegue a quien
-llamó. **Qué significa para ti:** el estado guardado no contradice una edición manual;
-se acomoda a ella. **Qué no cubre:** `consistency-audit.ts` tiene un
-`MANIFEST_SHA_MISMATCH`, pero no hay ninguna operación que puedas invocar para
-preguntarlo, y para cuando la auditoría corre el caché ya se curó. Lo que de verdad nota
-una edición a mano es el **recibo** —la limitación de más arriba—, no el índice. **Qué
-lo contiene:** la skill de al lado. El bloque de posición de `proposal-implementation`
-guarda el `sha256` de la revisión contra la que se derivó, así que cambiarle los bytes a
-una propuesta levanta `POSITION_STALE` en `gate` y en `close` —comprobado por
-ejecución—. El motor de deliberación no lo detecta; la implementación sí. **Cómo se
-arregla:** haciendo que el caché, cuando no valida, lo diga antes de curarse.
+*The persisted index is a cache that heals itself, not a guard.* It is tempting to
+read `.proposal-deliberation/state/<file>.json` —a manifest with the whole document's
+`documentSha256` and, for each entry of the structure, its own `textSha256` over a
+byte range— as a defense against a manual edit. **It is not.** `loadDocumentState`
+**always** rebuilds the state from the bytes on disk, and uses the stored one only if
+it validates against that same document; if it does not validate —which is exactly
+what happens after a manual edit— it **silently overwrites** it with the fresh
+reconstruction. No error, no report, nothing that reaches the caller. **What it
+means:** the stored state does not contradict a manual edit; it accommodates to it.
+**What it does not cover:** `consistency-audit.ts` has a `MANIFEST_SHA_MISMATCH`, but
+there is no operation that can be invoked to ask it, and by the time the audit runs
+the cache has already healed. What does notice a manual edit is the **receipt** —the
+limitation above—, not the index. **What contains it:** the neighboring skill. The
+position block of `proposal-implementation` stores the `sha256` of the revision it
+was derived from, so changing a proposal's bytes raises `POSITION_STALE` in `gate`
+and in `close` —verified by execution—. The deliberation engine does not detect it;
+the implementation does. **How it is fixed:** by making the cache, when it does not
+validate, say so before healing.
 
-*El estado no sobrevive a un clon.* `.proposal-deliberation/` es una entrada de
-`.gitignore` (línea 40), así que nada de lo que hay adentro —ni los índices, ni los
-recibos, ni la cuarentena— viaja en un clon nuevo. **Qué significa para ti:** un clon
-fresco arranca sin contabilidad y la reconstruye a partir de los bytes que encuentra en
-`proposals/`, aceptándolos tal como están. Si esos bytes venían editados a mano, el clon
-no tiene contra qué notarlo: para él ese es el documento, y la auditoría cierra. **Qué
-no cubre:** la verificación byte a byte es una propiedad **de la máquina donde se
-publicó**, no del repositorio. Un linaje verificado aquí no llega verificado allá. **Cómo
-se arregla:** no está decidido. Habría que separar qué mitad de esa contabilidad es
-historia del proyecto y cuál es estado de máquina, y versionar sólo la primera. Por
-ahora está anotado, no resuelto.
+*State does not survive a clone.* `.proposal-deliberation/` is a `.gitignore` entry
+(line 40), so nothing inside it —neither the indexes, nor the receipts, nor the
+quarantine— travels in a fresh clone. **What it means:** a fresh clone starts without
+accounting and rebuilds it from the bytes it finds in `proposals/`, accepting them as
+they are. If those bytes were manually edited, the clone has nothing against which to
+notice it: for the clone that is the document, and the audit closes. **What it does
+not cover:** byte-for-byte verification is a property **of the machine where the
+publication happened**, not of the repository. A lineage verified here does not
+arrive verified there. **How it is fixed:** it is not decided. It would be necessary
+to separate which half of that accounting is project history and which is machine
+state, and to version only the first. For now it is noted, not resolved.
 
-*Nada prueba quién decidió.* El motor deja constancia de lo que se publicó, contra qué
-base y con qué hash. Lo que no deja —ni puede dejar— es constancia de que la
-confirmación de la puerta la haya dado una persona: el token de aceptación es de un solo
-uso y ata una vista previa a su aprobación, pero lo consume quien llame al motor, y el
-agente que armó la vista previa puede llamarlo. **Qué significa para ti:** una decisión
-registrada prueba que llegó al registro, nunca que alguien la tomó. Un agente puede
-abrir la pregunta y contestársela solo, y nadie más adelante en la cadena puede
-distinguir ese caso del otro. **Qué no cubre:** cualquier lectura del registro como
-"esto fue aprobado". Lo que dice es "esto quedó registrado". **Cómo se arregla:** no con
-más registro. Haría falta que la confirmación entre por un canal que el motor no pueda
-originar, y hoy no existe.
+*Nothing proves who decided.* The engine records what was published, against what
+base and with which hash. What it does not record —nor can it— is that the gate's
+confirmation was given by a person: the acceptance token is single-use and ties a
+preview to its approval, but it is consumed by whoever calls the engine, and the
+agent that built the preview can call it. **What it means:** a recorded decision
+proves that it reached the record, never that someone made it. An agent can open the
+question and answer it itself, and no one later in the chain can distinguish that
+case from the other. **What it does not cover:** any reading of the record as "this
+was approved". What it says is "this was recorded". **How it is fixed:** not with
+more record. The confirmation would have to come in through a channel the engine
+cannot originate, and today none exists.
 
-**Deuda de mantenimiento.** No limita a quien usa la skill; limita a quien la
-modifique. *El nombre del directorio de estado está repetido.* La carpeta
-`.proposal-deliberation/` guarda la contabilidad —`receipts/` y `state/`— en la raíz
-del repositorio, y su nombre está escrito como texto literal en **21 puntos repartidos
-en 7 archivos** del motor (`consistency-audit.ts` sola tiene 7). Los 21 dicen lo mismo,
-así que la carpeta siempre se encuentra. **Qué sí funciona:** dos propuestas distintas
-conviven sin problema, porque tanto los recibos como el estado se guardan en **un
-archivo por revisión, nombrado con el archivo de la propuesta**
-(`state/research-concept-r01.md.json`). Nombres distintos, archivos distintos, cero
-colisión. **Qué no se puede:** tener el **mismo documento bajo dos deliberaciones
-independientes** —dos estados aislados sobre los mismos archivos, para explorar dos
-caminos en paralelo— ni mover el estado fuera de la raíz del repositorio. Las dos cosas
-necesitan que la ubicación sea configurable, y hoy no lo es. **Y el modo de fallar es
-feo:** si alguien renombra la carpeta y se olvida de uno de los 21 lugares, no falla
-nada — la mitad de la contabilidad queda escribiéndose en la carpeta vieja, en
-silencio, hasta que alguien nota que faltan recibos. **Cómo se arregla:** con un único
-`stateRoot(root)` del que salgan los 21. Es un refactor chico y desbloquea las dos
-cosas de arriba.
+**Maintenance debt.** It does not limit whoever uses the skill; it limits whoever
+modifies it. *The name of the state directory is repeated.* The
+`.proposal-deliberation/` folder holds the accounting —`receipts/` and `state/`— at
+the repository root, and its name is written as literal text in **21 places spread
+across 7 files** of the engine (`consistency-audit.ts` alone has 7). All 21 say the
+same thing, so the folder is always found. **What does work:** two different
+proposals coexist without a problem, because both the receipts and the state are
+stored in **one file per revision, named with the proposal's file**
+(`state/research-concept-r01.md.json`). Different names, different files, zero
+collision. **What cannot be done:** having the **same document under two independent
+deliberations** —two isolated states over the same files, to explore two paths in
+parallel— or moving the state outside the repository root. Both things need the
+location to be configurable, and today it is not. **And the failure mode is ugly:**
+if someone renames the folder and forgets one of the 21 places, nothing fails — half
+of the accounting keeps being written to the old folder, silently, until someone
+notices that receipts are missing. **How it is fixed:** with a single
+`stateRoot(root)` from which the 21 derive. It is a small refactor and it unblocks
+both things above.
 
-*Resuelto.* `proseReferenceText` era obligatorio a nivel de motor sin tener ningún lector
-en el núcleo —su único lector real siempre fue el lado matemático
-(`preservation-math.ts`)—, y el otro host lo declaraba porque debía, sin invocarlo jamás.
-Ahora es opcional en `domain-profile.ts`; `preservation-math.ts` exige su propia
-necesidad localmente (falla con `PROSE_REFERENCE_TEXT_REQUIRED` si no está), y el perfil
-experimental dejó de declararlo. En el mismo archivo de entrada, `cli.mjs` importaba
-`pathToFileURL` sin usarlo salvo por un `void pathToFileURL;` de cierre; ambos se
-borraron.
+*Resolved.* `proseReferenceText` was mandatory at the engine level with no reader in
+the core —its only real reader was always the mathematical side
+(`preservation-math.ts`)—, and the other host declared it because it had to, without
+ever invoking it. It is now optional in `domain-profile.ts`; `preservation-math.ts`
+requires its own need locally (it fails with `PROSE_REFERENCE_TEXT_REQUIRED` if
+absent), and the experimental profile stopped declaring it. In the same entry file,
+`cli.mjs` imported `pathToFileURL` without using it except for a closing
+`void pathToFileURL;`; both were deleted.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    A["Usuario invoca /proposal-deliberation"] --> B["Agente pide STATUS al motor"]
-    B --> C{"¿Existe una revisión gestionada?"}
-    C -- No --> D["Agente pide la idea"]
-    D --> E["Crea la v1: carga paper-guide UNA sola vez"]
-    E --> F["Escribe research-concept-r01.md"]
-    C -- Sí --> G["Deliberación en la conversación. El motor no participa"]
-    G --> H["Resolver objetivo: ubicar la sección"]
-    H --> I{"¿Candidato único?"}
-    I -- "No, empate" --> J["Bloqueado: el motor pregunta cuál"]
+    A["Operator invokes /proposal-deliberation"] --> B["Agent asks the engine for STATUS"]
+    B --> C{"Does a managed revision exist?"}
+    C -- No --> D["Agent asks for the idea"]
+    D --> E["Creates v1: loads paper-guide ONCE"]
+    E --> F["Writes research-concept-r01.md"]
+    C -- Yes --> G["Deliberation in the conversation. The engine takes no part"]
+    G --> H["Resolve target: locate the section"]
+    H --> I{"Single candidate?"}
+    I -- "No, tie" --> J["Blocked: the engine asks which one"]
     J --> H
-    I -- Sí --> K["Vista previa del sucesor"]
-    K --> L["Compila el candidato y lo valida entero"]
-    L --> M{"¿Validación OK?"}
-    M -- No --> N["Bloqueado: candidato rechazado"]
-    M -- Sí --> O["Token + lista de matemática que se perdería"]
-    O --> P["El agente muestra qué desaparecería"]
-    P --> Q{"¿Confirma cada pérdida?"}
-    Q -- No --> R["Rechazado. No se escribe nada"]
-    Q -- Sí --> S["Revalida, rehashea el fuente, escribe atómico"]
-    S --> T["Escribe research-concept-r-siguiente.md"]
-    T --> U["Reconstruye estado y escribe el recibo"]
-    U --> V["Auditoría de consistencia byte a byte"]
-    V --> W{"¿Pasa?"}
-    W -- No --> X["status: blocked. La contabilidad no cierra"]
-    W -- Sí --> Y["Publicado. STATUS ahora reporta esta revisión"]
+    I -- Yes --> K["Preview of the successor"]
+    K --> L["Compiles the candidate and validates it entirely"]
+    L --> M{"Validation OK?"}
+    M -- No --> N["Blocked: candidate refused"]
+    M -- Yes --> O["Token + list of mathematics that would be lost"]
+    O --> P["The agent shows what would disappear"]
+    P --> Q{"Confirms every loss?"}
+    Q -- No --> R["Refused. Nothing is written"]
+    Q -- Yes --> S["Revalidates, rehashes the source, writes atomically"]
+    S --> T["Writes research-concept-r-next.md"]
+    T --> U["Rebuilds state and writes the receipt"]
+    U --> V["Byte-for-byte consistency audit"]
+    V --> W{"Does it pass?"}
+    W -- No --> X["status: blocked. The accounting does not close"]
+    W -- Yes --> Y["Published. STATUS now reports this revision"]
     F --> U
-    Z["Corrección que llega desde proposal-implementation"] --> H
+    Z["Correction arriving from proposal-implementation"] --> H
 ```
 
 ---
