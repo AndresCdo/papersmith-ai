@@ -3175,11 +3175,35 @@ papersmith implement . --action verify --target implementations/demo
 papersmith implement . --action probe --target implementations/demo
 ```
 
-`--action` es obligatorio. Acciones comunes: `env`, `plan`, `apply` (alias
-`materialize`), `admit`, `handoff`, `compose`, `probe` (alias `benchmark`),
+`--action` es obligatorio. El puente corre sólo estas acciones: `env`, `name`,
+`plan`, `apply`, `admit`, `handoff`, `compose`, `probe` (alias `benchmark`) y
 `verify`. Flags de apoyo: `--target`, `--name`, `--plan`, `--finding`,
 `--entry-text`, `--python`, `--shards`, `--revision`; lo que venga después de
 los flags conocidos se reenvía como `extra` a `implementation_cli.py`.
+
+`--action materialize` sigue funcionando, pero es un alias de `apply` (la
+migración de layout aprobada con `--plan`), **no** del `materialize` del motor
+(`--stage`/`--authored`/`--adopt`). Cada uso imprime una nota en stderr; escríbelo
+`--action apply`.
+
+El resto de los comandos del motor no pasa por el puente y se corre directo con
+el lanzador de la skill, que fija el perfil de dominio:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py materialize \
+  --target implementations/demo --name Demo --stage scaffold --plan plan.json --seed 7
+```
+
+Directos: `walk`, `materialize`, `adopt`, `position`, `discuss`, `propose`,
+`gate`, `offer`, `close`, `step`, `settle`, `defect` (y `agree` en
+`experimental-implementation`, con su propio `implementation_cli.py`). Pedirle al
+puente uno de ellos (salvo `materialize`, el alias de arriba) lo rechaza
+nombrando esta ruta. Si fijas
+`IMPLEMENTATION_DOMAIN_PROFILE` a mano, tiene que ser una ruta absoluta (una
+relativa se rechaza con `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE`). Los
+comandos que escriben el ledger (`position`, `propose`, `gate`, `offer`, `close`,
+`step`, `settle`, `defect`, `walk`) exigen `--session <id>`; qué es ese id está en
+`skills/proposal-implementation/references/usage.md`, "Session ids".
 
 ### `papersmith run <profile> [<dir>]`
 
@@ -3688,7 +3712,8 @@ a servir sin un perfil de dominio. Usa `npm test` (que lo fija) o el CLI de la
 skill. Lo mismo vale para los motores de implementación:
 `IMPLEMENTATION_DOMAIN_PROFILE_REQUIRED` significa que los estás invocando
 directo en vez de a través de `implementation_cli.py`, que es quien los arranca
-con su perfil.
+con su perfil. Si los invocas directo a propósito, fija la variable a una ruta
+**absoluta**: una relativa se rechaza con `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE`.
 
 **"El workspace no tiene `.claude/skills`."** Es el estado por defecto: un
 workspace embarca el árbol `skills/` completo y `.claude/agents/`, y sus

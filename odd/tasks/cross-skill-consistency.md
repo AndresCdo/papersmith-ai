@@ -86,6 +86,7 @@ Route legend: D = delegated writer, I = inline.
   - [ ] E6 — partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
   - [x] E2 — holder name in proposal-implementation docs (inline: 2 doc files + drift test)
   - [x] E3 — sealed set documented + refusal lists it (inline: engine + 2 docs + test)
+  - [x] E1, E7, E8 — implement bridge coverage + alias note; absolute profile; session ids (inline/serial: bridge + test + 4 docs)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -987,3 +988,21 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   both modes) RED 3F -> GREEN (2 passed, 2 subtests). `npm run test:fast`: 3379 passed, 1 failed (the count sweep,
   fixed) -> sweep 3 passed. No migration.
   Commit: `fix(implementation): materialize names the sealed set it accepts` (the commit carrying this line)
+- E1 (real): `bridges/implementation.py` `ALIASES = {"materialize": "apply", ...}` and `REAL_COMMANDS` = 9 of the
+  engine's `COMMANDS` (21, +`agree` under two documents). Not renamed (backward compatible): the alias keeps mapping
+  to `apply` and `execute` writes a stderr note naming `--action apply` and the direct engine `materialize`; the
+  unsupported-action `UserError` names the bridged commands, the aliases and `python3 <ENGINE_CLI> <action> ...`;
+  `--action` help lists both. README `papersmith implement` (Spanish, matching the manual) lists bridged vs direct
+  commands. Tests in `tests/test_papersmith_bridges.py` (4 new): bridged ⊆ engine `COMMANDS` (AST-derived), refusal
+  names roster + route, alias note (and none for `apply`), README names every engine command minus the bridge;
+  RED 3F -> GREEN (15 passed). MCP `papersmith.implement` description untouched (it forwards to the CLI).
+- E7 (real): `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` (`impl_domain_profile.py:285`) was in no doc. Added to
+  proposal usage.md launcher intro, proposal SKILL.md Command Roster, experimental SKILL.md launcher paragraph,
+  README bridge section + troubleshooting.
+- E8 (real): `--session` had no definition. Verified in the engine: required by position/propose/gate/offer/close/
+  step/settle/defect (parser :21702) and walk (:21918), optional on `adopt --apply`; stamped verbatim into events,
+  never validated; `close`'s `prior_close` keys on it; `offer` interpolates it unquoted into published commands
+  (:17123, :17365). Defined in usage.md "### Session ids"; pointers from proposal SKILL.md roster, experimental
+  SKILL.md, README.
+  `npm run test:fast`: 4264 passed, 1 known `.venv` failure (skill_audit inversion). No migration.
+  Commit: `fix(cli): the implement bridge names its coverage and the direct engine route` (the commit carrying this line)

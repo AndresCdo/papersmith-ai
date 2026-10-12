@@ -1,7 +1,14 @@
-"""Bridge to proposal-implementation's real command surface."""
+"""Bridge to part of proposal-implementation's command surface.
+
+The bridge runs only the commands in `REAL_COMMANDS`; every other engine
+command (`materialize`, `position`, `settle`, ...) runs directly through
+`ENGINE_CLI`. An unsupported action is refused with both facts, so the
+reader learns the direct route where they meet the refusal.
+"""
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from ..core.exit_codes import map_child_rc
@@ -10,12 +17,30 @@ from .python import emit_result, run_script
 
 REAL_COMMANDS = {"env", "name", "plan", "apply", "admit", "handoff", "compose", "probe", "verify"}
 ALIASES = {"materialize": "apply", "benchmark": "probe"}
+ENGINE_CLI = "skills/proposal-implementation/scripts/implementation_cli.py"
+
+#: Kept for backward compatibility and announced on every use: the engine
+#: has its own `materialize` (`--stage`/`--authored`/`--adopt`), which this
+#: alias does NOT reach -- it runs `apply`, the layout migration.
+DEPRECATED_ALIASES = {
+    "materialize": (
+        "note: `papersmith implement --action materialize` runs the engine's "
+        "`apply` (the approved layout migration), not `materialize --stage`/"
+        "`--authored`/`--adopt`. Spell it `--action apply`; the old spelling "
+        "keeps working. The engine's own materialize runs directly: "
+        f"python3 {ENGINE_CLI} materialize --target <repo> --name <Name> ...\n"),
+}
 
 
 def command_args(args) -> tuple[str, list[str]]:
     command = ALIASES.get(args.action, args.action)
     if command not in REAL_COMMANDS:
-        raise UserError(f"unsupported implementation action: {args.action}")
+        raise UserError(
+            f"unsupported implementation action: {args.action}. The bridge runs "
+            f"{', '.join(sorted(REAL_COMMANDS))} (aliases: "
+            f"{', '.join(f'{a}->{c}' for a, c in sorted(ALIASES.items()))}); "
+            f"every other engine command runs directly: "
+            f"python3 {ENGINE_CLI} {args.action} --target <repo> --name <Name> ...")
     forwarded: list[str] = []
     if command == "name":
         if not args.name:
@@ -52,18 +77,20 @@ def command_args(args) -> tuple[str, list[str]]:
 def execute(workspace: str | Path, args) -> int:
     root = Path(workspace).expanduser().resolve()
     command, forwarded = command_args(args)
-    result = run_script(
-        root,
-        "skills/proposal-implementation/scripts/implementation_cli.py",
-        [command, *forwarded],
-    )
+    if args.action in DEPRECATED_ALIASES:
+        sys.stderr.write(DEPRECATED_ALIASES[args.action])
+    result = run_script(root, ENGINE_CLI, [command, *forwarded])
     return emit_result(result)
 
 
 def register(subparsers) -> None:
     parser = subparsers.add_parser("implement", help="bridge to proposal-implementation")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
-    parser.add_argument("--action", required=True)
+    parser.add_argument(
+        "--action", required=True,
+        help=f"one of {', '.join(sorted(REAL_COMMANDS))}; aliases "
+             f"{', '.join(f'{a}->{c}' for a, c in sorted(ALIASES.items()))}. "
+             f"Other engine commands run directly: python3 {ENGINE_CLI} <command>")
     parser.add_argument("--target", default=None)
     parser.add_argument("--name", default=None)
     parser.add_argument("--plan", default=None)

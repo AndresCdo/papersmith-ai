@@ -29,6 +29,34 @@ skill the profile declares (the skill directory of its `PROFILE["cli"]["path"]`)
 so a sibling's profile from a different checkout or workspace is refused as
 well, while this skill's own profile is accepted wherever it lives.
 
+If you set `IMPLEMENTATION_DOMAIN_PROFILE` yourself — a fixture profile, or
+running the engine without this launcher — it must be an **absolute** path. A
+relative one refuses `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any
+command runs, because it would resolve against whatever working directory a
+child process happens to have.
+
+`papersmith implement --action <command>` (the workspace CLI's bridge) runs only
+`env`, `name`, `plan`, `apply`, `admit`, `handoff`, `compose`, `probe` and
+`verify`; every other command on this page runs through this launcher directly.
+Its `--action materialize` is a kept alias of `apply`, not of the `materialize`
+documented below.
+
+### Session ids
+
+`position`, `propose`, `gate`, `offer`, `close`, `step`, `settle`, `defect` and
+`walk` require `--session <id>` (`adopt --apply` accepts one). The id is yours:
+the engine never mints, looks up or validates it. It is stamped verbatim into
+every event the call appends to `<Name>/.implementation/position.jsonl` and, for
+`position`, into the position block's header, so a later reader can tell which
+working session made each write. Use one id for one working session (a
+conversation, a sitting at the terminal) and pass the same id to every write in
+it; a new session gets a new id. Write it as one shell-safe token with no
+whitespace — for example `2026-10-12-a`, or your agent harness's own session
+id — because the commands `offer` publishes (its `launch` and `run-step` actions)
+carry it unquoted. It is an attribution, not a credential: `close` uses it only
+to recognize a repeat close by the same session over an unmoved position, which
+reports `not_open` instead of recording a second close.
+
 ## 0. Bind the revision
 
 ```bash

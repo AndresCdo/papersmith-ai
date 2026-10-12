@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import contextlib
+import io
 import shutil
 import subprocess
 import tempfile
@@ -17,6 +20,25 @@ from papersmith.errors import ExecutionError, UserError
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+ENGINE = ROOT / "skills/_core/implementation/engine/implementation_engine.py"
+
+
+def _engine_commands() -> set[str]:
+    """The engine's own `COMMANDS` keys, read from its source (the one
+    conditional `**{...}` entry included), never listed here."""
+    tree = ast.parse(ENGINE.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "COMMANDS"):
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.Dict):
+                    names.update(k.value for k in sub.keys
+                                 if isinstance(k, ast.Constant))
+    return names
 
 
 def _implementation_args(**overrides):
@@ -132,6 +154,51 @@ class BridgesTests(unittest.TestCase):
             implementation.command_args(_implementation_args(target=None))
         with self.assertRaisesRegex(UserError, "requires --plan"):
             implementation.command_args(_implementation_args(plan=None))
+
+    def test_bridged_commands_are_engine_commands(self) -> None:
+        engine = _engine_commands()
+        self.assertTrue(engine)
+        self.assertLessEqual(implementation.REAL_COMMANDS, engine)
+
+    def test_unsupported_action_names_the_bridge_and_the_direct_route(self) -> None:
+        with self.assertRaises(UserError) as caught:
+            implementation.command_args(_implementation_args(action="position"))
+        message = str(caught.exception)
+        for command in implementation.REAL_COMMANDS:
+            self.assertIn(command, message)
+        self.assertIn("skills/proposal-implementation/scripts/implementation_cli.py position",
+                      message)
+
+    def test_materialize_alias_still_runs_apply_and_says_which_command_it_is(self) -> None:
+        tmp_path = self.new_tmp()
+        captured: dict[str, object] = {}
+
+        def fake_run(root, script, argv):
+            captured["argv"] = argv
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        self.patch(implementation, "run_script", fake_run)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            rc = implementation.execute(tmp_path, _implementation_args(action="materialize"))
+        assert rc == SUCCESS
+        assert captured["argv"][0] == "apply"
+        note = stderr.getvalue()
+        self.assertIn("--action apply", note)
+        self.assertIn("materialize --stage", note)
+        self.assertIn("implementation_cli.py", note)
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            implementation.execute(tmp_path, _implementation_args(action="apply"))
+        assert stderr.getvalue() == ""
+
+    def test_readme_names_every_engine_command_the_bridge_does_not_run(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        start = readme.index("### `papersmith implement [<dir>]`")
+        section = readme[start:readme.index("\n### ", start + 1)]
+        for command in sorted(_engine_commands() - implementation.REAL_COMMANDS):
+            self.assertIn(f"`{command}`", section)
 
     def test_deliberation_alias_request_shapes(self) -> None:
         assert deliberation.build_request(_deliberation_args(action="status")) == {"operation": "STATUS"}

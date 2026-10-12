@@ -341,6 +341,15 @@ sibling is recognized by the skill its profile declares (the skill directory of
 from another checkout or workspace is refused too; this skill's own profile is
 accepted from any tree.
 
+A profile you set yourself (a fixture, or the engine run without this
+launcher) must be an absolute path: a relative one refuses
+`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any command runs. The
+commands that write the ledger take `--session <id>`, an id you choose per
+working session; `proposal-implementation`'s `references/usage.md`, "Session
+ids", defines it. The workspace bridge `papersmith implement` drives the
+sibling's launcher, never this one: run this skill's commands through its own
+`scripts/implementation_cli.py`.
+
 ## Which commands are not available yet, and why
 
 This domain ships no `assets/kit/` at all (measured this session: the kit

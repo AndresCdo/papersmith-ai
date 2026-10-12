@@ -570,6 +570,26 @@ number is `0`, breaking changes can still arrive without a major bump.
   `proposal-implementation`'s `references/usage.md` lists the set under "The
   sealed set", kept equal to the engine's `all_kit_destinations` by a test.
 
+- **`papersmith implement` says what it bridges and what it does not.** The
+  bridge runs nine of the engine's commands (`env`, `name`, `plan`, `apply`,
+  `admit`, `handoff`, `compose`, `probe`, `verify`), and its `--action
+  materialize` was an undocumented alias of `apply` — the layout migration —
+  while the engine's own `materialize --stage/--authored/--adopt` was
+  unreachable through it. The alias keeps working and now prints a note on
+  stderr saying which command it runs and how to reach the engine's
+  `materialize`; an unsupported action is refused naming the bridged commands
+  and the direct `implementation_cli.py` route; `--action`'s help lists both.
+  The manual's `papersmith implement` section lists the direct-only commands
+  (a test keeps it equal to the engine's `COMMANDS` minus the bridge).
+- **Direct engine use documents its two inputs.** `proposal-implementation`'s
+  `SKILL.md` and `references/usage.md`, `experimental-implementation`'s
+  `SKILL.md` and the manual now state that a hand-set
+  `IMPLEMENTATION_DOMAIN_PROFILE` must be absolute
+  (`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE`), and define the `--session`
+  id the ledger-writing commands require: chosen by the caller, one per
+  working session, one shell-safe token, stamped verbatim as attribution and
+  never validated.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1077,6 +1097,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   `atlas.json` checked with `--pool` may now fail where a quote was
   paraphrased or cites an origin outside the pool. `_failures(atlas)` keeps
   its one-argument form for the command center. No migration is needed.
+
+- `papersmith implement --action materialize` still runs `apply`, and now
+  prints a one-line note on stderr pointing at `--action apply`. Its stdout
+  and exit code are unchanged.
 
 
 ## 0.13.0
