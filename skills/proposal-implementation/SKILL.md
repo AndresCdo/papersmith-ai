@@ -1880,6 +1880,18 @@ search that is about to run first under a heavier one it declared for itself; mi
 that gap once is how a few minutes of pilot time gets mistaken for the cost of the
 whole flow.
 
+Read `contention` and `basis` next. A projection (`costForecast` and the benchmark's
+`projectedCost` alike) scales one duration, and runs that share a machine compete for
+it: one pilot on eight workers took 2.42 times its single-process projection. When the
+record's `reduction` names the `parallelism` it ran at (a positive integer), the
+forecast reports it, `contention: "included"`, and holds at that parallelism only.
+Otherwise it reads `parallelism: null`, `contention: "unmeasured"` and a `basis`
+saying it is single-process, and no contention factor is supplied, because any factor
+here would be chosen rather than measured. A `parallelism` of any other shape is
+echoed as `parallelismMalformed` and never read. To forecast a campaign at its planned
+parallelism, run the pilot at that parallelism and record `parallelism` beside its
+duration.
+
 ### `nextStep: "report-first"` — the document does not yet agree with the run
 
 `report` carries the same reading `verify` already reports (see

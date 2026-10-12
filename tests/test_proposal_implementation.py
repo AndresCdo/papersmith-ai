@@ -4496,6 +4496,44 @@ class DistributionTests(unittest.TestCase):
         self.assertIsNone(cost["projectedSeconds"])
         self.assertIn("no duration", cost["reason"])
 
+    def test_a_forecast_from_a_record_naming_no_parallelism_says_single_process(self):
+        """B12: the duration a record carries is read as one run alone, and
+        runs sharing a machine compete for it. A pilot on 8 workers measured
+        2.42x such a projection. The forecast now says what it is: projected
+        from single-process timing, with contention unmeasured, and no factor
+        for it invented."""
+        cost = impl._projected_cost(
+            {"seconds": 600, "epochs": 3}, {"epochs": 30})
+        self.assertEqual(cost["projectedSeconds"], 6000)
+        self.assertIsNone(cost["parallelism"])
+        self.assertEqual(cost["contention"], "unmeasured")
+        self.assertIn("single-process", cost["basis"])
+        self.assertNotIn("contentionFactor", cost)
+
+    def test_a_forecast_from_a_record_naming_its_parallelism_is_measured_there(self):
+        cost = impl._projected_cost(
+            {"seconds": 600, "epochs": 3, "parallelism": 8}, {"epochs": 30})
+        self.assertEqual(cost["projectedSeconds"], 6000)
+        self.assertEqual(cost["parallelism"], 8)
+        self.assertEqual(cost["contention"], "included")
+        self.assertIn("8 concurrent", cost["basis"])
+
+    def test_a_malformed_parallelism_is_never_read_as_measured(self):
+        for value in (True, 0, -2, "8", 2.5, None):
+            with self.subTest(value=value):
+                cost = impl._projected_cost(
+                    {"seconds": 600, "epochs": 3, "parallelism": value},
+                    {"epochs": 30})
+                self.assertIsNone(cost["parallelism"])
+                self.assertEqual(cost["contention"], "unmeasured")
+                self.assertEqual(cost["parallelismMalformed"], value)
+
+    def test_the_search_forecast_carries_the_same_label(self):
+        forecast = impl.search_cost_forecast(
+            {"seconds": 600, "epochs": 3}, {"epochs": 30})
+        self.assertEqual(forecast["contention"], "unmeasured")
+        self.assertIn("single-process", forecast["basis"])
+
     def test_a_complete_declaration_with_agreeing_shards_passes(self):
         merged = {"shardsArrived": ["a", "b"], "disagreements": []}
         state = impl.distribution_state(

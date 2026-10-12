@@ -1666,7 +1666,40 @@ def _projected_cost(reduction: dict, target_scale: dict) -> dict | None:
         if have and want:
             factor *= want / have
     return {"measuredSeconds": ran, "factor": round(factor, 2),
-            "projectedSeconds": round(ran * factor)}
+            "projectedSeconds": round(ran * factor),
+            **_projection_parallelism(reduction)}
+
+
+def _projection_parallelism(reduction: dict) -> dict:
+    """What the duration a projection scales was taken under.
+
+    Runs sharing a machine compete for it, so a duration taken from one run
+    alone understates what the same run costs next to seven others; one
+    eight-worker run took 2.42 times such a projection. That gap is known
+    from a run or not at all: when the record names the `parallelism` it ran
+    at (a positive integer), the projection is that run's own duration and
+    holds at that parallelism; otherwise it is labelled single-process with
+    contention unmeasured, and no factor for contention is supplied, because
+    any number here would be chosen. Anything else under that key is named
+    back and never read as the parallelism a run had."""
+    if "parallelism" not in reduction:
+        malformed = {}
+    else:
+        given = reduction["parallelism"]
+        if isinstance(given, int) and not isinstance(given, bool) and given >= 1:
+            return {"parallelism": given, "contention": "included",
+                    "basis": (f"the record's duration, taken with {given} "
+                              f"concurrent runs; the projection holds at "
+                              f"{given} concurrent runs and not at another "
+                              "parallelism")}
+        malformed = {"parallelismMalformed": given}
+    return {"parallelism": None, "contention": "unmeasured",
+            "basis": ("single-process: the record names no parallelism, so its "
+                      "duration is read as one run alone. Runs that share a "
+                      "machine compete for it and nothing here knows by how "
+                      "much; record `parallelism` in the reduction of a run "
+                      "at the planned parallelism to replace this"),
+            **malformed}
 
 
 def distribution_state(contract: dict, dimensions: dict,

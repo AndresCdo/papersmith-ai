@@ -59,6 +59,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] X3 — D5 mutation test runs on a scratch engine copy (D, same writer: 1 test file + CHANGELOG)
   - [x] B7 — executed kit notebooks are not structure drift (D, writer trigger: engine + test + 2 docs)
   - [x] B11 — step digest scope kept and stated on every unmeasured `@step` item (D, writer trigger: engine + test + 2 docs)
+  - [x] B12 — cost forecasts state the parallelism of their duration (D, writer trigger: engine + test + 2 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -84,6 +85,10 @@ Route legend: D = delegated writer, I = inline.
   `AGREED.md`): a profile test leaves `IMPLEMENTATION_DOMAIN_PROFILE` in `os.environ`, the fixture test passes
   `os.environ` to the experimental CLI, and the launcher only `setdefault`s it. Each file passes alone; the
   change-selected `npm run test:fast` tier hits it. Not fixed (outside B1/B4/B8/B10).
+- X10 — `tests/test_implementation_core.py` and `tests/test_proposal_implementation.py` run together under
+  `-n 8 --dist loadfile` interfere: `WorkspaceGuardTests.setUp`'s `implementations/_core_guard_*` directory
+  vanishes (`FileNotFoundError`), and one such run errored 1801 proposal tests at setup. Reproduced with the
+  B12 changes stashed (found in B12). Each file passes alone. Not investigated further.
 - X9 — `verify` crashes (traceback, exit 1) when a file under `<Name>/Notebooks/` is not valid JSON:
   `notebooks_state` calls `notebook_seals(json.loads(...))` unguarded (found in B7). Not fixed.
 
@@ -474,6 +479,20 @@ Route legend: D = delegated writer, I = inline.
   passed, 1 failed (`test_experiments_seal.py::...stray_parent_env_var...`, passes alone and with the file;
   a parallel flake, also passes on the stashed base). No migration (additive keys).
   Commit: `fix(implementation): an unmeasured step mark names its digest scope` (the commit carrying this line)
+
+- B12 (real): `_projected_cost` (behind `probe`'s `search.costForecast` via `search_cost_forecast` and the
+  benchmark's `projectedCost`) scaled `reduction.seconds`/`wallSeconds` linearly with no notion of
+  concurrency; the kit `probe.ipynb` harness times seeds in one process. No pilot measurement of
+  parallelism existed anywhere. Fix: `_projection_parallelism` adds `parallelism`/`contention`/`basis`:
+  a record whose `reduction.parallelism` is a positive int -> that value, `contention: "included"`
+  (projection holds at that parallelism only); otherwise `parallelism: null`, `contention: "unmeasured"`,
+  `basis` = single-process, and no contention factor invented; a malformed value is echoed as
+  `parallelismMalformed`. Tests: 4 in `DistributionTests` (one subTest per malformed shape). RED 9F -> GREEN.
+  Mutations: bool guard off -> 1 red; labelling dropped -> 2 red. Seals unchanged. Domain-lock pins
+  unchanged (reworded; the literal `included` avoids moving the `measured` pin). `pytest
+  tests/test_proposal_implementation.py` (single process): 1799 passed, 2 skipped; seal files 73 passed;
+  `test_implementation_core.py` alone 139 passed. No migration (records are read, never rewritten).
+  Commit: `fix(implementation): a cost forecast states the parallelism it was taken at` (the commit carrying this line)
 
 ## Next step
 

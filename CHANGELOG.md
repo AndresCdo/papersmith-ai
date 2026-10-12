@@ -310,6 +310,16 @@ number is `0`, breaking changes can still arrive without a major bump.
   the exact `step` command that clears it) and `digestScope`. Documented in
   `SKILL.md` and `references/usage.md`, with the advice to commit code and
   tests before the first pilot step.
+- **A cost forecast says what parallelism its duration was taken at.**
+  `probe`'s `search.costForecast` and the benchmark's `projectedCost` scale
+  one recorded duration, and read it as if runs never competed: a pilot on
+  eight workers took 2.42 times the projection, one arm about five times.
+  Both now carry `parallelism`, `contention` and `basis`. A record whose
+  `reduction` names `parallelism` (a positive integer) is projected from
+  that run's own duration, `contention: "included"`, holding at that
+  parallelism only. Otherwise the forecast is labelled single-process with
+  `contention: "unmeasured"`, and no contention factor is supplied. A
+  malformed `parallelism` is echoed as `parallelismMalformed` and never read.
 
 ### Added
 
@@ -527,6 +537,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   two new keys, `reason` and `digestScope`; the `sequence` entries and every
   verdict are unchanged. Step events keep their digest, so marks recorded by
   0.13.0 read exactly as before. No migration is needed.
+- `search.costForecast` and `projectedCost` gain `parallelism`,
+  `contention` and `basis` (and `parallelismMalformed` when that key is
+  unreadable) wherever they carry a projection; `projectedSeconds` is
+  unchanged. Search records are read, never rewritten, so no migration is
+  needed.
 
 ## 0.13.0
 

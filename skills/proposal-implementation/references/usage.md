@@ -1891,7 +1891,18 @@ nothing, which is exactly what makes them easy to walk past:
   so staleness was never attempted and a blank cell would have read as "nothing
   wrong".
 
-Neither one is a rung on the ladder, and that is a position rather than an
+A third fact rides inside `search.costForecast` (and the benchmark's
+`projectedCost`): **`contention`**. A forecast scales one recorded duration,
+and concurrent runs on one machine compete for it. With `parallelism` (a
+positive integer) in the record's `reduction`, the forecast echoes it and reads
+`contention: "included"`: it is that run's own duration and holds at that
+parallelism only. Without it, `parallelism` is `null`, `contention` is
+`"unmeasured"` and `basis` says the projection is single-process; no
+contention factor is supplied. A `parallelism` of another shape comes back as
+`parallelismMalformed`. Before planning eight concurrent runs from a
+single-process forecast, pilot at eight and record `parallelism: 8`.
+
+The first two are not rungs on the ladder, and that is a position rather than an
 oversight: the fact as computed cannot tell a repository that is not ready apart
 from one that never sends work anywhere. `SKILL.md`'s Output Contract carries the
 argument and states what would change it.
