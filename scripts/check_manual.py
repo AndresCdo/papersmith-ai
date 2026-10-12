@@ -119,6 +119,14 @@ def _is_translatable_prose(line: str) -> bool:
     return len(_WORD.findall(stripped)) >= 3
 
 
+def _is_translatable_heading(line: str) -> bool:
+    """A heading a translator has to rewrite. A heading that is only a command
+    name in backticks is not one: the brief lists command names among the things
+    that never translate, so its identity against the original proves nothing,
+    and it would report a section as untranslated for as long as it exists."""
+    return bool(_WORD.findall(_INLINE_CODE.sub(" ", line)))
+
+
 def _headings(text: str) -> dict[str, int]:
     return {line.strip(): number for number, line, inside in _numbered(text)
             if not inside and _SECTION.match(line)}
@@ -152,7 +160,9 @@ def residue(text: str, original: str | None = None,
                                  f"<{placeholder.group(1)}> in {stripped}"))
         if inside:
             continue
-        if original is not None and _SECTION.match(line) and stripped in original_headings:
+        if (original is not None and _SECTION.match(line)
+                and _is_translatable_heading(line)
+                and stripped in original_headings):
             found.append(Finding(number, ERROR, "untranslated-heading", stripped))
         elif (original is not None and not _HEADING.match(line)
                 and stripped in original_prose):

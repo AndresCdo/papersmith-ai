@@ -75,6 +75,17 @@ class ResidueTests(unittest.TestCase):
         findings = manual.residue("## Architecture\n", original="## Arquitectura\n")
         self.assertEqual(findings, [])
 
+    def test_a_heading_that_is_only_a_command_name_is_not_reported(self):
+        # The brief never translates a command name, so a heading made of one is
+        # not prose a translator was meant to rewrite.
+        text = "### `papersmith init <dir>`\n"
+        self.assertEqual(manual.residue(text, original=text), [])
+
+    def test_a_heading_with_prose_in_it_is_still_reported(self):
+        text = "### `papersmith init <dir>` and the files it writes\n"
+        self.assertEqual(codes(manual.residue(text, original=text)),
+                         ["untranslated-heading"])
+
     def test_the_level_one_title_is_the_project_name_and_is_never_reported(self):
         # The brief never translates the project's own name, so identity on the
         # document title is the one heading match that proves nothing.

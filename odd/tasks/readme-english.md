@@ -183,13 +183,13 @@ U0-U8 to revise for register       679 lines of already-English text
 SKILL.md + templates in Spanish      0 lines (both halves already English)
 ```
 
-And the guard's own output on the same tree, which is now the baseline every unit
-is measured against. `python3 scripts/check_manual.py --lines A-B` reports that
-range alone, so one unit's progress is one number:
+And the guard's own output on the state U10 started from, re-measured after two
+corrections to the rule (L7). `python3 scripts/check_manual.py --lines A-B`
+reports that range alone, so one unit's progress is one number:
 
 ```
 .venv/bin/python scripts/check_manual.py
-  25 errors    21 untranslated-heading, 3 spanish-placeholder, 1 inverted-punctuation
+  13 errors    9 untranslated-heading, 3 spanish-placeholder, 1 inverted-punctuation
  270 warnings  untranslated-line
    0 findings anywhere in lines 1-3117, the part that is already English
 ```
@@ -233,3 +233,12 @@ remove.
   land on a heading whose GitHub slug matches it, and the check is document-wide
   on purpose -- a heading and the links pointing at it have to move in the same
   commit, whatever lines they sit on.
+- **L7** — Two of the guard's rules reported things nobody had to change, both
+  found while translating U10 rather than by design. The document's `#` title is
+  the project's name. And ten of the "untranslated" headings were only command
+  names in backticks -- `` ### `papersmith init <dir>` `` -- which the brief
+  never translates, so they were permanent errors no unit could ever clear. Two
+  classes, one cause: identity proves nothing about text a translator was never
+  meant to rewrite. The corrected baseline is 13 errors, not the 25 first
+  written here, and the 12 difference is exactly those headings. Recorded
+  because the first number is the one that would have been planned against.
