@@ -61,10 +61,10 @@ agent is used as a copilot, the ones already defined are in
 
 ## Use flow — the short path
 
-Twelve skills. You invoke them by name in Claude Code (`/paper-ingestion`) or ask for them in
-Spanish (*"ingiere los papers"*). **You don't have to use them all, or in this order**: each
-one declares what it needs first and refuses if it's missing, so if you start in the middle it
-will tell you.
+Twelve skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
+Spanish (*"ingiere los papers"*). **Not all of them have to be used, or in this order**: each
+one declares what it needs first and refuses if it's missing, so an invocation from the middle
+of the flow reports which input is missing.
 
 The full path, from a PDF to a compiled paper:
 
@@ -83,14 +83,14 @@ The full path, from a PDF to a compiled paper:
 | 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
 | 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `papersmith upgrade` | the workspace itself |
 
-**The minimum to start.** If you just want to try the forge, start with step 1
-with your idea in two sentences: `/plausibility` tracks the SOTA and returns the
-constellation plus the top-5. Only afterwards, if you want, put a PDF in
-`guidance/reference-papers/`, run `/paper-ingestion`, and deliberate with
+The minimum to try the forge is step 1: with the idea in two sentences,
+`/plausibility` tracks the SOTA and returns the constellation plus the top-5. Only
+afterwards, if desired, a PDF can be placed in `guidance/reference-papers/` and run
+through `/paper-ingestion`; the deliberation is then carried out with
 `/proposal-deliberation`. Steps 4 and 6 only make sense once there's a published proposal
 and a target repository to implement it in.
 
-**The full flow, drawn.** The diagram shows every stage in this order with
+The diagram shows the full flow: every stage in this order with
 its command, its agents (with the tools each one declares in Pi), its
 human gates and what it leaves on disk. The interactive version, with links to
 the source of each node, is in
@@ -101,20 +101,18 @@ and its source and its recipe are versioned in
 
 [![papersmith-ai flow in Pi: commands, skills and agents](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 
-**Three things worth knowing before the first run.**
-
-1. **Nothing you produce gets uploaded.** `proposals/`, `experiments/`, `paper/`,
+1. **Nothing produced gets uploaded.** `proposals/`, `experiments/`, `paper/`,
    `implementations/` and `sota-pool/` travel to GitHub **as empty folders** and nothing more; `guidance/`
    versions its folders and never the PDFs or the Markdown inside. The scaffolding gets
    versioned, the content doesn't. A half-written paper is research material, and
    publishing it by accident is a leak.
 2. **Each skill refuses before doing something half-done.** If an input is missing, it
    doesn't invent it or skip it: it exits with a rejection code that names what's missing. A
-   `PAPER_ABSENT` or a `SECTION_CONTRACTS_UNREADABLE` is not your mistake, it's the skill
-   telling you what it's missing.
-3. **You close the deliberation.** The two deliberation skills propose, discuss and
-   prepare the edit, but neither publishes without your acceptance. That's not a courtesy:
-   it's in each one's contract and the engine enforces it.
+   `PAPER_ABSENT` or a `SECTION_CONTRACTS_UNREADABLE` names what the skill is missing, not an
+   operator error.
+3. **The operator closes the deliberation.** The two deliberation skills propose, discuss and
+   prepare the edit, but neither publishes without the operator's acceptance. It is part of
+   each one's contract, and the engine enforces it.
 
 ---
 
