@@ -84,6 +84,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] E4 — `walk --commit-template` (D, writer trigger: engine + new test file + 3 docs)
   - [x] E5 — `status`/`audit` collect projection notes; `--verbose` prints them (D, writer trigger: 3 src files + new test file + README)
   - [ ] E6 — partial: `check_atlas.py --pool` quote fidelity + resolver limits documented (D, writer trigger: script + test + SKILL.md); arXiv/Crossref year fix and grapher command wiring blocked on edit surface
+  - [x] E2 — holder name in proposal-implementation docs (inline: 2 doc files + drift test)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -968,3 +969,10 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `python scripts/sync-repo-harness.py`) so the grapher's own checker command passes
   `--pool sota-pool/candidates.json`; until then the guard is documented in SKILL.md but not in the agent's loop.
   Commit: `feat(plausibility): the atlas checker holds every quote to its pool abstract` (the commit carrying this line)
+- E2 (real): proposal-implementation `SKILL.md` (:1059 checklist doctrine, :2939 `agreements` row, :3178 `close`
+  row) and `references/usage.md` (:2445) said `AGREEMENTS.md`; the profile holder is `AGREED.md`. Engine comments
+  that say "`AGREEMENTS.md`-style" left as-is (generic shape wording; domain-lock pins engine prose). Test:
+  `tests/test_holder_name_doc_drift.py` (every `*AGREE*.md` spelled in `skills/*/SKILL.md` and
+  `skills/*/references/*.md` must be a holder some `impl_profile.py` declares) RED 4F -> GREEN (2 passed, 60
+  subtests). `npm run test:fast`: 188 passed. No migration.
+  Commit: `docs(implementation): name the declared checklist holder, not AGREEMENTS.md` (the commit carrying this line)

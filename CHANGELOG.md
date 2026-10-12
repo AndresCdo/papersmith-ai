@@ -554,6 +554,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   write the projections, still emit them as before. Documented in the
   manual's `status` and `audit` reference.
 
+- **`proposal-implementation`'s docs name the checklist holder it declares.**
+  `SKILL.md` (the checklist doctrine, the `agreements` status row and the
+  `close` refusal row) and `references/usage.md` still called the holder
+  `AGREEMENTS.md`, a name from one early commit; the profile declares
+  `AGREED.md`, which is the file `settle` writes. A new drift test checks that
+  every `*AGREE*.md` a skill's docs spell is a holder some implementation
+  profile declares.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**

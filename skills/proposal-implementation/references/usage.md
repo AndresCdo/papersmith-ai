@@ -2442,7 +2442,7 @@ shardsRoot` — so the tick cannot be checked at all, a different fact from
 `POSITION_UNBACKED`'s "checked, and found silent", and `POSITION_DISAGREES`
 when a recorded mark still contradicts its own measured evidence. Right
 after that ladder, a second and independent axis: `AGREEMENT_DISAGREES`
-when a ticked `AGREEMENTS.md`-style checklist item's own declared
+when a ticked `AGREED.md` checklist item's own declared
 `test_<id>` witness (`settle --witness`) is absent from a fully-parsed
 `tests/` — the only place in the whole CLI this ever gates; `verify` and
 `probe` only ever report it. Only once both checks are clean does `close`
