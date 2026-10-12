@@ -543,6 +543,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   substitutions. Documented in `proposal-implementation`'s `SKILL.md` steps 5
   and 9 and `references/usage.md`.
 
+- **`status` and `audit --check-drift` no longer print projection warnings
+  on every call.** Both re-render the runtime projections to compare them,
+  and rendering the Pi agents emitted a multi-line `UserWarning` (`agent
+  '<name>': tool 'WebSearch' has no Pi tool; not granted`) each time, so a
+  healthy workspace read as faulty in a read-only command. The two commands
+  now collect those notes: `status --json` carries them under
+  `framework.generator_notes`, and `status --verbose` / `audit --check-drift
+  --verbose` print them to stderr as `note: ...`. `init` and `upgrade`, which
+  write the projections, still emit them as before. Documented in the
+  manual's `status` and `audit` reference.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1026,6 +1037,11 @@ number is `0`, breaking changes can still arrive without a major bump.
 - `walk` accepts `--commit-template`; without it the walked commits keep the
   exact `walk: <step>` subject and body as before. No receipt or ledger
   records the message, so nothing on disk changes. No migration is needed.
+
+- `papersmith status` and `papersmith audit --check-drift` are quiet about
+  projection notes by default; pass `--verbose` to see them. `status --json`
+  gains an additive `framework.generator_notes` list. Nothing on disk changes;
+  no migration is needed.
 
 
 ## 0.13.0

@@ -440,7 +440,8 @@ def synchronized_paths(workspace: Path, kit_root: Path, context: dict | None = N
 
 
 def workspace_framework_files(workspace: Path, kit_root: Path,
-                              context: dict | None = None) -> dict[str, str]:
+                              context: dict | None = None, *,
+                              notes: list[str] | None = None) -> dict[str, str]:
     """Current hashes of every framework-managed file in a workspace.
 
     The rendered contribution derives from :func:`generators.render_files` — the
@@ -454,13 +455,18 @@ def workspace_framework_files(workspace: Path, kit_root: Path,
     A path this cannot read is **omitted**, not marked — see
     :func:`synchronized_paths` for why the baseline writer has to account for
     that.
+
+    ``notes`` collects the projection notes rendering produces (a Claude tool
+    a runtime has no counterpart for, a skipped definition). Without it they
+    are emitted as one ``UserWarning``, as before; the read-only ``status`` and
+    ``audit`` pass a list so they report them only when asked.
     """
     files: dict[str, str] = {}
     for relpath in kit_files(kit_root):
         digest = sha256_if_readable(workspace / relpath)
         if digest is not None:
             files[relpath] = digest
-    rendered = render_files(workspace, context, workspace_tools(workspace))
+    rendered = render_files(workspace, context, workspace_tools(workspace), warnings=notes)
     for relpath in rendered:
         if relpath in MANAGED_BLOCK_FILES:
             # Only the block is the framework's; lines the workspace added

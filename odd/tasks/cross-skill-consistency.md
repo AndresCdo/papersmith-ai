@@ -82,6 +82,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C13 — `paper-ingestion --force-ocr` / `force_ocr` (D, writer trigger: script + 2 test files + SKILL.md + README)
 - [ ] E1–E10
   - [x] E4 — `walk --commit-template` (D, writer trigger: engine + new test file + 3 docs)
+  - [x] E5 — `status`/`audit` collect projection notes; `--verbose` prints them (D, writer trigger: 3 src files + new test file + README)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -940,3 +941,12 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   unchanged (73 passed). `npm run test:fast`: 3378 passed. Docs: proposal SKILL.md (`walk` row), usage.md
   (`walk` section), experimental SKILL.md (Flow A step 6). No migration.
   Commit: `feat(implementation): walk commits under an operator-declared subject template` (the commit carrying this line)
+- E5 (real): `status` -> `manifest.workspace_framework_files` and `audit --check-drift` -> `check_generated` +
+  `workspace_framework_files` called `render_files` without a `warnings` list, so `_collect_projected_agents`
+  emitted the Pi `has no Pi tool` notes as a `UserWarning` on every read (reproduced on a fresh `init`).
+  Fix: `workspace_framework_files(..., notes=)`; `status` collects into additive `framework.generator_notes`,
+  `status --verbose` / `audit --check-drift --verbose` print `note: ...` to stderr; init/upgrade unchanged
+  (still warn). Tests: `tests/test_papersmith_quiet_reads.py` (6, subprocess with `-W default` so dedup cannot
+  hide a warning) RED 5F -> GREEN; the fixture test asserts init still emits the note. `npm run test:fast`:
+  3440 passed, 1 known failure. Docs: README `status`/`audit` reference. No migration.
+  Commit: `fix(cli): status and audit keep projection notes out of every read` (the commit carrying this line)

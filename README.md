@@ -3106,6 +3106,13 @@ papersmith status --json
 | Flag | Efecto |
 |------|--------|
 | `--json` | Snapshot legible por máquina (versiones, propuestas, corridas, inbox) |
+| `--verbose` | Imprime además en stderr las notas de proyección (`note: ...`) |
+
+Las notas de proyección (por ejemplo `agent 'x': tool 'WebSearch' has no Pi tool;
+not granted`, una herramienta de Claude que otro runtime no puede otorgar) las
+emiten `init` y `upgrade` al escribir las proyecciones. `status` ya no las repite
+como `UserWarning` en cada llamada: van en `framework.generator_notes` del JSON y
+se imprimen sólo con `--verbose`.
 
 Incluye la procedencia del kit que el workspace registró (`Kit source:`; ver
 [Procedencia del kit](#procedencia-del-kit)).
@@ -3250,6 +3257,7 @@ papersmith audit --check-drift
 | Flag | Efecto |
 |------|--------|
 | `--check-drift` | Reporta también el drift de archivos generados como findings (nunca repara) |
+| `--verbose` | Con `--check-drift`, imprime además en stderr las notas de proyección (las mismas que `status --verbose`) |
 
 Audita la estructura y consistencia del workspace. Hoy está atado al sujeto
 `skill-audit`; el drift se reporta, no se arregla.

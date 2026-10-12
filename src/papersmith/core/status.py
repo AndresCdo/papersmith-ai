@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import shutil
 from pathlib import Path
 from typing import Any
@@ -231,6 +232,13 @@ def _runtime_status(root: Path) -> dict[str, Any]:
 
 
 def status(workspace: str | Path = ".") -> dict[str, Any]:
+    """A read-only snapshot of the workspace.
+
+    Projection notes (``generator_notes``) are collected, never warned: they
+    describe what ``init``/``upgrade`` wrote, which those commands already
+    report, and repeating them on every read made a healthy workspace look
+    faulty. ``--verbose`` prints them; ``--json`` always carries them.
+    """
     root = Path(workspace).expanduser().resolve()
     stored = manifest.load_manifest(root)
     if stored is None:
@@ -240,7 +248,8 @@ def status(workspace: str | Path = ".") -> dict[str, Any]:
     kit_root = resolve_and_validate()
     kit_version = manifest.kit_version(kit_root)
     workspace_version = read_workspace_version(root, "unknown")
-    current_files = manifest.workspace_framework_files(root, kit_root)
+    generator_notes: list[str] = []
+    current_files = manifest.workspace_framework_files(root, kit_root, notes=generator_notes)
     stored_files = stored.get("files", {})
     drifted = sorted({
         path for path in set(current_files) | set(stored_files)
@@ -260,6 +269,7 @@ def status(workspace: str | Path = ".") -> dict[str, Any]:
             "drifted_files": drifted,
             "migrations": _migration_status(root, kit_version),
             "kit_source": provenance.read_record(root),
+            "generator_notes": generator_notes,
         },
         "runtimes": _runtime_status(root),
         "proposal": _proposal_status(root),
@@ -315,11 +325,21 @@ def register(subparsers) -> None:
     parser = subparsers.add_parser("status", help="show comprehensive workspace status")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
     parser.add_argument("--json", action="store_true", dest="as_json")
+    parser.add_argument("--verbose", action="store_true",
+                        help="also print the projection notes (e.g. a tool a runtime cannot grant) to stderr")
     parser.set_defaults(handler=run_cli)
+
+
+def print_notes(notes: list[str]) -> None:
+    """The projection notes, on stderr, one per line."""
+    for note in notes:
+        print(f"note: {note}", file=sys.stderr)
 
 
 def run_cli(args) -> int:
     snapshot = status(args.directory)
+    if getattr(args, "verbose", False):
+        print_notes(snapshot["framework"]["generator_notes"])
     if args.as_json:
         print(json.dumps(snapshot, indent=2, sort_keys=True))
     else:
