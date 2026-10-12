@@ -2423,198 +2423,196 @@ flowchart TD
 
 ### 8. `remote-execution` — the record of what was sent out
 
-**Para qué está.** Mandar un entrenamiento a una máquina remota, hoy, se hace copiando
-un comando, corriéndolo a mano y **recordando de memoria** si salió, si volvió, y si lo
-que volvió sigue correspondiéndose con el código que lo produjo. Esta skill reemplaza
-esa memoria humana por un registro durable y de sólo agregado: qué se mandó, qué volvió,
-si ese resultado todavía es confiable contra el código actual, y cuántos trabajos puede
-aceptar un worker a la vez.
+**What it is for.** Sending a training run to a remote machine is done today by copying
+a command, running it by hand and **remembering** whether it went out, whether it came
+back, and whether what came back still corresponds to the code that produced it. This
+skill replaces that human memory with a durable, append-only record: what was sent, what
+came back, whether that result is still reliable against the current code, and how many
+jobs a worker can accept at once.
 
-**De dónde recibe y a quién le entrega.**
+**What it receives and what it hands on.**
 
-*Recibe de `kaggle-accounts`:* la identidad de los workers y la ruta de la credencial,
-por las dos costuras descritas en aquel apartado. Vale la pena seguir el recorrido
-entero del secreto, porque es el diseño más cuidado de la forja: el valor del token vive
-en el depósito de `kaggle-accounts`; la entrega lo escribe como archivo suelto; esta
-skill lee **sólo la ruta** de la salida de ese proceso hijo; esa ruta viaja adentro de un
-handle congelado; y su único destino es una variable de entorno en el proceso hijo que
-ejecuta el cliente del servicio. **El valor del secreto nunca entra en la memoria de esta
-skill ni en la del agente.**
+*It receives from `kaggle-accounts`:* the identity of the workers and the path to the
+credential, through the two seams described in that section. The value of the token
+lives in the store of `kaggle-accounts`; the handoff writes it as a loose file; this
+skill reads **only the path** from that child process's output; that path travels inside
+a frozen handle; and its only destination is an environment variable in the child
+process that runs the service client. **The value of the secret never enters the memory
+of this skill or of the agent.**
 
-*Recibe de `proposal-implementation`:* la carpeta del trabajo, que vive bajo
-`<destino>/tools/<servicio>/<trabajo>/` dentro del repositorio de la implementación.
+*It receives from `proposal-implementation`:* the job folder, which lives under
+`<destination>/tools/<service>/<job>/` inside the implementation repository.
 
-*Le entrega a `proposal-implementation`:* el registro. Aquella skill lo pliega en modo
-sólo lectura, reutilizando **este mismo** código de pliegue en vez de reimplementarlo —
-dos definiciones de "este resultado ya no es vigente" sería una que deriva de la otra en
-silencio. De ese pliegue sale su peldaño `poll-first`.
+*It hands to `proposal-implementation`:* the record. That skill folds it read-only,
+reusing **this same** fold code instead of reimplementing it — two definitions of "this
+result is no longer current" would be one silently derived from the other. That fold
+yields its `poll-first` rung.
 
-**Qué necesita antes.** Python 3.10+, biblioteca estándar, sin entorno virtual. Para
-hablar con un servicio real hace falta un adaptador registrado y una credencial.
+**What it needs first.** Python 3.10+, the standard library, no virtual environment. To
+talk to a real service, a registered adapter and a credential are required.
 
-**El flujo, por etapas.** Esta sección tampoco tenía uno. Leídas de
-`OBJECTIVE_FLOW`, independientes de todo ledger, carpeta de job o resultado en
-disco: `status` contesta *dónde estoy* plegando lo que pasó, esto contesta *para
-qué es*. Las catorce rutas de rechazo de este CLI la llevan, y para eso hubo que
-crear el único lugar por el que todas llegan a un lector.
+**The flow, by stages.** This section did not have one either. Read from
+`OBJECTIVE_FLOW`, independent of any ledger, job folder or result on disk:
+`status` answers *where am I* by folding what happened, this answers *what is this
+for*. The fourteen refusal paths of this CLI carry it, and that required creating
+the single place through which all of them reach a reader.
 
-| Etapa | Qué deja establecido | La tienes detrás cuando |
+| Stage | What it establishes | Behind the operator when |
 |---|---|---|
-| `reachable` | Una carpeta de job **fijada a un commit que el remoto declarado puede servir de verdad**, que es lo que un worker clona | `generate-job` escribió la carpeta — prueba el pin contra el remoto **antes de escribir un byte**, así que una carpeta que existe es un pin que se publicó |
-| `wire` | Que este worker, en este pin, lleva corriente — pagado en minutos en vez de en las horas que cuesta una campaña | `readiness` dice listo, con un veredicto **derivado de la evidencia de un ensayo**, nunca afirmado |
-| `authorized` | Un lanzamiento atado a este commit, este entrypoint y esta lista de unidades, con un token acuñado para él y consumido una sola vez | un registro de `gate` coincide; un hecho ligado que se movió lo vuelve stale, que no es lo mismo que pasar el tiempo |
-| `sent` | La entrega salió y el ledger lo sabe, así ninguna segunda contesta una pregunta que ya se está contestando | el ledger lo tiene con un estado terminal |
-| `returned` | El resultado está en disco, actual, y no en cuarentena | es la llegada; no está detrás de nadie |
+| `reachable` | A job folder **pinned to a commit the declared remote can actually serve**, which is what a worker clones | `generate-job` wrote the folder — it proves the pin against the remote **before writing a byte**, so a folder that exists is a pin that was published |
+| `wire` | That this worker, at this pin, carries current — paid in minutes rather than in the hours a campaign costs | `readiness` says ready, from a verdict **derived from a rehearsal's evidence**, never asserted |
+| `authorized` | A launch bound to this commit, this entrypoint and this unit list, with a token minted for it and consumed once | a `gate` record matches; a bound fact that moved makes it stale, which is not the same as time passing |
+| `sent` | The submission is out and the ledger knows it, so no second one answers a question already being answered | the ledger holds it with a terminal state |
+| `returned` | The result is on disk, current, and not quarantined | this is the arrival; it is behind nobody |
 
-**Llegada:** el resultado en disco y verificado como el actual — lo único de lo
-que alguien puede leer un número. **No** la entrega aceptada: una entrega que el
-servicio tomó es un recibo, no un resultado.
+**Arrival:** the result on disk and verified as the current one — the only thing
+anybody can read a number out of. **Not** the accepted submission: a submission
+the service took is a receipt, not a result.
 
-**`reconcile` no es una etapa y nunca avanza ninguna.** Es el camino de vuelta
-cuando el ledger y el servicio dejan de coincidir —`drift`, o una línea que no
-se pudo leer— y devuelve a `sent`.
+**`reconcile` is not a stage and never advances one.** It is the way back when
+the ledger and the service stop agreeing —`drift`, or a line that could not be
+read— and it returns to `sent`.
 
-**Dos paradas son de una persona:** **publicar el commit** que un worker
-clonaría, sin el cual `generate-job` se niega y lo nombra con precisión, y
-**autorizar el lanzamiento**, que son horas de la cuota de alguien.
+**Two stops are a person's:** **publishing the commit** a worker would clone,
+without which `generate-job` refuses and names it precisely, and **authorizing
+the launch**, which is hours of somebody's quota.
 
-**Los comandos.**
+**The commands.**
 
-| Comando | Qué hace | Cuándo se usa |
+| Command | What it does | When it is used |
 |---------|----------|---------------|
-| `generate-job` | Arma la carpeta del trabajo: configuración de corrida, cuaderno ejecutor y el archivo de metadatos del servicio. Se construye en un directorio parcial y se renombra atómicamente al terminar — **una carpeta a medio escribir no puede existir**. | Una vez, antes del primer envío. |
-| `submit` | El camino de envío completo, en orden fijo: guardia de ruta → resolver el producto → digest fresco del fuente → clamp de capacidad → envío real → **y solo entonces** anotar en el registro. Anotar último significa que nunca se registra algo que no salió. `--smoke` marca la corrida como ensayo y la manda al registro de ensayos. | Cada vez que envías trabajo. |
-| `status` | Pliega el registro y muestra el estado por punto de entrada: pendiente, devuelto, con error, en cuarentena, en vuelo hace demasiado. **No recibe adaptador**: es estructuralmente incapaz de resolver nada, sólo reporta. | Cuando quieres saber dónde estás parado. |
-| `poll` | Pregunta por una entrega y **re-valida** que el estado devuelto esté dentro del vocabulario de cinco valores del seam. Una defensa contra un adaptador que se porte mal. | Mientras esperas. |
-| `fetch` | Trae el resultado. Evalúa la vigencia **antes** de escribir nada; si el resultado ya no corresponde al código actual, se redirige a cuarentena. Materializa en un directorio parcial, verifica que esté completo, renombra, y sólo entonces anota la devolución. | Cuando la corrida terminó. |
-| `reconcile` | Compara lo que el servicio dice tener contra lo que el registro cree, en las dos direcciones. Reporta huérfanos; nunca los adopta ni los cancela solo. | Cuando algo no cuadra. Siempre lo corre un humano. |
-| `smoke record` | Anota el veredicto de un ensayo, y ese veredicto sale de **la evidencia del artefacto traído**, no de que alguien diga que anduvo. | Después de traer el ensayo. |
-| `readiness` | Reporta —nunca envía— si un trabajo está listo para su corrida completa. Ata el último ensayo a tres cosas: que pasó, mismo commit, mismo worker. **No lee ningún reloj**: un ensayo caduca porque cambió el commit o el worker, jamás por tiempo transcurrido. | Antes de gastar una corrida grande. |
+| `generate-job` | Builds the job folder: run configuration, executor notebook and the service metadata file. It is built in a partial directory and renamed atomically when it finishes — **a half-written folder cannot exist**. | Once, before the first submission. |
+| `submit` | The complete submission path, in fixed order: path guard → resolve the product → fresh digest of the source → capacity clamp → real submission → **and only then** record it in the ledger. Recording last means that something which never went out is never recorded. `--smoke` marks the run as a rehearsal and sends it to the rehearsal record. | Every time work is submitted. |
+| `status` | Folds the record and shows the state per entrypoint: pending, returned, errored, quarantined, in flight for too long. **It accepts no adapter**: it is structurally incapable of resolving anything, it only reports. | When the current position has to be known. |
+| `poll` | Asks about one submission and **re-validates** that the returned state is inside the seam's five-value vocabulary. A defence against an adapter that misbehaves. | While waiting. |
+| `fetch` | Brings the result back. It evaluates currency **before** writing anything; if the result no longer corresponds to the current code, it is redirected to quarantine. It materializes in a partial directory, verifies that it is complete, renames, and only then records the return. | When the run has finished. |
+| `reconcile` | Compares what the service says it has against what the record believes, in both directions. It reports orphans; it never adopts them or cancels them on its own. | When something does not add up. A human always runs it. |
+| `smoke record` | Records a rehearsal's verdict, and that verdict comes from **the evidence of the artifact brought back**, not from somebody saying that it worked. | After the rehearsal is brought back. |
+| `readiness` | Reports —it never submits— whether a job is ready for its full run. It binds the last rehearsal to three things: that it passed, the same commit, the same worker. **It reads no clock**: a rehearsal expires because the commit or the worker changed, never because time passed. | Before spending a large run. |
 
-**El registro y su pliegue.** El registro es un archivo de una línea JSON por evento,
-sólo de agregado. Se escribe con un descriptor crudo en modo de anexado, verificando que
-la cantidad de bytes escritos sea la esperada, con un tope por evento. Nada se guarda
-como "estado actual mutable": el estado se **deriva** releyendo el log en dos pasadas —
-la primera resuelve cuál es el último envío de cada punto de entrada, la segunda decide
-si cada resultado devuelto sigue vigente. Hacen falta dos pasadas porque **un resultado
-que era vigente cuando llegó deja de serlo en el instante en que aterriza un reenvío
-posterior**.
+**The record and its fold.** The record is a file of one JSON line per event,
+append-only. It is written with a raw descriptor in append mode, checking that the
+number of bytes written is the expected one, with a cap per event. Nothing is stored as
+"mutable current state": the state is **derived** by re-reading the log in two passes —
+the first resolves which is the latest submission of each entrypoint, the second decides
+whether each returned result is still current. Two passes are needed because **a result
+that was current when it arrived stops being current the instant a later resubmission
+lands**.
 
-**El clamp de capacidad.** El empaquetador lee el tope directamente del adaptador —nunca
-lo recibe por parámetro ni lo tiene escrito a mano—, arranca de lo pendiente según el
-registro, y lo refina preguntándole al servicio qué tiene activo. La cuenta es
-`otorgado = max(0, min(pedido, tope) - en_vuelo)`, y se reporta como cuatro números
-distintos para que nadie confunda "pide 5 y me dieron 2 porque el tope es 2" con "pide
-exactamente 2".
+**The capacity clamp.** The packer reads the cap directly from the adapter —it never
+receives it as a parameter and never has it written by hand—, starts from what is
+pending according to the record, and refines it by asking the service what it has
+active. The count is `granted = max(0, min(requested, cap) - in_flight)`, and it is
+reported as four different numbers so that nobody confuses "asks for five and receives
+two because the cap is two" with "asks for exactly two".
 
-**Los módulos.**
+**The modules.**
 
-| Archivo | Qué hace y por qué existe |
+| File | What it does and why it exists |
 |---------|---------------------------|
-| `scripts/adapter.py` | El seam: una clase abstracta con exactamente seis operaciones, las formas congeladas que la cruzan, y un registro de nombre a clase. Gracias a esto, todo lo que está arriba es ciego respecto de qué servicio hay abajo. Un backend nuevo entra sin tocar nada más. |
-| `scripts/ledger.py` | El registro: el camino de escritura confiable y el pliegue que deriva el estado, incluida la vigencia. Es el módulo que `proposal-implementation` importa. |
-| `scripts/packer.py` | El clamp de capacidad. El único lugar que combina lo que sabe el repositorio con lo que sabe el servicio. |
-| `scripts/remote_cli.py` | La puerta de entrada. También la guardia de ruta, que resuelve los enlaces simbólicos **antes** de comprobar contención y admite exactamente dos formas de ruta. |
-| `scripts/credentials.py` | El único productor de un handle de credencial. Importa nada más que `subprocess`, `json`, `pathlib` y el seam: **estructuralmente no puede leer un secreto**. |
-| `scripts/jobfolder.py` | Genera y lee la carpeta del trabajo, y calcula la única condición de obsolescencia: que el fuente se haya movido más allá del commit fijado, dentro de las rutas declaradas. |
-| `scripts/shard_io.py` | Un único predicado de completitud de evidencia, compartido por el registro de ensayos y por el paso de fusión posterior. Una sola definición, cero deriva. |
-| `scripts/adapters/kaggle.py`, `colab.py` | Los adaptadores de servicio autorizados a nombrar un backend. Invocan el CLI oficial correspondiente (`kaggle` o `google-colab-cli`); nunca importan paquetes privados ni leen secretos directamente. |
-| `assets/runner_bootstrap.py` | La celda 0 de todo cuaderno generado: valida la configuración, clona el commit fijado, pone `src/` en el path e importa los módulos declarados verificando que resuelvan **dentro del clon**. Corre en la máquina remota, antes que cualquier código tuyo. |
-| `assets/runner_invoke.py` | La celda 1: elige el bloque normal o el de ensayo y llama al punto de entrada declarado. |
-| `distribute` | Reparte las unidades declaradas entre los workers disponibles y devuelve el reparto, **sin enviar nada**. Es la respuesta a "¿en cuántos pedazos entra esto y quién corre cada uno?", separada de `submit` a propósito: decidir el reparto y gastar cuota son dos actos distintos. |
+| `scripts/adapter.py` | The seam: an abstract class with exactly six operations, the frozen shapes that cross it, and a name-to-class registry. Because of this, everything above is blind to which service is below. A new backend enters without touching anything else. |
+| `scripts/ledger.py` | The record: the reliable write path and the fold that derives state, including currency. It is the module `proposal-implementation` imports. |
+| `scripts/packer.py` | The capacity clamp. The only place that combines what the repository knows with what the service knows. |
+| `scripts/remote_cli.py` | The front door. Also the path guard, which resolves symbolic links **before** checking containment and admits exactly two path shapes. |
+| `scripts/credentials.py` | The only producer of a credential handle. It imports nothing but `subprocess`, `json`, `pathlib` and the seam: **it structurally cannot read a secret**. |
+| `scripts/jobfolder.py` | Generates and reads the job folder, and computes the only staleness condition: that the source has moved beyond the pinned commit, inside the declared paths. |
+| `scripts/shard_io.py` | A single evidence-completeness predicate, shared by the rehearsal record and by the later merge step. One definition, zero drift. |
+| `scripts/adapters/kaggle.py`, `colab.py` | The service adapters authorized to name a backend. They invoke the corresponding official CLI (`kaggle` or `google-colab-cli`); they never import private packages or read secrets directly. |
+| `assets/runner_bootstrap.py` | Cell 0 of every generated notebook: it validates the configuration, clones the pinned commit, puts `src/` on the path and imports the declared modules, verifying that they resolve **inside the clone**. It runs on the remote machine, before any of the user's code. |
+| `assets/runner_invoke.py` | Cell 1: it chooses the normal block or the rehearsal one and calls the declared entrypoint. |
+| `distribute` | Spreads the declared units across the available workers and returns the distribution, **without submitting anything**. It is the answer to "how many pieces does this go into and who runs each one?", kept separate from `submit` on purpose: deciding the distribution and spending quota are two different acts. |
 
-**Qué escribe en el disco.**
+**What it writes to disk.**
 
 ```
-<destino>/<Producto>/.remote-execution/
-├── ledger.jsonl              el registro principal
-├── smoke.jsonl               los ensayos: archivo FÍSICAMENTE distinto
-└── quarantine/<id>/          resultados que llegaron fuera de vigencia
-<destino>/tools/<servicio>/<trabajo>/
-├── run-config.json           qué se corre, con qué argumentos, en qué commit
-├── runner.ipynb              el cuaderno que clona el commit fijado y ejecuta
-└── <metadatos del servicio>
+<destination>/<Product>/.remote-execution/
+├── ledger.jsonl              the main record
+├── smoke.jsonl               the rehearsals: a physically separate file
+└── quarantine/<id>/          results that arrived no longer current
+<destination>/tools/<service>/<job>/
+├── run-config.json           what is run, with which arguments, at which commit
+├── runner.ipynb              the notebook that clones the pinned commit and executes
+└── <service metadata>
 ```
 
-Los ensayos van a un archivo aparte y no a un cuarto tipo de evento en el registro
-principal, y la razón es concreta: un envío de ensayo se convertiría en el "último
-envío" del punto de entrada y **taparía en silencio una corrida real todavía
-pendiente**.
+Rehearsals go to a separate file and not to a fourth kind of event in the main
+record, and the reason is concrete: a rehearsal submission would become the "latest
+submission" of the entrypoint and **would silently mask a real run that is still
+pending**.
 
-**Los seguros.**
+**The safeguards.**
 
-- **Sólo se agrega.** Un envío es un hecho una vez que ocurrió; un reenvío agrega una
-  línea nueva, jamás borra la que supera.
-- **Falla cerrado.** Un proceso hijo que sale con error o vence su tiempo es una
-  negativa, nunca un estado inventado.
-- **La cuarentena no se puede olvidar.** Un resultado fuera de vigencia se escribe
-  estructuralmente afuera del único árbol que el lector de resultados recorre: no hay
-  filtro que alguien pueda olvidarse de aplicar.
-- **La preparación se prueba, no se declara.** El veredicto de un ensayo sale de la
-  evidencia traída, y no hay ningún reloj involucrado en ninguna parte.
-- **Sólo los adaptadores nombran un servicio.** `scripts/adapters/kaggle.py` y
-  `scripts/adapters/colab.py` son los únicos lugares autorizados; hay guardas a
-  nivel de código fuente que verifican que el resto de la skill sea ciego respecto
-  del backend.
+- **Append-only.** A submission is a fact once it happened; a resubmission adds a new
+  line and never deletes the one it supersedes.
+- **It fails closed.** A child process that exits with an error or times out is a
+  refusal, never an invented state.
+- **Quarantine cannot be forgotten.** A result out of currency is written structurally
+  outside the only tree the result reader walks: there is no filter somebody could
+  forget to apply.
+- **Readiness is proven, not declared.** A rehearsal's verdict comes from the evidence
+  brought back, and no clock is involved anywhere.
+- **Only the adapters name a service.** `scripts/adapters/kaggle.py` and
+  `scripts/adapters/colab.py` are the only authorized places; there are guards at
+  source-code level that verify that the rest of the skill is blind to the backend.
 
-**Limitaciones conocidas.**
+**Known limitations.**
 
-*El adaptador de Kaggle nunca se probó contra un servicio real.* Está verificado contra
-la fuente del driver —hoy `kagglesdk==0.1.37` con token Bearer, no el camino Basic-auth
-del CLI, que la skill retiró— y contra un binario falso en los tests, pero **ninguna
-prueba de esta skill toca la red ni una cuenta real**. Eso último no es un descuido: un
-test tripwire falla si aparece una llamada de red a nivel de módulo, y se prueba a sí
-mismo contra un módulo envenenado. **Qué significa en
-la práctica:** todo lo que está *arriba* del seam —el registro, el pliegue, la vigencia,
-el clamp, la cuarentena— sí está probado, y esas son las partes cuyo error sería
-silencioso. Lo que no está probado en vivo es el archivo de abajo, cuyos errores son
-ruidosos: un comando mal formado falla y se ve. **Qué puedes hacer:** si algo falla en
-vivo por primera vez, empieza a buscar ahí y no en el seam. **Cómo se arregla:** con un
-ensayo real —para eso existe `submit --smoke`—, que es exactamente el camino más barato
-para descubrirlo antes de gastar una corrida grande.
+*The Kaggle adapter was never tested against a real service.* It is verified against the
+driver's source —today `kagglesdk==0.1.37` with a Bearer token, not the CLI's Basic-auth
+path, which the skill retired— and against a fake binary in the tests, but **no test in
+this skill touches the network or a real account**. That last point is not an oversight: a
+tripwire test fails if a module-level network call appears, and it proves itself against a
+poisoned module. **What it means in practice:** everything *above* the seam —the record,
+the fold, currency, the clamp, quarantine— is tested, and those are the parts whose
+failure would be silent. What is not
+tested live is the file below, whose failures are loud: a malformed command fails and is
+visible. **What can be done:** if something fails live for the first time, start looking
+there and not in the seam. **How it is fixed:** with a real rehearsal —that is what
+`submit --smoke` exists for—, which is exactly the cheapest path to discover it before
+spending a large run.
 
-*Resuelto: los nueve sitios de impresión llevan red.* `status` reventaba con
-`TypeError: Object of type PosixPath is not JSON serializable` en cada invocación, porque
-alguien le agregó un sub-bloque anidado y nadie revisó los sitios de impresión. El arreglo
-—`json.dumps(..., default=str)`— llegó a cuatro de los nueve: **exactamente los cuatro que
-tenían test de regresión**. Los otros cinco quedaron pelados, y tres de ellos se probaron
-crasheables por mutación. Ahora los nueve tienen red y los nueve tienen su test. El
-defecto nunca fue "tres comandos pueden reventar": era **un arreglo aplicado donde había
-cobertura en vez de donde se repite la forma**.
+*Resolved: the nine print sites carry a net.* `status` crashed with
+`TypeError: Object of type PosixPath is not JSON serializable` on every invocation,
+because somebody added a nested sub-block and nobody checked the print sites. The fix
+—`json.dumps(..., default=str)`— reached four of the nine: **exactly the four that had a
+regression test**. The other five stayed bare, and three of them were proven crashable by
+mutation. Now all nine carry a net and all nine have their test. The defect was never
+"three commands can crash": it was **a fix applied where there was coverage instead of
+where the shape repeats**.
 
-**Diagrama.**
+**Diagram.**
 
 ```mermaid
 flowchart TD
-    KA["kaggle-accounts entrega worker + ruta"] --> C
-    B0["proposal-implementation deja la carpeta en tools/"] --> A
-    A["generate-job"] --> B["Carpeta del trabajo: config + cuaderno + metadatos"]
+    KA["kaggle-accounts delivers worker + path"] --> C
+    B0["proposal-implementation leaves the folder in tools/"] --> A
+    A["generate-job"] --> B["Job folder: config + notebook + metadata"]
     B --> C["submit"]
-    C --> D{"¿La ruta pasa la guardia?"}
-    D -- No --> E["Rechazado"]
-    D -- Sí --> F["Digest fresco del fuente"]
-    F --> G["Clamp de capacidad"]
-    G --> H{"¿Otorgado mayor que cero?"}
-    H -- No --> I["No se envía: el worker está al tope"]
-    H -- Sí --> J["El adaptador envía vía el CLI del servicio"]
-    J --> K{"¿El servicio confirmó un id?"}
-    K -- No --> L["Falla cerrado. Nada se anota"]
-    K -- Sí --> M["Anota el envío"]
-    M --> N["ledger.jsonl o smoke.jsonl"]
-    N --> O["status: pliega el registro y reporta"]
-    N --> P["poll: pregunta por una entrega"]
+    C --> D{"Does the path pass the guard?"}
+    D -- No --> E["Rejected"]
+    D -- Yes --> F["Fresh digest of the source"]
+    F --> G["Capacity clamp"]
+    G --> H{"Is granted greater than zero?"}
+    H -- No --> I["Nothing is submitted: the worker is at its cap"]
+    H -- Yes --> J["The adapter submits via the service's CLI"]
+    J --> K{"Did the service confirm an id?"}
+    K -- No --> L["Fails closed. Nothing is recorded"]
+    K -- Yes --> M["Records the submission"]
+    M --> N["ledger.jsonl or smoke.jsonl"]
+    N --> O["status: folds the record and reports"]
+    N --> P["poll: asks about one submission"]
     P --> Q["fetch"]
-    Q --> R{"¿El resultado sigue vigente?"}
-    R -- No --> S["Cuarentena, fuera del árbol de resultados"]
-    R -- Sí --> T["Materializa en un directorio parcial"]
-    T --> U{"¿Llegó completo?"}
-    U -- No --> V["No se anota nada. Se puede reintentar"]
-    U -- Sí --> W["Renombra atómico al destino"]
-    W --> X["Anota la devolución"]
-    X --> Y["smoke record: veredicto por evidencia"]
-    Y --> Z["readiness: ¿pasó, mismo commit, mismo worker?"]
-    N --> AA["reconcile: registro contra servicio. Lo corre un humano"]
-    N --> AB["proposal-implementation pliega esto en sólo lectura"]
+    Q --> R{"Is the result still current?"}
+    R -- No --> S["Quarantine, outside the results tree"]
+    R -- Yes --> T["Materializes in a partial directory"]
+    T --> U{"Did it arrive complete?"}
+    U -- No --> V["Nothing is recorded. It can be retried"]
+    U -- Yes --> W["Atomic rename into place"]
+    W --> X["Records the return"]
+    X --> Y["smoke record: verdict from evidence"]
+    Y --> Z["readiness: did it pass, same commit, same worker?"]
+    N --> AA["reconcile: record against service. A human runs it"]
+    N --> AB["proposal-implementation folds this read-only"]
 ```
 
 ---
