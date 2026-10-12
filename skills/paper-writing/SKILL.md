@@ -1037,6 +1037,68 @@ either command's own `--help`.
 | `bind` refuses `BINDING_UNARGUED` | No settled round licenses this exact `(block, fact)` claim, or its licence expired (a new revision or an in-place rewrite voids it) — the detail names which of the four checks failed and the exact `separate` invocation to run next |
 | A binding's own fact resolves to an unmeasured root | `bind` records as it always did, no `separate` round required — the payload reports `separation: unmeasured(<reason>)`, never a silent pass over a document that was never there to argue about |
 
+## The paper is written in English, whatever language the session is in
+
+The conversation may be Spanish or English. **The artifact is English.** A block's
+body, a section's contract prose, a figure caption, the fields of a `refs.bib`
+entry and every report this skill writes land in English, and one that lands
+otherwise is a defect of the draft rather than a preference of the operator.
+
+The split is not invented here. `proposal-implementation` states it for its own
+artifacts — *"Every artifact stays English — code, comments, commit messages,
+reports, every file written. The conversation does not."* — and this skill is held
+to the same rule, because a manuscript is the one deliverable that leaves this
+workspace and is read by people who were never part of the conversation that
+produced it.
+
+**Why this is written down rather than assumed.** Until now nothing here said
+which language a block is written in, so the answer was whatever language the
+session happened to be speaking. A Spanish session that produces a Spanish block
+has not served the operator: it has produced a manuscript in a language nobody
+chose, and the defect stays invisible until the paper is read by someone else.
+
+**What this rule does not touch.** Identifiers, paths, code, LaTeX commands,
+citation keys and the strings a contract quotes stay byte-identical — they were
+never prose. The `style` channel's samples keep whatever language they were
+ingested in: a style reference is evidence about rhythm and register, and
+`STYLE_OVERLAP` already refuses a draft that borrows its words.
+
+## The prose pass: what it may not touch
+
+An already-written block can be edited for **prose** — vocabulary, phrasing,
+sentence rhythm, the connective between two sentences. That pass is **opt-in**: it
+runs when the operator asks for it, on a block that already exists, and never as
+part of `write`.
+
+**The list it may not touch.** Citations and their identifiers, every number and
+statistic, the methodology as stated, and the technical terms a block's contract
+names. A pass that changes one of those has not improved the prose; it has broken
+the block's binding to its evidence. That is a **failure, not a warning** — the
+same class of damage `UNBOUND_SENTENCE` and `SPAN_NOT_IN_SOURCE` exist to catch,
+and a draft that survives those two audits by accident has still damaged the
+artifact.
+
+**It never writes to `main.tex` itself.** Its output goes through `open` and
+`substitute` like any other body, so the engine's own proof — that not one byte
+outside the target block moved — still holds for it. A pass with its own
+file-writing path would sit outside every guarantee this skill makes.
+
+**It runs as a checklist with nothing installed.** The untouchable list above, plus
+the three audits `write` already sequences. An operator-wired humanizer connector
+is an accelerator inside that contract, never a prerequisite for it: a skill that
+stops working because a third-party server is absent has made the operator's
+environment part of its contract.
+
+**What it is not.** It does not lower an AI-detection score, it does not add
+digressions or asides so the text reads as humanly edited, and it does not change
+what a sentence claims. A rewrite whose purpose is that a detector reads the text
+differently is a different capability from this one, and it is not built here: the
+forge's invariant is that every claim is tied to its evidence, and prose that is
+shaped to fool a classifier is prose shaped by something other than that evidence.
+
+**It reports what it changed**, block by block, so the operator reads the diff it
+produced instead of being asked to trust it.
+
 ## The writer may assert only what it was given: `write`
 
 Three channels feed one block's draft: **contract** (the block's own prose,
