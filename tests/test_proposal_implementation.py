@@ -9988,7 +9988,7 @@ class NonRevisionSha256ScalarsAreDocumentCountInvariantTests(unittest.TestCase):
             n for n in ast.walk(tree)
             if isinstance(n, ast.FunctionDef) and n.name == "cmd_verify")
         body = ast.get_source_segment(source, cmd_verify)
-        for anchor in ('module["stale"] = bool(revision) and module["revision"] != revision',
+        for anchor in ('bound["stale"] = (bool(revision) and bound["revision"] != revision',
                       'built_against = declared_revision',
                       'stale_revision = bool(revision) and built_against != revision',
                       '"latestRevision": revision,',
@@ -39530,3 +39530,97 @@ class ProseSkipsEngineWritesTests(unittest.TestCase):
         self.assertIn("test_seed_is_seven",
                       [e["symbol"] for e in prose["unresolvedSymbols"]])
         self.assertGreater(len(prose["staleRevisions"]), 1)
+
+
+class OtherLineageModuleTests(unittest.TestCase):
+    """X16 (`cross-skill-consistency`): on a target both implementation skills
+    share, `__implementation__.revision` maps one revision per document label
+    (A8), and each skill's modules carry their own lineage's revision. The
+    whole-tree `fidelity.staleModules` compared every module against this
+    skill's own revision, so the sibling's module read "bound to an older
+    revision" and the headline drifted on every shared target. Measured the
+    same on main's engine with a single-string binding (the only form it
+    reads). A module whose revision belongs to another label's lineage is now
+    reported in `otherLineageModules` and judged by that skill, not here; a
+    module of this skill's own lineage still goes stale, and a bare-string
+    binding is unchanged."""
+
+    OWN = "## 1\n\n$$\nc = d \\tag{1}\n$$\n"
+
+    def _proposals(self) -> Path:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "draft-1.md").write_text(self.OWN, encoding="utf-8")
+        (root / "draft-2.md").write_text(self.OWN, encoding="utf-8")
+        previous = os.environ.get("IMPLEMENTATION_PROPOSALS")
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(root)
+
+        def restore():
+            if previous is None:
+                os.environ.pop("IMPLEMENTATION_PROPOSALS", None)
+            else:
+                os.environ["IMPLEMENTATION_PROPOSALS"] = previous
+
+        self.addCleanup(restore)
+        return root
+
+    def _box(self, revision, modules: dict[str, str]) -> Path:
+        box = FORGE / "implementations" / f"_lineage_{os.getpid()}_{id(self)}_{len(modules)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text(
+            f"__implementation__ = {{'revision': {revision!r}, 'premises': {{'metric': 'm'}}}}\n",
+            encoding="utf-8")
+        for module, bound in modules.items():
+            (box / "src" / "Method" / f"{module}.py").write_text(
+                f"__provenance__ = {{'revision': {bound!r}, 'sections': ['1'], 'invariants': []}}\n",
+                encoding="utf-8")
+        return box
+
+    def _fidelity(self, box) -> dict:
+        return impl.cmd_verify(argparse.Namespace(
+            target=str(box), name="Method", revision=None))["fidelity"]
+
+    def test_the_siblings_module_does_not_drift_this_skills_headline(self):
+        self._proposals()
+        label = impl.DOCUMENTS[0]["label"]
+        box = self._box({label: "draft-2.md", "other-lineage": "other-plan-v03.md"},
+                        {"own": "draft-2.md", "sibling": "other-plan-v03.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["latestRevision"], "draft-2.md")
+        self.assertEqual(fidelity["staleModules"], [])
+        self.assertEqual(fidelity["drift"], [])
+        self.assertEqual(fidelity["otherLineageModules"],
+                         [{"module": "src/Method/sibling.py", "label": "other-lineage",
+                           "revision": "other-plan-v03.md"}])
+        self.assertEqual(fidelity["status"], "ok", fidelity)
+
+    def test_an_older_revision_of_the_siblings_lineage_is_still_the_siblings(self):
+        self._proposals()
+        label = impl.DOCUMENTS[0]["label"]
+        box = self._box({label: "draft-2.md", "other-lineage": "other-plan-v03.md"},
+                        {"own": "draft-2.md", "sibling": "other-plan-v01.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["staleModules"], [])
+        self.assertEqual([m["module"] for m in fidelity["otherLineageModules"]],
+                         ["src/Method/sibling.py"])
+
+    def test_this_skills_own_older_module_still_goes_stale(self):
+        self._proposals()
+        label = impl.DOCUMENTS[0]["label"]
+        box = self._box({label: "draft-2.md", "other-lineage": "other-plan-v03.md"},
+                        {"own": "draft-1.md", "sibling": "other-plan-v03.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["staleModules"], ["src/Method/own.py"])
+        self.assertEqual(fidelity["status"], "drift")
+
+    def test_a_bare_string_binding_judges_every_module_as_before(self):
+        self._proposals()
+        box = self._box("draft-2.md", {"own": "draft-2.md", "sibling": "other-plan-v03.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["staleModules"], ["src/Method/sibling.py"])
+        self.assertEqual(fidelity["otherLineageModules"], [])
+        self.assertEqual(fidelity["status"], "drift")
+

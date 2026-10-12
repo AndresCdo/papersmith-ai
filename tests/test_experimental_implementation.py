@@ -2997,6 +2997,28 @@ class PerLineageImplementationBindingTests(unittest.TestCase):
         self.assertEqual(fidelity["latestRevision"], "experiments-x-v01.md")
         self.assertEqual(fidelity["benchmark"]["revision"], "experiments-x-v01.md")
 
+    def test_the_siblings_module_does_not_drift_this_skills_headline(self):
+        """X16: the proposal-bound module read stale in this skill's whole-tree
+        `staleModules` while `fidelityByDocument` judged it `ok` under its own
+        label. It is reported in `otherLineageModules` instead."""
+        engine = self._engine()
+        box = self._box({"proposal": "r01.md", "experiments": "experiments-x-v01.md"})
+        (box / "src" / "Method" / "sweep.py").write_text(
+            "__provenance__ = {'revision': 'experiments-x-v01.md', 'sections': ['E1'], "
+            "'experiments': ['E1'], 'invariants': []}\n", encoding="utf-8")
+        (box / "src" / "Method" / "estimator.py").write_text(
+            "__provenance__ = {'revision': 'r01.md', 'sections': ['1'], 'invariants': []}\n",
+            encoding="utf-8")
+        fidelity = self._fidelity(engine, box)
+        self.assertEqual(fidelity["staleModules"], [])
+        self.assertEqual(fidelity["otherLineageModules"],
+                         [{"module": "src/Method/estimator.py", "label": "proposal",
+                           "revision": "r01.md"}])
+        self.assertEqual({entry["label"]: entry["conditions"]["staleModules"]
+                          for entry in fidelity["fidelityByDocument"]},
+                         {"experiments": [], "proposal": []})
+        self.assertEqual(fidelity["status"], "ok", fidelity)
+
     def test_the_scaffold_template_names_this_skills_own_document(self):
         """The template's comment used to name `proposals/` under both
         skills; it now names this skill's own document directory and label."""

@@ -975,7 +975,8 @@ Two independent findings, reported separately:
   because fallback probes for optional dataset roots are legitimately absent
   and burying the real finding is worse. Fix with `plan` → `apply`.
 - **fidelity drift** — `staleModules` implement an older revision than the one
-  in `--revision`; `invariantsWithoutTest` are claims declared in code with no
+  in `--revision` (a module bound to another document label's lineage under a
+  keyed `revision` is listed in `otherLineageModules` instead); `invariantsWithoutTest` are claims declared in code with no
   test enforcing them. Both need the user's decision before you touch anything.
 
 Twelve more are reported and none of them is a finding, which is exactly why

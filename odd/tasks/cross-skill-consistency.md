@@ -160,10 +160,24 @@ Route legend: D = delegated writer, I = inline.
   `tests/test_upgrade_v0_13_0_workspace.py::...::test_the_experiments_revision_takes_a_successor_after_upgrade` (RED
   with the engine stashed: `inspect_error`; GREEN: refused with both `-r01.md`/`-r02.md` sections named, then the
   two-section repair published with one marker). Mutation: reverting the continuity read turns the repair test red.
-- [ ] X16 — (found in F, open) on a target both implementation skills share, each skill's aggregate `fidelity.status`
+  Commit: 636400d. E2E (fresh `init`, kit clean at 636400d, driver s1 + s13 without `sourceWindowBytes`): v01 `created`
+  with the proposal `loaded`, `reservedMarkersRemoved: 1`, one marker in v01; v02 `published`, audit PASS.
+- [x] X16 — (found in F; fixed, see below) on a target both implementation skills share, each skill's aggregate `fidelity.status`
   is `drift`: a module bound to the other skill's lineage is listed under `staleModules` with "bound to an older
   revision, but none of its sections moved", while `fidelityByDocument` is `ok` for both documents. Not checked
   against main.
+  Main (checked: `git archive main skills` into a copy of the F workspace): the mapping crashes both skills
+  (`TypeError ... not 'dict'`). With the single-string binding main reads, the same defect: bound to r03, proposal
+  `verify` drifts with `staleModules: [sweep.py]`; bound to v03, experimental drifts with `[estimator.py]`.
+  Fix (route I, inline; one engine function + 2 test files + 3 docs): `other_lineage_modules` lists modules whose
+  provenance revision is in another label's mapped filename family (digits wildcarded); they go to
+  `fidelity.otherLineageModules` and out of `staleModules`/`drift`/headline. Own lineage and bare strings unchanged.
+  Tests: `tests/test_proposal_implementation.py::OtherLineageModuleTests` (4; RED: 4 failed, KeyError and stale
+  sibling), `tests/test_experimental_implementation.py::PerLineageImplementationBindingTests::test_the_siblings_module_does_not_drift_this_skills_headline`
+  (RED: `['src/Method/estimator.py'] != []`). Seals regenerated (`verify-*` +31 bytes each, the new empty key;
+  nondeterministic `propose` restored). Domain-lock count kept at its pins (one `module` comment reworded).
+  Re-anchored: `NonRevisionSha256ScalarsAreDocumentCountInvariantTests` (its C6 anchor names the staleness line,
+  now `bound["stale"] = (... and not foreign)`; the site still reads no `DOCUMENTS`).
 - X17 — (found in F, pre-existing on main, verified) a `position` refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2)
   still creates the empty holder skeleton (`# Agreed` / `## Ladder`).
 - X18 — (found in F) `settle --done --unwitnessed` needs the line to exist already, and placing a new line needs

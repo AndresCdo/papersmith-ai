@@ -8090,6 +8090,43 @@ def _unbound_after_lineage(contract: dict) -> str | None:
             "nor premises have been answered yet")
 
 
+def _revision_family(name: str) -> str:
+    """A revision filename with every run of digits wildcarded: the family
+    key `discover_document_revision` groups candidates by."""
+    return re.sub(r"\d+", "#", Path(name).name)
+
+
+def other_lineage_modules(bound: list[dict], mapping) -> list[dict]:
+    """The provenance entries bound to ANOTHER document label's lineage in a
+    per-label `__implementation__.revision` mapping.
+
+    Lineage is the family of the mapped name (digits wildcarded), so an
+    older revision of the sibling's lineage is still the sibling's. An entry
+    in this host's own family is never foreign, and without a mapping (a bare
+    string, the pre-0.14.0 shape) nothing is: every entry is judged here,
+    as it always was.
+    """
+    if not isinstance(mapping, dict):
+        return []
+    own_label = DOCUMENTS[0]["label"]
+    own = mapping.get(own_label)
+    own_family = _revision_family(own) if isinstance(own, str) and own else None
+    others = {label: _revision_family(text) for label, text in mapping.items()
+              if label != own_label and isinstance(text, str) and text}
+    found = []
+    for entry in bound:
+        revision = entry.get("revision")
+        if not isinstance(revision, str) or not revision:
+            continue
+        family = _revision_family(revision)
+        if family == own_family:
+            continue
+        label = next((label for label, other in sorted(others.items()) if other == family), None)
+        if label is not None:
+            found.append({"module": entry["module"], "label": label, "revision": revision})
+    return found
+
+
 def resolve_implementation_declaration(target: Path, name: str) -> dict:
     """The one place every reader gets `__implementation__` from.
 
@@ -18312,15 +18349,22 @@ def cmd_verify(args: argparse.Namespace) -> dict:
                     and not harness_recorded["drift"]
                     and not harness_recorded["unrecorded"])
 
-    for module in modules:
-        module["stale"] = bool(revision) and module["revision"] != revision
+    # X16: under a per-label binding (A8), a file bound to another label's
+    # lineage is that skill's to judge. Counting it stale here drifted both
+    # skills' headlines on every target they share.
+    other_lineage = other_lineage_modules(
+        modules, (implementation_declared["contract"] or {}).get("revisionByDocument"))
+    foreign = {entry["module"] for entry in other_lineage}
+    for bound in modules:
+        bound["stale"] = (bool(revision) and bound["revision"] != revision
+                          and bound["module"] not in foreign)
 
     tests = test_function_names(target / "tests")
     untested = sorted(i for i in declared_invariants if f"test_{i}" not in tests)
     stale = [m["module"] for m in modules if m["stale"]]
 
     # What actually changed, rather than "the revision string is different".
-    # Marking every module stale because one locus moved tells the reader there is
+    # Marking every file stale because one locus moved tells the reader there is
     # work to do and nothing about where, which is the part they have to find anyway.
     target_source = revision_source(revision) if revision else None
     drift_detail = []
@@ -18744,6 +18788,9 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             "nonManagedCandidates": discovery["nonManaged"],
             "revisionTie": discovery["tied"],
             "staleModules": stale,
+            # Files bound to another document label's lineage under a
+            # per-label `revision` mapping, kept out of `staleModules`.
+            "otherLineageModules": other_lineage,
             "drift": drift_detail,
             "benchmark": benchmark,
             "missingProvenance": missing_provenance,

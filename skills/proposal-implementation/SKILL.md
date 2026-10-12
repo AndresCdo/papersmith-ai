@@ -1375,6 +1375,16 @@ read here. A value under the label that is not a string makes
 the declaration `undeclared`. `verify` and `probe` read the narrowed name; the
 full mapping travels as `revisionByDocument` on the reader's contract.
 
+Under the keyed form, a module whose `__provenance__` revision belongs to
+another label's lineage (the same filename family as that label's mapped name,
+digits aside, so an older revision of it counts too) is the other skill's to
+judge: `verify` lists it in `fidelity.otherLineageModules` (`{module, label,
+revision}`) and keeps it out of `staleModules`, `drift` and the headline
+`fidelity.status`. Before 0.14.0 it read "bound to an older revision" and
+drifted the headline of both skills on every shared target. A module of this
+skill's own lineage goes stale exactly as before, and a bare string binds no
+other lineage, so every module is judged here.
+
 | Literal | Filled by | When |
 | --- | --- | --- |
 | `revision` | Flow A step 8 | Proposed as step 1's `latest` and confirmed inside the authorization approval, before any code that approval authorized is written |

@@ -120,6 +120,13 @@ unanswered revision, never as the proposal's name. The details, and the
 `undeclared` cases, are in `proposal-implementation`'s SKILL.md under "The
 implementation declaration".
 
+Under the keyed form, a module bound to the proposal's lineage is the sibling's
+to judge: `verify` lists it in `fidelity.otherLineageModules` and keeps it out
+of `staleModules` and the headline `fidelity.status`, while
+`fidelityByDocument` still judges it under `proposal`. Before 0.14.0 it read
+"bound to an older revision" here, so the headline drifted while every entry of
+`fidelityByDocument` read `ok`.
+
 ## `Data/` is demandable, per product folder
 
 `documents[0]`'s own `dataset_marker` leaf (`**Dataset:**`) makes a

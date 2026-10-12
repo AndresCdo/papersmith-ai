@@ -684,6 +684,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   code, message and repair step, where it used to answer only
   `CANDIDATE_VALIDATION_FAILED` with `nextAction: "inspect_error"`.
 
+- **A shared target's headline fidelity judges only its own lineage.** On a
+  target both implementation skills share, `__implementation__.revision` maps
+  one revision per document label, and each skill's modules carry their own
+  lineage's revision. The whole-tree `fidelity.staleModules` compared every
+  module against this skill's revision, so the other skill's module read
+  "bound to an older revision, but none of its sections moved" and
+  `fidelity.status` was `drift` for both skills, while `fidelityByDocument`
+  read `ok` for both documents. main's engine shows the same with a
+  single-string binding (the only form it reads; it crashes on the mapping).
+  A module whose revision is in another label's filename family is now
+  listed in `fidelity.otherLineageModules` (`module`, `label`, `revision`)
+  and kept out of `staleModules`, `drift` and the headline. A module of the
+  skill's own lineage goes stale as before, and a bare-string binding is
+  unchanged.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1232,6 +1247,10 @@ number is `0`, breaking changes can still arrive without a major bump.
 - An experiments v1 written by 0.13.0 with copied proposal markers (the
   fixture's `experiments-*-v01.md` has two) now takes a successor that replaces
   the sections holding them; its own bytes, receipt and state are untouched.
+- `verify` output gains `fidelity.otherLineageModules` (`[]` unless the
+  target binds a per-label `revision` mapping). On a shared target, the
+  other skill's modules leave `staleModules` and `drift`, so the headline
+  `fidelity.status` can turn from `drift` to `ok`.
 
 
 ## 0.13.0
