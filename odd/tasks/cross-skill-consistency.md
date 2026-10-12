@@ -87,6 +87,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] E2 — holder name in proposal-implementation docs (inline: 2 doc files + drift test)
   - [x] E3 — sealed set documented + refusal lists it (inline: engine + 2 docs + test)
   - [x] E1, E7, E8 — implement bridge coverage + alias note; absolute profile; session ids (inline/serial: bridge + test + 4 docs)
+  - [x] E6b — grapher agent runs check_atlas with --pool (inline: agent + projections + test)
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
 
 ## Found along the way (to resolve before F)
@@ -1006,3 +1007,12 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   SKILL.md, README.
   `npm run test:fast`: 4264 passed, 1 known `.venv` failure (skill_audit inversion). No migration.
   Commit: `fix(cli): the implement bridge names its coverage and the direct engine route` (the commit carrying this line)
+- E6 remainder (b) (real): canonical source is the tracked `.claude/agents/sota-grapher.md` (kit entry
+  `KIT_ENTRIES`; `generators.py` projects `.pi/.opencode/.agents` from it; `scripts/sync-repo-harness.py` copies
+  the projections into the checkout). Edited the checker command to add `--pool sota-pool/candidates.json` + one
+  sentence; `python scripts/sync-repo-harness.py` synced 3 of 95; `--check` clean (95 files). Test:
+  `GrapherAgentChecksQuotesTests` in `tests/test_sota_atlas.py` (every agent line running
+  `check_atlas.py sota-pool/atlas.json`, all four agent folders, carries `--pool`) RED 4 subtests -> GREEN (35
+  passed). Upgrade verified: workspace `init` from the stashed (previous) tree had 0 `--pool` lines; `papersmith
+  upgrade --allow-dirty-kit` rewrote `.claude/`, `.pi/`, `.opencode/` grapher files (2 lines each).
+  Commit: `fix(plausibility): the grapher agent checks quotes against the pool` (the commit carrying this line)

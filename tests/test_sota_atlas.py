@@ -274,6 +274,28 @@ class QuoteFidelityTests(unittest.TestCase):
         self.assertNotIn("quote verbatim", out)
 
 
+class GrapherAgentChecksQuotesTests(unittest.TestCase):
+    """The agent that draws the atlas runs the checker WITH the pool, so the
+    quote-fidelity guard runs inside its own repair loop, not only when an
+    operator remembers the flag. Every agent definition (canonical and every
+    projection) that runs the checker on the pool's atlas is read."""
+
+    ROOT = Path(__file__).resolve().parent.parent
+    PROJECTIONS = (".claude/agents", ".agents/agents", ".opencode/agents", ".pi/agents")
+
+    def test_every_checker_run_on_the_atlas_carries_the_pool(self):
+        runs = []
+        for folder in self.PROJECTIONS:
+            for agent in sorted((self.ROOT / folder).glob("*.md")):
+                for line in agent.read_text(encoding="utf-8").splitlines():
+                    if "check_atlas.py sota-pool/atlas.json" in line:
+                        runs.append((f"{folder}/{agent.name}", line.strip()))
+        self.assertTrue(runs, "no agent runs the atlas checker")
+        for where, line in runs:
+            with self.subTest(agent=where):
+                self.assertIn("--pool sota-pool/candidates.json", line)
+
+
 class RenderAtlasTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="sota-render-"))

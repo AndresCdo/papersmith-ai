@@ -590,6 +590,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   working session, one shell-safe token, stamped verbatim as attribution and
   never validated.
 
+- **The `sota-grapher` agent runs the atlas checker with the pool.** Its
+  repair loop ran `check_atlas.py sota-pool/atlas.json` without `--pool`, so
+  the quote-fidelity guard added to the checker never ran inside the stretch
+  that draws the quotes. The agent now runs
+  `check_atlas.py sota-pool/atlas.json --pool sota-pool/candidates.json`; the
+  OpenCode, Pi and `.agents` projections are regenerated from it, and a test
+  reads every agent definition that runs the checker on the atlas.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1101,6 +1109,11 @@ number is `0`, breaking changes can still arrive without a major bump.
 - `papersmith implement --action materialize` still runs `apply`, and now
   prints a one-line note on stderr pointing at `--action apply`. Its stdout
   and exit code are unchanged.
+
+- `papersmith upgrade` rewrites `.claude/agents/sota-grapher.md` and its
+  OpenCode/Pi/`.agents` projections, so the grapher's checker run now
+  refuses an atlas whose quotes are not verbatim in the pool's abstracts
+  (verified on a scratch workspace initialized from the previous commit).
 
 
 ## 0.13.0
