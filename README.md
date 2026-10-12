@@ -1,234 +1,235 @@
 # papersmith-ai
 
-> **Una forja de papers**: convierte PDFs de referencia en Markdown de alta fidelidad y legible por un agente (ecuaciones en LaTeX, tablas como tablas, figuras como archivos), y conduce la deliberación formal —matemática y de diseño experimental— hasta el código que se prueba solo y el paper compilado.
+> **A paper forge**: turns reference PDFs into high-fidelity Markdown that an agent can read (equations in LaTeX, tables as tables, figures as files), and drives the formal deliberation —mathematics and experimental design— all the way to the code that tests itself and the compiled paper.
 
 [![CI](https://github.com/LIAUNAL/papersmith-ai/actions/workflows/test.yml/badge.svg)](https://github.com/LIAUNAL/papersmith-ai/actions/workflows/test.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D21-green.svg)](https://nodejs.org/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
 <p align="center">
-  <img src="docs/assets/agent-smith-anime.jpg" alt="Agent Smith en clave anime, con un paper holográfico y agentes de IA orbitando a su alrededor" width="560">
+  <img src="docs/assets/agent-smith-anime.jpg" alt="Agent Smith in anime style, with a holographic paper and AI agents orbiting around him" width="560">
 </p>
 
-Este README es el **manual completo, en español**: instalación, el workspace por
-dentro, los doce comandos del CLI, las doce skills, los diecinueve agentes,
-cómputo remoto, desarrollo y solución de problemas.
+This README is the **complete manual, in English**: installation, the workspace from the
+inside, the twelve CLI commands, the twelve skills, the nineteen agents,
+remote compute, development and troubleshooting.
 
-## Índice
+## Contents
 
-1. [Si es tu primera vez](#si-es-tu-primera-vez)
-2. [Flujo de uso — el camino corto](#flujo-de-uso--el-camino-corto)
-3. [Puesta en marcha](#puesta-en-marcha)
-4. [Cómo funciona — el orden](#cómo-funciona--el-orden)
-5. [El workspace por dentro](#el-workspace-por-dentro)
-6. [Harnesses y proyección de skills](#harnesses-y-proyección-de-skills)
-7. [Los agentes](#los-agentes)
-8. [Anatomía de cada skill](#anatomía-de-cada-skill)
-9. [Los comandos del CLI](#los-comandos-del-cli)
-10. [Cómputo remoto, con cuidado](#cómputo-remoto-con-cuidado)
-11. [Arquitectura](#arquitectura)
-12. [Desarrollo y pruebas](#desarrollo-y-pruebas)
-13. [Solución de problemas](#solución-de-problemas)
-14. [Documentación relacionada](#documentación-relacionada)
-15. [Licencia](#licencia)
+1. [If this is your first time](#if-this-is-your-first-time)
+2. [Use flow — the short path](#use-flow--the-short-path)
+3. [Getting started](#getting-started)
+4. [How it works — the order](#how-it-works--the-order)
+5. [Inside the workspace](#inside-the-workspace)
+6. [Harnesses and skill projection](#harnesses-and-skill-projection)
+7. [The agents](#the-agents)
+8. [Anatomy of each skill](#anatomía-de-cada-skill)
+9. [The CLI commands](#los-comandos-del-cli)
+10. [Remote compute, carefully](#cómputo-remoto-con-cuidado)
+11. [Architecture](#arquitectura)
+12. [Development and testing](#desarrollo-y-pruebas)
+13. [Troubleshooting](#solución-de-problemas)
+14. [Related documentation](#documentación-relacionada)
+15. [License](#licencia)
 
-## Si es tu primera vez
+## If this is your first time
 
-Bienvenido. Esta forja está pensada para que puedas ir de un PDF a un paper
-compilado sin adivinar el orden. El camino mínimo:
+Welcome. This forge is built so you can go from a PDF to a compiled paper
+without guessing the order. The minimum path:
 
-1. **Instala el CLI y prepara el entorno** — ver [Puesta en marcha](#puesta-en-marcha).
-2. **Crea tu workspace** — `papersmith init ~/papers/mi-paper --title "…" --topic "…"`.
-   Qué te deja adentro, en [El workspace por dentro](#el-workspace-por-dentro).
-3. **Pon un PDF de referencia** en `guidance/reference-papers/` y ejecuta
-   `papersmith ingest <pdf>` — o pide `/paper-ingestion` dentro de tu harness.
-4. **Abre la deliberación** con `/proposal-deliberation` y discute la matemática
-   con el agente.
+1. **Install the CLI and set up the environment** — see [Getting started](#getting-started).
+2. **Create your workspace** — `papersmith init ~/papers/my-paper --title "…" --topic "…"`.
+   What it leaves inside, in [Inside the workspace](#inside-the-workspace).
+3. **Check that the idea is plausible** — with your idea in two sentences,
+   `/plausibility` tracks the SOTA and returns the constellation plus a ranked top 5.
+4. **Put a reference PDF** in `guidance/reference-papers/` and run
+   `papersmith ingest <pdf>` — or ask for `/paper-ingestion` inside your harness.
+5. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
+   with the agent.
 
-No hace falta usar todas las skills ni en este orden: **cada una declara qué
-necesita antes y se niega antes de hacer algo a medias**. Si le falta una
-entrada no la inventa: sale con un código de rechazo que nombra qué falta. Un
-`PAPER_ABSENT` no es un error tuyo; es la skill diciéndote qué le falta.
+You don't have to use every skill, or in this order: **each one declares what
+it needs first and refuses before doing something half-done**. If an input is
+missing it doesn't invent it: it exits with a rejection code that names what's missing. A
+`PAPER_ABSENT` is not your mistake; it's the skill telling you what it's missing.
 
-El mapa completo está en [Flujo de uso](#flujo-de-uso--el-camino-corto); la
-ruta con detalle, en [Cómo funciona — el orden](#cómo-funciona--el-orden). Y si
-vas a usar un agente de IA como copiloto, los que ya vienen definidos están en
-[Los agentes](#los-agentes).
+The full map is in [Use flow](#use-flow--the-short-path); the
+detailed route, in [How it works — the order](#how-it-works--the-order). And if
+you're going to use an AI agent as copilot, the ones already defined are in
+[The agents](#the-agents).
 
 ---
 
-## Flujo de uso — el camino corto
+## Use flow — the short path
 
-Doce skills. Se invocan por nombre en Claude Code (`/paper-ingestion`) o se piden en
-castellano (*"ingiere los papers"*). **No hace falta usarlas todas ni en este orden**: cada
-una declara qué necesita antes y se niega si falta, así que si empiezas por el medio te
-lo va a decir ella.
+Twelve skills. You invoke them by name in Claude Code (`/paper-ingestion`) or ask for them in
+Spanish (*"ingiere los papers"*). **You don't have to use them all, or in this order**: each
+one declares what it needs first and refuses if it's missing, so if you start in the middle it
+will tell you.
 
-El camino completo, de un PDF a un paper compilado:
+The full path, from a PDF to a compiled paper:
 
-| # | Invocás | Qué hace | Dónde deja el resultado |
+| # | You invoke | What it does | Where it leaves the result |
 |---|---------|----------|-------------------------|
-| 1 | `/paper-ingestion` | Convierte los PDFs de referencia a Markdown legible (ecuaciones en LaTeX, tablas como tablas, figuras como archivos) | `guidance/<carpeta>/` |
-| 2 | `/plausibility` | Explora la idea pre-ingesta en tres tramos: rastrea ~25 referencias por sus abstracts, mapea la constelación en un HTML único y discute la plausibilidad de la hipótesis contra ese SOTA | `sota-pool/` (ignorado, como `guidance/`) |
-| 3 | `/proposal-deliberation` | Discute la matemática contigo y publica cada acuerdo como una revisión gestionada, con la constelación del SOTA al lado | `proposals/` (la revisión y su `graph.html`) |
-| 4 | `/proposal-implementation` | Prueba de concepto: convierte la propuesta en Python que se verifica contra el documento | `implementations/<repo>/` |
-| 5 | `/experimental-deliberation` | Discute el diseño experimental que va a poner a prueba esa matemática | `experiments/` |
-| 6 | `/experimental-implementation` | Convierte el protocolo en código y corre sus mediciones | el mismo repo destino |
-| 7 | `/kaggle-accounts` | Prueba que las credenciales de Kaggle autentican de verdad | `store/` (nunca sale del disco) |
-| 8 | `/remote-execution` | Manda trabajo a un worker remoto y lleva el registro de lo que volvió | el ledger del repo destino |
-| 9 | `/paper-writing` | Escribe el paper bloque por bloque, con cada afirmación atada a su evidencia | `paper/` |
-| 10 | `/figure-review` | Mira el render: rasteriza cada `Figures/<id>.pdf` y mide lo que un raster puede sostener (tinta fuera del canvas, colisiones) | un informe visual, nunca un cambio |
-| 11 | `/skill-audit` | Audita cualquiera de las anteriores: qué acepta el código contra qué promete su documentación | un informe, nunca un cambio |
-| 12 | `/upgrade-project` | Lleva el workspace a la versión del CLI que tienes instalado: sincroniza los archivos del kit y migra los artefactos, delegando todo en `papersmith upgrade` | el workspace mismo |
+| 1 | `/plausibility` | Explores the idea before any ingestion, in three stretches: it tracks ~25 references through their abstracts, maps the constellation in a single HTML and discusses the plausibility of the hypothesis against that SOTA | `sota-pool/` (ignored, like `guidance/`) |
+| 2 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
+| 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
+| 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
+| 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
+| 6 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
+| 7 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
+| 8 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
+| 9 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
+| 10 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
+| 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
+| 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `papersmith upgrade` | the workspace itself |
 
-**Lo mínimo para empezar.** Si sólo quieres probar la forja, empieza por el paso 2
-con tu idea en dos oraciones: `/plausibility` rastrea el SOTA y te devuelve la
-constelación más el top-5. Solo después, si quieres, pon un PDF en
-`guidance/reference-papers/`, ejecuta `/paper-ingestion`, y delibera con
-`/proposal-deliberation`. Los pasos 4 y 6 sólo tienen sentido cuando ya hay una propuesta
-publicada y un repositorio destino donde implementarla.
+**The minimum to start.** If you just want to try the forge, start with step 1
+with your idea in two sentences: `/plausibility` tracks the SOTA and returns the
+constellation plus the top-5. Only afterwards, if you want, put a PDF in
+`guidance/reference-papers/`, run `/paper-ingestion`, and deliberate with
+`/proposal-deliberation`. Steps 4 and 6 only make sense once there's a published proposal
+and a target repository to implement it in.
 
-**El flujo completo, dibujado.** El diagrama muestra cada etapa en este orden con
-su comando, sus agentes (con las herramientas que cada uno declara en Pi), sus
-compuertas humanas y lo que deja en disco. La versión interactiva, con enlaces a
-la fuente de cada nodo, está en
+**The full flow, drawn.** The diagram shows every stage in this order with
+its command, its agents (with the tools each one declares in Pi), its
+human gates and what it leaves on disk. The interactive version, with links to
+the source of each node, is in
 [`docs/diagrams/papersmith-pi-flow.html`](docs/diagrams/papersmith-pi-flow.html)
-(se abre en el navegador; generada con [Archify](https://github.com/tt-a1i/archify),
-y su fuente y su receta están versionadas en
+(opens in the browser; generated with [Archify](https://github.com/tt-a1i/archify),
+and its source and its recipe are versioned in
 [`docs/diagrams/`](docs/diagrams/README.md)).
 
-[![Flujo de papersmith-ai en Pi: comandos, skills y agentes](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
+[![papersmith-ai flow in Pi: commands, skills and agents](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 
-**Tres cosas que conviene saber antes de la primera corrida.**
+**Three things worth knowing before the first run.**
 
-1. **Nada de lo que produzcas se sube.** `proposals/`, `experiments/`, `paper/`,
-   `implementations/` y `sota-pool/` viajan a GitHub **como carpetas vacías** y nada más; `guidance/`
-   versiona sus carpetas y nunca los PDFs ni el Markdown de adentro. El andamiaje se
-   versiona, el contenido no. Un paper a medio escribir es material de investigación, y
-   publicarlo por accidente es una fuga.
-2. **Cada skill se niega antes de hacer algo a medias.** Si le falta una entrada, no la
-   inventa ni la saltea: sale con un código de rechazo que nombra qué falta. Un
-   `PAPER_ABSENT` o un `SECTION_CONTRACTS_UNREADABLE` no es un error tuyo, es la skill
-   diciéndote qué le falta.
-3. **La deliberación la cierras tú.** Las dos skills de deliberación proponen, discuten y
-   preparan la edición, pero ninguna publica sin que aceptes. Eso no es una cortesía:
-   está en el contrato de cada una y el motor lo hace cumplir.
+1. **Nothing you produce gets uploaded.** `proposals/`, `experiments/`, `paper/`,
+   `implementations/` and `sota-pool/` travel to GitHub **as empty folders** and nothing more; `guidance/`
+   versions its folders and never the PDFs or the Markdown inside. The scaffolding gets
+   versioned, the content doesn't. A half-written paper is research material, and
+   publishing it by accident is a leak.
+2. **Each skill refuses before doing something half-done.** If an input is missing, it
+   doesn't invent it or skip it: it exits with a rejection code that names what's missing. A
+   `PAPER_ABSENT` or a `SECTION_CONTRACTS_UNREADABLE` is not your mistake, it's the skill
+   telling you what it's missing.
+3. **You close the deliberation.** The two deliberation skills propose, discuss and
+   prepare the edit, but neither publishes without your acceptance. That's not a courtesy:
+   it's in each one's contract and the engine enforces it.
 
 ---
 
-## Puesta en marcha
+## Getting started
 
-Nada de esto requiere claves ni servicios externos: la forja corre localmente.
+None of this requires keys or external services: the forge runs locally.
 
-### 0. Lo que tu máquina necesita tener
+### 0. What your machine needs to have
 
-Dos runtimes, y los dos son obligatorios. No es una recomendación: la forja usa
-Python para el CLI y Node para el motor de deliberación, y sin el segundo la
-mitad del framework no arranca.
+Two runtimes, and both are mandatory. It's not a recommendation: the forge uses
+Python for the CLI and Node for the deliberation engine, and without the second
+one half the framework won't start.
 
-| Runtime | Versión | Para qué | Si falta |
+| Runtime | Version | What for | If it's missing |
 | --- | --- | --- | --- |
-| **Python** | ≥ 3.11 | el CLI `papersmith` y todas las skills de Python | no hay instalación posible |
-| **Node.js** | ≥ 21 | el motor de deliberación (`jiti`, `typebox`) y el tablero | `init` avisa y `deliberate` se niega |
-| `npm` | el que trae Node | instalar esas dos dependencias en el workspace | igual que arriba |
+| **Python** | ≥ 3.11 | the `papersmith` CLI and all the Python skills | there's no possible installation |
+| **Node.js** | ≥ 21 | the deliberation engine (`jiti`, `typebox`) and the dashboard | `init` warns and `deliberate` refuses |
+| `npm` | whatever Node ships | installing those two dependencies in the workspace | same as above |
 
-Comprueba las dos de una vez:
+Check both at once:
 
 ```bash
 python3 --version && node --version && npm --version
 ```
 
-**Qué pasa exactamente si Node no está.** `papersmith init` no falla: avisa con
-`npm was not found; deliberate requires npm install for jiti/typebox` y sigue
-adelante, porque el resto del workspace sí se puede crear. Pero
-`proposal-deliberation` y `experimental-deliberation` —las dos skills que
-proponen y discuten antes de escribir— no corren sin esas dependencias. Si
-quieres crear el workspace a propósito sin ellas, `init --no-npm` lo dice
-explícitamente en lugar de dejarlo al azar.
+**What exactly happens if Node isn't there.** `papersmith init` doesn't fail: it
+warns with `npm was not found; deliberate requires npm install for jiti/typebox`
+and moves on, because the rest of the workspace can be created. But
+`proposal-deliberation` and `experimental-deliberation` —the two skills that
+propose and discuss before writing— don't run without those dependencies. If you
+want to create the workspace on purpose without them, `init --no-npm` says so
+explicitly instead of leaving it to chance.
 
-El runtime de ingestión del paso 2 es aparte y **sí es opcional**: solo hace
-falta para extraer PDFs con OCR.
+The ingestion runtime from step 2 is separate and **is optional**: it's only
+needed to extract PDFs with OCR.
 
-### 1. Instala el CLI y prepara el entorno
+### 1. Install the CLI and set up the environment
 
 ```bash
-# 1a. El CLI, desde la última versión publicada en PyPI
+# 1a. The CLI, from the latest version published on PyPI
 pipx install papersmith-ai
-#     lo mismo con pip, si no usas pipx
+#     the same with pip, if you don't use pipx
 pip install papersmith-ai
-#     o la punta de `main`, sin esperar a que salga una release
+#     or the tip of `main`, without waiting for a release
 pipx install git+https://github.com/LIAUNAL/papersmith-ai.git
 
-# 1b. O desde un clon de `main` (si vas a desarrollar el framework)
+# 1b. Or from a clone of `main` (if you're going to develop the framework)
 git clone https://github.com/LIAUNAL/papersmith-ai.git && cd papersmith-ai
-pipx install .            # con pip: pip install .
+pipx install .            # with pip: pip install .
 
-# 1c. Actualizar el CLI cuando sale una release nueva
+# 1c. Update the CLI when a new release comes out
 pipx upgrade papersmith-ai
-#     si lo instalaste desde una URL de git, `upgrade` no lo ve: reinstala
+#     if you installed it from a git URL, `upgrade` doesn't see it: reinstall
 pipx install --force git+https://github.com/LIAUNAL/papersmith-ai.git
-#     con pip, `--upgrade` sobre una URL de git no siempre vuelve a clonar
+#     with pip, `--upgrade` over a git URL doesn't always re-clone
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai.git"
 
-# 1d. Y llevar a esa versión los workspaces que ya existen
-papersmith upgrade --plan-migrations ~/papers/sparse-ae  # qué artefactos faltan, sin escribir nada
-papersmith upgrade ~/papers/sparse-ae                    # sincroniza los archivos y migra los artefactos
-papersmith status ~/papers/sparse-ae                     # deriva y migraciones pendientes
+# 1d. And bring the workspaces that already exist up to that version
+papersmith upgrade --plan-migrations ~/papers/sparse-ae  # which artifacts are missing, without writing anything
+papersmith upgrade ~/papers/sparse-ae                    # syncs the files and migrates the artifacts
+papersmith status ~/papers/sparse-ae                     # drift and pending migrations
 
-# 2. Runtime aislado de ingestión (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
+# 2. Isolated ingestion runtime (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
 python3 scripts/setup_env.py install
 
-# 3. Dependencias de Node y proyección de skills a los harnesses
+# 3. Node dependencies and projection of skills to the harnesses
 npm install
 npm run setup:harnesses
 ```
 
-**El paquete está publicado en PyPI.** `pipx install papersmith-ai` trae la
-última release, y es lo que `pipx upgrade papersmith-ai` del **1c** actualiza. La
-URL de git del **1a**, en cambio, trae la punta de `main`, que es lo que conviene
-si vas a desarrollar el framework. Y cuidado con el nombre vecino: `papersmith`
-—sin el `-ai`— también está en PyPI, pero es **otro proyecto** (generación de
-documentos Word), así que `pip install papersmith` no instala esta forja.
+**The package is published on PyPI.** `pipx install papersmith-ai` brings the
+latest release, and that's what `pipx upgrade papersmith-ai` in **1c** updates.
+The git URL in **1a**, on the other hand, brings the tip of `main`, which is what
+you want if you're going to develop the framework. And watch out for the
+neighbouring name: `papersmith` —without the `-ai`— is also on PyPI, but it's
+**another project** (Word document generation), so `pip install papersmith`
+doesn't install this forge.
 
-`main` es la única rama que se mantiene, y cada release queda además con su tag,
-así que si necesitas congelar un build exacto fíjalo en la URL — por ejemplo
+`main` is the only branch that's maintained, and each release also gets its tag,
+so if you need to freeze an exact build, pin it in the URL — for example
 `pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.13.0"`.
-La **1b** toma el clon tal como está, incluidos cambios sin commitear, así que
-para reproducir un build usa la **1a** o un tag. El historial de cambios está en
-[CHANGELOG.md](CHANGELOG.md).
+**1b** takes the clone as it is, including uncommitted changes, so to reproduce a
+build use **1a** or a tag. The changelog is in [CHANGELOG.md](CHANGELOG.md).
 
-Actualizar son dos pasos y son dos objetos distintos. El **1c** reinstala el
-CLI desde `main`; confirma qué quedó con `papersmith --version`. El **1d**
-mueve cada **workspace** que ya existe, y no es opcional: un release puede
-cambiar la forma de un artefacto que el workspace ya produjo —el `atlas.html`
-del pool de grafos, por ejemplo—, así que sincronizar los archivos del
-framework sin migrar los artefactos deja el andamiaje nuevo leyendo estado
-viejo.
+Updating is two steps and they're two different objects. **1c** reinstalls the
+CLI from `main`; confirm what you got with `papersmith --version`. **1d** moves
+each **workspace** that already exists, and it isn't optional: a release can
+change the shape of an artifact a workspace has already produced —the graph
+pool's `atlas.html`, for example—, so syncing the framework files without
+migrating the artifacts leaves the new scaffolding reading old state.
 
-`papersmith upgrade` sincroniza el workspace con la versión instalada y aplica
-las migraciones de artefactos de esa versión. La versión que el workspace
-registra no avanza hasta que esas migraciones están hechas, así que
-`papersmith status` puede decirte que todavía no llegó al release que acabas de
-instalar. `--plan-migrations` informa lo pendiente y termina sin escribir nada;
-no se llama `--dry-run` a propósito, porque no previsualiza la copia del kit.
-`--no-migrate` sincroniza los archivos y deja los artefactos como están, con el
-marcador de versión donde estaba.
+`papersmith upgrade` syncs the workspace with the installed version and applies
+that version's artifact migrations. The version the workspace records doesn't
+advance until those migrations are done, so `papersmith status` may tell you it
+hasn't yet reached the release you just installed. `--plan-migrations` reports
+what's pending and finishes without writing anything; it isn't called
+`--dry-run` on purpose, because it doesn't preview the kit copy. `--no-migrate`
+syncs the files and leaves the artifacts as they are, with the version marker
+where it was.
 
-Ojo con no confundir los dos `upgrade`: ninguno de los dos toca al otro.
-`papersmith upgrade` se niega a llevar un workspace a una versión anterior a la
-que él registra, salvo que se lo pidas con `--allow-downgrade`.
+Be careful not to mix up the two `upgrade`s: neither one touches the other.
+`papersmith upgrade` refuses to take a workspace to a version older than the one
+it records, unless you ask it to with `--allow-downgrade`.
 
-`scripts/setup_env.py install` provisiona **todo** el stack de ingestión en un
-entorno micromamba aparte (CPU o CUDA, según lo que detecte), incluido el
-binario `llama-server` que el OCR necesita — **no** es Ollama ni una
-instalación de Homebrew. `npm run setup:harnesses` enlaza el árbol canónico
-`skills/` dentro de `.claude/skills`, `.pi/skills`, `.opencode/skills`
-y `.agents/skills`, con enlaces relativos e idempotentes (ver
-[Harnesses y proyección de skills](#harnesses-y-proyección-de-skills)). La
-primera corrida de `papersmith ingest` descarga ~1.5 GB de pesos de Surya si el
-entorno no quedó pre-provisionado.
+`scripts/setup_env.py install` provisions **the whole** ingestion stack in a
+separate micromamba environment (CPU or CUDA, depending on what it detects),
+including the `llama-server` binary that the OCR needs — it is **not** Ollama
+nor a Homebrew installation. `npm run setup:harnesses` symlinks the canonical
+`skills/` tree into `.claude/skills`, `.pi/skills`, `.opencode/skills`
+and `.agents/skills`, with relative, idempotent symlinks (see
+[Harnesses and skill projection](#harnesses-and-skill-projection)). The first
+run of `papersmith ingest` downloads ~1.5 GB of Surya weights if the
+environment wasn't pre-provisioned.
 
-### 2. Crea un workspace
+### 2. Create a workspace
 
 ```bash
 papersmith init ~/papers/sparse-ae \
@@ -238,193 +239,216 @@ papersmith init ~/papers/sparse-ae \
 
 cd ~/papers/sparse-ae
 papersmith status
-papersmith status --json          # snapshot legible por máquina
+papersmith status --json          # machine-readable snapshot
 ```
 
-El workspace queda desacoplado del checkout del framework: el andamiaje se
-sincroniza con `papersmith upgrade` y tus artefactos de investigación están
-protegidos por contrato. Qué crea `init` exactamente —y qué se versiona— en
-[El workspace por dentro](#el-workspace-por-dentro).
+The workspace stays decoupled from the framework checkout: the scaffolding is
+synced with `papersmith upgrade`, and your research artifacts are protected by
+contract. What `init` creates exactly —and what gets versioned— in
+[Inside the workspace](#inside-the-workspace).
 
-### 3. Ingiere literatura
+### 3. Ingest literature
 
 ```bash
-papersmith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview o URL
-papersmith ingest ~/Downloads/reference-paper.pdf     # PDF local
-papersmith ingest ~/Downloads/escaneo.pdf --ocr       # escaneado: modo OCR balanceado
+papersmith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview or URL
+papersmith ingest ~/Downloads/reference-paper.pdf     # local PDF
+papersmith ingest ~/Downloads/scan.pdf --ocr       # scanned: balanced OCR mode
 ```
 
-Cada PDF suelto termina en su propia carpeta, junto a su Markdown (texto +
-LaTeX + tablas, con la bibliografía quitada) y las imágenes de sus figuras. El
-detalle del pipeline, en la sección de `paper-ingestion` de la
-[Anatomía](#anatomía-de-cada-skill).
+Each loose PDF ends up in its own folder, next to its Markdown (text + LaTeX +
+tables, with the bibliography stripped) and the images of its figures. The
+pipeline's details, in the `paper-ingestion` section of the
+[Anatomy](#anatomía-de-cada-skill).
 
-### 4. Delibera, implementa y ejecuta
+### 4. Deliberate, implement and run
 
 ```bash
-papersmith deliberate . --action status                                   # estado de la propuesta gestionada
-papersmith implement . --action verify --target implementations/mi-repo   # sobre un repo ya materializado
-papersmith run smoke_and_invariants --dry-run                             # planifica; no despacha nada
+papersmith deliberate . --action status                                   # state of the managed proposal
+papersmith implement . --action verify --target implementations/my-repo   # over an already materialized repo
+papersmith run smoke_and_invariants --dry-run                             # plans; dispatches nothing
 ```
 
-Dentro de un harness, las mismas capacidades se piden por nombre de skill:
+Inside a harness, the same capabilities are requested by skill name:
 `/paper-ingestion`, `/proposal-deliberation`, `/experimental-deliberation`,
 `/proposal-implementation`, `/experimental-implementation`, `/paper-writing`.
-Y las que no dependen de un dominio — `/kaggle-accounts`, `/remote-execution`,
-`/skill-audit` — hacen de portero, memoria y auditor de lo que envías afuera.
+And the ones that don't depend on a domain — `/kaggle-accounts`,
+`/remote-execution`, `/skill-audit` — act as gatekeeper, memory and auditor of
+what you send out.
 
 ---
 
-## Cómo funciona — el orden
+## How it works — the order
 
-### Paso 1 — Colocar cada PDF en la carpeta según su rol
+### Step 1 — Check that the idea is plausible (`plausibility`)
 
-| Carpeta | Qué va aquí |
+Before there is anything to ingest there is an idea, and this is the step that
+tests it. It needs no PDFs, which is why it comes first: all three stretches work
+from the idea and from what can be found about it.
+
+| Stretch | Runs as | Ends at |
+| --- | --- | --- |
+| **Scout** | the `sota-scout` agent | the pool — 25 candidates with abstracts, in 3 to 5 families, plus the provisional plausibility note |
+| **Constellation** | the `sota-grapher` agent | the single `atlas.html` beside `atlas.json`, with the checker's green run |
+| **Screen** | the `novelty-screener` agent | the plausibility report — graded claims, a ranked top 5, and one closing paragraph on where the proposal stands |
+
+Everything lands in `sota-pool/`, which is ignored like `guidance/`.
+**Nothing here files into `guidance/`**: this step reads the literature, it does
+not collect it. The pool it leaves behind is what `proposal-deliberation` shows
+alongside the mathematics, and its ranked top 5 is what tells the ingestion step
+which PDFs are worth having.
+
+An idea stated in fewer than two sentences is refused before the search starts:
+scouting an unstated idea invents its own question. A claim with no abstract
+passage behind it does not become a planet — a quoteless planet is a drawing.
+
+### Step 2 — Put each PDF in the folder according to its role
+
+| Folder | What goes here |
 |---------|------------|
-| `guidance/paper-guide/` | **Papers guía** — las referencias metodológicas / de estilo. `proposal-deliberation` las carga como contexto al inicio de cada deliberación. |
-| `guidance/reference-papers/` | **Corpus de referencia** — papers de apoyo, ingeridos a Markdown para consulta. No se cargan automáticamente en la deliberación. |
-| `guidance/data-paper/` | **Paper de datos — obligatorio para `experimental-deliberation`.** Describe la base de datos de la investigación y es el **techo**: acota qué se puede afirmar. Una afirmación que los datos no sostienen no es un experimento. Sin esta carpeta poblada, `CREATE_INITIAL_REVISION` no puede arrancar. |
+| `guidance/paper-guide/` | **Guide papers** — the methodological / style references. `proposal-deliberation` loads them as context at the start of each deliberation. |
+| `guidance/reference-papers/` | **Reference corpus** — supporting papers, ingested to Markdown for consultation. They aren't loaded automatically into the deliberation. |
+| `guidance/data-paper/` | **Data paper — mandatory for `experimental-deliberation`.** It describes the research's database and is the **ceiling**: it bounds what can be claimed. A claim the data doesn't support isn't an experiment. Without this folder populated, `CREATE_INITIAL_REVISION` can't start. |
 
-**Las tres carpetas viajan vacías.** Cada una llega a un clon con su `.gitkeep` y nada más: `guidance/*/*` está ignorado, con `!guidance/*/.gitkeep` como única escapatoria. El andamiaje se versiona, los PDFs y su Markdown no. `tests/test_forge_scaffolding.py` deriva las dos mitades —lo que los `profile.ts` declaran como fuente contra lo que git realmente rastrea— y se pone rojo si una carpeta declarada deja de viajar.
+**All three folders travel empty.** Each one arrives in a clone with its `.gitkeep` and nothing more: `guidance/*/*` is ignored, with `!guidance/*/.gitkeep` as the only escape hatch. The scaffolding is versioned, the PDFs and their Markdown are not. `tests/test_forge_scaffolding.py` derives both halves —what the `profile.ts` declare as source against what git actually tracks— and goes red if a declared folder stops travelling.
 
-### Paso 2 — Ingerir los PDFs (PDF → Markdown)
+### Step 3 — Ingest the PDFs (PDF → Markdown)
 
-En **Claude Code**, invocar la skill:
+In **Claude Code**, invoke the skill:
 
 ```
 /paper-ingestion
 ```
 
-(o simplemente pedir: *"ingiere los papers"*). Por cada PDF **suelto**, crea una
-carpeta con el nombre del paper, mueve el PDF adentro y escribe un `<nombre>.md`
-liviano (texto + LaTeX + tablas, con la bibliografía quitada) junto con las
-imágenes de las figuras:
+(or simply ask: *"ingiere los papers"*). For each **loose** PDF, it creates a
+folder with the paper's name, moves the PDF inside and writes a lightweight
+`<name>.md` (text + LaTeX + tables, with the bibliography stripped) together
+with the images of the figures:
 
 ```
 guidance/reference-papers/computers-13-00176-v2-1/
 ├── computers-13-00176-v2-1.pdf
 ├── computers-13-00176-v2-1.md
-└── _page_4_Figure_2.jpeg   (figuras que el .md referencia)
+└── _page_4_Figure_2.jpeg   (figures that the .md references)
 ```
 
-Un **PDF suelto** (directamente en una carpeta raíz) está pendiente; un paper
-que ya está dentro de su carpeta se saltea. Para re-ingerir, borrar la carpeta
-del paper (dejando el PDF suelto) y volver a ejecutar la skill. La configuración
-vive en `papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
+A **loose PDF** (directly in a source root folder) is pending; a paper that's
+already inside its folder is skipped. To re-ingest, delete the paper's folder
+(leaving the PDF loose) and run the skill again. The configuration lives in
+`papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
 
-### Paso 3 — Deliberar sobre una propuesta (`proposal-deliberation`)
+### Step 4 — Deliberate over a proposal (`proposal-deliberation`)
 
-En **Claude Code**, invocar la skill:
+In **Claude Code**, invoke the skill:
 
 ```
 /proposal-deliberation
 ```
 
-En el primer turno carga automáticamente los Markdown de `guidance/paper-guide/`
-como contexto y actúa como tutor matemático. Desde ahí se puede:
+On the first turn it automatically loads the Markdown from `guidance/paper-guide/`
+as context and acts as a mathematics tutor. From there you can:
 
-- describir una idea y pedir una primera versión,
-- pedir ediciones a una propuesta gestionada,
-- ejecutar el ciclo de vida de revisiones gestionadas.
+- describe an idea and ask for a first version,
+- ask for edits to a managed proposal,
+- run the lifecycle of managed revisions.
 
-Las propuestas viven en `proposals/`, una por revisión gestionada
+Proposals live in `proposals/`, one per managed revision
 (`research-concept-rNN.md`).
 
-Cada revisión publicada viaja con su propia constelación: la del SOTA con la
-propuesta adentro, en `proposals/research-concept-rNN.graph.html`, dibujada por
-el mismo visor 3D que el atlas y nombrada desde la revisión. La produce el
-tramo de publicación de la deliberación, a partir de la superposición
-`proposals/research-concept-rNN.sky.json` que se redacta durante la discusión:
-ahí la idea principal, los temas que la propuesta toma de los papers del SOTA,
-su novedad, el problema que resolvería y de tres a cinco conceptos quedan como
-nodos y aristas en vez de como frases. Si esa superposición no existe, el tramo
-lo reporta como pendiente en lugar de dibujar relaciones que nadie acordó.
+Each published revision travels with its own constellation: the SOTA's with the
+proposal inside, in `proposals/research-concept-rNN.graph.html`, drawn by the
+same 3D viewer as the atlas and named from the revision. The deliberation's
+publication stretch produces it, from the `proposals/research-concept-rNN.sky.json`
+overlay written during the discussion: there the main idea, the topics the
+proposal takes from the SOTA papers, its novelty, the problem it would solve and
+three to five concepts remain as nodes and edges instead of as sentences. If
+that overlay doesn't exist, the stretch reports it as pending instead of drawing
+relationships nobody agreed on.
 
-### Paso 4 — Llevar la propuesta a código (`proposal-implementation`)
+### Step 5 — Take the proposal to code (`proposal-implementation`)
 
-En **Claude Code**, invocar la skill:
+In **Claude Code**, invoke the skill:
 
 ```
 /proposal-implementation
 ```
 
-Toma la revisión vigente y la materializa en un repositorio destino, que vive en
-`implementations/` con su propio git y su propio entorno virtual. El flujo tiene
-dos fases separadas:
+It takes the current revision and materializes it in a target repository, which
+lives in `implementations/` with its own git and its own virtual environment. The
+flow has two separate phases:
 
-1. **Estructura.** Si el repo trae contenido, lo lleva al layout y verifica
-   —sin ejecutar nada— que cuadernos, rutas y referencias sigan resolviendo. No
-   audita ni valida el código que ya estaba: es lo que hay, ordenado.
-2. **Materialización.** Solo entonces implementa la matemática y la somete a
-   la escalera de validación.
+1. **Structure.** If the repo comes with content, it moves it to the layout and
+   verifies —without running anything— that notebooks, paths and references
+   still resolve. It doesn't audit or validate the code that was already there:
+   it's what's there, tidied up.
+2. **Materialization.** Only then does it implement the mathematics and subject
+   it to the validation ladder.
 
 ```
 <repo>/
 ├── <Name>/            Notebooks/  Data/  Results/  Models/
-├── src/<Package>/     una implementación por objeto matemático
-├── tests/             smoke · invariantes · sintéticos · auditoría · remedios
+├── src/<Package>/     one implementation per mathematical object
+├── tests/             smoke · invariants · synthetic · audit · remedies
 └── pyproject.toml
 ```
 
-La escalera tiene cinco niveles, del más barato al más caro: **smoke**,
-**invariantes** (cada afirmación de la propuesta anclada a un test),
-**sintéticos** (deterministas, semilla fija), **auditoría** (hallazgos sobre la
-matemática, medidos sobre 200 configuraciones aleatorias) y **remedios** (cada
-corrección propuesta validada con el mismo rigor). Un hallazgo sin remedio
-validado no se reporta.
+The ladder has five levels, from the cheapest to the most expensive: **smoke**,
+**invariants** (each claim of the proposal anchored to a test), **synthetic**
+(deterministic, fixed seed), **audit** (findings about the mathematics, measured
+over 200 random configurations) and **remedies** (each proposed fix validated
+with the same rigour). A finding without a validated remedy isn't reported.
 
-Eso es todo lo que hace falta para usar la forja. Si quieres entender **qué pasa
-adentro** de cada skill —sus pasos, sus piezas, cómo se conectan entre sí y qué
-limitaciones tiene cada una— sigue en [Anatomía de cada
-skill](#anatomía-de-cada-skill). Y para el contrato literal, el `SKILL.md` de cada
-una.
+That's all it takes to use the forge. If you want to understand **what goes on
+inside** each skill —its steps, its pieces, how they connect to each other and
+what limitations each one has— read on in [Anatomy of each
+skill](#anatomía-de-cada-skill). And for the literal contract, each one's
+`SKILL.md`.
 
 ---
 
-## El workspace por dentro
+## Inside the workspace
 
-`papersmith init` crea un directorio autocontenido —sin git inicializado y sin
-tocar tu checkout— con esta forma:
+`papersmith init` creates a self-contained directory —with no git initialized and
+without touching your checkout— with this shape:
 
 ```
-mi-paper/
-├── .papersmith/                 # estado del workspace (config, manifest, ledger)
-│   ├── config.json              #   target y perfil activos, rutas del ledger
-│   ├── manifest.json            #   hashes de todo lo que generó el framework
-│   ├── runs_ledger.jsonl        #   cada corrida despachada, en orden
-│   └── version                  #   versión del framework que lo creó
-├── .claude/agents/              # los diecinueve subagentes (fuente única de verdad)
-├── skills/                      # la copia del kit: las doce skills + _core
-│   └── _core/                   #   los dos motores compartidos (deliberación, implementación)
-├── sections/                    # los diez contratos de sección (viajan CON contenido, como skills/)
+my-paper/
+├── .papersmith/                 # workspace state (config, manifest, ledger)
+│   ├── config.json              #   active target and profile, ledger paths
+│   ├── manifest.json            #   hashes of everything the framework generated
+│   ├── runs_ledger.jsonl        #   every dispatched run, in order
+│   └── version                  #   framework version that created it
+├── .claude/agents/              # the nineteen subagents (single source of truth)
+├── skills/                      # the kit copy: the twelve skills + _core
+│   └── _core/                   #   the two shared engines (deliberation, implementation)
+├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
 ├── guidance/
-│   ├── reference-papers/        # drop-zone: deja aquí los PDFs de referencia
-│   ├── paper-guide/             # papers guía de método y estilo (opcional pero recomendado)
-│   └── data-paper/              # paper de datos (obligatorio para experimental-deliberation)
-├── proposals/                   # revisiones gestionadas, plano: research-concept-rNN.md
-├── paper/                       # el LaTeX del paper (paper-writing lo escribe aquí)
-├── experiments/                 # el protocolo experimental gestionado
-├── implementations/             # repos destino; cada uno con su propio git
-├── kaggle-inbox/                # lo que vuelve de los workers remotos
-├── CLAUDE.md / OPENCODE.md / .agents/AGENTS.md   # routing de harnesses
-├── .pi/APPEND_SYSTEM.md         # routing de harnesses (Pi lo appendea al prompt de sistema)
-├── papersmith.yaml              # configuración del workspace (la tuya, editable)
-├── package.json                 # dependencias Node del workspace (jiti, typebox), la tuya, editable
+│   ├── reference-papers/        # drop-zone: leave your reference PDFs here
+│   ├── paper-guide/             # guiding papers for method and style (optional but recommended)
+│   └── data-paper/              # data paper (mandatory for experimental-deliberation)
+├── proposals/                   # managed revisions, flat: research-concept-rNN.md
+├── paper/                       # the paper's LaTeX (paper-writing writes it here)
+├── experiments/                 # the managed experimental protocol
+├── implementations/             # destination repos; each one with its own git
+├── kaggle-inbox/                # what comes back from the remote workers
+├── CLAUDE.md / OPENCODE.md / .agents/AGENTS.md   # harness routing
+├── .pi/APPEND_SYSTEM.md         # harness routing (Pi appends it to the system prompt)
+├── papersmith.yaml              # workspace configuration (yours, editable)
+├── package.json                 # workspace Node dependencies (jiti, typebox), yours, editable
 ├── requirements.txt
-├── scripts/setup_env.py         # provisión del runtime de ingestión
-└── README.md                    # descripción breve del workspace
+├── scripts/setup_env.py         # ingestion runtime provisioning
+└── README.md                    # brief description of the workspace
 ```
 
-Cada carpeta de investigación (`guidance/*/`, `proposals/`, `paper/`, `experiments/`,
-`implementations/`) llega vacía, con su propio `.gitkeep`: el `.gitignore` del
-workspace aplica la misma regla que este repositorio se aplica a sí mismo —la
-carpeta se versiona, el contenido nunca.
+Every research folder (`guidance/*/`, `proposals/`, `paper/`, `experiments/`,
+`implementations/`) arrives empty, with its own `.gitkeep`: the workspace's
+`.gitignore` applies the same rule this repository applies to itself —the
+folder is versioned, the content never is.
 
-### `papersmith.yaml` — la configuración que sí vas a tocar
+### `papersmith.yaml` — the configuration you will actually touch
 
-El archivo viene con tres targets de ejemplo y tres perfiles de ejecución. Los
-targets declaran **dónde** corre el trabajo; los perfiles, **qué** se corre y
-cómo se reparte:
+The file comes with three example targets and three execution profiles. The
+targets declare **where** the work runs; the profiles, **what** runs and how
+it is split up:
 
 ```yaml
 compute_targets:
@@ -441,85 +465,84 @@ execution_profiles:
 
 paper_ingestion:
   engine: marker
-  mode: fast            # fast (CPU) | balanced (GPU, máxima fidelidad)
+  mode: fast            # fast (CPU) | balanced (GPU, maximum fidelity)
   strip_references: true
   source_base: guidance
 ```
 
-El target y el perfil activos viven en `.papersmith/config.json`; `papersmith
-target set` los cambia. El bloque `paper_ingestion` lo posee la skill de
-ingestión y el orquestador lo trata como opaco (editalo con la skill, no a
-mano).
+The active target and profile live in `.papersmith/config.json`; `papersmith
+target set` changes them. The `paper_ingestion` block is owned by the ingestion
+skill and the orchestrator treats it as opaque (edit it with the skill, not by
+hand).
 
-### Qué se versiona y qué no
+### What is versioned and what is not
 
-El contrato de preservación de `papersmith upgrade` es explícito: nunca toca
+`papersmith upgrade`'s preservation contract is explicit: it never touches
 `guidance/`, `proposals/`, `paper/`, `experiments/`, `implementations/`,
 `kaggle-inbox/`, `papersmith.yaml`, `package.json`, `README.md`
-ni los archivos `.env*`. Todo lo demás es andamiaje del framework y `upgrade`
-lo sincroniza —con `--force` si hace falta— dejando tus artefactos intactos.
+nor the `.env*` files. Everything else is framework scaffolding and `upgrade`
+syncs it —with `--force` if needed— leaving your artifacts intact.
 
-En este repositorio la misma regla vale para Git: el andamiaje se versiona, el
-contenido no. Las carpetas de investigación viajan con su `.gitkeep` y nada
-más; `guidance/` versiona las carpetas y nunca los PDFs ni el Markdown
-ingerido. `sota-pool/` sigue el mismo contrato: la carpeta viaja, y el
-`candidates.json`, el `atlas.json` y el `atlas.html` —que inlinea el visor 3D
-completo— se quedan en la máquina que los produjo.
+In this repository the same rule holds for Git: the scaffolding is versioned,
+the content is not. Research folders travel with their `.gitkeep` and nothing
+else; `guidance/` versions the folders and never the PDFs nor the ingested
+Markdown. `sota-pool/` follows the same contract: the folder travels, and
+`candidates.json`, `atlas.json` and `atlas.html` —which inlines the full 3D
+viewer— stay on the machine that produced them.
 
-Preservar, eso sí, no es migrar. No tocar un artefacto lo protege mientras su
-forma no cambie; el día que un release la cambia, hace falta algo que lo lleve
-hasta ella. Eso es trabajo de las [migraciones de
-artefactos](#migraciones-de-artefactos), y es también la razón por la que
-`.papersmith/version` dejó de avanzar por el solo hecho de haber copiado
-archivos.
+Preserving, mind you, is not migrating. Not touching an artifact protects it while
+its shape does not change; the day a release changes that shape, something is
+needed to carry it up to it. That is the job of [artifact
+migrations](#migraciones-de-artefactos), and it is also the reason
+`.papersmith/version` stopped advancing just because files had been copied.
 
-### El estado: `.papersmith/`
+### The state: `.papersmith/`
 
-- **`manifest.json`** guarda el hash de cada archivo generado. `papersmith
-  audit --check-drift` compara contra el disco y nombra lo que se desvió; la
-  reparación es `papersmith upgrade`, nunca una edición a mano.
-- **`runs_ledger.jsonl`** es append-only: cada corrida de `papersmith run` que
-  se despacha queda registrada con su target, su perfil y su resultado.
-- **`config.json`** guarda el target activo, el perfil activo y las rutas de
-  configuración del ledger.
-- **`migrations.json`** registra qué migraciones de artefactos atadas a una
-  versión ya se aplicaron, para que `upgrade` no las repita. Las de
-  convergencia nunca se anotan: no terminan nunca. Si el archivo se daña,
-  `upgrade` se niega y `status` lo reporta; no lo edites a mano.
-- **`version`** es la versión que el workspace declara para sus **artefactos**,
-  no para sus archivos. De los dos marcadores es el que se queda atrás cuando
-  una migración falla, y por eso `status` puede decir que el workspace todavía
-  no llegó al release instalado.
+- **`manifest.json`** stores the hash of every generated file. `papersmith
+  audit --check-drift` compares against the disk and names what drifted; the
+  repair is `papersmith upgrade`, never a hand edit.
+- **`runs_ledger.jsonl`** is append-only: every `papersmith run` that gets
+  dispatched is recorded with its target, its profile and its result.
+- **`config.json`** stores the active target, the active profile and the ledger's
+  configuration paths.
+- **`migrations.json`** records which version-tied artifact migrations have
+  already been applied, so that `upgrade` does not repeat them. Convergence
+  ones are never recorded: they never end. If the file gets damaged,
+  `upgrade` refuses and `status` reports it; do not edit it by hand.
+- **`version`** is the version the workspace declares for its **artifacts**,
+  not for its files. Of the two markers it is the one that lags behind when
+  a migration fails, and that is why `status` can say the workspace has not
+  yet reached the installed release.
 
 ---
 
-## Harnesses y proyección de skills
+## Harnesses and skill projection
 
-`skills/` en la raíz del repositorio es la **fuente única de verdad**. Cada
-harness lee skills desde su propia carpeta, así que el script de proyección
-enlaza el árbol canónico en cada una con enlaces **relativos** e idempotentes:
-correrlo de nuevo converge al mismo layout y el checkout sigue siendo
-relocalizable.
+`skills/` at the repository root is the **single source of truth**. Each
+harness reads skills from its own folder, so the projection script symlinks
+the canonical tree into each one with **relative** and idempotent symlinks:
+running it again converges to the same layout and the checkout stays
+relocatable.
 
 ```bash
 npm run setup:harnesses      # = bash scripts/setup-harnesses.sh
 ```
 
-| Harness | Dónde lee las skills | Documento de routing (workspace) |
-|---------|----------------------|-----------------------------------|
+| Harness | Where it reads skills from | Routing document (workspace) |
+|---------|----------------------------|-------------------------------|
 | Claude Code | `.claude/skills/` | `CLAUDE.md` |
 | Pi | `.pi/skills/` | `.pi/APPEND_SYSTEM.md` |
 | OpenCode | `.opencode/skills/` | `OPENCODE.md` |
 | Google Antigravity | `.agents/skills/` | `.agents/AGENTS.md` |
 
-### Qué cablea cada harness
+### What each harness wires
 
-`papersmith init` y `papersmith upgrade` generan, por cada harness que declara el
-workspace, lo que muestra esta tabla. Es la misma matriz que
-`HARNESS_CAPABILITIES` en `src/papersmith/generators.py`, y un test
-(`tests/test_harness_parity.py`) verifica que ambas coincidan. `wired` es lo que
-se genera; `unsupported` es lo que no se genera; `opt-in` es lo que sólo se
-documentas y activas tú.
+`papersmith init` and `papersmith upgrade` generate, for each harness the
+workspace declares, what this table shows. It is the same matrix as
+`HARNESS_CAPABILITIES` in `src/papersmith/generators.py`, and a test
+(`tests/test_harness_parity.py`) verifies that both match. `wired` is what
+gets generated; `unsupported` is what does not get generated; `opt-in` is
+only documented, and you enable it yourself.
 
 <!-- harness-capabilities:start -->
 | Harness | Skills | Comandos | Agentes | Plugins / guards |
@@ -530,128 +553,127 @@ documentas y activas tú.
 | Google Antigravity | wired | unsupported — vía skills (workflows deprecados) | wired (`.agents/agents`) | unsupported |
 <!-- harness-capabilities:end -->
 
-Al terminar, `init` y `upgrade` imprimen una línea por harness activo con el
-estado de cada capacidad (`wired`, `unsupported`, `failed` o `blocked`) y agregan
-la clave `wiring` a su resultado. Si un enlace de skills no se pudo crear, o hay
-un directorio real donde iría el enlace, lo informan como advertencia (`failed` /
-`blocked`) en lugar de omitirlo en silencio.
+When it finishes, `init` and `upgrade` print one line per active harness with
+the state of each capability (`wired`, `unsupported`, `failed` or `blocked`) and
+add the `wiring` key to its result. If a skill symlink could not be created, or
+there is a real directory where the symlink would go, they report it as a warning
+(`failed` / `blocked`) instead of silently omitting it.
 
-Lo que la tabla no promete:
+What the table does not promise:
 
-- **Pi:** los agentes de `.pi/agents` sólo los lee el paquete de terceros
-  `pi-subagents`; el núcleo de Pi no tiene subagentes. Sin ese paquete, los
-  archivos existen pero nadie los usa.
-- **Claude Code:** el guard es opt-in. Papersmith nunca escribe ni mezcla
-  `.claude/settings.json`; el fragmento para activarlo está en
+- **Pi:** the agents in `.pi/agents` are only read by the third-party package
+  `pi-subagents`; the Pi core has no subagents. Without that package, the
+  files exist but nobody uses them.
+- **Claude Code:** the guard is opt-in. Papersmith never writes or merges
+  `.claude/settings.json`; the snippet to enable it is in
   [`docs/guard-hooks.md`](docs/guard-hooks.md).
-- **Antigravity:** no hay guard hasta que se obtenga el esquema de entrada de sus
-  hooks (`.agents/hooks.json`).
-- **Antigravity, comandos:** no se generan archivos de comandos. Su único
-  mecanismo de slash commands, los workflows, está deprecado a favor de skills
-  (retiro 2026-11-01) y la ruta de workspace de los workflows no está verificada
-  (`.agents/workflows` es una suposición). Las skills ya funcionan como
-  `/<skill-name>` a través de `.agents/skills`, así que todas siguen invocables
-  como comandos.
-- **Antigravity, sólo ubicaciones documentadas:** `.antigravity/rules.md` y
-  `.antigravity/skills` ya no se generan. Antigravity usa `.agents/skills`,
-  `.agents/agents/` y `.agents/AGENTS.md` (texto plano, sin frontmatter). Los
-  workspaces existentes no se migran: ejecuta `papersmith init` en un workspace
-  nuevo.
+- **Antigravity:** there is no guard until its hooks' input schema is obtained
+  (`.agents/hooks.json`).
+- **Antigravity, commands:** no command files are generated. Its only
+  slash-command mechanism, workflows, is deprecated in favor of skills
+  (retirement 2026-11-01) and the workflows' workspace path is not verified
+  (`.agents/workflows` is an assumption). Skills already work as
+  `/<skill-name>` through `.agents/skills`, so all of them stay invocable
+  as commands.
+- **Antigravity, documented locations only:** `.antigravity/rules.md` and
+  `.antigravity/skills` are no longer generated. Antigravity uses `.agents/skills`,
+  `.agents/agents/` and `.agents/AGENTS.md` (plain text, no frontmatter). Existing
+  workspaces are not migrated: run `papersmith init` in a new workspace.
 
-#### Matriz de soporte verificada
+#### Verified support matrix
 
-Resumen de [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md),
-leída contra la documentación de cada herramienta el 2026-10-02. Es lo que la
-herramienta documenta, no lo que Papersmith genera (eso es la tabla de arriba).
-`unverified` significa que no se leyó una fuente primaria.
+Summary of [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md),
+read against each tool's documentation on 2026-10-02. It is what the
+tool documents, not what Papersmith generates (that is the table above).
+`unverified` means no primary source was read.
 
-| Harness | Skills | Comandos | Agentes | Plugins / hooks | MCP / config | Fuentes (2026-10-02) |
-|---------|--------|----------|---------|-----------------|--------------|----------------------|
+| Harness | Skills | Commands | Agents | Plugins / hooks | MCP / config | Sources (2026-10-02) |
+|---------|--------|----------|--------|-----------------|--------------|----------------------|
 | OpenCode | supported: `.opencode/skills` | supported: `.opencode/commands` | supported: `.opencode/agents` | supported: `.opencode/plugins/` | supported: `opencode.json` | <https://opencode.ai/docs/skills/>, <https://opencode.ai/docs/commands/>, <https://opencode.ai/docs/agents/>, <https://opencode.ai/docs/plugins/>, <https://opencode.ai/docs/config/> |
-| Pi | supported: `.pi/skills`, `.agents/skills` | supported: `.pi/prompts/*.md` | unsupported en el núcleo; sólo de terceros (`.pi/agents`, `pi-subagents`) | supported: `.pi/extensions/` | supported: `.pi/mcp.json` | <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/prompt-templates.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md>, <https://github.com/nicobailon/pi-subagents/blob/main/docs/agents.md> |
-| Google Antigravity | supported: `.agents/skills` | supported pero deprecado (workflows); ruta `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (esquema de entrada unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
-| Claude Code | supported: `.claude/skills` | supported (formato legado): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith nunca lo escribe) | supported: `.mcp.json` (Papersmith no lo genera) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
+| Pi | supported: `.pi/skills`, `.agents/skills` | supported: `.pi/prompts/*.md` | unsupported in the core; third-party only (`.pi/agents`, `pi-subagents`) | supported: `.pi/extensions/` | supported: `.pi/mcp.json` | <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/prompt-templates.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md>, <https://github.com/nicobailon/pi-subagents/blob/main/docs/agents.md> |
+| Google Antigravity | supported: `.agents/skills` | supported but deprecated (workflows); path `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (input schema unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
+| Claude Code | supported: `.claude/skills` | supported (legacy format): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith never writes it) | supported: `.mcp.json` (Papersmith does not generate it) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
 
-- `.antigravity/skills` y `.antigravity/rules.md`: unsupported (no source found)
-  y ya no se generan; Antigravity usa `.agents/skills`, `.agents/agents/` y
+- `.antigravity/skills` and `.antigravity/rules.md`: unsupported (no source found)
+  and no longer generated; Antigravity uses `.agents/skills`, `.agents/agents/` and
   `.agents/AGENTS.md`.
-- Antigravity deprecó los workflows a favor de skills (2026-11-01, fuente:
+- Antigravity deprecated workflows in favor of skills (2026-11-01, source:
   <https://antigravity.google/docs/ide/workflows>).
-- Pi: los nombres de herramienta `mcp` y `mcpScript` no tienen fuente
+- Pi: the tool names `mcp` and `mcpScript` have no source
   (unsupported, no source found).
-- Las docs de estas herramientas cambian rápido; vuelve a verificar una celda antes
-  de apoyarte en ella después de esa fecha.
+- The docs of these tools change fast; re-verify a cell before
+  relying on it after that date.
 
-Las fuentes de cada celda están en
+The sources of each cell are in
 [`docs/harness-support-matrix.md`](docs/harness-support-matrix.md).
 
-Dentro de un **workspace** generado, la historia es ligeramente distinta y
-conviene saberlo: el workspace embarca el árbol `skills/` completo y el de
-agentes (`.claude/agents/`), y sus routing docs apuntan al árbol canónico
-`skills/*/SKILL.md`. Los documentos de routing son generated projections: la
-fuente real de cada agente es `.claude/agents/*.md` y la de cada skill es su
-`SKILL.md`. No edites las proyecciones a mano; se regeneran (y
-`papersmith audit --check-drift` avisa si una se desvió). `init` y `upgrade` generan un comando slash por skill
-en `.claude/commands/`, `.opencode/commands/` y `.pi/prompts/`; Antigravity no
-recibe archivos de comandos y lee las skills por sus enlaces. Los agentes se
-proyectan desde `.claude/agents/` a `.opencode/agents/`, `.pi/agents/` y
-`.agents/agents/`. Para que tu harness
-liste las skills como comandos `/`, ejecuta `npm run setup:harnesses` dentro del
-workspace: enlaza el árbol embarcado en `.claude/skills`, `.pi/skills`,
-`.opencode/skills` y `.agents/skills`, igual de relativo e idempotente que
-en el checkout. En este checkout, las proyecciones de comandos slash
-(`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`), las proyecciones de agentes
-(`.opencode/agents/`, `.pi/agents/`, `.agents/agents/`) y los guards de OpenCode y Pi
-se sincronizan con `python scripts/sync-repo-harness.py` (`--check` para CI; no
-tiene script en `package.json` porque el kit lo embarca y el script es sólo del
-repo).
+Inside a generated **workspace**, the story is slightly different and
+worth knowing: the workspace ships the full `skills/` tree and the agent
+tree (`.claude/agents/`), and its routing docs point at the canonical tree
+`skills/*/SKILL.md`. The routing documents are generated projections: the
+real source of each agent is `.claude/agents/*.md` and the source of each skill is its
+`SKILL.md`. Do not edit the projections by hand; they regenerate (and
+`papersmith audit --check-drift` warns if one drifted). `init` and `upgrade` generate one slash command per skill
+in `.claude/commands/`, `.opencode/commands/` and `.pi/prompts/`; Antigravity does not
+receive command files and reads skills through its symlinks. Agents are
+projected from `.claude/agents/` to `.opencode/agents/`, `.pi/agents/` and
+`.agents/agents/`. For your harness to
+list the skills as `/` commands, run `npm run setup:harnesses` inside the
+workspace: it symlinks the shipped tree into `.claude/skills`, `.pi/skills`,
+`.opencode/skills` and `.agents/skills`, just as relative and idempotent as
+in the checkout. In this checkout, the slash command projections
+(`.claude/commands/`, `.opencode/commands/`, `.pi/prompts/`), the agent projections
+(`.opencode/agents/`, `.pi/agents/`, `.agents/agents/`) and the OpenCode and Pi guards
+are synced with `python scripts/sync-repo-harness.py` (`--check` for CI; it
+has no script in `package.json` because the kit ships it and the script is
+repo-only).
 
 ---
 
-## Los agentes
+## The agents
 
-Un workspace trae **diecinueve subagentes** en `.claude/agents/`. No son
-reemplazos del CLI: son tiradas cortas de trabajo que tu harness lanza (por
-ejemplo, con la Task tool) cuando se lo pides. La forma es siempre la
-misma — **una tirada entre dos compuertas del operador**: el agente decide
-nada, pregunta nada, y termina reportando qué encontró y cuánto costó
-establecerlo. Las compuertas las abres y cierras tú.
+A workspace ships **nineteen subagents** in `.claude/agents/`. They are not
+replacements for the CLI: they are short bursts of work your harness launches (for
+example, with the Task tool) when you ask for them. The shape is always the
+same — **one burst between two operator gates**: the agent decides
+nothing, asks nothing, and ends up reporting what it found and how much it cost
+to establish it. You open and close the gates.
 
-| Agente | Para qué entra | Skill que carga |
-|--------|----------------|-----------------|
-| `implementation-build` | Del mapa objeto→módulo aprobado al informe de hallazgos: materializa el scaffolding, escribe un módulo por objeto con su procedencia y sus tests de invariantes, y valida los remedios admitidos. | `proposal-implementation` |
-| `implementation-walk` | Camina el flujo declarado acto por acto, en su orden: corre los pasos locales, registra cada producto y se detiene en el ensayo previo al lanzamiento. No tiene camino para enviar una campaña. | `proposal-implementation` |
-| `deliberation-publish` | Desde que aceptas un cambio hasta que la revisión sucesora queda publicada y vigente — la única forma en que la matemática viaja. La deliberación en sí no está aquí: solo tú la cierras. | `proposal-deliberation` |
-| `experimental-publish` | Lo mismo que `deliberation-publish`, sobre el documento de experimentos. | `experimental-deliberation` |
-| `experimental-validation` | La etapa `validated`: busca el protocolo de evaluación del área —métricas, baselines, dataset, semillas, test de significancia—, verifica cada baseline contra su repo y su venue, y fecha cada URL que usa. | `experimental-deliberation` |
-| `experiments-build` | Del mapa aprobado de pasos del protocolo a comandos ejecutables: materializa lo que haga falta, cablea cada paso e instrumenta cada medición para que se pueda correr y leer. | `experimental-implementation` |
-| `experiments-walk` | La caminata del protocolo, con las mismas compuertas y el mismo alto en el ensayo. | `experimental-implementation` |
-| `paper-ingestion` | Convierte un paper a la forma en que se puede usar de verdad: ecuaciones LaTeX, tablas como tablas, figuras como archivos. Etapas: `filed`, `extracted`, `readable`. No le pregunta nada a nadie. | `paper-ingestion` |
-| `contract-auditor` | Lee los `## Disqualifiers` de un contrato, literales, y juzga un bloque borrador contra cada uno: `fires`/`clear`/`undecidable`, con el pasaje citado en cada `fires`. | `paper-writing` |
-| `redactor` | Redacta el LaTeX de un bloque a partir de exactamente cuatro entradas (la prosa del contrato, su evidence set, su modo y su style set) y devuelve un mapa de binding: de dónde sale cada oración. | `paper-writing` |
-| `style-sampler` | Resuelve el bloque equivalente, completo, en cada carpeta de estilo de `guidance/` y lo devuelve verbatim, nunca recortado. Es la única material que un chequeo de solapamiento puede comparar. | `paper-writing` |
-| `diagram-author` | Escribe un diagrama TikZ standalone (`<id>.tex` + `<id>.diagram.json`) y lo compila en su propio loop, hasta el presupuesto de reparaciones. Nunca dibuja un gráfico a partir de números medidos — eso es el verbo `place`. | `paper-writing` |
-| `figure-auditor` | Compara los componentes declarados en el manifest contra la prosa de la sección y los pasos del pipeline; reporta veredicto estructurado. | `paper-writing` |
-| `insumos-observer` | Lee las cuatro fuentes de entrada declaradas del paper —`proposals/`, `experiments/`, el código del repo destino y sus propias salidas de corrida— y reporta, por cada hecho observable, si se cumple y con qué evidencia. Nunca decide un valor ni corre `declare`. | `paper-writing` |
-| `novelty-screener` | Discute la hipótesis contra los abstracts del pool, califica novedad y plausibilidad con cita exacta —todo provisional— y rankea el top-5 para la ingesta posterior, cerrando con un párrafo de plausibilidad. Diálogo con reporte al final; no publica, no escribe, no ingiere, no delibera. | `plausibility` |
-| `sota-scout` | Rastrea la idea en la literatura abierta —25 referencias con abstracts, cada una en su familia (3 a 5 en el pool)— como `sota-pool/candidates.json`. Termina en el pool; no ingiere ni califica nada final. | `plausibility` |
-| `sota-grapher` | Mapea el pool a su constelación —un sistema solar por paper agrupado por familia, 20 planetas máximo, aristas entre sistemas hermanos— como `atlas.json` más el `atlas.html` único, corriendo checker y renderer hasta el verde. | `plausibility` |
-| `audit-report` | Audita un sujeto que enumera un conjunto cerrado —operaciones, subcomandos, códigos, assets— buscando la brecha entre lo que su código acepta y lo que su documentación promete. Reporta; nunca repara. | `skill-audit` |
+| Agent | What it is for | Skill it loads |
+|-------|----------------|----------------|
+| `implementation-build` | From the approved object→module map to the findings report: materializes the scaffolding, writes one module per object with its provenance and its invariant tests, and validates the admitted remedies. | `proposal-implementation` |
+| `implementation-walk` | Walks the declared flow act by act, in order: runs the local steps, records each product and stops at the rehearsal before launch. It has no path to submit a campaign. | `proposal-implementation` |
+| `deliberation-publish` | From the moment you accept a change until the successor revision is published and in force — the only way the mathematics travels. The deliberation itself is not here: only you close it. | `proposal-deliberation` |
+| `experimental-publish` | The same as `deliberation-publish`, over the experiments document. | `experimental-deliberation` |
+| `experimental-validation` | The `validated` stage: it looks for the area's evaluation protocol —metrics, baselines, dataset, seeds, significance test—, verifies each baseline against its repo and its venue, and dates every URL it uses. | `experimental-deliberation` |
+| `experiments-build` | From the approved map of protocol steps to executable commands: materializes whatever is needed, wires each step and instruments each measurement so that it can be run and read. | `experimental-implementation` |
+| `experiments-walk` | The walk of the protocol, with the same gates and the same stop at the rehearsal. | `experimental-implementation` |
+| `paper-ingestion` | Turns a paper into the form in which it can really be used: LaTeX equations, tables as tables, figures as files. Stages: `filed`, `extracted`, `readable`. It asks nobody anything. | `paper-ingestion` |
+| `contract-auditor` | Reads the `## Disqualifiers` of a contract, literally, and judges a draft block against each one: `fires`/`clear`/`undecidable`, with the passage quoted in each `fires`. | `paper-writing` |
+| `redactor` | Writes the LaTeX of a block from exactly four inputs (the contract's prose, its evidence set, its mode and its style set) and returns a binding map: where each sentence comes from. | `paper-writing` |
+| `style-sampler` | Resolves the equivalent block, complete, in each style folder of `guidance/` and returns it verbatim, never trimmed. It is the only material an overlap check can compare. | `paper-writing` |
+| `diagram-author` | Writes a standalone TikZ diagram (`<id>.tex` + `<id>.diagram.json`) and compiles it in its own loop, up to the repair budget. It never draws a chart from measured numbers — that is the `place` verb. | `paper-writing` |
+| `figure-auditor` | Compares the components declared in the manifest against the section's prose and the pipeline steps; reports a structured verdict. | `paper-writing` |
+| `insumos-observer` | Reads the paper's four declared input sources —`proposals/`, `experiments/`, the destination repo's code and its own run outputs— and reports, for each observable fact, whether it holds and with what evidence. It never decides a value nor runs `declare`. | `paper-writing` |
+| `novelty-screener` | Discusses the hypothesis against the pool's abstracts, grades novelty and plausibility with an exact citation —all provisional— and ranks the top-5 for later ingestion, closing with a plausibility paragraph. Dialogue with a report at the end; it does not publish, does not write, does not ingest, does not deliberate. | `plausibility` |
+| `sota-scout` | Tracks the idea across the open literature —25 references with abstracts, each in its family (3 to 5 in the pool)— as `sota-pool/candidates.json`. It ends in the pool; it does not ingest nor finally grade anything. | `plausibility` |
+| `sota-grapher` | Maps the pool to its constellation —one solar system per paper grouped by family, 20 planets maximum, edges between sibling systems— as `atlas.json` plus the single `atlas.html`, running checker and renderer until green. | `plausibility` |
+| `audit-report` | Audits a subject that enumerates a closed set —operations, subcommands, codes, assets— looking for the gap between what its code accepts and what its documentation promises. It reports; it never repairs. | `skill-audit` |
 
-Tres reglas que ordenan todo lo demás:
+Three rules that order everything else:
 
-- **La fuente de verdad es `.claude/agents/`.** Los routing docs de cada
-  harness (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
-  `.agents/AGENTS.md`) listan
-  a los diecinueve enteros, y se generan: si quieres cambiar un agente, se cambia
-  ahí, no en la proyección.
-- **Cada agente declara la skill que carga** (`skills/<nombre>/SKILL.md`), y esa
-  atadura se verifica: un agente que apunte a una skill que el workspace no
-  embarca no llega.
-- **Algunos agentes no son invocados por ningún camino de código**
-  (`contract-auditor`, `redactor`, `style-sampler`): los lanzas tú, y es el
-  verbo `write` el que juzga lo que devuelven — nunca confía en tu relato ni en
-  el borrador por sí solos.
+- **The source of truth is `.claude/agents/`.** Each harness's routing docs
+  (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
+  `.agents/AGENTS.md`) list
+  all nineteen, and they are generated: if you want to change an agent, you change it
+  there, not in the projection.
+- **Each agent declares the skill it loads** (`skills/<name>/SKILL.md`), and that
+  binding is verified: an agent that points at a skill the workspace does not
+  ship does not get there.
+- **Some agents are not invoked by any code path**
+  (`contract-auditor`, `redactor`, `style-sampler`): you launch them, and it is the
+  `write` verb that judges what they return — it never trusts your account nor the
+  draft on their own.
 
 ---
 
@@ -2973,7 +2995,7 @@ imprime nada, para no ensuciar una salida que otro programa está leyendo.
 Crea `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
 más la copia del kit y su manifest. La forma completa del árbol está en
-[El workspace por dentro](#el-workspace-por-dentro).
+[El workspace por dentro](#inside-the-workspace).
 
 ### `papersmith upgrade [<dir>]`
 
@@ -3464,7 +3486,7 @@ ensayos baratos. Bajala en orden; no la saltees:
 5. Solo entonces, la corrida real (`--consent <token>` cuando corresponda).
 
 Los targets y los perfiles son los de tu `papersmith.yaml` (ver
-[El workspace por dentro](#el-workspace-por-dentro)). El ledger
+[El workspace por dentro](#inside-the-workspace)). El ledger
 `.papersmith/runs_ledger.jsonl` es append-only: cada corrida despachada queda
 registrada con su target, su perfil y su resultado. Y `papersmith remote
 status` / `pull` es la memoria de lo que se mandó afuera y lo que volvió — el
