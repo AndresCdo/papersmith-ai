@@ -3156,13 +3156,14 @@ adopta con `ADOPT_INITIAL_REVISION`.
 
 ```bash
 papersmith deliberate . --action status
-papersmith deliberate . --action init
+papersmith deliberate . --action init --instruction "Primera oración. Segunda oración."
+papersmith deliberate . --action adopt --revision borrador.md --instruction "Adoptar como v1."
 papersmith deliberate . --request-file request.json
 ```
 
 | Flag | Efecto |
 |------|--------|
-| `--action ACTION` | Operación real del motor (`status`, `init`, sucesoras…) o alias soportado |
+| `--action ACTION` | Operación real del motor (`status`, `init`, `adopt`, sucesoras…) o alias soportado |
 | `--request JSON` / `--request-file FILE` | Objeto JSON crudo / archivo que lo contiene |
 | `--serve` | Modo persistente por JSON-lines |
 | `--revision FILE` | Archivo fuente gestionado al que aplica la operación |
@@ -3174,6 +3175,16 @@ papersmith deliberate . --request-file request.json
 
 Corre el motor de deliberación determinista y verificado por AST, keyless y
 local (ninguna operación de estado llama a un modelo).
+
+`--action adopt` es `ADOPT_INITIAL_REVISION`: convierte en v1 un `.md` no
+gestionado de `proposals/`, nombrado con `--revision`, y como toda operación
+salvo `status` y `resolve` exige `--instruction`. El puente no tiene
+`--dry-run`; la vista previa de `init` o `adopt` se pide con `--request` y
+`"dryRun": true`, que el puente pasa tal cual al motor:
+
+```bash
+papersmith deliberate . --request '{"operation":"ADOPT_INITIAL_REVISION","sourceFilename":"borrador.md","instruction":"Adoptar como v1.","dryRun":true}'
+```
 
 ### `papersmith implement [<dir>]`
 

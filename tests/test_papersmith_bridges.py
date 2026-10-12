@@ -6,6 +6,8 @@ import argparse
 import ast
 import contextlib
 import io
+import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -220,6 +222,54 @@ class BridgesTests(unittest.TestCase):
         request = {"operation": "STATUS", "sourceFilename": "note.md"}
         args = _deliberation_args(request='{"operation":"STATUS","sourceFilename":"note.md"}', action=None)
         assert deliberation.build_request(args) == request
+
+    def test_adopt_alias_names_the_source_it_adopts(self) -> None:
+        expected = {"operation": "ADOPT_INITIAL_REVISION", "sourceFilename": "my-draft.md",
+                    "instruction": "Adopt the draft."}
+        for action in ("adopt", "ADOPT_INITIAL_REVISION"):
+            with self.subTest(action=action):
+                assert deliberation.build_request(_deliberation_args(
+                    action=action, revision="my-draft.md", instruction="Adopt the draft.")) == expected
+
+    def test_adopt_without_a_source_is_refused_before_the_engine(self) -> None:
+        with self.assertRaisesRegex(UserError, "--revision is required for deliberate action adopt"):
+            deliberation.build_request(_deliberation_args(action="adopt", instruction="Adopt the draft."))
+        with self.assertRaisesRegex(UserError, "--instruction is required for deliberate action adopt"):
+            deliberation.build_request(_deliberation_args(action="adopt", revision="my-draft.md"))
+
+    def test_every_engine_operation_is_reachable_by_action(self) -> None:
+        """The operation enum is read from the engine's own schema, never listed
+        here, so an operation added to the engine without a bridge route fails."""
+        source = (ROOT / "skills/_core/deliberation/engine/proposal-workspace.ts").read_text(encoding="utf-8")
+        start = source.index("operation:Type.Optional(StringEnum([")
+        listed = source[start:source.index("]", start)]
+        operations = set(re.findall(r"'([A-Z_]+)'", listed))
+        self.assertIn("ADOPT_INITIAL_REVISION", operations)
+        self.assertEqual(operations - deliberation.REAL_OPERATIONS, set())
+
+    @unittest.skipIf(
+        shutil.which("node") is None or not (ROOT / "node_modules/jiti").is_dir(),
+        reason="Node.js and jiti are required for the keyless engine smoke check",
+    )
+    def test_adopt_action_runs_the_engine_operation_end_to_end(self) -> None:
+        root = self.new_tmp()
+        (root / "skills").symlink_to(ROOT / "skills")
+        (root / "node_modules").symlink_to(ROOT / "node_modules")
+        (root / "proposals").mkdir()
+        draft = "# Sampling under drift\n\n## Setting\n\nA sampler with bounded drift.\n"
+        (root / "proposals" / "my-draft.md").write_text(draft, encoding="utf-8")
+        args = _deliberation_args(action="adopt", revision="my-draft.md",
+                                  instruction="Adopt the draft as v1.", serve=False)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = deliberation.execute(root, args)
+        response = json.loads(out.getvalue())
+        self.assertEqual(code, SUCCESS, out.getvalue())
+        self.assertEqual(response["operation"], "ADOPT_INITIAL_REVISION")
+        self.assertEqual(response["status"], "adopted")
+        written = root / "proposals" / response["targetFilename"]
+        self.assertTrue(written.is_file())
+        self.assertEqual((root / "proposals" / "my-draft.md").read_text(encoding="utf-8"), draft)
 
     def test_deliberation_requires_instruction_for_mutating_alias(self) -> None:
         with self.assertRaisesRegex(UserError, "--instruction is required"):

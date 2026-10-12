@@ -17,6 +17,7 @@ ACTION_OPERATIONS = {
     "resolve": "RESOLVE_TARGET",
     "plan": "RESOLVE_TARGET",
     "init": "CREATE_INITIAL_REVISION",
+    "adopt": "ADOPT_INITIAL_REVISION",
     "successor": "CREATE_SUCCESSOR",
     "materialize": "CREATE_SUCCESSOR",
     "withdraw": "WITHDRAW_REVISION",
@@ -31,6 +32,7 @@ REAL_OPERATIONS = {
     "RESTORE_WITHDRAWN_REVISION",
     "CREATE_SUCCESSOR",
     "CREATE_INITIAL_REVISION",
+    "ADOPT_INITIAL_REVISION",
     "MAINTENANCE",
     "CHAT_DELIBERATION",
     "CLOSE_DELIBERATION",
@@ -70,6 +72,11 @@ def build_request(args) -> dict[str, Any]:
         request["instruction"] = args.instruction
     elif operation not in {"STATUS", "RESOLVE_TARGET"}:
         raise UserError(f"--instruction is required for deliberate action {action}")
+    if operation == "ADOPT_INITIAL_REVISION" and args.revision is None:
+        # Adoption reads an existing document, named by `sourceFilename`; without one
+        # the engine could only refuse.
+        raise UserError(f"--revision is required for deliberate action {action}: "
+                        "the .md file in proposals/ to adopt as v1")
     if args.revision is not None:
         request["sourceFilename"] = args.revision
     if args.query:

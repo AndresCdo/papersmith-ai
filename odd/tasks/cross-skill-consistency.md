@@ -136,7 +136,8 @@ Route legend: D = delegated writer, I = inline.
   Section added (inline: SKILL.md + CHANGELOG).
 - [x] X13 — deliberation refusal `INITIAL_IDEA_SINGLE_SENTENCE` says "Provide a non-empty idea".
   Own message naming the two-sentence requirement (inline: engine + test + CHANGELOG).
-- [ ] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
+- [x] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
+  `--action adopt` added (inline: bridge + test + README + CHANGELOG).
 
 ## Progress / evidence
 
@@ -1072,3 +1073,14 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   instruction-budget files: 27 pass. `npm run setup:harnesses && npm run typecheck`: clean. `npm run test:node`:
   778 pass, 0 fail. No migration.
   Commit: `fix(deliberation): the single-sentence refusal names the two-sentence rule` (the commit carrying this line)
+- X14 (real): `bridges/deliberation.py` `REAL_OPERATIONS` lacked `ADOPT_INITIAL_REVISION`, so `--action adopt` was
+  "unsupported deliberate action"; only raw `--request` reached it. Added alias `adopt` and the operation; `--revision`
+  required for it (refused before the engine). First draft also dropped `--instruction` for adopt; the end-to-end
+  test caught the engine CLI's `INSTRUCTION_REQUIRED` (cli.mjs:349), so `--instruction` stays required. The bridge has
+  no `--dry-run`, so none was added; README documents the raw `--request` with `"dryRun": true` (verified on a
+  scratch workspace: `status: preview`, `mutations: 0`, no file; then `--action adopt`: `adopted`, source kept). README
+  `--action init` example now carries the `--instruction` it needs. Tests in `tests/test_papersmith_bridges.py`:
+  alias shape (2 subtests), missing `--revision`/`--instruction`, engine operation enum (read from
+  `proposal-workspace.ts`) subset of `REAL_OPERATIONS`, end-to-end adopt through `execute`. RED 5 failed with
+  deliberation.py stashed -> GREEN 19 passed. No migration.
+  Commit: `feat(cli): deliberate --action adopt reaches ADOPT_INITIAL_REVISION` (the commit carrying this line)

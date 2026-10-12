@@ -647,6 +647,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   sentences (title and section heading), what ends a sentence, and that
   nothing was written. Both deliberation skills share it.
 
+- **`papersmith deliberate --action adopt` runs `ADOPT_INITIAL_REVISION`.**
+  The bridge listed every engine operation except adoption, so `--action
+  adopt` and `--action ADOPT_INITIAL_REVISION` were refused as unsupported and
+  the operation was reachable only through a raw `--request`. The alias passes
+  `--revision` as `sourceFilename` and, like every operation but `status` and
+  `resolve`, needs `--instruction`; a missing `--revision` is refused before
+  the engine starts. The bridge still has no `--dry-run` flag; the preview is
+  a raw `--request` carrying `"dryRun": true`, which the bridge passes through
+  unchanged (README). A test now reads the engine's operation list and fails
+  if any operation has no bridge route.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1178,6 +1189,10 @@ number is `0`, breaking changes can still arrive without a major bump.
   (`INITIAL_IDEA_SINGLE_SENTENCE`) and `nextAction` (`supply_initial_idea`);
   only the blocker's `message` text changes. An empty idea keeps its old
   message.
+
+- `papersmith deliberate --action adopt` (or `--action ADOPT_INITIAL_REVISION`)
+  now runs adoption instead of refusing it as an unsupported action. Every
+  other action builds the same request as before.
 
 
 ## 0.13.0
