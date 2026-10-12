@@ -98,8 +98,8 @@ Route legend: D = delegated writer, I = inline.
 - Fixture script: `scripts/build-v0_13_0-fixture.py`'s `--under "# Agreed"` comment now says it keeps the
   0.13.0 heading on purpose and that X6/B4 fixed `## Ladder` in 0.14.0 (comment only; fixture not
   regenerated). Commit: `docs(fixture): the 0.13.0 settle workaround comment names the 0.14.0 fix`.
-- X9 — `verify` crashes (traceback, exit 1) when a file under `<Name>/Notebooks/` is not valid JSON:
-  `notebooks_state` calls `notebook_seals(json.loads(...))` unguarded (found in B7). Not fixed.
+- [x] X9 — `verify` crashes (traceback, exit 1) when a file under `<Name>/Notebooks/` is not valid JSON:
+  `notebooks_state` calls `notebook_seals(json.loads(...))` unguarded (found in B7). Fixed; see Progress.
 
 ## Progress / evidence
 
@@ -568,3 +568,18 @@ Route legend: D = delegated writer, I = inline.
 ## Next step
 
 D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+
+- X9 (real; reproduced RED: `verify` exit 1 with a traceback for 4/4 subtests -- `{ not json` at
+  `notebooks_state`'s seal read, `[]` and `"a string"` at `prose_of`'s `.get` on a non-mapping, `\xff\xfe` at a
+  UTF-8 decode). Siblings found by the same derivation: `notebook_execution`, `notebook_sources` and
+  `_notebook_cells` caught the decode errors but crashed on a non-mapping top level. Fix: one shared
+  `read_notebook_document` (UTF-8 JSON with a mapping at the top level, else `None`) used by all four readers;
+  `prose_of` skips a non-mapping document or cell. Fail-closed: the file reads `unreadable`, `sealed: false`,
+  `sourcesMatch: null`, listed in `unsealed`, notebooks `drift`, validation `incomplete`.
+  Route: inline (1 engine file + 1 test + 1 doc). Tests: `ExecutedKitNotebookIsNotDriftTests::
+  test_verify_reports_an_unreadable_notebook_instead_of_crashing` (4 subtests) RED 4F -> GREEN; the B7 test's
+  docstring no longer defers the crash. Domain-lock pins unchanged (comments reworded). Seals unchanged
+  (`test_implementation_seal.py` + `test_experiments_seal.py`: 73 passed). `test_proposal_implementation.py` +
+  `test_experimental_implementation.py` + domain lock: 1935 passed, 2 skipped. Docs: proposal usage.md notebook
+  status table. CHANGELOG Fixed + Behaviour changes. No migration (report-only).
+  Commit: `fix(implementation): verify reports a notebook that is not a notebook instead of crashing` (the commit carrying this line)

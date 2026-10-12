@@ -626,7 +626,12 @@ answerable without running anything:
 | `executed` | every non-empty code cell has an `execution_count` and none raised |
 | `stale` | the file is there but some cells never ran — `unexecuted` lists them |
 | `errored` | a cell raised; `errors` names the cell and the exception |
-| `missing` / `unreadable` / `empty` | no file, unparsable JSON, or no code cells |
+| `missing` / `unreadable` / `empty` | no file, not a notebook document (not UTF-8, not JSON, or JSON whose top level is not an object), or no code cells |
+
+An `unreadable` file is a finding, never a traceback: `verify` and `probe` report
+it with `sealed: false` and `sourcesMatch: null`, list it under `unsealed`, and
+the notebooks verdict reads `drift`, so it never passes for a sealed or current
+report.
 
 `errored` is caught even when the notebook was executed with `--allow-errors`,
 which otherwise writes a red cell and exits zero.

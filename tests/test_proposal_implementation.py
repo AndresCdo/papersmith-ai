@@ -14742,11 +14742,34 @@ class ExecutedKitNotebookIsNotDriftTests(MaterializeCommandFixture, unittest.Tes
         self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
                       structure["scaffoldDrift"])
 
+    def test_verify_reports_an_unreadable_notebook_instead_of_crashing(self):
+        """X9: a file under `<Name>/Notebooks/` that is not a JSON notebook
+        crashed `verify` with a traceback. It is a finding, not a crash, and
+        it stays fail-closed: the notebook reads `unreadable`, never sealed,
+        never current, and both the structure and validation verdicts drift."""
+        box = self._fully_materialized("_nb_verify_unreadable")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        for broken in ("{ not json", "[]", '"a string"', "\xff\xfe"):
+            with self.subTest(broken=broken):
+                self._notebook(box).write_bytes(broken.encode("latin-1"))
+                payload, code, proc = self._run_cli(
+                    "verify", "--target", str(box), "--name", self.NAME)
+                self.assertEqual(code, 0, proc.stderr[-2000:])
+                self.assertIsNotNone(payload, proc.stderr[-2000:])
+                self.assertIn(rel, payload["structure"]["scaffoldDrift"])
+                notebooks = payload["validation"]["notebooks"]
+                report = next(r for r in notebooks["reports"] if r["notebook"] == rel)
+                self.assertEqual(report["status"], "unreadable")
+                self.assertIs(report["sealed"], False)
+                self.assertIsNone(report["sourcesMatch"])
+                self.assertIn(rel, notebooks["unsealed"])
+                self.assertEqual(notebooks["status"], "drift")
+                self.assertEqual(payload["validation"]["status"], "incomplete")
+
     def test_an_unreadable_notebook_is_drift(self):
         """Fail-closed: no source content can be read, so only the full
-        bytes count. Read through the drift reader directly: `verify` as a
-        whole does not yet survive a notebook that is not JSON (recorded
-        separately), which is not what this test is about."""
+        bytes count. Read through the drift reader directly; the whole
+        `verify` payload is pinned by the test above."""
         box = self._fully_materialized("_nb_unreadable")
         rel = f"{self.NAME}/Notebooks/verification.ipynb"
         for broken in ("{ not json", "[]", '{"cells": "x"}',

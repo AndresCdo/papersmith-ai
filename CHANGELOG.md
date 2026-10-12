@@ -370,6 +370,16 @@ number is `0`, breaking changes can still arrive without a major bump.
   ("under a `## X` heading", "the `## X` block") against the v1 the worked
   example actually renders and the profile's change header.
 
+- **`verify` reports a notebook that is not a notebook instead of crashing.**
+  A file under `<Name>/Notebooks/` whose bytes were not UTF-8, were not JSON,
+  or were JSON whose top level is not an object made `verify` (and `probe`)
+  exit with a traceback: the seal check and the prose check read it without
+  the guard the execution check already had, and the execution check itself
+  crashed on a JSON array or string. Every notebook reader now shares one
+  read (`read_notebook_document`). The file is reported as `unreadable`,
+  `sealed: false`, `sourcesMatch: null`, listed under `unsealed`, and the
+  notebooks verdict reads `drift`, so it never passes for a sealed report.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -608,6 +618,11 @@ number is `0`, breaking changes can still arrive without a major bump.
   when the successor names another revision's companion artifact. Receipts
   written by 0.13.0 carry no such key and keep validating on read; no
   existing revision is rewritten and no migration is needed.
+
+- A file under `<Name>/Notebooks/` that is not a JSON notebook object now
+  yields a `verify`/`probe` payload (the notebook `unreadable`, listed under
+  `unsealed`, notebooks verdict `drift`) where 0.13.0 exited 1 with a
+  traceback. Nothing on disk is read differently; no migration is needed.
 
 ## 0.13.0
 

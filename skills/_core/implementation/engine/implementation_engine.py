@@ -1293,11 +1293,16 @@ def prose_of(path: Path) -> list[tuple[int, str]]:
         return list(enumerate(text.splitlines(), 1))
     if path.suffix == ".ipynb":
         try:
-            cells = json.loads(text).get("cells") or []
+            document = json.loads(text)
         except json.JSONDecodeError:
             return []
+        # Valid JSON is not yet a notebook: a top level or a cell that is not
+        # a mapping has no prose to read; `notebook_execution` names the file.
+        cells = document.get("cells") if isinstance(document, dict) else None
         lines = []
-        for cell in cells:
+        for cell in cells if isinstance(cells, list) else []:
+            if not isinstance(cell, dict):
+                continue
             body = "".join(cell.get("source") or [])
             if cell.get("cell_type") == "markdown":
                 lines += list(enumerate(body.splitlines(), 1))
@@ -3568,6 +3573,22 @@ ACQUISITION_PATTERNS = (
 # absence — see `foundNothingFor`.
 
 
+def read_notebook_document(path: Path) -> dict | None:
+    """A notebook file's top-level JSON mapping, or `None` when it has none.
+
+    `None` covers every way the file fails to be a notebook document: bytes
+    that are not UTF-8, text that is not JSON, JSON with a list or a scalar at
+    the top level, and a file that cannot be read. Every reader below shares
+    this one answer, so a single malformed `.ipynb` reads the same to each of
+    them and never ends in a traceback from whichever reaches it first.
+    """
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None
+    return document if isinstance(document, dict) else None
+
+
 def notebook_sources(path: Path) -> list[str]:
     """The code cells of a notebook, as plain text.
 
@@ -3575,11 +3596,8 @@ def notebook_sources(path: Path) -> list[str]:
     other source rather than counted as documentation. A cell may hold shell magics
     that no parser accepts, so callers treat this as text and parse what they can.
     """
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-        return []
-    cells = document.get("cells")
+    document = read_notebook_document(path)
+    cells = document.get("cells") if document is not None else None
     if not isinstance(cells, list):
         return []
     sources = []
@@ -6519,11 +6537,8 @@ def _dotted_calls(source: str) -> list[str]:
 
 
 def _notebook_cells(path: Path) -> list[dict]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return []
-    cells = document.get("cells")
+    document = read_notebook_document(path)
+    cells = document.get("cells") if document is not None else None
     return cells if isinstance(cells, list) else []
 
 
@@ -8342,10 +8357,10 @@ def notebook_execution(path: Path) -> dict:
     if not path.exists():
         return {"status": "missing", "codeCells": 0, "unexecuted": [],
                 "errors": [], "executedBy": None}
-    try:
-        notebook = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return {"status": "unreadable", "detail": str(exc)[:160],
+    notebook = read_notebook_document(path)
+    if notebook is None:
+        return {"status": "unreadable",
+                "detail": "not a notebook document: UTF-8 JSON with a mapping at the top level",
                 "codeCells": 0, "unexecuted": [], "errors": [],
                 "executedBy": None}
 
@@ -8794,8 +8809,10 @@ def notebooks_state(target: Path, name: str, package: str) -> dict:
         state["digestScope"] = DIGEST_SCOPE
         # Estático, y antes de que corra nada: `unstamped` mira las SALIDAS y por
         # eso sólo puede hablar de un cuaderno que ya corrió. Éste mira la fuente.
-        state["sealed"] = notebook_seals(json.loads(
-            notebook.read_text(encoding="utf-8")))
+        # A file that is not a notebook document cannot seal: `False`, never a
+        # traceback, so it is named in `unsealed` like one without the seal cell.
+        document = read_notebook_document(notebook)
+        state["sealed"] = document is not None and notebook_seals(document)
         reports.append(state)
     return {
         "sourcesDigest": current,
