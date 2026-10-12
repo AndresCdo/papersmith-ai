@@ -14,23 +14,23 @@ This README is the **complete manual, in English**: installation, the workspace 
 inside, the twelve CLI commands, the twelve skills, the nineteen agents,
 remote compute, development and troubleshooting.
 
-## Índice
+## Contents
 
-1. [Si es tu primera vez](#si-es-tu-primera-vez)
-2. [Flujo de uso — el camino corto](#flujo-de-uso--el-camino-corto)
-3. [Puesta en marcha](#puesta-en-marcha)
-4. [Cómo funciona — el orden](#cómo-funciona--el-orden)
-5. [El workspace por dentro](#el-workspace-por-dentro)
-6. [Harnesses y proyección de skills](#harnesses-y-proyección-de-skills)
-7. [Los agentes](#los-agentes)
-8. [Anatomía de cada skill](#anatomía-de-cada-skill)
-9. [Los comandos del CLI](#los-comandos-del-cli)
-10. [Cómputo remoto, con cuidado](#cómputo-remoto-con-cuidado)
-11. [Arquitectura](#arquitectura)
-12. [Desarrollo y pruebas](#desarrollo-y-pruebas)
-13. [Solución de problemas](#solución-de-problemas)
-14. [Documentación relacionada](#documentación-relacionada)
-15. [Licencia](#licencia)
+1. [If this is your first time](#if-this-is-your-first-time)
+2. [Use flow — the short path](#use-flow--the-short-path)
+3. [Getting started](#puesta-en-marcha)
+4. [How it works — the order](#cómo-funciona--el-orden)
+5. [Inside the workspace](#el-workspace-por-dentro)
+6. [Harnesses and skill projection](#harnesses-y-proyección-de-skills)
+7. [The agents](#los-agentes)
+8. [Anatomy of each skill](#anatomía-de-cada-skill)
+9. [The CLI commands](#los-comandos-del-cli)
+10. [Remote compute, carefully](#cómputo-remoto-con-cuidado)
+11. [Architecture](#arquitectura)
+12. [Development and testing](#desarrollo-y-pruebas)
+13. [Troubleshooting](#solución-de-problemas)
+14. [Related documentation](#documentación-relacionada)
+15. [License](#licencia)
 
 ## Si es tu primera vez
 
