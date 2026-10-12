@@ -138,6 +138,24 @@ Route legend: D = delegated writer, I = inline.
   Own message naming the two-sentence requirement (inline: engine + test + CHANGELOG).
 - [x] X14 — the deliberation bridge has no route to `ADOPT_INITIAL_REVISION` (since 340dc26).
   `--action adopt` added (inline: bridge + test + README + CHANGELOG).
+- [ ] X15 — (found in F, open) experimental-deliberation v1 pastes `proposals/` revisions verbatim, and every managed
+  proposal revision carries the reserved `proposal-workspace:artifact` marker. Since A6, v1 runs the pre-publish
+  validation, so `CREATE_INITIAL_REVISION` is refused `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`
+  (`initial-candidate-limit`) whenever a managed proposal falls inside the source window, which is the normal flow;
+  the message says to repair a source that cannot be repaired. On main the same call created a v1 holding the pasted
+  markers, and no successor could ever be accepted from it (`continuity-source-unowned`). The 0.13.0 fixture's
+  `experiments-smoothing-window-sweep-v01.md` holds 2 pasted markers, so after upgrade its lineage cannot take a
+  successor (preview answers a bare `CANDIDATE_VALIDATION_FAILED`, `nextAction: inspect_error`). Workaround seen in F:
+  `sourceWindowBytes` small enough to leave `proposals/` unread. See "Final verification".
+- [ ] X16 — (found in F, open) on a target both implementation skills share, each skill's aggregate `fidelity.status`
+  is `drift`: a module bound to the other skill's lineage is listed under `staleModules` with "bound to an older
+  revision, but none of its sections moved", while `fidelityByDocument` is `ok` for both documents. Not checked
+  against main.
+- X17 — (found in F, pre-existing on main, verified) a `position` refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2)
+  still creates the empty holder skeleton (`# Agreed` / `## Ladder`).
+- X18 — (found in F) `settle --done --unwitnessed` needs the line to exist already, and placing a new line needs
+  `--about` (a discussion). A scoping decision with no position sequence therefore has no command route to its
+  line, which has to be written by hand at the gate. Not a refusal defect; a documentation gap to triage.
 
 ## Progress / evidence
 
@@ -1084,3 +1102,220 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   `proposal-workspace.ts`) subset of `REAL_OPERATIONS`, end-to-end adopt through `execute`. RED 5 failed with
   deliberation.py stashed -> GREEN 19 passed. No migration.
   Commit: `feat(cli): deliberate --action adopt reaches ADOPT_INITIAL_REVISION` (the commit carrying this line)
+
+## Final verification
+
+Run on 2026-10-12 against `90e5731` (branch head before this commit). The verification worker did not change any
+source, skill, test or doc other than this file. Scratch workspaces were outside the repository.
+
+**Verdict: task F stays open.** Checks 1 and 3 passed. Check 2 drove every stage end to end and showed that none of
+A1–A8 reproduces, but it found two open defects (X15, X16) and two smaller notes (X17 pre-existing, X18 doc gap).
+X15 blocks experimental-deliberation v1 in the normal flow.
+
+### Check 1 — full suites
+
+- `npm run test:node`: 778 tests, 778 pass, 0 fail.
+- `npm run test:py:par`: 6185 passed, 14 skipped, 3 failed. The 3 failures are the known `.venv/bin/python`-absent
+  environment failures: `tests/test_skill_audit.py::NothingWasRepairedTests::test_an_inversion_run_leaves_the_subject_byte_identical`,
+  `tests/test_skill_audit.py::UsageReferenceTests::test_every_documented_invocation_runs` (subtest: the
+  `audit_cli.py inversion ... self-guarded-facts.json` invocation), and
+  `tests/test_cli_paper_e2e.py::TestWiringSmokeWrapper::test_wiring_smoke_script_exits_zero_on_fresh_workspace`.
+- `npm run setup:harnesses && npm run typecheck`: exit 0 (`tsc -p tsconfig.json` clean).
+- `python scripts/sync-repo-harness.py --check`: `harness projection: clean (95 files)`, exit 0.
+- Afterwards `git status --porcelain` was empty and `git diff | grep -c MUTATED` = 0.
+
+### Check 2 — E2E smoke on a fresh `papersmith init` workspace
+
+`papersmith init ws --no-env --no-npm --remote local` (micromamba env `papersmith`, CLI 0.14.0), with
+`PAPERSMITH_ALLOW_DIRTY_KIT` unset and **no `--allow-dirty-kit`**: `Kit source: 0.14.0 at 90e573114b55 (checkout,
+clean)`. The repo's `node_modules` was symlinked in for the deliberation engines. Content was generic: a windowed
+average estimator, one equation `c = d \tag{1}`, experiments E1 and E2.
+
+- **Proposal deliberation.** v1 with `--dry-run` answered `preview`, `dryRun: true`, `mutations: 0`, and no
+  `proposals/*.md` or lock was created. The real call created `...-r01.md`, and its body equals the dry-run markdown.
+  r02 (resolve, preview, accept on one `--serve` process) added `## 1 Estimator` and the equation. r03 adopted the
+  implementation finding by replacing it with `c = e + \kappa`, with the math removal acknowledged. Both receipts
+  record `rationale`/`decider` (C7).
+- **Proposal implementation on `implementations/Smoother`.** `env` gave `excluded: [.venv/, *.egg-info/]` and the
+  tree stayed clean (B5). `plan` then `apply` committed the layout. `materialize` with the old plan was refused
+  `PLAN_STALE`, and the detail says this is expected after `apply` (B5). `plan` again, then `materialize --stage
+  scaffold` gave `materialized`, with `{{REVISION}}`/`{{NAME}}` filled and only step-9 tokens left (C12). `verify`:
+  `fidelity: ok` and `missingProvenance: []` beside the kit seal (A4). `materialize --stage objects --module
+  estimator` wrote `src/Smoother/estimator.py` and `filled` two scaffold files, and `objectGaps: []` (C11, C12).
+  After that came the authored module, findings and tests, `admit` (A1), and `close` (A5).
+- **Experimental deliberation.** v01, v02 adding `## Experiment [exp:E1]` (with `[claims:1]`, a code span, and a
+  parameters table), and v03 adding `## Experiment [exp:E2]` that cites `(Exp. E1)`. All published with audit PASS.
+  v01 needed `sourceWindowBytes: 87` because of X15.
+- **Experimental implementation on the same target.** A per-lineage `__implementation__` mapping (A8), in-package
+  steps `first`/`second` with no prior-work package (A3), a `position` into `Experimental_AGREED.md` beside a
+  populated `AGREED.md` (A2), and a pilot of both steps. Between the steps came `settle`, `position` refresh and
+  commits, as documented.
+- **Workspace.** `papersmith status` reported `Proposal: ...-r03.md (published)` (B2) with empty stderr.
+  `papersmith audit --check-drift` reported `drift: clean` with empty stderr; the notes appear only with `--verbose`
+  (E5).
+
+Per A-item, compared with the original symptom:
+
+- **A1:** `admit --revision r02` gave `admitted`, `introducesNotation: {loose_term: [\kappa]}`, and `verify` read
+  audit `incomplete` with `remediesWithoutValidation: [loose_term]` (open finding, as designed). After r03,
+  `admit --revision r03` gave `admitted`, `adopted: {loose_term: {revision: r03, matched: [c = e + \kappa]}}`, and
+  `verify` read audit `ok`, compatibility `ok`, migration `clear`, and `findingsWithoutEvidence: []`. Before the fix,
+  the successor was ruled inadmissible and the audit never reached `ok`.
+- **A2:** the experimental `position` gave `written` into `Smoother/Experimental_AGREED.md`, and `AGREED.md` was
+  byte-identical. The experimental `verify` lists `siblingHolders: [Smoother/AGREED.md]` and the proposal `verify`
+  lists `siblingHolders: [Smoother/Experimental_AGREED.md]`. The same target on main's engine (`git archive main`)
+  refused `HOLDER_UNDECLARED` and asked to rename the sibling's `AGREED.md`.
+- **A3:** with `comparable: false` and `baselines: []`, `probe` answered `pilot-first` before and after step 1, and
+  `pilot-decisions` with `pilotCompleteness: complete` and 3 placement questions after both steps. Main's engine on
+  the same target answered `nothing-to-compare` with pilot `complete`.
+- **A4:** with a freshly scaffolded `src/Smoother/report_digest.py` present, proposal `verify` gave `fidelity: ok`
+  and `missingProvenance: []`, and experimental `verify` (sibling seal) also gave `missingProvenance: []`.
+- **A5:** on a proposal-only target (no flow declared), `close` gave `closed` with `positionOwed: false`. `settle
+  --done --unwitnessed --reason ...` gave `written` with `unwitnessed: true`. `verify` agreements then read `settled`
+  with `witness.decided: [{text, reason, session: smoke2, at}]`, and the line stays under `unwitnessed`. `close` gave
+  `closed` again. Before the fix, `close` required a position no witness could produce, and a hand tick was the only
+  route to `settled`.
+- **A6:** v1 carrying an inline-code `` `## Results` `` was created. A proposal successor carrying it was accepted
+  (`published`, audit PASS), and so were both experiments successors. Before the fix, the accept turn refused
+  `atx-heading-standalone` after an `awaiting_acceptance` preview. See X15 for the v1 side effect.
+- **A7:** experimental `verify` reads `src/Smoother/sweep.py` with `sections: [E1]` and `experiments: [E1]`, and
+  `fidelityByDocument.experiments` is `ok`. A finding citing `E1` is not ruled absent (`unknownExperiments: []`).
+  `handoff` counts the `(Exp. E1)` prose citation (`citedElsewhere: 1` for remedy `E1`). Before the fix, only
+  `## N` headings and digit citations were read.
+- **A8:** with `revision: {"proposal": r03}`, experimental `verify` (no `--revision`) read `fidelity: unknown`,
+  `latestRevision: null`, `revisionSource: none`, and `fidelityByDocument.proposal` `ok`, never the proposal
+  filename. Proposal `verify` discovered r03. With `{"proposal": r03, "experiments": v03}`, experimental discovered
+  v03 and proposal kept r03. Main's engine crashed on the mapping (`TypeError ... not 'dict'` in
+  `revision_discovery`).
+
+Where a stage could not be driven as first written:
+
+- Experimental v1 refused under the default source window (X15).
+- Experimental `verify` refused `MALFORMED_FINDINGS` until the proposal finding carried `'document': 'proposal'`.
+  This is the documented rule for two documents, and the proposal skill accepts the field. It is a sharing cost, not
+  a defect.
+- `settle` cannot place a witness-less line without a discussion, so it was written by hand at the gate (X18).
+- `materialize --authored src/Smoother/sweep.py` was refused `NOT_A_KIT_DESTINATION`, as E3 documents.
+- No target `pip install` was run, so no notebook was executed and no remote stages were driven.
+- X16 was observed as the aggregate `fidelity: drift` on both skills.
+
+### Check 3 — upgrade of the v0.13.0 fixture
+
+The fixture `tests/fixtures/workspace_v0_13_0/workspace.tar.gz` was extracted to scratch (54 files), and the sha256
+of every file was recorded. Recorded artifacts (first 12 hex characters):
+
+| Artifact | sha256 |
+| --- | --- |
+| `.proposal-deliberation/locks/initial-revision.lock` | `3c8843112212` |
+| `.proposal-deliberation/receipts/...-r01.md.json` / `...-r02.md.json` | `dba823582d0e` / `a0096e169bb1` |
+| `.proposal-deliberation/state/...-r01.md.json` / `...-r02.md.json` | `6001d141e976` / `fd5fd0fa9c76` |
+| `proposals/...-r01.md` / `...-r02.md` (managed revisions) | `700e79af2930` / `9a77371b5e80` |
+| `.experimental-deliberation/locks/initial-revision.lock` | `28f4d7938691` |
+| `.experimental-deliberation/receipts/...-v01.md.json` / `state/...-v01.md.json` | `d02e49cb7ee2` / `c45d6a99344a` |
+| `experiments/experiments-smoothing-window-sweep-v01.md` | `e0ab95884b0a` |
+| `implementations/Smoother/.implementation/materialization.json` (scaffold receipt) | `52d2586b4b8e` |
+| `implementations/Smoother/Smoother/.implementation/position.jsonl` (ledger) | `847fcc1b737c` |
+| `implementations/Smoother/Smoother/AGREED.md` / `Experimental_AGREED.md` (holders) | `5a8e43957fde` / `8de06c4731f9` |
+| `implementations/Smoother/src/Smoother/report_digest.py` (seal) | `c3f00820fae0` |
+| `implementations/Smoother/Smoother/Notebooks/verification.ipynb` | `a9ed76e20844` |
+| `.papersmith/runs_ledger.jsonl` | `e3b0c44298fc` |
+
+- `papersmith upgrade ws --plan-migrations` reported `none; this workspace's artifacts already match the installed
+  release` and wrote nothing. `papersmith upgrade ws` (no `--allow-dirty-kit`) exited 0 with `changed files: 360`
+  and `Kit source: 0.14.0 at 90e573114b55 (checkout, clean)`.
+- Migrations: `REGISTRY` holds exactly two, both convergence (`applies_from=None`): `sota-pool-scaffold` and
+  `atlas-render-refresh`. After the upgrade, `migrations.plan(recorded="0.13.0")` reports both `satisfied`, with
+  pending and undetermined empty. This branch adds no version-gated migration: every shape change in it is additive
+  or reader-side (per-item notes above). The upgrade also wrote `.papersmith/kit-source.json` (D1), converted
+  `.gitignore` to the managed block (D3), and re-rendered the routing docs after the marker moved (X5).
+- Bytes: 50 of 54 files are byte-identical, including every artifact in the table. The 4 changed files are exactly
+  the intended ones: `.gitignore`, `.papersmith/config.json`, `.papersmith/manifest.json`, `.papersmith/version`
+  (`0.13.0` -> `0.14.0`).
+- Still validating: proposal STATUS lists r01/r02 as managed with `latest` r02 and no non-managed files.
+  Experimental STATUS lists v01. Proposal `verify --revision r02` gives `fidelity: ok`, no `scaffoldDrift` or
+  `unrecordedScaffold`, and agreements `open` on `AGREED.md`. Experimental `verify --revision v01` gives `fidelity:
+  ok`, agreements on `Experimental_AGREED.md` with `siblingHolders: [AGREED.md]`, and position `open`. Structure
+  `drift` comes only from the stages the fixture never ran (`objectGaps`, `harnessGaps`, `Results`/`Models` dirs).
+- `papersmith audit --check-drift`: `drift: clean`, rc 0, empty stderr. `papersmith status`: workspace 0.14.0,
+  `Framework drift: none`, `Pending artifact migrations: none`, `Proposal: ...-r02.md (published)`, empty stderr.
+- Note (X15): the fixture's experiments v01 holds pasted proposal markers. A successor preview from it is refused
+  (`CANDIDATE_VALIDATION_FAILED`), as main refused it at accept. The upgrade did not cause this.
+
+### Outcome table
+
+The commit hashes below were cross-checked against `git log main..HEAD` (all 68 branch commits are present). In the
+behaviour-change column, "y" means an existing workspace or caller can notice the change.
+
+| Item | Outcome | Commit(s) | Test file(s) | Behaviour change |
+| --- | --- | --- | --- | --- |
+| A1 | fixed | fe4907c | tests/test_proposal_implementation.py | y — an adopted finding is admissible with `adopted`; audit can reach `ok` |
+| A2 | fixed | b00042f, 3c6207c | tests/test_implementation_domain_profile.py, tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — a sibling's holder is set aside (`siblingHolders`), never `HOLDER_UNDECLARED` |
+| A3 | fixed | 4b2ff0f | tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — `probe` reaches `pilot-first`/`pilot-decisions` with nothing to compare |
+| A4 | fixed | 7804d6d | tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — the unmodified kit seal no longer reads as `missingProvenance` |
+| A5 | fixed | 775850e | tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — `close` owes no position without a flow; `settle --done --unwitnessed` |
+| A6 | fixed (side effect: X15) | 5b8a045 | tests/deliberation-validation-parity.test.mjs, tests/proposal-workspace.test.mjs | y — one verdict at v1/preview/accept; code spans are not headings |
+| A7 | fixed | 446c8da | tests/test_experimental_implementation.py, tests/test_experimental_implementation_mutation.py | y — `[exp:<id>]` headings and `(Exp. <id>)` citations are read |
+| A8 | fixed | 2d046e8 | tests/test_experimental_implementation.py, tests/test_proposal_implementation.py | y — `__implementation__.revision` may map one revision per document label |
+| D1 | fixed | b172941 (prep: 0426dbc) | tests/test_kit_provenance.py, tests/test_papersmith_init.py | y — `kit-source.json` recorded; a dirty kit is refused without `--allow-dirty-kit` |
+| D2 | intended-and-documented | 968b6f0 | none (release policy) | n — support policy written; upgrade, never re-init |
+| D3 | fixed | ec06f30 | tests/test_workspace_gitignore.py | y — engine state ignored; `.gitignore` managed block keeps user lines |
+| D4 | fixed | 445756a | tests/test_plausibility_resolve_cache.py | y — plausibility caches in `sota-pool/`, no `paper/` tree |
+| D5 | fixed | 653219a | tests/test_no_bytecode_in_workspace.py | y — bridged scripts write no `__pycache__` |
+| B1 | fixed | 8bfdb0d | tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — `verify` drift reads labelled sections |
+| B2 | fixed | b77f80b | tests/test_papersmith_status.py | y — `status` stage from the publication receipt (`published`) |
+| B3 | fixed | 62eaac1 | tests/deliberation-heading-target.test.mjs | y — whole-word locus match; level-marked queries name outer sections |
+| B4 | fixed; (c) no un-tick, intended-and-documented | 264e36d | tests/test_proposal_implementation.py | y — `settle` appends chronologically, never inside the block |
+| B5 | fixed; `PLAN_STALE` intended-and-documented | 0079e18 | tests/test_implementation_fresh_target_lifecycle.py | y — `env` writes `.git/info/exclude` entries |
+| B6 | fixed | 029f659 | tests/test_implementation_backend_declaration.py | y — `__backend__` declaration, neutral kit helpers, `env --torch` |
+| B7 | fixed | efa4695 | tests/test_proposal_implementation.py | y — an executed kit notebook is not structure drift |
+| B8 | fixed | c0643cb | tests/test_proposal_implementation.py | y — `attainedLevel` bounded by the aim; may refuse `RUNG_NOT_ATTAINED` |
+| B9 | fixed | f6090c8 | tests/test_papersmith_executor.py | y — `{target}`/`{target_python}` placeholders; `run --implementation` |
+| B10 | fixed | b6c617a | tests/test_proposal_implementation.py | y — the prose check skips engine-written holder structures |
+| B11 | intended-and-documented (+ `reason`/`digestScope` added) | 5e504c3 | tests/test_proposal_implementation.py | y — unmeasured `@step` items carry `reason` and `digestScope` |
+| B12 | fixed | 034e960 | tests/test_proposal_implementation.py | y — cost forecasts carry `parallelism`/`contention`/`basis` |
+| B13 | fixed | e9ba3f1 | tests/deliberation-stale-companion-reference.test.mjs | y — `staleCompanionReferences` on preview, result and receipt |
+| C1 | fixed | ede86c5 | tests/deliberation-instruction-budget.test.mjs | y — `INSTRUCTION_TOO_LONG` on the CLI; `instructionBudget` |
+| C2 | fixed | b07ba2a | tests/deliberation-source-window.test.mjs | y — `sourceWindow` report, warning, `sourceWindowBytes` |
+| C3 | fixed | 0ae70b2 | tests/experimental-deliberation-parameters-table.test.mjs | y — a `Parameter` table may carry values |
+| C4 | fixed (punctuation); heading-from-2nd-sentence and verbatim body intended-and-documented | b67df88 | tests/deliberation-initial-title-derivation.test.mjs | y — v1 headings drop terminal punctuation |
+| C5 | fixed | 340dc26, f95e181 | tests/deliberation-initial-revision-adoption.test.mjs, tests/test_skill_audit.py | y — new `ADOPT_INITIAL_REVISION` |
+| C6 | fixed | 1078390 | tests/deliberation-initial-revision-dry-run.test.mjs | y — `--dry-run` preview for v1 |
+| C7 | fixed | ecc2979 | tests/deliberation-successor-decision-record.test.mjs | y — optional `rationale`/`decider` in successor receipts |
+| C8 | fixed | 4ae80f9 | tests/test_implementation_prose_findings.py | y — `remedy_in_prose` findings defer as `prose-remedy` |
+| C9 | fixed | 2ac5ff2 | tests/test_implementation_empty_ruling.py | y — `admit --no-findings` |
+| C10 | fixed | 0c84f9b | tests/test_implementation_remedy_control.py | y — attribute calls and helpers count as control |
+| C11 | fixed | 0a2d729 | tests/test_implementation_object_stage.py | y — `--module <name>`; no fixed `module.py` gap |
+| C12 | fixed | 26b3c6d | tests/test_implementation_kit_tokens.py | y — `{{NAME}}`/`{{REVISION}}`/`{{MODULE}}` filled |
+| C13 | fixed | bbe6c12 | tests/test_extract_pdf.py | y — `--force-ocr` / `paper_ingestion.force_ocr` |
+| C14 | fixed | 3ae0413 | tests/test_experimental_out_of_scope.py | y — `[out-of-scope:<id>]` subtracted from `untested` |
+| E1 | fixed | c9a3dfa | tests/test_papersmith_bridges.py | y — stderr note on the `materialize` alias; refusal names the direct route |
+| E2 | fixed (docs) | 0736dba | tests/test_holder_name_doc_drift.py | n — docs name `AGREED.md` |
+| E3 | fixed | dd775e2 | tests/test_materialize_sealed_set_doc.py | y — refusal detail lists the accepted paths |
+| E4 | fixed | 8f8424f | tests/test_implementation_walk_commit_template.py | y — `walk --commit-template` |
+| E5 | fixed | b6e0647 | tests/test_papersmith_quiet_reads.py | y — `status`/`audit` quiet; `--verbose` prints notes |
+| E6 | fixed; Crossref abstract limit intended-and-documented | d8ef950, 692d82d, 6122b7a | tests/test_sota_atlas.py, tests/test_paper_resolve.py | y — `check_atlas --pool`; grapher passes it; resolver reads years |
+| E7 | fixed (docs) | c9a3dfa | tests/test_papersmith_bridges.py | n — `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` documented |
+| E8 | fixed (docs) | c9a3dfa | tests/test_papersmith_bridges.py | n — `--session` defined |
+| E9 | fixed (docs) | 04acafc | tests/test_agent_inline_fallback_doc.py | n — inline fallback section in 8 skills |
+| E10 | fixed | 0f8014b | tests/test_papersmith_ingest.py | y — non-PDF refusals name the seeding routes |
+| X1 | fixed | 148526a | tests/deliberation-first-section-delete.test.mjs | y — deleting the first section publishes |
+| X2 | fixed (docs) | bc9eb7c | tests/experimental-deliberation-usage-doc-drift.test.mjs | n — usage names `## Reference Sources` |
+| X3 | fixed (test-only) | 3e7f041 | tests/test_implementation_pair.py | n |
+| X4 | deferred — the legacy deliberation `write` action publishes without candidate validation; it is not an entry point | — | — | n |
+| X5 | fixed | bad7dce | tests/test_upgrade_v0_13_0_workspace.py | y — one upgrade ends drift-clean |
+| X6 | fixed (with B4) | 264e36d | tests/test_proposal_implementation.py | y — `settle --under "## Ladder"` no longer breaks the block |
+| X7 | fixed by A2 | b00042f | tests/test_experimental_implementation.py | y — holder order no longer matters |
+| X8 | fixed | 540a663, 4292c81, 494c881 | tests/test_implementation_profile.py, tests/test_process_state_isolation.py, tests/conftest.py | y — launchers refuse `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` |
+| X9 | fixed | c38e8c4 | tests/test_proposal_implementation.py | y — unreadable notebook reported, no traceback |
+| X10 | fixed (test-only) | b2f56da | tests/scratch_forge.py, tests/test_shipped_engine_is_never_written.py, tests/test_orphan_sweep.py | n |
+| X11 | fixed (docs) | 173f188 | none (passive doc) | n |
+| X12 | fixed (docs) | 2201a6f | none (passive doc) | n |
+| X13 | fixed | 17238df | tests/deliberation-initial-revision-dry-run.test.mjs | y — single-sentence refusal message |
+| X14 | fixed | 90e5731 | tests/test_papersmith_bridges.py | y — `deliberate --action adopt` |
+| X15 | open (found in F) | — | — | — |
+| X16 | open (found in F) | — | — | — |
+| X17 | pre-existing on main (found in F) | — | — | — |
+| X18 | doc gap to triage (found in F) | — | — | — |
+| C1 note | deferred — v1 creation from an idea near 65,000 characters takes about 35 s | — | — | n |
+
+Other commits on the branch: 8e3f813 (fixture comment), 5969fcf (feature-doc progress).
