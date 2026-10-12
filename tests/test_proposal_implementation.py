@@ -39256,10 +39256,15 @@ class SettleDoneUnwitnessedTests(unittest.TestCase):
                                  "SETTLE_REASON_REQUIRED")
 
     def test_unwitnessed_and_reason_only_modify_done(self):
+        """Re-anchored by X18: `--unwitnessed --reason` without `--done` is
+        now the witness-less placement, so with no `--under` it is refused
+        `SETTLE_UNDER_REQUIRED` (`SettleUnwitnessedPlacementTests`)."""
         box = self._box()
         self._holder(box, "- [ ] a scoping decision\n")
-        for extra in (("--unwitnessed", "--reason", "x"),
-                      ("--done", "--reason", "x"),
+        proc = self._settle(box, "--unwitnessed", "--reason", "x")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_UNDER_REQUIRED")
+        for extra in (("--done", "--reason", "x"),
                       ("--attach", "--witness", "test_w", "--unwitnessed")):
             with self.subTest(extra=extra):
                 proc = self._settle(box, *extra)
@@ -39704,3 +39709,102 @@ class PositionRefusalWritesNothingTests(unittest.TestCase):
         self.assertTrue(text.startswith(impl.HOLDER_SCAFFOLD.rstrip("\n").splitlines()[0]), text)
         self.assertIn("<!-- position ", text)
         self.assertIn("Rehearse the job.", text)
+
+
+class SettleUnwitnessedPlacementTests(unittest.TestCase):
+    """X18 (`cross-skill-consistency`): a witness-less agreement (a scoping
+    decision, a premise, a deferral) had no command route to its own line
+    when there was no position sequence. Placing a line needs `--about`, a
+    witness identity with an answered discussion, and `settle --done
+    --unwitnessed` only closes a line that already exists, so the line was
+    written by hand. `settle --under <heading> --unwitnessed --reason <why>`
+    now places it: unticked, logged with its reason, never discussed (it
+    names no witness to discuss) and never counted as witnessed. Closing it
+    is still the separate `--done --unwitnessed` act."""
+
+    def setUp(self) -> None:
+        self._boxes: list[Path] = []
+
+    def _box(self) -> Path:
+        box = (FORGE / "implementations"
+               / f"_e2e_settle_unwitnessed_place_{os.getpid()}_{id(self)}_{len(self._boxes)}")
+        self._boxes.append(box)
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    run_cli = SettleDoneUnwitnessedTests.run_cli
+    _settle = SettleDoneUnwitnessedTests._settle
+
+    def _tree(self, box: Path) -> dict[str, bytes]:
+        return {str(p.relative_to(box)): p.read_bytes() for p in sorted(box.rglob("*"))
+                if p.is_file() and ".git" not in p.relative_to(box).parts}
+
+    def _events(self, box: Path) -> list[dict]:
+        return [e for e in impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+            if e.get("kind") == "settle"]
+
+    def test_places_a_witness_less_line_on_a_fresh_holder_and_closes_it(self):
+        box = self._box()
+        proc = self._settle(box, "--under", "## Ladder", "--unwitnessed",
+                            "--reason", "Scoped out of this revision.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["status"], "written")
+        self.assertIsNone(payload["about"])
+        self.assertIs(payload["unwitnessed"], True)
+        self.assertIs(payload["done"], False)
+        holder = box / "Method" / "AGREED.md"
+        self.assertEqual(holder.read_text(encoding="utf-8"),
+                         impl.HOLDER_SCAFFOLD + "- [ ] a scoping decision\n")
+        (placed,) = self._events(box)
+        self.assertIs(placed["done"], False)
+        self.assertEqual(placed["reason"], "Scoped out of this revision.")
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["open"], ["a scoping decision"])
+        self.assertNotIn("decided", state["witness"],
+                         "placing a line is not the act that closes it")
+
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "Agreed at the gate.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["status"], "settled")
+        self.assertEqual([(d["text"], d["reason"]) for d in state["witness"]["decided"]],
+                         [("a scoping decision", "Agreed at the gate.")])
+
+    def test_a_hand_tick_after_the_placement_still_reads_as_a_hand_tick(self):
+        box = self._box()
+        proc = self._settle(box, "--under", "## Ladder", "--unwitnessed", "--reason", "Scoped out.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        holder = box / "Method" / "AGREED.md"
+        holder.write_text(holder.read_text(encoding="utf-8").replace("- [ ]", "- [x]"),
+                          encoding="utf-8")
+        witness = impl.agreements_state(box, "Method")["witness"]
+        self.assertEqual(witness["handTicked"], ["a scoping decision"])
+        self.assertNotIn("decided", witness)
+
+    def test_refusals_write_nothing(self):
+        for extra, code in (
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "x", "--about", "record"),
+                 "SETTLE_UNWITNESSED_CONFLICT"),
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "x", "--witness", "test_w"),
+                 "SETTLE_UNWITNESSED_CONFLICT"),
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "x", "--supersedes", "y"),
+                 "SETTLE_UNWITNESSED_CONFLICT"),
+                (("--under", "## Ladder", "--unwitnessed"), "SETTLE_REASON_REQUIRED"),
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "  "), "SETTLE_REASON_REQUIRED"),
+                (("--unwitnessed", "--reason", "x"), "SETTLE_UNDER_REQUIRED"),
+                (("--under", "## Nowhere", "--unwitnessed", "--reason", "x"), "SETTLE_HEADING_ABSENT"),
+                (("--under", "## Ladder"), "SETTLE_ABOUT_REQUIRED")):
+            with self.subTest(extra=extra):
+                box = self._box()
+                before = self._tree(box)
+                proc = self._settle(box, *extra)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["code"], code, proc.stdout)
+                self.assertEqual(self._tree(box), before)

@@ -710,6 +710,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   into and reaches the disk with it, under the same compare-and-swap; a
   refused call leaves the tree byte-identical.
 
+- **A witness-less agreement can be placed by `settle`.** Placing a line
+  needed `--about` and an answered discussion, and `settle --done
+  --unwitnessed` closes only a line that exists, so a scoping decision with
+  no position sequence had to be written into the holder by hand.
+  `settle --under <heading> --unwitnessed --reason <why> --text <line>` now
+  places it, unticked and bound to no discussion, and logs the reason
+  (`about: null`, `unwitnessed: true`, `done: false`). `--about`, `--witness`
+  and `--supersedes` are refused with it (`SETTLE_UNWITNESSED_CONFLICT`),
+  `--reason` stays required, and closing the line is still the separate
+  `--done --unwitnessed` act. Only that closing act is named under
+  `agreements.witness.decided`.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
@@ -1265,6 +1277,9 @@ number is `0`, breaking changes can still arrive without a major bump.
 - A refused `position` or `settle` on a product folder without its holder
   no longer creates `<Name>/AGREED.md` (or `Experimental_AGREED.md`); the
   next accepted write creates it, with the same scaffold.
+- `settle --unwitnessed --reason` without `--done` used to be refused
+  `SETTLE_UNWITNESSED_CONFLICT`; with `--under` it now places a line, and
+  without `--under` it is refused `SETTLE_UNDER_REQUIRED`.
 
 
 ## 0.13.0

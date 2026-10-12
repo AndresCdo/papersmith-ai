@@ -103,7 +103,9 @@ Both behave exactly as in the sibling (its `usage.md`, `settle`'s `--done`
 section and `close`). An agreement no test could ever witness — a scoping
 decision, a premise, a deferral — closes by the operator's recorded
 decision: ask whether it is closed and why, then run `settle --done
---unwitnessed --reason "<their reason>" --text "<line>"`. The act lands in
+--unwitnessed --reason "<their reason>" --text "<line>"`. A line that does
+not exist yet is put in with `settle --under "## Ladder" --unwitnessed
+--reason "<why>" --text "<line>"`, with no `--about` and no discussion. The act lands in
 `Experimental_AGREED.md`, the ledger event carries the reason and session,
 and `agreements.witness.decided` names it; it is never counted as
 witnessed. A decision recorded against the sibling's holder never names a

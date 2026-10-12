@@ -494,7 +494,7 @@ def agreements_state(target: Path, name: str) -> dict:
         for event in impl_position.read_events(
             product / ".implementation" / "position.jsonl")
         if isinstance(event, dict) and event.get("kind") == "settle"
-        and event.get("unwitnessed") is True
+        and event.get("unwitnessed") is True and event.get("done") is True
     } if files else {}
     decided: list[dict] = []
     hand_ticked: list[str] = []
@@ -15839,27 +15839,41 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "line may ever be marked done through this command) and "
             "--paragraph (only --reverse ever writes one) do not apply "
             "and must be omitted.")
-    # `--unwitnessed` and `--reason` modify `--done` alone: the logged
-    # closing act for a line no test could ever witness (see "Why marking
-    # done requires a witness", above). Given in any other mode they would
-    # be silently ignored, the surprise every conflict code here refuses.
+    # `--unwitnessed` and `--reason` modify `--done` (the logged closing act
+    # for a line no test could ever witness, see "Why marking done requires
+    # a witness", above) and the placement of such a line (X18): with no
+    # witness there is no identity to discuss, so `--about` is not asked
+    # for, and `--reason` is the logged statement of why the line exists.
+    # Given in any other mode they would be silently ignored, the surprise
+    # every conflict code here refuses.
+    placing = not attach and not remove and not reverse and not done
     unwitnessed = bool(getattr(args, "unwitnessed", False))
     reason = getattr(args, "reason", None)
     reason = reason.strip() if reason is not None else None
-    if (unwitnessed and not done) or (reason is not None and not unwitnessed):
+    if ((unwitnessed and not (done or placing))
+            or (reason is not None and not unwitnessed)):
         raise Refused(
             "SETTLE_UNWITNESSED_CONFLICT",
             "--unwitnessed modifies --done (it closes a line that names no "
-            "witness, recording why), and --reason supplies that act's "
-            "reason; give --unwitnessed only with --done, and --reason "
-            "only with --unwitnessed.")
+            "witness, recording why) or the placement of such a line, and "
+            "--reason supplies that act's reason; give --unwitnessed only "
+            "with --done or --under, and --reason only with --unwitnessed.")
+    if unwitnessed and placing and (args.about or witness
+                                    or args.supersedes is not None):
+        raise Refused(
+            "SETTLE_UNWITNESSED_CONFLICT",
+            "--unwitnessed places a line that names no witness: it is bound "
+            "to no discussion (--about), carries no test token (--witness) "
+            "and collides with nothing it could supersede (--supersedes). "
+            "Omit those three, or drop --unwitnessed for a discussed, "
+            "witnessed line.")
     if unwitnessed and not reason:
         raise Refused(
             "SETTLE_REASON_REQUIRED",
-            "--done --unwitnessed closes a line no test witnesses, and the "
+            "--unwitnessed records a line no test witnesses, and the "
             "engine never authors why: --reason is the operator's own "
-            "statement of why this agreement is closed and cannot be "
-            "omitted or blank.")
+            "statement of why this agreement is placed or closed and "
+            "cannot be omitted or blank.")
     if paragraph and not reverse:
         raise Refused(
             "SETTLE_REVERSE_CONFLICT",
@@ -15887,13 +15901,14 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 "the write goes and has no default. Omit it only together "
                 "with --attach, --remove, --reverse or --done, none of "
                 "which places a new item under a heading.")
-        if not args.about:
+        if not args.about and not unwitnessed:
             raise Refused(
                 "SETTLE_ABOUT_REQUIRED",
                 "--about is required to place a new item; it names the "
                 "discussion this placement is bound to. Omit it only "
                 "together with --attach, --remove, --reverse or --done, "
-                "none of which places anything new.")
+                "none of which places anything new, or with --unwitnessed "
+                "--reason for a line no test could ever witness.")
     if witness and not re.fullmatch(r"test_[A-Za-z0-9_]+", witness):
         raise Refused(
             "SETTLE_WITNESS_MALFORMED",
@@ -15903,7 +15918,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "witness `agreements_state` can read back.")
 
     about = None
-    if not attach and not remove and not reverse and not done:
+    if placing and not unwitnessed:
         evidence = _position_write_evidence(target, name)
         position = position_state(target, name, evidence, None, None,
                               _document_extra_sources(None))
@@ -16210,7 +16225,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 "is not decidable without a human choosing.")
         target_path, data, span = candidates[0]
 
-        collides = _agreement_collides(target, name, about["operand"])
+        collides = (_agreement_collides(target, name, about["operand"])
+                    if about is not None else [])
         if args.supersedes is not None:
             supersedes = sys.stdin.read() if args.supersedes == "-" else args.supersedes
             supersedes = supersedes.strip()
@@ -21991,8 +22007,8 @@ def main(argv: list[str] | None = None) -> int:
                                 "operand') -- the identical shape discuss's "
                                 "own --about takes, matched against an "
                                 "answered discuss event by witness identity "
-                                "(kind, operand). Required unless --attach "
-                                "or --remove is given (refused "
+                                "(kind, operand). Required unless --attach, "
+                                "--remove or --unwitnessed is given (refused "
                                 "SETTLE_ABOUT_REQUIRED); neither mode ever "
                                 "resolves or requires it -- there is no "
                                 "discussion gate left to check it against")
@@ -22214,10 +22230,14 @@ def main(argv: list[str] | None = None) -> int:
                                 "and so are --attach, --remove and "
                                 "--reverse themselves")
             p.add_argument("--unwitnessed", action="store_true",
-                           help="with --done only: close a line that names "
+                           help="with --done: close a line that names "
                                 "no witness and that no test could ever "
                                 "witness (a scoping decision, a premise, a "
-                                "deferral). Requires --reason (refused "
+                                "deferral). With --under and no --about: "
+                                "put such a line in, unticked and bound to "
+                                "no discussion; --about, --witness and "
+                                "--supersedes are refused SETTLE_UNWITNESSED_"
+                                "CONFLICT there. Requires --reason (refused "
                                 "SETTLE_REASON_REQUIRED); the act is "
                                 "logged in the ledger with --session and "
                                 "--reason and is never counted as "
@@ -22225,10 +22245,10 @@ def main(argv: list[str] | None = None) -> int:
                                 "names it. Refused SETTLE_WITNESS_PRESENT on "
                                 "a line that names a witness (plain --done "
                                 "closes that one) and SETTLE_UNWITNESSED_"
-                                "CONFLICT without --done")
+                                "CONFLICT in any other mode)")
             p.add_argument("--reason", default=None,
                            help="the operator's own statement of why a "
-                                "witness-less agreement is closed; required "
+                                "witness-less agreement is closed or put in; required "
                                 "with --unwitnessed and refused SETTLE_"
                                 "UNWITNESSED_CONFLICT without it")
         if name == "defect":

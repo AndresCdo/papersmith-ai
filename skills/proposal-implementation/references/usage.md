@@ -1882,9 +1882,31 @@ carrying neither reads as before. Refused `SETTLE_REASON_REQUIRED` when
 `--reason` is missing or blank (the reason is the operator's, never the
 agent's), `SETTLE_WITNESS_PRESENT` when the located line names a witness
 (that line closes through plain `--done`, which its test answers for), and
-`SETTLE_UNWITNESSED_CONFLICT` when `--unwitnessed` is given without
-`--done`, or `--reason` without `--unwitnessed`. `SETTLE_ALREADY_DONE` is
-checked first.
+`SETTLE_UNWITNESSED_CONFLICT` when `--unwitnessed` is given with neither
+`--done` nor `--under`, or `--reason` without `--unwitnessed`.
+`SETTLE_ALREADY_DONE` is checked first.
+
+**When the line does not exist yet, place it the same way.** A witness-less
+agreement often has no position sequence and no discussion to bind it to, and
+placing a line otherwise needs `--about`. Pass `--unwitnessed --reason` with
+`--under` instead:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --under "## Ladder" --unwitnessed --reason "<the operator's reason>" \
+  --text "<the agreement>"
+```
+
+It places one unticked `- [ ] <text>` line, creating the declared holder if it
+is missing, with no discussion gate (the line names no witness to discuss).
+The ledger event carries `about: null`, `unwitnessed: true`, `done: false`
+and the reason. It closes nothing: the line stays open until the `--done
+--unwitnessed` act above, and only that act is named under
+`witness.decided`. Refused `SETTLE_UNWITNESSED_CONFLICT` with `--about`,
+`--witness` or `--supersedes`, `SETTLE_REASON_REQUIRED` without a reason,
+and `SETTLE_UNDER_REQUIRED` / `SETTLE_HEADING_ABSENT` as any placement is.
+Before 0.14.0 this line had to be written by hand.
 
 **Only the mark moves.** `--text`, any witness token the line already
 carries, and every other byte in the holder file are byte-identical

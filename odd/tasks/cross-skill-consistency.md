@@ -194,9 +194,17 @@ Route legend: D = delegated writer, I = inline.
   `SettleHeadingAbsentMutationTests::test_inverting_the_settle_heading_absent_guard_lets_the_write_proceed` (their
   mutation anchors named the removed early-creation lines). Domain-lock pins shrunk deliberately: `before` 263->261,
   `empty` 132->131, `write` 156->154 (the duplicated early-creation comment is gone).
-- X18 — (found in F) `settle --done --unwitnessed` needs the line to exist already, and placing a new line needs
+  Commit: e4cfbee.
+- [x] X18 — (found in F; fixed by a command) `settle --done --unwitnessed` needs the line to exist already, and placing a new line needs
   `--about` (a discussion). A scoping decision with no position sequence therefore has no command route to its
   line, which has to be written by hand at the gate. Not a refusal defect; a documentation gap to triage.
+  Fix (route I, inline; engine + test file + 3 docs): `settle --under <h> --unwitnessed --reason <why>` places the
+  line with no `--about` and no discussion gate, logged `about: null, unwitnessed: true, done: false`; `--about`/
+  `--witness`/`--supersedes` refused `SETTLE_UNWITNESSED_CONFLICT`, reason required, closing stays `--done
+  --unwitnessed`. `agreements_state` now counts only `done: true` unwitnessed events as decisions, so a placement is
+  never read as a closing act. Tests: `tests/test_proposal_implementation.py::SettleUnwitnessedPlacementTests` (3, 8
+  refusal subtests; RED: 6 failed). Re-anchored: `SettleDoneUnwitnessedTests::test_unwitnessed_and_reason_only_modify_done`
+  (its `--unwitnessed --reason` subtest now expects `SETTLE_UNDER_REQUIRED`).
 
 ## Progress / evidence
 
@@ -1353,10 +1361,10 @@ behaviour-change column, "y" means an existing workspace or caller can notice th
 | X12 | fixed (docs) | 2201a6f | none (passive doc) | n |
 | X13 | fixed | 17238df | tests/deliberation-initial-revision-dry-run.test.mjs | y — single-sentence refusal message |
 | X14 | fixed | 90e5731 | tests/test_papersmith_bridges.py | y — `deliberate --action adopt` |
-| X15 | open (found in F) | — | — | — |
-| X16 | open (found in F) | — | — | — |
-| X17 | pre-existing on main (found in F) | — | — | — |
-| X18 | doc gap to triage (found in F) | — | — | — |
+| X15 | fixed | 636400d | tests/deliberation-source-reserved-markers.test.mjs, tests/test_upgrade_v0_13_0_workspace.py | y — sources neutralised (`reservedMarkersRemoved`); legacy v1 repaired by a section-replacing successor; preview refusals carry `repair_candidate` + blocker |
+| X16 | fixed (same on main) | 1c87d53 | tests/test_proposal_implementation.py, tests/test_experimental_implementation.py | y — `otherLineageModules`; headline can turn `drift` -> `ok` on shared targets |
+| X17 | fixed (pre-existing on main; `settle` too) | e4cfbee | tests/test_proposal_implementation.py | y — a refused `position`/`settle` creates no holder |
+| X18 | fixed (command) | see `git log` (the X18 commit) | tests/test_proposal_implementation.py | y — `settle --under --unwitnessed --reason` places a witness-less line |
 | C1 note | deferred — v1 creation from an idea near 65,000 characters takes about 35 s | — | — | n |
 
 Other commits on the branch: 8e3f813 (fixture comment), 5969fcf (feature-doc progress).
