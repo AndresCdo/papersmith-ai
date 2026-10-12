@@ -566,6 +566,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   `FINDINGS_DECLARED`. Shared by `experimental-implementation`, which runs the
   same engine. Documented in `proposal-implementation`'s `SKILL.md` step 11
   and `references/usage.md`.
+- **A defect that lives in the prose can be declared as a finding.** A
+  finding's correction was only expressible as one numbered equation rewritten
+  in place: the kit's `test_audit.py` required a non-empty `remedy_equations`,
+  `compose` substitutes at the equation's own `\tag{n}`, and `verify` kept
+  asking for a `remedy_block` that nobody can write for a sentence with no tag.
+  A finding may now declare `"remedy_in_prose": True` with its remedy locus
+  list empty and no `remedy_block`: it is admitted on the same notation and
+  adoption checks, never listed under `localRemediesNotWritten` (so no
+  `toDiscuss` entry), and `handoff` defers it as `prose-remedy` to a
+  deliberation session of its own. Declaring it beside remedy loci, or with a
+  value other than `True`, is ruled inadmissible; without the flag an empty
+  locus list reads exactly as before. The kit's `findings.py` documents the
+  field and `test_audit.py` accepts it. Shared by `experimental-implementation`.
+  Documented in both implementation skills' `SKILL.md` and
+  `proposal-implementation`'s `references/usage.md`.
 
 ### Changed
 
@@ -877,6 +892,14 @@ number is `0`, breaking changes can still arrive without a major bump.
   empty findings list still refuses `NO_FINDINGS` and still reads
   `audit: none`; existing rulings carry no such key and read unchanged, so no
   migration is needed.
+
+- `handoff` can return a new `deferredBecause` value, `prose-remedy`, only for
+  a finding that declares `"remedy_in_prose": True`; findings without the key
+  are sized, admitted and reported exactly as before. A target scaffolded
+  before 0.14.0 keeps its own `tests/test_audit.py`, which still requires a
+  non-empty `remedy_equations`; to declare a prose finding there, apply the
+  kit's two-line change to that file and re-seal it with `materialize
+  --authored tests/test_audit.py`. No migration is needed.
 
 
 ## 0.13.0

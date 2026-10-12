@@ -346,6 +346,17 @@ proposal itself — that is `proposal-deliberation`.
   writing the mathematics is the work, and nothing here paraphrases a
   description into a document. `verify` lists these under
   `audit.localRemediesNotWritten` so the omission is a decision, not a silence.
+- A defect that lives in the prose rather than in a numbered equation (an
+  overstated sentence, a term used before it is defined) is still a finding:
+  declare `"remedy_in_prose": True` with `remedy_equations` left empty and no
+  `remedy_block`. There is no `\tag{n}` to substitute at, so `verify` never
+  lists it under `localRemediesNotWritten`, it never settles inline, and
+  `handoff` defers it as `prose-remedy` to a deliberation session of its own,
+  where the new wording is decided. It still owes `uses`, `adoption`, its
+  `test_finding_<id>` and its `test_remedy_<id>`; `admit` rules it
+  inadmissible if it also names remedy equations, or if the flag is anything
+  but `True`. Without the flag an empty `remedy_equations` reads as before
+  (`remedy-locus-missing`) and fails the kit's `test_audit.py`.
 - To settle one inline, drive `proposal-deliberation` with the item's
   `deliberation` payload: `RESOLVE_TARGET` with its `selectedEntryId` returns
   the entry's `text`; pipe that text into `implementation_cli.py compose

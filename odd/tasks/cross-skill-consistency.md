@@ -76,6 +76,7 @@ Route legend: D = delegated writer, I = inline.
   - [x] C7 — successor receipt `rationale`/`decider` (D, writer trigger: workspace + orchestrator + types + test + 4 docs)
   - [x] C5 — `ADOPT_INITIAL_REVISION` rename + record (D, writer trigger: creation + renderer + receipt + workspace + cli + 2 tests + 4 docs)
   - [x] C9 — explicit empty ruling `admit --no-findings` (D, writer trigger: engine + test + 2 docs + 2 re-anchored tests)
+  - [x] C8 — prose findings via `remedy_in_prose` (D, writer trigger: engine + 2 kit files + test + 3 docs)
   - [ ] C14 — out-of-scope declaration for `agree`: verified missing; blocked on edit surface (implementation engine)
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -834,3 +835,18 @@ D3 next (D1, D5, D2 done). Common writer rules: scratchpad common.md (mirrored i
   275->276 and `incomplete` 28->29 (payload key and status literal). Additive shape: no migration.
   Verification: focused 6 passed; domain lock 28 passed; roster 19 passed; `npm run test:fast` 3367 passed.
   Commit: `feat(implementation): admit --no-findings records an audit that found nothing` (the commit carrying this line)
+
+- C8 (real): the engine already tolerated an empty remedy locus (handoff `remedy-locus-missing`), but the kit's
+  `test_audit.py` required non-empty `remedy_equations` and `verify` listed such a finding under
+  `localRemediesNotWritten` (+ a `toDiscuss` asking for a `remedy_block` nobody can compose without a tag), so a
+  prose defect could not be a finding. Fix (supported, not just documented): explicit `"remedy_in_prose": True`
+  (`remedy_in_prose()`): excluded from `localRemediesNotWritten`, deferred by `handoff` as `prose-remedy`,
+  admitted on the ordinary checks; `admit` rules it inadmissible beside remedy loci or with a non-`True` value.
+  Kit `test_audit.py` accepts it (and refuses it beside remedy equations); kit `findings.py` documents it.
+  Docs: proposal-implementation SKILL.md (remedy bullets), usage.md (deferral table), experimental SKILL.md step 5.
+  Tests: `tests/test_implementation_prose_findings.py` (10) RED 6F -> GREEN. Domain-lock pin `remedy` 56->57 (the
+  published `prose-remedy` code). Old targets keep their own `test_audit.py` (documented: apply the kit change +
+  `materialize --authored`). Additive: no migration.
+  Verification: focused 10 passed; domain lock passed; `npm run test:fast` 4179 passed, 4 failed = the uncommitted
+  RED files of C10/C14 only.
+  Commit: `feat(implementation): a finding may declare a correction that rewrites prose` (the commit carrying this line)

@@ -279,7 +279,12 @@ narrowed to what this domain actually has:
    --revision <document 0's newest>` to size the open findings and hand
    the local ones to the deliberation (`experimental-deliberation`) as
    agenda items. `settleInline` entries substitute through `compose`;
-   everything else is a prompt for a session of its own.
+   everything else is a prompt for a session of its own. A finding whose
+   defect lives in the protocol's prose rather than in an experiment block
+   declares `"remedy_in_prose": True` with `remedy_experiments` empty and no
+   `remedy_block`: it is never asked for a block and always defers, as
+   `prose-remedy` (the shared engine's rule, stated in full in
+   `proposal-implementation`'s own SKILL.md).
 6. Once the deliberation publishes a successor revision, this skill's own
    part is done -- what remains is reaching a **test submission**, and
    `remote-execution`'s own commands answer it exactly as they do for the

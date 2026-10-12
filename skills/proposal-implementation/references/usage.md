@@ -2635,6 +2635,7 @@ A deferred item says why in `deferredBecause`:
 | `structural-reach` | the remedy rewrites more than one equation, adds notation, or touches an equation the text leans on |
 | `remedy-text-missing` | local reach, but nobody wrote the corrected block (`remedy_block`) |
 | `remedy-locus-missing` | it measures as local only because `remedy_equations` is empty, so there is no equation to resolve against |
+| `prose-remedy` | the finding declares `"remedy_in_prose": True`: its remedy rewrites prose, which carries no `\tag{n}` to substitute at, so only a session of its own can decide the new wording |
 
 Measured on this repository: three remedies are local, and the confidence one is
 not — it rewrites two equations, adds three symbols, and touches Eq. (24), which

@@ -568,6 +568,9 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: `"command"` key (`command` 275->276) and the `"incomplete"` status
 #: (`incomplete` 28->29). The surrounding comments were worded to move
 #: nothing else.
+#: `cross-skill-consistency` (C8): `handoff`'s new `deferredBecause` code
+#: `"prose-remedy"` is a published machine value, not prose (`remedy`
+#: 56->57); every comment beside it says "correction" instead.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
@@ -580,7 +583,7 @@ M5_PINNED_RESIDUE: dict[str, int] = {
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
     "measured": 143, "measurement": 43, "module": 195, "notebooks": 110,
     "object": 33, "pilot": 123, "place": 58, "produces": 51,
-    "rather": 384, "recorded": 81, "remedy": 56, "remote": 65,
+    "rather": 384, "recorded": 81, "remedy": 57, "remote": 65,
     "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,
     "scaffolded": 12, "sitting": 9, "small": 8, "something": 76,
     "steps": 139, "sweep": 11, "validated": 10, "value": 244, "whose": 156,

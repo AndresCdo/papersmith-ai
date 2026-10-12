@@ -6351,6 +6351,20 @@ def finding_declared_loci(finding: dict) -> tuple[list | None, list | None, str]
     return loci, remedy, remedy_key
 
 
+def remedy_in_prose(finding: dict) -> bool:
+    """Whether a finding declares that its correction rewrites prose, not a
+    numbered locus: `"remedy_in_prose": True` exactly, with no correction
+    locus of its own. Such a correction has no tag to substitute at, so it
+    is never asked for a `remedy_block` and never settled inline; `handoff`
+    defers it to a deliberation session of its own. Anything other than
+    `True`, or the flag next to declared loci, declares nothing here --
+    `admit` rules that finding inadmissible instead of guessing which was
+    meant.
+    """
+    return (finding.get("remedy_in_prose") is True
+            and not finding_declared_loci(finding)[1])
+
+
 def finding_named_source(finding: dict, source: str,
                          sources_by_document: dict | None) -> str:
     """The joined text of each document a finding names, or document 0's
@@ -9786,7 +9800,12 @@ def cmd_handoff(args: argparse.Namespace) -> dict:
             # Until 2026-09-14 this branch also emitted a sentence of its own,
             # in one fixed human tongue, next to the identical machine code:
             # a second copy that could only ever be right for one reader.
-            if local_reach(impact) and not own_remedy:
+            if remedy_in_prose(finding):
+                # Declared on purpose: the correction rewrites prose, so there is
+                # no locus to swap and no block to compose. Only a session of
+                # its own can decide the new wording.
+                item["deferredBecause"] = "prose-remedy"
+            elif local_reach(impact) and not own_remedy:
                 # No locus at all, so there is nothing the deliberation could
                 # be asked to swap out. The key it left blank travels too, so
                 # the agent can say which one without guessing at it.
@@ -10005,6 +10024,13 @@ def cmd_admit(args: argparse.Namespace) -> dict:
                 reasons.append(
                     f"{field} cites entries absent from the revision "
                     f"({DOCUMENTS[label_index]['label']}): {missing}")
+        prose = finding.get("remedy_in_prose")
+        if prose is not None and prose is not True:
+            reasons.append(f"declares remedy_in_prose as {prose!r}; only True "
+                           "says the correction rewrites prose")
+        elif prose is True and finding_declared_loci(finding)[1]:
+            reasons.append("declares remedy_in_prose next to declared loci; a "
+                           "correction in prose names no locus to rewrite")
         marker = (finding.get("adoption") or {}).get("absent")
         adoption = finding_adoption(finding, source, sources_by_document)
         adopted = adopted_record(adoption, args.revision)
@@ -18480,6 +18506,7 @@ def cmd_verify(args: argparse.Namespace) -> dict:
         f["id"] for f in findings
         if local_reach(finding_impact(f, source or "", verify_sources_by_document))
         and not f.get("remedy_block")
+        and not remedy_in_prose(f)
         and f["id"] not in adopted
     ]
     to_discuss = [_local_remedy_discuss_entry(target, name, finding_id)
