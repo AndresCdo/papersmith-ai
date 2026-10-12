@@ -3657,13 +3657,13 @@ with its target, its profile and its outcome. And `papersmith remote status` /
 contract lives in the `remote-execution` section of the
 [Anatomy](#anatomy-of-each-skill).
 
-**Credenciales y backends.** `remote-execution` soporta múltiples backends (`kaggle`, `colab`):
-- **Kaggle**: corre contra el pool de workers configurados. Sus credenciales viven en el store de `kaggle-accounts` (`skills/kaggle-accounts/store/accounts.json`), nunca salen del disco y nunca se imprimen: `materialize` escribe el token de un worker a un archivo de texto y te dice **dónde**, jamás **qué**. `/kaggle-accounts` valida o remueve cuentas, y `papersmith target check kaggle` las prueba de costado. Un subcomando `papersmith accounts` todavía no existe (follow-up registrado): se invoca como `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
-- **Colab**: corre contra sesiones administradas por `google-colab-cli` (`papersmith remote push --backend colab ...`). No es un target de workspace (no se pasa a `init --remote` ni a `target check`), sino un backend directo de `remote-execution`. Requiere tener `google-colab-cli` en `PATH` y el token resuelto en `~/.config/colab-cli/token.json`.
+**Credentials and backends.** `remote-execution` supports several backends (`kaggle`, `colab`):
+- **Kaggle**: runs against the configured worker pool. Its credentials live in the `kaggle-accounts` store (`skills/kaggle-accounts/store/accounts.json`), never leave the disk and are never printed: `materialize` writes a worker's token to a text file and reports **where**, never **what**. `/kaggle-accounts` validates or removes accounts, and `papersmith target check kaggle` tests them from the side. A `papersmith accounts` subcommand does not exist yet (recorded follow-up): it is invoked as `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
+- **Colab**: runs against sessions managed by `google-colab-cli` (`papersmith remote push --backend colab ...`). It is not a workspace target (it is not passed to `init --remote` or to `target check`), but a direct backend of `remote-execution`. It requires `google-colab-cli` on `PATH` and the token resolved in `~/.config/colab-cli/token.json`.
 
-**Cuota real.** Un envío real gasta cuota y horas de GPU. La doctrina de la casa
-es simple: todo lo que se pueda ensayar con `--dry-run` y `--smoke`, se ensaya;
-lo que quede después de eso, lo decides tú.
+**Real quota.** A real submission spends quota and GPU hours. The house rule is
+simple: everything that can be rehearsed with `--dry-run` and `--smoke` is
+rehearsed; what is left after that is a decision for the operator.
 
 ---
 
