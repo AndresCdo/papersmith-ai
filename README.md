@@ -435,7 +435,7 @@ my-paper/
 │   ├── runs_ledger.jsonl        #   every dispatched run, in order
 │   └── version                  #   framework version that created it
 ├── .claude/agents/              # the nineteen subagents (single source of truth)
-├── skills/                      # the kit copy: the twelve skills + _core
+├── skills/                      # the kit copy: the skills + _core
 │   └── _core/                   #   the two shared engines (deliberation, implementation)
 ├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
 ├── guidance/
@@ -2622,7 +2622,7 @@ flowchart TD
     P --> Q["fetch"]
     Q --> R{"Is the result still current?"}
     R -- No --> S["Quarantine, outside the results tree"]
-    R -- Yes --> T["Materializes in a partial directory"]
+    R -- Yes --> T["Writes into a partial directory"]
     T --> U{"Did it arrive complete?"}
     U -- No --> V["Nothing is recorded. It can be retried"]
     U -- Yes --> W["Atomic rename into place"]
