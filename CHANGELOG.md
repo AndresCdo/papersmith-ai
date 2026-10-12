@@ -77,6 +77,24 @@ number is `0`, breaking changes can still arrive without a major bump.
   `writtenSha256` the scaffold receipt's `materialized` entry recorded (so a
   seal written by an earlier release still counts). An `adopted` or
   `authored` entry does not count, and a modified copy is reported as before.
+- **`close` is reachable for a proposal-only target, and witness-less
+  agreements have a recorded closing act.** `close` refused
+  `POSITION_ABSENT` on every target without a position, and a position can
+  only name execution witnesses (a step, notebook, record, rehearsed job or
+  shard), so a target with no flow could pass only by installing an item
+  pointing at a witness that does not exist. A position is now owed only
+  when the target declares part of a flow (`__levels__`, `__steps__`,
+  `__records__`, a shard root or a job folder); otherwise `close` checks the
+  agreement and discussion axes, skips the refresh, and records the close
+  over an empty sequence. Separately, an agreement no test could ever
+  witness (a scoping decision, a premise, a deferral) could be ticked only
+  by hand, so `agreements` stayed `open` unless someone edited the holder
+  outside every command. `settle --done --unwitnessed --reason <text>` now
+  ticks such a line and writes the operator's reason and the session to the
+  ledger. It is never counted as witnessed: `agreements.witness` names it
+  under `decided`. `--done` on a line that names a witness is unchanged, and
+  `--unwitnessed` on such a line refuses `SETTLE_WITNESS_PRESENT`. Shared by
+  `experimental-implementation`.
 
 ### Behaviour changes
 
@@ -117,6 +135,22 @@ number is `0`, breaking changes can still arrive without a major bump.
   Existing 0.13.0 targets benefit without any action: the exemption also
   accepts the bytes their own scaffold receipt recorded. The receipt shape is
   unchanged; no migration is needed.
+- `close` on a target declaring no flow now records the close (status
+  `closed`, `positionOwed: false`) where it used to refuse `POSITION_ABSENT`.
+  A target declaring any part of a flow still refuses, and the detail now
+  names what it declares. `positionOwed` is absent whenever a position was
+  owed.
+- `verify`'s `agreements.witness` gains `decided` (lines closed by `settle
+  --done --unwitnessed`, with reason, session and time) and `handTicked`
+  (ticked witness-less lines with no such record), each present only when
+  non-empty. Lines ticked by hand in a 0.13.0 holder keep counting as
+  settled and stay under `unwitnessed`; they are now also named under
+  `handTicked`. The `settle` ledger event and response carry `unwitnessed`
+  and `reason` only on the new act. Additive; no migration is needed.
+- `SETTLE_NOT_WITNESSED`'s detail and question now name `--unwitnessed` for a
+  line no test could witness. Three new refusals: `SETTLE_UNWITNESSED_CONFLICT`,
+  `SETTLE_REASON_REQUIRED` (a work state whose question asks the operator
+  why) and `SETTLE_WITNESS_PRESENT`.
 
 ## 0.13.0
 

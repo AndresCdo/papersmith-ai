@@ -40,7 +40,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A2 — sibling holder collision (D, writer trigger: engine + profile loader + tests + docs)
 - [x] A3 — probe pilot ladder with in-package baselines (D, writer trigger: engine + 2 test files + docs)
 - [x] A4 — scaffold seal file provenance exemption (D, writer trigger: engine + 2 test files + docs)
-- [ ] A5 — close for proposal-only targets / witness-less agreements
+- [x] A5 — close for proposal-only targets / witness-less agreements (D, writer trigger: engine + 2 test files + 4 docs + seals)
 - [ ] A6 — deliberation validation parity (code spans)
 - [ ] A7 — shared experiment heading convention
 - [ ] A8 — per-lineage `__implementation__` binding (verify)
@@ -113,7 +113,33 @@ Route legend: D = delegated writer, I = inline.
   (experimental, 2) RED 1F -> GREEN. Mutations: drop byte check -> 2 red; drop kind check -> 1 red;
   drop kit-bytes path -> 1 red. Domain-lock pins unchanged. Seals unchanged.
   Commit: `fix(implementation): the kit's own seal owes no provenance` (the commit carrying this line)
+- A5 (real, option (a)): facts measured on a generic fixture before the fix: (1) a hand-ticked
+  witness-less line counts as `settled` (listed under `witness.unwitnessed`, never `disagrees`), and
+  `close` gates on agreements only via `AGREEMENT_DISAGREES`, so `agreements: open` never blocked close
+  but could only reach `settled` by a hand edit; (2) with empty `__levels__`, `position --sequence`
+  accepts any `--target-level`, but every witness kind is an execution one (step/notebook/record/
+  rehearsal/shard), so a no-flow target could install a position only by naming a nonexistent witness
+  (verified: a fake `@rehearsal job1` item let `close` pass). Fix: `_declared_flow` (levels, steps,
+  records, shard root, any job folder); `close` owes a position only when it is non-empty or a block
+  exists -- otherwise skips the ladder's `POSITION_ABSENT` and the refresh, keeps
+  `AGREEMENT_DISAGREES`/`DISCUSSION_UNANSWERED`, binds the empty sequence, reports
+  `positionOwed: false`; `POSITION_ABSENT` detail names the declared flow. `settle --done
+  --unwitnessed --reason` ticks a witness-less line, logging reason+session in the ledger event
+  (keys only on that act); `agreements_state` adds `witness.decided` (ledger-joined by holder path +
+  exact text) and `witness.handTicked`, both only when non-empty, neither counted witnessed. New
+  codes `SETTLE_UNWITNESSED_CONFLICT`, `SETTLE_WITNESS_PRESENT` (invocation), `SETTLE_REASON_REQUIRED`
+  (work state, question). Roster 124 -> 127 (53 -> 55, 71 -> 72), docs counts moved. No migration:
+  all new keys additive and legacy hand ticks read as before.
+  Tests: `CloseWithoutDeclaredFlowTests` (6), `SettleDoneUnwitnessedTests` (9) RED 19F -> GREEN;
+  experimental `SettleDoneUnwitnessedSiblingTests` (2, written after the engine change, proven by
+  mutation). Two existing tests encoded the defect on a no-flow box (`CloseCommandTests` absent
+  subtest, `RefusalPayloadPublishesItsExitTests` work-state test) -- now declare a job folder.
+  Mutations: holder key dropped -> 1 red; jobs ignored -> 1 red; witness-present check off -> 1 red;
+  decided read off -> 1 red; reason check off -> 2 red. Domain-lock pins unchanged (rewording).
+  Seals: `close-e1` (both corpora) +174 bytes = the new detail text only; experiments `propose`
+  timestamp noise reverted.
+  Commit: `fix(implementation): close needs no position without a flow, and witness-less agreements close by record` (the commit carrying this line)
 
 ## Next step
 
-A5 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+A6 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

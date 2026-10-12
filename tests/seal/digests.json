@@ -28,9 +28,9 @@
     "sha256": "665682ef256a7e90c8d19b7d4f43304684f7a2ec53b3e600c454851db64a547f"
   },
   "close-e1": {
-    "bytes": 3776,
+    "bytes": 3950,
     "exit": 2,
-    "sha256": "dcddeb78824a72d816a3c8a86b808ef79d5f81b53e8fe6610aeb2859c03b1d03"
+    "sha256": "1cc988db36a574530cfd989da2ae3750e4c468c9821275e8a7f8e97b113f3a0a"
   },
   "compose": {
     "bytes": 134,

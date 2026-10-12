@@ -483,6 +483,21 @@ def agreements_state(target: Path, name: str) -> dict:
     tests_readable = tests_dir.is_dir() and not unparsable_tests(tests_dir)
     tested_names = test_function_names(tests_dir) if tests_readable else set()
 
+    # The logged closing acts for witness-less lines (`settle --done
+    # --unwitnessed`), keyed by (holder, exact text); the latest wins. Read
+    # only to tell such a tick apart from a hand tick -- neither is ever
+    # counted as witnessed, and a missing or unreadable ledger simply
+    # keeps every unwitnessed tick reading as a hand tick.
+    decisions = {
+        (event.get("holder"), event.get("text")): event
+        for event in impl_position.read_events(
+            product / ".implementation" / "position.jsonl")
+        if isinstance(event, dict) and event.get("kind") == "settle"
+        and event.get("unwitnessed") is True
+    } if files else {}
+    decided: list[dict] = []
+    hand_ticked: list[str] = []
+
     open_items: list[str] = []
     settled = 0
     unparsed: list[str] = []
@@ -521,6 +536,16 @@ def agreements_state(target: Path, name: str) -> dict:
                 settled += 1
             if not witness:
                 unwitnessed.append(text)
+                if mark != " ":
+                    decision = decisions.get(
+                        (str(path.relative_to(target)), text))
+                    if decision is None:
+                        hand_ticked.append(text)
+                    else:
+                        decided.append({
+                            "text": text, "reason": decision.get("reason"),
+                            "session": decision.get("session"),
+                            "at": decision.get("at")})
             elif (tests_readable and mark in ("x", "X")
                   and witness not in tested_names):
                 disagrees.append(text)
@@ -557,6 +582,10 @@ def agreements_state(target: Path, name: str) -> dict:
             "unmeasured": unmeasured,
             "disagrees": disagrees,
             "summary": f"{witnessed} of {total_items} witnessed",
+            # Both present only when they hold an item, so a holder with no ticked
+            # witness-less line reads exactly as it always has.
+            **({"decided": decided} if decided else {}),
+            **({"handTicked": hand_ticked} if hand_ticked else {}),
         },
         **sibling_key,
     }
@@ -14549,7 +14578,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     delete that same line in ONE call (design "a reversal is one write")
     -- OR, with `--done`, flip an already-settled line's own mark from
     `[ ]` to `[x]`, matched the identical way once more (design "the tick
-    this class closes"). All five modes go through this one command; there
+    this class closes"); `--done --unwitnessed --reason` is that same flip
+    for a line no test could witness, logged as a decision. All five modes go through this one command; there
     is still no second write path. `--attach` also takes `--replace`, which
     re-points an EXISTING witness onto a different test instead of adding a
     first one (`re-pointing-a-proof-is-not-retracting-a-claim`) -- a
@@ -14605,25 +14635,31 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     **Measured against the weighing this decision requires, not assumed.**
     A real adopting target's `AGREED.md` carries agreements ticked with no
     witness at all -- irreducible arguments (a design tradeoff, a scoping
-    decision) that no test could ever contradict, because nothing about
-    them is executable. A guard requiring a witness cannot mark THOSE done
-    through this command, ever -- and that is read here as correct, not as
-    a gap needing an escape hatch. Two reasons, not one: first, an
-    argument is not the kind of claim `[x]` was ever meant to certify in
-    this file's own grammar -- `disagrees`/`unmeasured` (`agreements_
-    state`, above) only exist for a claim a witness token could measure,
-    and an unwitnessed line already reports `unwitnessed`, a state this
-    file treats as legitimate and permanent, never as an error. Second,
-    the "unsupported, never technically prevented" doctrine this same
-    file already states for hand-typing a witness token (`--witness`'s
-    own CLI help, `usage.md`) already covers exactly this case: a human
-    may still tick an irreducible argument by hand, the identical way
-    those existing lines were ticked, and `verify`/`close` evaluate a
-    hand-ticked mark exactly the same as one this command would have
-    written. An escape flag on `--done` would not add a capability this
-    programme lacks; it would only let an AUTOMATED call assert "done"
-    over an argument nobody can measure, the one assertion this guard
-    exists to keep a human, not a command, responsible for.
+    decision, a premise, a deferral) that no test could ever contradict,
+    because nothing about them is executable. A guard requiring a witness
+    cannot mark THOSE done through this command, and the first answer here
+    was that it never should: an argument is not the kind of claim a
+    witness certifies, so a human ticks it by hand. That answer left a
+    requirement the skill itself could not answer -- `agreements` read
+    `open` until someone edited the holder outside every command, and a
+    hand tick is an act no record tells apart from any other edit made
+    before it.
+
+    **`--done --unwitnessed --reason <why>` is the logged act for that
+    case, and it certifies nothing a witness would.** It flips the same one
+    byte plain `--done` flips, and only on a line that names NO witness
+    (`SETTLE_WITNESS_PRESENT` otherwise: a line a test speaks for is
+    closed by that test, through plain `--done`). The reason is required
+    (`SETTLE_REASON_REQUIRED`) and never authored here -- it is the
+    operator's statement, asked for as a question -- and it lands in the
+    ledger event together with `--session`. Nothing reads it as evidence:
+    `agreements_state` keeps the line under `witness.unwitnessed`, out of
+    the witnessed count, and names it under `witness.decided` with its
+    reason, so the act stays visible as a decision, never as a reading.
+    A hand tick still reads exactly as it always has (`settled`, under
+    `unwitnessed`), and is named under `witness.handTicked`: nothing an
+    existing holder already carries changes meaning, and no claim this
+    command did not log is ever presented as one it did.
 
     **Un-ticking does not belong in this change.** `--done` closes a
     measured gap: no composition of the other four modes could ever
@@ -15052,6 +15088,27 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "line may ever be marked done through this command) and "
             "--paragraph (only --reverse ever writes one) do not apply "
             "and must be omitted.")
+    # `--unwitnessed` and `--reason` modify `--done` alone: the logged
+    # closing act for a line no test could ever witness (see "Why marking
+    # done requires a witness", above). Given in any other mode they would
+    # be silently ignored, the surprise every conflict code here refuses.
+    unwitnessed = bool(getattr(args, "unwitnessed", False))
+    reason = getattr(args, "reason", None)
+    reason = reason.strip() if reason is not None else None
+    if (unwitnessed and not done) or (reason is not None and not unwitnessed):
+        raise Refused(
+            "SETTLE_UNWITNESSED_CONFLICT",
+            "--unwitnessed modifies --done (it closes a line that names no "
+            "witness, recording why), and --reason supplies that act's "
+            "reason; give --unwitnessed only with --done, and --reason "
+            "only with --unwitnessed.")
+    if unwitnessed and not reason:
+        raise Refused(
+            "SETTLE_REASON_REQUIRED",
+            "--done --unwitnessed closes a line no test witnesses, and the "
+            "engine never authors why: --reason is the operator's own "
+            "statement of why this agreement is closed and cannot be "
+            "omitted or blank.")
     if paragraph and not reverse:
         raise Refused(
             "SETTLE_REVERSE_CONFLICT",
@@ -15354,13 +15411,23 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 f"{text!r} is already marked done "
                 f"(`[{located.group('mark')}]`); --done never re-ticks an "
                 "already-ticked line.")
-        if not located.group("witness"):
+        if unwitnessed and located.group("witness"):
+            raise Refused(
+                "SETTLE_WITNESS_PRESENT",
+                f"{text!r} names the witness `{located.group('witness')}`; "
+                "--unwitnessed closes only a line no test could witness. "
+                "Mark it done with plain --done, which the bound witness "
+                "speaks for.")
+        if not unwitnessed and not located.group("witness"):
             raise Refused(
                 "SETTLE_NOT_WITNESSED",
                 f"{text!r} carries no witness token; --done refuses to "
                 "mark an agreement done that names nothing a test could "
                 "contradict -- bind one first with `settle --attach "
-                "--witness test_<id>`.")
+                "--witness test_<id>`. If no test could ever witness it "
+                "(a scoping decision, a premise, a deferral), close it "
+                "with `settle --done --unwitnessed --reason <why>`, which "
+                "records the act and never counts it as witnessed.")
 
         new_line = _render_done_line(raw_line)
         spliced = impl_position.splice(data, new_line, span)
@@ -15418,6 +15485,10 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     impl_position.write_spliced(target_path, spliced, expect_digest=pre_digest)
 
     recorded_at = _now_iso8601()
+    # Present only on the logged unwitnessed closing act, so every other
+    # settle event and response keeps its exact shape.
+    unwitnessed_keys = ({"unwitnessed": True, "reason": reason}
+                        if unwitnessed else {})
     impl_position.append_event(
         target / name / ".implementation" / "position.jsonl",
         {"kind": "settle", "session": args.session, "about": about,
@@ -15426,7 +15497,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
          "replace": replace, "replacedWitness": replaced_witness,
          "paragraph": paragraph,
          "holder": str(target_path.relative_to(target)),
-         "supersedes": supersedes, "collides": collides, "at": recorded_at})
+         "supersedes": supersedes, "collides": collides, "at": recorded_at,
+         **unwitnessed_keys})
 
     return {
         "command": "settle", "target": str(target), "name": name,
@@ -15436,6 +15508,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         "replace": replace, "replacedWitness": replaced_witness,
         "paragraph": paragraph, "supersedes": supersedes,
         "collides": collides, "recordedAt": recorded_at,
+        **unwitnessed_keys,
     }
 
 
@@ -16668,6 +16741,35 @@ def cmd_offer(args: argparse.Namespace) -> dict:
     }
 
 
+def _declared_flow(target: Path, name: str, evidence: dict) -> list[str]:
+    """What this target declares of a flow, named, or `[]` when nothing.
+
+    A position sequence is built only from execution witnesses
+    (`impl_position.WITNESS_KINDS`): a step, a notebook, a record, a
+    rehearsed job, a shard. Each part named here is read by one of
+    those witnesses -- `__levels__`, `__steps__`, `__records__`, a
+    resolvable shard root, or any job folder on disk -- so a target
+    carrying any of them owes `close` a position. One carrying none has
+    nothing a sequence could honestly name, and the only way to install a
+    position there would be an item pointing at a witness that does not
+    exist. Read from the same `evidence` `close` already built; a job
+    folder of any product counts (fail-closed: owing a position is the
+    stricter reading).
+    """
+    flow = []
+    if evidence.get("levels"):
+        flow.append("__levels__")
+    if resolve_steps_declaration(target, name):
+        flow.append("__steps__")
+    if resolve_records_declaration(target, name):
+        flow.append("__records__")
+    if evidence.get("shardsArrived") is not None:
+        flow.append("a shard root")
+    if evidence.get("jobs"):
+        flow.append("a job folder")
+    return flow
+
+
 def cmd_close(args: argparse.Namespace) -> dict:
     """The finishing precondition (design §3.3): writing the position
     becomes a precondition of finishing, not a courtesy. `close` refuses
@@ -16679,6 +16781,15 @@ def cmd_close(args: argparse.Namespace) -> dict:
     rule `gate` calls first (through `launch_available`) -- one order, one
     set of codes, never a second refusal ladder this command writes for
     itself.
+
+    **A position is owed only where a flow is declared
+    (`_declared_flow`).** A target declaring no `__levels__`, `__steps__`,
+    `__records__`, shard root or job folder has nothing a position
+    sequence could name, so `POSITION_ABSENT` does not apply to it: it
+    closes on the agreement and discussion axes alone, its response says
+    `positionOwed: false`, and the logged close binds a sequence of no
+    items. Every other honesty code still fires, and an existing
+    position block is always held to the full ladder.
 
     **`AGREEMENT_DISAGREES` is a second, independent axis (spec Group 3).**
     A ticked `AGREEMENTS.md`-style checklist item whose declared
@@ -16736,14 +16847,24 @@ def cmd_close(args: argparse.Namespace) -> dict:
         status=before["status"], unbacked=before["unbacked"],
         disagreements=before["disagreements"],
         shards_declared=evidence["shardsArrived"] is not None)
-    if not honesty["honest"]:
+    # A position is owed only by a target that declares some part of a
+    # flow (`_declared_flow`). One that declares none has nothing a
+    # sequence could honestly name, so an ABSENT position is not a
+    # transition left unrecorded there; every other honesty code, and
+    # every axis below, still applies unchanged.
+    flow = _declared_flow(target, name, evidence)
+    position_owed = bool(flow) or honesty["code"] != "POSITION_ABSENT"
+    if not honesty["honest"] and position_owed:
         code, facts = honesty["code"], honesty["facts"]
         if code == "POSITION_ABSENT":
             raise Refused(
                 "POSITION_ABSENT",
-                "no position section has ever been generated for this target; "
-                "run `position` (--sequence or --reconcile) before close can "
-                "require it true.")
+                "no position section has ever been generated for this target, "
+                f"and it declares a flow ({', '.join(flow)}), so close owes "
+                "one; run `position` (--sequence or --reconcile, with "
+                "--target-level naming the rung this pass aims at); then "
+                "close can require it true. A target that declares no flow "
+                "at all closes without a position.")
         if code == "POSITION_STALE":
             raise Refused(
                 "POSITION_STALE",
@@ -16825,15 +16946,20 @@ def cmd_close(args: argparse.Namespace) -> dict:
 
     # Only unmeasured witnesses can still move here (see docstring): pick up
     # anything that became measurable since the position was last written.
-    refresh_args = argparse.Namespace(
-        target=args.target, name=args.name, revision=args.revision,
-        session=args.session, sequence=None, reconcile=False, replace=False,
-        shards=None, target_level=None)
-    cmd_position(refresh_args)
+    # Nothing to refresh when no position is owed: the block is absent.
+    if position_owed:
+        refresh_args = argparse.Namespace(
+            target=args.target, name=args.name, revision=args.revision,
+            session=args.session, sequence=None, reconcile=False, replace=False,
+            shards=None, target_level=None)
+        cmd_position(refresh_args)
 
     evidence = _position_write_evidence(target, name)
     after = position_state(target, name, evidence, args.revision, source,
                            _document_extra_sources(args.revision))
+    # Present only when no position was owed, so every close that owed one
+    # reads exactly as it always has.
+    owed_key = {} if position_owed else {"positionOwed": False}
 
     position_digest = hashlib.sha256(
         json.dumps(after["sequence"], sort_keys=True).encode("utf-8")).hexdigest()
@@ -16865,6 +16991,7 @@ def cmd_close(args: argparse.Namespace) -> dict:
             "revision": args.revision, "revisionSha256": revision_sha256,
             "position": after, "recordedAt": prior_close["at"],
             **({"documentRevisions": extra_documents} if len(DOCUMENTS) > 1 else {}),
+            **owed_key,
         }
 
     recorded_at = _now_iso8601()
@@ -16880,6 +17007,7 @@ def cmd_close(args: argparse.Namespace) -> dict:
         "revision": args.revision, "revisionSha256": revision_sha256,
         "position": after, "recordedAt": recorded_at,
         **({"documentRevisions": extra_documents} if len(DOCUMENTS) > 1 else {}),
+        **owed_key,
     }
 
 
@@ -19329,6 +19457,8 @@ GATING_REFUSALS: dict[str, str] = {
     "SETTLE_NOTHING_TO_REPLACE": INVOCATION_DEFECT,
     "SETTLE_WITNESS_UNCHANGED": INVOCATION_DEFECT,
     "SETTLE_ALREADY_DONE": INVOCATION_DEFECT,
+    "SETTLE_UNWITNESSED_CONFLICT": INVOCATION_DEFECT,
+    "SETTLE_WITNESS_PRESENT": INVOCATION_DEFECT,
     "SETTLE_ALREADY_REVERSED": INVOCATION_DEFECT,
     "SETTLE_NOT_DISCUSSED": WORK_STATE,
     "SETTLE_DISCUSSION_UNANSWERED": WORK_STATE,
@@ -19339,6 +19469,8 @@ GATING_REFUSALS: dict[str, str] = {
     "SETTLE_HEADING_AMBIGUOUS": WORK_STATE,
     "SETTLE_COLLIDES_UNNAMED": WORK_STATE,
     "SETTLE_NOT_WITNESSED": WORK_STATE,
+    # The reason is the operator's to give, never the agent's: a question.
+    "SETTLE_REASON_REQUIRED": WORK_STATE,
     # --- materialize -------------------------------------------------------
     "MATERIALIZE_MODE_REQUIRED": INVOCATION_DEFECT,
     "MATERIALIZE_MODE_CONFLICT": INVOCATION_DEFECT,
@@ -20219,7 +20351,14 @@ _WORK_STATE_RESOLUTIONS = {
         args, "this agreement names nothing a test could contradict, and a "
               "line is not marked done until it does; which `test_<id>` "
               "witnesses it? Bind it with `settle --attach --witness "
-              "test_<id>` before marking it done."),
+              "test_<id>` before marking it done. If no test ever could (a "
+              "scoping decision, a premise, a deferral), is it closed, and "
+              "why? Record that answer with `settle --done --unwitnessed "
+              "--reason <why>`."),
+    "SETTLE_REASON_REQUIRED": lambda args: _refusal_question(
+        args, "closing an agreement no test witnesses is the operator's "
+              "decision, logged with its reason; why is this agreement "
+              "closed? Pass that answer as `--reason <why>`."),
 
     # --- the guards, one file over -----------------------------------------
     "PRODUCT_DIR_MISNAMED": _resolve_product_dir_misnamed,
@@ -21122,6 +21261,24 @@ def main(argv: list[str] | None = None) -> int:
                                 "are refused SETTLE_DONE_CONFLICT if given, "
                                 "and so are --attach, --remove and "
                                 "--reverse themselves")
+            p.add_argument("--unwitnessed", action="store_true",
+                           help="with --done only: close a line that names "
+                                "no witness and that no test could ever "
+                                "witness (a scoping decision, a premise, a "
+                                "deferral). Requires --reason (refused "
+                                "SETTLE_REASON_REQUIRED); the act is "
+                                "logged in the ledger with --session and "
+                                "--reason and is never counted as "
+                                "witnessed -- `agreements.witness.decided` "
+                                "names it. Refused SETTLE_WITNESS_PRESENT on "
+                                "a line that names a witness (plain --done "
+                                "closes that one) and SETTLE_UNWITNESSED_"
+                                "CONFLICT without --done")
+            p.add_argument("--reason", default=None,
+                           help="the operator's own statement of why a "
+                                "witness-less agreement is closed; required "
+                                "with --unwitnessed and refused SETTLE_"
+                                "UNWITNESSED_CONFLICT without it")
         if name == "defect":
             p.add_argument("--file", required=True,
                            help="path to the forge file this declares "

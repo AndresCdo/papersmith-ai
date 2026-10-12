@@ -822,7 +822,11 @@ they were easy to leave undocumented:
   even a token whose function name *is* found among `test_<id>` functions
   stays `unmeasured`, never "proven"), and `disagrees` (declared, `tests/`
   is readable and fully parsed, the item is ticked, and the declared
-  function is absent). `summary` prints `"N of M witnessed"` on every run,
+  function is absent). Two more keys appear only when non-empty: `decided`
+  (ticked witness-less lines closed by `settle --done --unwitnessed`, each
+  `{text, reason, session, at}`) and `handTicked` (ticked witness-less lines
+  with no such recorded act); neither counts as witnessed, and both lines
+  stay listed under `unwitnessed`. `summary` prints `"N of M witnessed"` on every run,
   including a target with zero declared tokens (`"0 of 0 witnessed"`) —
   silence never stands in for "nothing is declared". It **never gates
   here** — `close` is the one place `disagrees` refuses
@@ -1645,16 +1649,38 @@ same way.
 **The guard: a tick must rest on a witness.** Refused `SETTLE_NOT_WITNESSED`
 unless the located line already carries a `` `test_<id>` `` token — bind
 one first with `--attach`. A tick asserts the work is done; a line nobody
-can point a test at cannot assert that through this command. This is
-decided, not merely present: a real target carries agreements ticked with
-no witness at all — irreducible arguments no test could ever measure — and
-this guard leaves those permanently unreachable through `--done`, on
-purpose. An unwitnessed line already reports `unwitnessed` in
-`agreements_state`, a state this file treats as legitimate; a human may
-still tick one by hand, the same "unsupported, never technically
-prevented" doctrine that already covers a hand-typed `--witness` token.
-Refused `SETTLE_ALREADY_DONE` if the located mark is already `x`/`X` —
-`--done` never re-ticks an already-ticked line.
+can point a test at cannot assert that through this command. Refused
+`SETTLE_ALREADY_DONE` if the located mark is already `x`/`X` — `--done`
+never re-ticks an already-ticked line.
+
+**An agreement no test could ever witness closes by a recorded decision.**
+A scoping decision, a premise, a deferral, a design tradeoff: nothing about
+them is executable, so no witness can be bound and plain `--done` refuses
+them. Ask the operator whether the item is closed and why, then pass their
+answer:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --done --unwitnessed --reason "<the operator's reason>" \
+  --text "<the exact line text>"
+```
+
+The same one byte flips. The `settle` ledger event and the response carry
+`unwitnessed: true` and `reason` beside the session; both keys are absent
+from every other `settle` call. The act is never counted as witnessed:
+`agreements.witness` keeps the line under `unwitnessed`, out of the
+`summary` count, and names it under `witness.decided` as `{text, reason,
+session, at}`. A ticked witness-less line with no such recorded act (a hand
+tick) reads exactly as it always has and is named under
+`witness.handTicked`; both keys appear only when non-empty, so a holder
+carrying neither reads as before. Refused `SETTLE_REASON_REQUIRED` when
+`--reason` is missing or blank (the reason is the operator's, never the
+agent's), `SETTLE_WITNESS_PRESENT` when the located line names a witness
+(that line closes through plain `--done`, which its test answers for), and
+`SETTLE_UNWITNESSED_CONFLICT` when `--unwitnessed` is given without
+`--done`, or `--reason` without `--unwitnessed`. `SETTLE_ALREADY_DONE` is
+checked first.
 
 **Only the mark moves.** `--text`, any witness token the line already
 carries, and every other byte in the holder file are byte-identical
@@ -2251,7 +2277,8 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py close \
 Checked against the position exactly as recorded, before the refresh that
 follows — the identical ladder `gate` calls first
 (`impl_availability.position_honest`, shared rather than reimplemented):
-`POSITION_ABSENT` when no section was ever generated, `POSITION_STALE` when
+`POSITION_ABSENT` when no section was ever generated and the target
+declares a flow, `POSITION_STALE` when
 it is bound to a revision that has moved on, `POSITION_UNBACKED` when a
 sequence item is ticked and its witness was never measured, `POSITION_
 SHARDS_UNDECLARED` when the ticked item carries a `@shard` witness and
@@ -2268,6 +2295,20 @@ when a ticked `AGREEMENTS.md`-style checklist item's own declared
 refresh — picking up any position witness that has become measurable since
 — and record the transition. A second `close` over the identical, unmoved
 position reports `"not_open"` rather than appending a second event.
+
+**A position is owed only where a flow is declared.** Every position
+witness is an execution one (`@step`, `@notebook`, `@record`, `@rehearsal`,
+`@shard`), so a target declaring none of `__levels__`, `__steps__`,
+`__records__`, a shard root (`distribution.shardsRoot`) or a job folder
+under `tools/` has nothing a sequence could honestly name — a proposal-only
+target, before any experimental stage defines a ladder. There `close` does
+not refuse `POSITION_ABSENT`: it checks `AGREEMENT_DISAGREES` and
+`DISCUSSION_UNANSWERED` as always, skips the refresh, records the close
+over an empty sequence, and its response carries `"positionOwed": false`
+(the key is absent whenever a position was owed). Declare any part of a
+flow and the position is owed again; an existing position block is always
+held to the full ladder. `POSITION_ABSENT`'s detail names what the target
+declares.
 
 ## `step` — run one declared local step, isolated
 
@@ -2565,12 +2606,12 @@ them. Which refusals carry the extra key is itself the answer to a question:
 > the repository?
 
 **Yes — an invocation defect.** The detail already names the flag, the token or
-the mutual exclusion. Fifty-three codes, and nothing is published beside them:
+the mutual exclusion. Fifty-five codes, and nothing is published beside them:
 `SETTLE_STDIN_CONFLICT`, `OFFER_ANSWER_NOT_A_TOKEN`, `MATERIALIZE_MODE_REQUIRED`,
 `NOT_A_GIT_REPO`, `GATE_ELECTION_REQUIRED` and the rest. Retype the call.
 
 **No — a work state.** Somebody has to act on the repository, so the payload
-carries a `resolve` key saying what. Seventy-one codes, including
+carries a `resolve` key saying what. Seventy-two codes, including
 `POSITION_DISAGREES`, `AGREEMENT_DISAGREES`, `POSITION_STALE`, `DIRTY_WORKTREE`,
 `GATE_AUTHORIZATION_CONSUMED`, `STEP_MODULE_MISSING`,
 `POSITION_RUNG_SKIPPED`, `POSITION_STEP_UNKNOWN`, `STEPS_UNDECLARED`,

@@ -29640,7 +29640,10 @@ class CloseCommandTests(unittest.TestCase):
         proposals = self._proposals()
 
         with self.subTest("absent"):
-            box, _ = self._box()
+            # A job folder declares a flow, so a position is owed; a target
+            # declaring none closes without one (CloseWithoutDeclaredFlowTests).
+            box, commit = self._box()
+            self._write_job_folder(box, commit)
             proc = self.run_cli("close", "--target", str(box), "--name", "Method",
                                 "--revision", self.PROPOSAL_REVISION, "--session", "s1",
                                 proposals=proposals)
@@ -34012,6 +34015,13 @@ _ENGLISH_COUNTS = {
     # work-state count (71) is untouched, and the total moves 121 -> 124.
     53: "Fifty-three",
     124: "One hundred and twenty-four",
+    # The unwitnessed closing act (`settle --done --unwitnessed --reason`):
+    # two new reachable invocation-defect codes, `SETTLE_UNWITNESSED_CONFLICT`
+    # and `SETTLE_WITNESS_PRESENT`, and one work-state code,
+    # `SETTLE_REASON_REQUIRED` -- 53 -> 55, 71 -> 72, 124 -> 127, measured by
+    # running the derivation, never predicted.
+    72: "Seventy-two",
+    127: "One hundred and twenty-seven",
 }
 
 
@@ -34425,9 +34435,12 @@ class GatingRefusalRosterTests(unittest.TestCase):
         plus `SETTLE_REPLACE_CONFLICT`, `SETTLE_NOTHING_TO_REPLACE` and
         `SETTLE_WITNESS_UNCHANGED`, all three raised inside `cmd_settle`'s
         own `--attach` branch -- measured here at exactly +3, never
-        predicted.
+        predicted. One hundred and twenty-seven (the unwitnessed closing
+        act) is that reading plus `SETTLE_UNWITNESSED_CONFLICT`,
+        `SETTLE_REASON_REQUIRED` and `SETTLE_WITNESS_PRESENT`, all three
+        raised inside `cmd_settle` -- measured here at exactly +3.
         """
-        self.assertEqual(len(reachable_refusal_codes()), 124)
+        self.assertEqual(len(reachable_refusal_codes()), 127)
 
     def test_agree_joins_gating_commands_unconditionally_never_this_profiles_own_commands(self):
         """`the-agreement-nothing-computes` (Slice D, design.md D9, tasks.md
@@ -34741,7 +34754,9 @@ class RefusalPayloadPublishesItsExitTests(unittest.TestCase):
         return CloseCommandTests.run_cli(self, *args, proposals=proposals)
 
     def test_a_work_state_refusal_carries_its_resolution(self):
-        box, _ = self._box()
+        # A job folder declares a flow, so close owes a position here.
+        box, commit = self._box()
+        self._write_job_folder(box, commit)
         proc = self.run_cli("close", "--target", str(box), "--name", "Method",
                             "--revision", CloseCommandTests.PROPOSAL_REVISION,
                             "--session", "s1", proposals=self._proposals())
@@ -38426,3 +38441,271 @@ class SkillRootValueTests(unittest.TestCase):
                 source = impl.scaffold_kit_source(destination, name)
                 if source is not None:
                     self.assertFalse(source.exists(), destination)
+
+
+
+class CloseWithoutDeclaredFlowTests(unittest.TestCase):
+    """`close` for a target that declares no flow at all.
+
+    A position sequence is built from execution witnesses only (`step`,
+    `notebook`, `record`, `rehearsal`, `shard`). A target that declares no
+    `__levels__`, no `__steps__`, no `__records__`, no shard root and has no
+    job folder has nothing such a sequence could honestly name, so `close`
+    used to refuse `POSITION_ABSENT` forever: the only way past it was to
+    install an item naming a witness that does not exist. Such a target now
+    closes without a position; every other axis `close` checks still
+    applies, and a target declaring any part of a flow still owes one.
+    """
+
+    PROPOSAL_REVISION = "r1.md"
+    PROPOSAL_TEXT = "## 1\nbody\n"
+
+    def _proposals(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / self.PROPOSAL_REVISION).write_text(self.PROPOSAL_TEXT,
+                                                   encoding="utf-8")
+        return root
+
+    def _box(self, init_source=""):
+        self._count = getattr(self, "_count", 0) + 1
+        box = (FORGE / "implementations"
+               / f"_e2e_close_noflow_{os.getpid()}_{id(self)}_{self._count}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text(init_source, encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_PROPOSALS"] = str(self._proposals())
+        return subprocess.run([sys.executable, str(CLI), *args],
+                              capture_output=True, text=True, cwd=FORGE, env=env)
+
+    def _close(self, box, session="s1"):
+        return self.run_cli("close", "--target", str(box), "--name", "Method",
+                            "--revision", self.PROPOSAL_REVISION,
+                            "--session", session)
+
+    def _ledger(self, box):
+        return impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+
+    def test_a_target_declaring_no_flow_closes_without_a_position(self):
+        box = self._box()
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["status"], "closed")
+        self.assertIs(payload["positionOwed"], False)
+        self.assertEqual(payload["position"]["status"], "absent")
+        closes = [e for e in self._ledger(box) if e.get("kind") == "close"]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["session"], "s1")
+        # No position block is invented on the way: close writes no holder.
+        self.assertFalse(any((box / "Method").glob("*.md")))
+
+    def test_a_second_close_over_the_same_state_is_not_open(self):
+        box = self._box()
+        self.assertEqual(self._close(box).returncode, 0)
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["status"], "not_open")
+
+    def test_each_declared_part_of_a_flow_still_owes_a_position(self):
+        declarations = {
+            "__levels__": "__levels__ = ['floor', 'top']\n",
+            "__steps__": "__steps__ = {'one': {'module': 'Method.s', 'function': 'f'}}\n",
+            "__records__": "__records__ = {'main': {'path': 'out.csv'}}\n",
+        }
+        for label, source in declarations.items():
+            with self.subTest(label):
+                proc = self._close(self._box(init_source=source))
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                payload = json.loads(proc.stdout)
+                self.assertEqual(payload["code"], "POSITION_ABSENT")
+                self.assertIn(label, payload["detail"])
+
+    def test_a_job_folder_still_owes_a_position(self):
+        box = self._box()
+        job = box / "tools" / "svc" / "job1"
+        job.mkdir(parents=True)
+        (job / "run-config.json").write_text(json.dumps({
+            "schemaVersion": 1, "product": "Method", "service": "svc",
+            "jobName": "job1", "commit": "0" * 40,
+            "repo": {"url": "https://example.invalid/repo.git", "ref": "main"},
+            "clonePaths": ["src/Method"],
+            "run": {"module": "Method.module", "function": "run", "kwargs": {}},
+            "runnerTemplate": []}), encoding="utf-8")
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["code"], "POSITION_ABSENT")
+        self.assertIn("job folder", payload["detail"])
+
+    def test_agreement_disagreement_still_refuses_without_a_position(self):
+        box = self._box()
+        (box / "tests" / "test_present.py").write_text(
+            "def test_present():\n    pass\n", encoding="utf-8")
+        (box / "Method" / "AGREED.md").write_text(
+            "# Agreed\n\n## Ladder\n\n- [x] a claimed item `test_missing`\n",
+            encoding="utf-8")
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "AGREEMENT_DISAGREES")
+
+    def test_an_unanswered_discussion_still_refuses_without_a_position(self):
+        box = self._box()
+        asked = self.run_cli("discuss", "--target", str(box), "--name", "Method",
+                             "--about", "record", "--question", "Which one?")
+        self.assertEqual(asked.returncode, 0, asked.stdout)
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "DISCUSSION_UNANSWERED")
+
+
+class SettleDoneUnwitnessedTests(unittest.TestCase):
+    """`settle --done --unwitnessed --reason <text>`: the recorded closing
+    act for an agreement no test could ever witness (a scoping decision, a
+    premise, a deferral). Before it, such a line could only be ticked by
+    hand, an act no record distinguished from any other edit.
+
+    The act ticks the line, records who closed it (`--session`) and why
+    (`--reason`) in the ledger, and is never counted as witnessed:
+    `agreements.witness` keeps listing the line under `unwitnessed`, and
+    names it under `decided` with its reason. A hand tick keeps reading
+    exactly as before and is named under `handTicked`. A line that carries
+    a witness is still closed only by plain `--done`.
+    """
+
+    def _box(self):
+        box = (FORGE / "implementations"
+               / f"_e2e_settle_unwitnessed_{os.getpid()}_{id(self)}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(CLI), *args],
+                              capture_output=True, text=True, cwd=FORGE)
+
+    def _settle(self, box, *extra, text="a scoping decision"):
+        return self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s7", "--text", text, *extra)
+
+    def _holder(self, box, body):
+        path = box / "Method" / "AGREED.md"
+        path.write_text("# Agreed\n\n## Ladder\n\n" + body, encoding="utf-8")
+        return path
+
+    def test_closes_a_witness_less_line_with_a_recorded_reason(self):
+        box = self._box()
+        path = self._holder(box, "- [ ] a scoping decision\n"
+                                 "- [ ] a witnessed item `test_w`\n")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason",
+                            "Out of scope for this revision.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertIs(payload["unwitnessed"], True)
+        self.assertEqual(payload["reason"], "Out of scope for this revision.")
+        self.assertEqual(path.read_text(encoding="utf-8"),
+                         "# Agreed\n\n## Ladder\n\n- [x] a scoping decision\n"
+                         "- [ ] a witnessed item `test_w`\n")
+        events = [e for e in impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+            if e.get("kind") == "settle"]
+        self.assertEqual(len(events), 1)
+        self.assertIs(events[0]["done"], True)
+        self.assertIs(events[0]["unwitnessed"], True)
+        self.assertEqual(events[0]["reason"], "Out of scope for this revision.")
+        self.assertEqual(events[0]["session"], "s7")
+
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["open"], ["a witnessed item"])
+        witness = state["witness"]
+        self.assertIn("a scoping decision", witness["unwitnessed"])
+        self.assertEqual(witness["summary"], "1 of 2 witnessed")
+        self.assertEqual(
+            [(d["text"], d["reason"], d["session"]) for d in witness["decided"]],
+            [("a scoping decision", "Out of scope for this revision.", "s7")])
+        self.assertNotIn("handTicked", witness)
+
+    def test_closing_every_witness_less_line_settles_the_holder(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "Agreed.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(impl.agreements_state(box, "Method")["status"], "settled")
+
+    def test_a_hand_tick_reads_as_before_and_is_named(self):
+        box = self._box()
+        self._holder(box, "- [x] a scoping decision\n- [ ] still open\n")
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["settled"], 1)
+        self.assertEqual(state["open"], ["still open"])
+        self.assertIn("a scoping decision", state["witness"]["unwitnessed"])
+        self.assertEqual(state["witness"]["handTicked"], ["a scoping decision"])
+        self.assertNotIn("decided", state["witness"])
+
+    def test_a_holder_without_unwitnessed_ticks_keeps_its_old_shape(self):
+        box = self._box()
+        self._holder(box, "- [ ] open item\n- [x] done item `test_d`\n")
+        witness = impl.agreements_state(box, "Method")["witness"]
+        self.assertEqual(set(witness),
+                         {"unwitnessed", "unmeasured", "disagrees", "summary"})
+
+    def test_plain_done_on_a_witness_less_line_names_the_recorded_act(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        proc = self._settle(box, "--done")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["code"], "SETTLE_NOT_WITNESSED")
+        self.assertIn("--unwitnessed", payload["detail"])
+
+    def test_refuses_a_line_that_carries_a_witness(self):
+        box = self._box()
+        path = self._holder(box, "- [ ] a scoping decision `test_w`\n")
+        before = path.read_bytes()
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "Because.")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_WITNESS_PRESENT")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_refuses_without_a_reason(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        for extra in ((), ("--reason", "   ")):
+            with self.subTest(extra=extra):
+                proc = self._settle(box, "--done", "--unwitnessed", *extra)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["code"],
+                                 "SETTLE_REASON_REQUIRED")
+
+    def test_unwitnessed_and_reason_only_modify_done(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        for extra in (("--unwitnessed", "--reason", "x"),
+                      ("--done", "--reason", "x"),
+                      ("--attach", "--witness", "test_w", "--unwitnessed")):
+            with self.subTest(extra=extra):
+                proc = self._settle(box, *extra)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["code"],
+                                 "SETTLE_UNWITNESSED_CONFLICT")
+
+    def test_an_already_done_line_is_refused_first(self):
+        box = self._box()
+        self._holder(box, "- [x] a scoping decision\n")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "x")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_ALREADY_DONE")

@@ -288,6 +288,11 @@ sibling's own `AGREED.md` beside it is set aside rather than refused, and for
 what `position`/`settle` refuse (`HOLDER_UNDECLARED`, naming both exits) when a
 checklist already exists under a name no skill sharing the engine declares.
 
+An agreement no test could ever witness is closed by the operator's recorded
+decision, `settle --done --unwitnessed --reason "<their reason>"`, never by a
+hand tick; `close` owes a position only once the target declares a flow. Both
+are described in `references/usage.md`.
+
 ## What this skill has not written down
 
 Same as the sibling, and settled the same way: `.implementation/` is a required

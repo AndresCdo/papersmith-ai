@@ -90,6 +90,22 @@ and `discuss` run (`_agreement_collides`) still inventories every checklist
 under `<Name>/`, the sibling's included, because it reports overlap rather than
 choosing a holder.
 
+## Witness-less agreements, and `close` before a flow exists
+
+Both behave exactly as in the sibling (its `usage.md`, `settle`'s `--done`
+section and `close`). An agreement no test could ever witness — a scoping
+decision, a premise, a deferral — closes by the operator's recorded
+decision: ask whether it is closed and why, then run `settle --done
+--unwitnessed --reason "<their reason>" --text "<line>"`. The act lands in
+`Experimental_AGREED.md`, the ledger event carries the reason and session,
+and `agreements.witness.decided` names it; it is never counted as
+witnessed. A decision recorded against the sibling's holder never names a
+same-text line here, because the match is keyed by holder path. `close`
+owes a position only once the target declares a flow (`__levels__`,
+`__steps__`, `__records__`, a shard root or a job folder); without one it
+closes on the agreement and discussion checks alone and reports
+`positionOwed: false`.
+
 ## Write-refusal into an undeclared holder: `HOLDER_UNDECLARED`
 
 When some other markdown file under `<Name>/` — one no skill sharing this

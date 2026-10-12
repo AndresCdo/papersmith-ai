@@ -2593,5 +2593,72 @@ class ShippedHolderObligationsTests(unittest.TestCase):
             )
 
 
+
+class SettleDoneUnwitnessedSiblingTests(unittest.TestCase):
+    """The recorded closing act for a witness-less agreement, under this
+    profile's own launcher and holder (`Experimental_AGREED.md`).
+
+    The shared engine's logic is covered by the proposal skill's
+    `SettleDoneUnwitnessedTests`; this class proves the act lands in this
+    skill's holder, reads back under `witness.decided`, and that a decision
+    logged against one skill's holder never names a same-text line in the
+    sibling's holder (the ledger match is keyed by holder path).
+    """
+
+    def _box(self):
+        box = (FORGE / "implementations"
+               / f"_exp_settle_unwitnessed_{os.getpid()}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def _settle(self, box, *extra):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(PROFILE_FILE)
+        return subprocess.run(
+            [sys.executable, str(LAUNCHER), "settle", "--target", str(box),
+             "--name", "Method", "--session", "s9",
+             "--text", "a deferred item", *extra],
+            capture_output=True, text=True, cwd=FORGE, env=env)
+
+    def test_the_act_lands_in_this_skills_holder_and_reads_back(self):
+        engine = HolderCollisionTests._load_engine(self)
+        box = self._box()
+        holder = box / "Method" / engine.HOLDER_FILENAME
+        holder.write_text("# Agreed\n\n## Ladder\n\n- [ ] a deferred item\n",
+                          encoding="utf-8")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason",
+                            "Deferred to the next revision.")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["holder"],
+                         f"Method/{engine.HOLDER_FILENAME}")
+        self.assertIn("- [x] a deferred item\n",
+                      holder.read_text(encoding="utf-8"))
+        state = engine.agreements_state(box, "Method")
+        self.assertEqual(state["status"], "settled")
+        self.assertEqual([d["reason"] for d in state["witness"]["decided"]],
+                         ["Deferred to the next revision."])
+
+    def test_a_decision_on_one_holder_never_names_the_siblings_line(self):
+        engine = HolderCollisionTests._load_engine(self)
+        box = self._box()
+        (box / "Method" / engine.HOLDER_FILENAME).write_text(
+            "# Agreed\n\n## Ladder\n\n- [x] a deferred item\n", encoding="utf-8")
+        ledger = box / "Method" / ".implementation" / "position.jsonl"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text(json.dumps({
+            "kind": "settle", "session": "s1", "text": "a deferred item",
+            "done": True, "unwitnessed": True, "reason": "elsewhere",
+            "holder": "Method/AGREED.md", "at": "2026-10-11T00:00:00Z"}) + "\n",
+            encoding="utf-8")
+        witness = engine.agreements_state(box, "Method")["witness"]
+        self.assertNotIn("decided", witness)
+        self.assertEqual(witness["handTicked"], ["a deferred item"])
+
+
 if __name__ == "__main__":
     unittest.main()
