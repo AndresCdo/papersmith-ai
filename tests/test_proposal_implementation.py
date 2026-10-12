@@ -32376,10 +32376,13 @@ class ShardlessRungDiagnosisTests(unittest.TestCase):
                  {"ordinal": 2, "mark": " ", "text": "t", "derived": None,
                   "witness": {"kind": "shard", "operand": "s1",
                               "twostate": True}}]
+        # B8 (`cross-skill-consistency`): with no leveled item, attainment is
+        # the position's own aim, so the aim is part of the evidence a gate
+        # reads (`position_state` sets it from the header).
         verdict = self._verdict(
             items, shards_declared=False,
             evidence={"smokeReady": {"job": True}, "shardsArrived": None,
-                      "shardsCurrent": None})
+                      "shardsCurrent": None, "targetLevel": "top"})
         self.assertTrue(verdict["available"], verdict)
 
     def test_the_refusal_gate_raises_no_longer_claims_the_item_is_ticked(self):
@@ -32584,16 +32587,33 @@ class UnreachableLadderTests(unittest.TestCase):
     def test_dropping_the_level_marker_is_the_other_exit(self):
         """The second exit, proven the same way: the identical four-rung
         ladder with the rehearsal recorded two-state -- the grammar's own
-        default -- launches."""
+        default -- launches once the position aims at the launch rung (B8,
+        `cross-skill-consistency`: with no leveled item attainment is the
+        aim, never the ladder's top)."""
         items = [{"ordinal": 1, "mark": "x", "text": "t",
                   "witness": {"kind": "rehearsal", "operand": "job",
                               "twostate": True}}]
-        evidence = {"levels": self.LADDER, "smokeReady": {"job": True}}
+        evidence = {"levels": self.LADDER, "smokeReady": {"job": True},
+                    "targetLevel": self.LADDER[-2]}
         verdict = impl_availability.launch_available(
             status="ok", unbacked=[], disagreements=[], sequence=items,
             ready=True, job="job", shards_declared=True, levels=self.LADDER,
             attained_level=impl_position.attained_level(items, evidence))
         self.assertTrue(verdict["available"], verdict)
+
+    def test_an_all_two_state_aim_below_the_launch_rung_does_not_launch(self):
+        """B8: aimed at the floor, a sequence with no leveled item attains
+        the floor, not the top, so the launch threshold refuses."""
+        items = [{"ordinal": 1, "mark": "x", "text": "t",
+                  "witness": {"kind": "rehearsal", "operand": "job",
+                              "twostate": True}}]
+        evidence = {"levels": self.LADDER, "smokeReady": {"job": True},
+                    "targetLevel": self.LADDER[0]}
+        verdict = impl_availability.launch_available(
+            status="ok", unbacked=[], disagreements=[], sequence=items,
+            ready=True, job="job", shards_declared=True, levels=self.LADDER,
+            attained_level=impl_position.attained_level(items, evidence))
+        self.assertEqual(verdict["code"], "RUNG_NOT_ATTAINED", verdict)
 
     # --- what a reader is handed -------------------------------------------
 
@@ -39042,3 +39062,38 @@ class SettleOrderingAndCorrectionTests(unittest.TestCase):
             box / "Method" / ".implementation" / "position.jsonl")
             if e.get("kind") == "settle"]
         self.assertEqual([e["reverse"] for e in events], [True, False])
+
+
+class AttainedLevelNeverOverstatesTests(unittest.TestCase):
+    """B8 (`cross-skill-consistency`): `verify`'s `position.attainedLevel`
+    never exceeds what ran. An all-two-state sequence aimed at the middle
+    rung reported the ladder's top (`full`) although no full-scale run had
+    happened; it now reports the aim."""
+
+    def test_an_all_two_state_position_reports_its_aim(self):
+        proposals = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        (proposals / "r1.md").write_text("## 1\ntext\n", encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_attained_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__levels__ = ['local', 'pilot', 'full']\n", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        env = dict(os.environ, IMPLEMENTATION_PROPOSALS=str(proposals))
+        sequence = json.dumps([{"text": "Rehearse the job.",
+                                "witness": {"kind": "rehearsal", "operand": "job1"}}])
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "position", "--target", str(box), "--name",
+             "Method", "--revision", "r1.md", "--session", "s1", "--sequence", "-",
+             "--target-level", "pilot"],
+            input=sequence, capture_output=True, text=True, cwd=FORGE, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box), "--name", "Method"],
+            capture_output=True, text=True, cwd=FORGE, env=env)
+        position = json.loads(proc.stdout)["position"]
+        self.assertEqual(position["targetLevel"], "pilot")
+        self.assertEqual(position["attainedLevel"], "pilot")

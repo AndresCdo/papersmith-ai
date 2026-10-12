@@ -931,7 +931,10 @@ they were easy to leave undocumented:
   answers `RUNG_NOT_ATTAINED` on every call, naming a rung nothing that can
   run will reach. Two exits, both the target's own: declare at most three
   rungs, or drop the `:level` marker from that item and record it two-state
-  (the grammar's default). The forge takes neither on its own — a launch floor
+  (the grammar's default). A sequence with no leveled item attains the rung
+  its position aims at, so after the second exit the position must aim at
+  the launch rung (`position --target-level <requiredLevel>`) before `gate`
+  passes. The forge takes neither on its own — a launch floor
   that moved with whatever the sequence happens to hold would let *adding* a
   leveled item quietly *lower* the threshold for every item beside it. `null`
   when the ladder and the sequence can meet, and `null` below two rungs, where
@@ -1173,6 +1176,10 @@ does.
 That separation is also published: `position`'s state carries
 `attainedLevel` beside `targetLevel`, so the gap between what a pass aims
 at and what backs it can be read without tripping a refusal to find it.
+`attainedLevel` never claims more than ran: with no leveled (`:level`)
+witness in the sequence, nothing measured a scale, and it reports the aim
+(`targetLevel`), never a rung above it. Before 0.14.0 such a sequence
+reported the ladder's top.
 
 Three boundaries, each of them decided rather than fallen into:
 

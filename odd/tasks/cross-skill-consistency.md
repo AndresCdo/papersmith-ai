@@ -53,6 +53,7 @@ Route legend: D = delegated writer, I = inline.
 - [ ] B1–B13
   - [x] B1 — section labels in `verify` drift (D, writer trigger: engine + resolver + 2 profiles + convention + 2 test files + 4 docs + seal)
   - [x] B4 + X6 — settle ordering, reverse heading, tick correction path (D, writer trigger: impl_position + engine + 3 test files + 3 docs)
+  - [x] B8 — attainedLevel bounded by the aim when nothing leveled ran (D, writer trigger: impl_position + engine + 2 test files + 2 docs)
 - [ ] C1–C14
 - [ ] E1–E10
 - [ ] F — final verification: full suite, E2E smoke, upgrade fixture, outcome table
@@ -376,6 +377,25 @@ Route legend: D = delegated writer, I = inline.
   `scripts/build-v0_13_0-fixture.py`'s comment explaining why the fixture settles under `# Agreed` (still
   true of 0.13.0, which builds it).
   Commit: `fix(implementation): settle appends in order, never inside the position block` (the commit carrying this line)
+
+- B8 (real, reproduced on HEAD via the CLI): `__levels__ = ['local','pilot','full']`, one two-state
+  `@rehearsal` item, `position --target-level pilot` -> `verify` `position.attainedLevel: 'full'`. Cause:
+  `impl_position.attained_level` answered the ladder's top for a sequence with no leveled item (documented
+  "vacuous" boundary). Fix: with no leveled item it returns `evidence["targetLevel"]` when on the ladder, else
+  `None`; sequences with leveled items unchanged (leveled evidence is what ran). The rung-skip guard is
+  unaffected (it compares an aim with this answer); `_position_attained_level` (refusal resolution) now
+  passes the block's own target. Consequence (documented under Behaviour changes): `gate`/the launch menu read
+  the same value, so an all-two-state position aimed below `levels[-2]` on a 3+ rung ladder refuses
+  `RUNG_NOT_ATTAINED` (exit: re-seal at the launch rung, which the skip guard allows).
+  Tests: `AttainedLevelNeverOverstatesTests` (1, e2e; RED `'full'` on HEAD via the probe, then GREEN),
+  `UnreachableLadderTests.test_an_all_two_state_aim_below_the_launch_rung_does_not_launch` (new).
+  Re-anchored (pinned the vacuous top): `AttainedLevelTests.test_a_sequence_with_no_leveled_item_attains_
+  the_whole_ladder` -> `..._attains_the_aim_never_more` (RED 3F before the fix),
+  `ShardlessRungDiagnosisTests.test_a_two_state_shard_item_is_not_a_rung_fact_at_all` and
+  `UnreachableLadderTests.test_dropping_the_level_marker_is_the_other_exit` (evidence now carries the aim, as
+  `position_state` supplies it), `LaunchAvailableTests.test_vacuous_attainment_at_the_top_rung_is_sufficient`
+  (docstring only). Domain-lock pins unchanged. Seals unchanged. No migration.
+  Commit: `fix(implementation): attainedLevel never exceeds the aim when nothing leveled ran` (the commit carrying this line)
 
 ## Next step
 

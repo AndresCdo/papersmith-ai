@@ -716,10 +716,11 @@ def attainable_rung(items: list[dict], levels: list[str]) -> str | None:
     one item that can never pass rung N holds the whole sequence below it,
     exactly as it does in `attained_level`.
 
-    **A sequence with no leveled item attains the whole ladder**, vacuously
-    and deliberately -- the identical third boundary `attained_level`'s own
-    docstring states, for the identical reason: with nothing that could fail
-    to reach a rung, every rung is reachable.
+    **A sequence with no leveled item can attain the whole ladder**, vacuously
+    and deliberately: with nothing that could fail to reach a rung, every
+    rung is reachable by aiming at it. This is a bound on the future, so it
+    does not contradict `attained_level`, which answers what is reached now
+    and bounds such a sequence by its aim.
 
     Pure: no I/O, no evidence read at all. It answers a question about the
     grammar and the ladder, never about what has run.
@@ -1099,11 +1100,14 @@ def attained_level(items: list[dict], evidence: dict) -> str | None:
       and read identically at every rung, so they carry no information about
       which one was reached. Folding them in would make this whole-sequence
       completeness under another name.
-    - **A sequence with no leveled item attains the whole ladder.** Vacuously,
-      and deliberately: with nothing that could fail to reach a rung, every
-      rung grades attained and the answer is the top one. That is what keeps a
-      target whose sequence is all two-state exactly as unconstrained by rung
-      arithmetic as it was before any of it existed.
+    - **A sequence with no leveled item attains the rung it aims at, never
+      more** (`cross-skill-consistency`, B8). Nothing in it measured a scale,
+      so no rung above the aim was shown reached; before 0.14.0 this answered
+      the ladder's top vacuously, so a pilot-aimed two-state sequence read as
+      full-scale with no full-scale run behind it. The aim is
+      `evidence["targetLevel"]`; with no aim on the ladder the answer is
+      `None`. Sealing stays as unconstrained as before: the rung-skip rule
+      compares an aim with this answer, which is that same aim.
 
     `evidence["levels"]` is the ladder, read from the same key `derive` reads
     it from, so the two can never disagree about which ladder is in play. No
@@ -1112,10 +1116,14 @@ def attained_level(items: list[dict], evidence: dict) -> str | None:
 
     Pure: no I/O, and `evidence` is copied per candidate rather than mutated,
     so a caller's own `targetLevel` survives the call untouched and never
-    reaches the grading — attainment is a property of the evidence, never of
-    the pass that happens to be reading it.
+    reaches the grading of a leveled item — attainment is a property of the
+    evidence, never of the pass that happens to be reading it. The aim is read
+    only as the bound of a sequence with nothing leveled in it.
     """
     levels = evidence.get("levels") or []
+    if not any(not item["witness"].get("twostate", True) for item in items):
+        aim = evidence.get("targetLevel")
+        return aim if aim in levels else None
     # Top down: the first rung that grades attained is the highest one, and
     # `satisfied` is monotone down the ladder (`derived_index >= target_index`),
     # so there is never a lower rung that fails beneath a higher one that

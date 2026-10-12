@@ -19903,7 +19903,8 @@ def _position_attained_level(target: Path, name: str) -> str | None:
                 continue
             return impl_position.attained_level(
                 impl_position.parse_items(block["body"]),
-                _position_write_evidence(target, name))
+                {**_position_write_evidence(target, name),
+                 "targetLevel": block.get("target")})
     except Exception:
         # Deliberately every one of them: a block that will not parse, a
         # benchmark package that will not import, a declaration that refuses.

@@ -249,6 +249,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   undone. The correction path, now documented, is `settle --reverse` on the
   ticked line (the explanation and the ledger event stay) followed by a new
   `settle --under`.
+- **`position.attainedLevel` no longer claims a rung nothing ran.** A
+  sequence with no leveled (`:level`) witness reported the ladder's top
+  rung, so an all-two-state position aimed at `pilot` read `attainedLevel:
+  full` with no full-scale run behind it. With nothing leveled, attainment is
+  now the rung the position aims at (`targetLevel`), and `null` when the aim
+  is not on the ladder. Sequences with leveled witnesses read as before.
 
 ### Added
 
@@ -437,6 +443,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   refusing `SETTLE_HEADING_ABSENT`, a code that path no longer raises. More
   than one heading still refuses `SETTLE_HEADING_AMBIGUOUS`. Holders and
   ledgers keep their shape, so no migration is needed.
+- `verify`'s `position.attainedLevel` for a sequence with no leveled witness
+  is the header's `targetLevel` instead of the ladder's top rung. `gate` and
+  the launch menu read the same value. On a ladder of three or more rungs, a
+  launch from such a position now needs the position to aim at the launch
+  rung (`levels[-2]` or above). One aimed at a lower rung refuses
+  `RUNG_NOT_ATTAINED` where it used to pass, and re-sealing with
+  `position --target-level <rung>` is the exit, which the rung-skip rule
+  allows for such a sequence. Sealing is otherwise unchanged. Nothing stored
+  changes shape and no migration is needed.
 
 ## 0.13.0
 
