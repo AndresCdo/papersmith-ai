@@ -149,6 +149,8 @@ node skills/proposal-deliberation/cli.mjs '{
 }
 ```
 
+Deleting a document's **first** section is allowed: the artifact marker line that opens every managed revision is a block boundary of its own, so the next heading may follow it directly. Anywhere else, a removal that would leave two blocks one line break apart is refused as `successor-markdown-block-safety`.
+
 ### Move (literal — content carried byte-for-byte)
 
 ```json

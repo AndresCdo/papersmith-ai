@@ -353,6 +353,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   the line inside the successor, deliberated and validated like any other
   edit, clears the flag.
 
+- **A successor can delete the document's first section.** A managed
+  revision opens with the artifact marker line and one newline, so removing
+  the first section left the marker and the next heading one line break
+  apart, and `derive_successor`'s removal-join check refused it as
+  `successor-markdown-block-safety` (since A6 already at the preview, as
+  `CANDIDATE_VALIDATION_FAILED`). The marker is an HTML comment line no block
+  can fuse into, so a removal whose left side is exactly the marker is now a
+  clean join; every other single-newline join is still refused.
+
 ### Added
 
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**

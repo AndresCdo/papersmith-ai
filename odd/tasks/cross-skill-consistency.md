@@ -68,7 +68,7 @@ Route legend: D = delegated writer, I = inline.
 
 ## Found along the way (to resolve before F)
 
-- X1 — `derive_successor` refuses deleting a document's first section (single newline after artifact marker); pre-existing, now visible at preview (found in A6).
+- [x] X1 — `derive_successor` refuses deleting a document's first section (single newline after artifact marker); pre-existing, now visible at preview (found in A6). Fixed; see Progress.
 - X2 — `skills/experimental-deliberation/references/usage.md` says `## Paper Guide Reference`; renderer writes `## Reference Sources` (found in A6).
 - X3 — `tests/test_implementation_pair.py` mutates the real engine file in place; flaky under parallel runs (found in A2).
 - X4 — unguarded legacy deliberation `write` action publishes without candidate validation (found in A6; not a deliberation entry point).
@@ -540,6 +540,18 @@ Route legend: D = delegated writer, I = inline.
   `npm run test:node`: 721 passed (2 failing = the uncommitted X1 RED file). `test_upgrade_v0_13_0_workspace.py`:
   8 passed. No migration (optional receipt key; old receipts validate unchanged).
   Commit: `fix(deliberation): a successor flags an inherited link to another revision's companion artifacts` (the commit carrying this line)
+
+- X1 (real, reproduced with a generic three-section document): deleting `# 1 Intro` refused at preview with
+  `CANDIDATE_VALIDATION_FAILED` / `successor-markdown-block-safety` ("fuses Markdown blocks"); deleting the
+  middle section passed. Cause: `validateSuccessorManifest`'s removal join wants `\n\n` across
+  `before`/`after`, and `before` is the artifact marker, which ends in one `\n`. Fix
+  (`proposal-workspace.ts`): a removal whose `before` is exactly `ARTIFACT_MARKER` is a clean join; every
+  other left side keeps the blank-line rule. Tests: `tests/deliberation-first-section-delete.test.mjs` (3:
+  publish of a first-section delete with exact bytes; the bare manifest check admits it and still refuses
+  the same join after prose, also at preview; middle deletion unchanged). RED 2F -> GREEN. Mutation (admit
+  any left side ending in `\n`) -> 1 red. Docs: both usage.md Delete sections. `npm run test:node`: 723
+  passed. No migration.
+  Commit: `fix(deliberation): a successor can delete the document's first section` (the commit carrying this line)
 
 ## Next step
 

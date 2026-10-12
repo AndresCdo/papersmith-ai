@@ -257,6 +257,8 @@ Every `CREATE_SUCCESSOR` preview needs `changeSummary`, or it is blocked with `C
 }
 ```
 
+Deleting a document's **first** section is allowed: the artifact marker line that opens every managed revision is a block boundary of its own, so the next heading may follow it directly. Anywhere else, a removal that would leave two blocks one line break apart is refused as `successor-markdown-block-safety`.
+
 ### Move (literal) and copy (adaptive)
 
 ```json

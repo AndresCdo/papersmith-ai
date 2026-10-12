@@ -4671,8 +4671,13 @@ function validateSuccessorPatches(
 			if (blockScoped) {
 				const before = source.slice(0, start);
 				const after = source.slice(end);
+				// A removal joins `before` to `after`. When `before` is exactly the artifact marker,
+				// the removed span was the document's first block: the marker is an HTML comment line
+				// that ends in its own single newline and that no Markdown block can fuse into, and
+				// the source itself joins it to its first heading with that one newline. Any other
+				// left side still needs a blank line.
 				const safe = newText.length === 0
-					? hasMarkdownBlockSeparation(before, after)
+					? hasMarkdownBlockSeparation(before, after) || before === ARTIFACT_MARKER
 					: (hasMarkdownBlockSeparation(before, newText) ||
 						preservesExistingMarkdownBoundaryOnRight(before, oldText, newText)) &&
 						(hasMarkdownBlockSeparation(newText, after) ||
