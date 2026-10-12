@@ -147,11 +147,52 @@ breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
 - [x] T2 — Pilot: U0-U3, reviewed for voice before scaling
 - [x] T3 — U4-U8
 - [x] T4 — The flow reordered: plausibility before ingestion
-- [ ] T5 — U9, one commit per skill, in neutral register
+- [x] T5 — U9, one commit per skill, in neutral register
 - [ ] T6 — U10-U16, in neutral register
 - [ ] T7 — The neutral-register revision of U0-U8, one commit per unit
 - [ ] T8 — `README.es.md` stops claiming the manual is Spanish
 - [ ] T9 — Guards, then merge
-- [ ] T10 — The artifacts half: templates, skills and diagram locales in English (0.14.0)
+- [x] T10 — The artifacts half. **Measured, not assumed, on 2026-10-12 and already
+      satisfied:** the twelve `skills/*/SKILL.md` (9,603 lines) and the thirteen
+      `src/papersmith/templates/*.tpl` (786 lines) are English on the tree; the
+      only Spanish left under a shipped root is `docs/diagrams/locales/es.json`,
+      which is the Spanish locale and is Spanish on purpose. `0.14.0` is already
+      in `CHANGELOG.md` and in `src/papersmith/__init__.py`, so this half forces
+      no further version move and no release. The manual is documentation and
+      never forced one either.
 - [ ] T11 — Regenerate the diagram once the manual stops moving, re-pointing every
       `sources` citation at once and advancing `meta.repository.revision`
+- [x] T12 — Reconcile this record with the tree (2026-10-12): T5 closed, T10
+      re-measured, `## Log` opened
+- [ ] T13 — The manual's mechanical rules become a checkable script,
+      `scripts/check_manual.py`, instead of a reading done by hand at every unit
+
+## Measured on 2026-10-12, mid-cycle
+
+The three numbers the remaining work is now planned against. They come from the
+file, not from an estimate:
+
+```
+README.md                        3.852 líneas
+  English, U0-U9                 3.117  (81%)
+  Spanish, U10-U16                 735  (573 prosa, 73 tabla, 55 código)
+  `###` blocks left to translate   13
+U0-U8 to revise for register       679 lines of already-English text
+SKILL.md + templates in Spanish      0 lines (both halves already English)
+```
+
+## Log
+
+- **L1** — The operator's request that opened the reconciling unit, verbatim:
+  *"revisa en que quedamos en este proyecto, analiza el todo, mira si podemos
+  optimizar, nos estamos demorando mucho en estos cambios"*.
+- **L2** — Operator decision, verbatim in its effect: reconcile this record and
+  write the manual's guard **first**, then continue with T6 and T7. Chosen over
+  translating straight through and guarding at the end.
+- **L3** — Evidence found while reconciling, 2026-10-12: T5 was finished by
+  `cb92ded` but still unchecked here, so the plan could not be trusted; T10 was
+  planned as "the artifacts half, forcing 0.14.0" when the artifacts are already
+  English and 0.14.0 is already released. T12 and T13 close both gaps.
+- **L4** — The remaining serial cost was measured at ~22 minutes per unit across
+  ten commits on 2026-10-12, which is what L1 was reacting to. The guard exists
+  to remove the hand-reading from every one of the units left.
