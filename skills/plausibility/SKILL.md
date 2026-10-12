@@ -36,6 +36,12 @@ family. A candidate without an abstract does not exist for the map — a
 title is not a territory. The pool is research content: it travels
 gitignored, like everything under `sota-pool/`.
 
+The borrowed `resolve` caches every answer it gives. Both agents pass
+`--cache-dir sota-pool/metadata`, so those caches stay in the pool too, one
+`<metadata_digest>.json` per resolution. Without that flag `resolve` caches
+under `paper/.paper-writing/metadata/`, which is paper-writing's own place,
+and exploring an idea would start a paper tree before any paper exists.
+
 ## The planets
 
 Every system carries exactly these slots. Counts are exact where stated,

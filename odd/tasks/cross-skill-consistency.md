@@ -48,7 +48,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] D2 — migration support policy (I within this writer: docs only)
 - [x] F-prep — populated v0.13.0 workspace fixture + upgrade test (D, writer trigger: generator + fixture + test + src fix + docs)
 - [x] D3 — engine state gitignore decision (D, writer trigger: generators + manifest + upgrade + template + 2 test files + docs)
-- [ ] D4 — plausibility metadata cache inside sota-pool
+- [x] D4 — plausibility metadata cache inside sota-pool (D, writer trigger: paper_cli + paper_resolve + 2 agents + 2 SKILL.md + test)
 - [x] D5 — no bytecode in kit copy (I/D within this writer: 2 src files + 1 test file + docs)
 - [ ] B1–B13
 - [ ] C1–C14
@@ -304,6 +304,22 @@ Route legend: D = delegated writer, I = inline.
   off -> 2; malformed guard off -> 1. Fixture test: `.gitignore` added to `INTENDED_CHANGES`. Related suites
   246 passed. Docs gap (outside surface): `skills/upgrade-project/SKILL.md` does not mention the block.
   Commit: `fix(workspace): engine state is ignored and upgrade keeps a workspace's own .gitignore lines` (the commit carrying this line)
+
+- D4 (real): `cmd_resolve` always cached under `resolve_paper_dir(args.paper)` (default `<root>/paper`), and both
+  plausibility agents called it without `--paper`. Choice: a `--cache-dir` flag the callers pass, not "resolve
+  never creates paper/": the latter would drop the cache entirely (nowhere in `sota-pool/`) and change
+  paper-writing's pre-scaffold behaviour, and a role-derived default is impossible (paper-writing also uses
+  `--role resolution`). Doctrine: the requirement is answered through the skill's own documented invocation
+  (the agents name the pool they already write into), and the cache key/layout is derived from the one
+  `metadata_digest` keying (`cache_metadata_in`; `cache_metadata` delegates via `metadata_dir`). `--paper` and
+  `--cache-dir` are an argparse mutually exclusive group; containment reuses `_resolve_repo_path`
+  (`PAPER_OUTSIDE_REPOSITORY`), checked before any request. Existing `paper/.paper-writing/metadata/` caches: no
+  migration (valid paper-writing caches, unchanged key). Harness agent projections regenerated with
+  `scripts/sync-repo-harness.py` (`--check` clean, 95 files).
+  Tests: `tests/test_plausibility_resolve_cache.py` (4; invocation parsed from each agent file, run against the
+  workspace's shipped `paper_cli.py` with the `OPENER` seam). RED 3F (+1 subtest) -> GREEN. Mutations: cache-dir
+  ignored -> 3 red; containment dropped -> 1 red. test:fast 2018 passed, 1 failed (known `.venv` env failure).
+  Commit: `fix(plausibility): resolve caches in sota-pool, never starting a paper tree` (the commit carrying this line)
 
 ## Next step
 

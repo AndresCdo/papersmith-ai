@@ -20,6 +20,7 @@ Public surface:
     resolve_identifier(identifier, *, resolver, role, config) -> dict
     fetch_bytes(url, *, config)                -> bytes
     cache_metadata(paper_dir, result)         -> dict
+    cache_metadata_in(directory, result)      -> dict
     read_cached_metadata(paper_dir, digest)   -> dict | None
 """
 from __future__ import annotations
@@ -439,15 +440,29 @@ def fetch_bytes(url: str, *, config: dict) -> bytes:
         raise Refused("IDENTIFIER_UNRESOLVED", f"full-text fetch: {exc}")
 
 
+def metadata_dir(paper_dir: Path) -> Path:
+    """Where a paper's resolutions are cached, and where `bib` and
+    `full_text` look them up."""
+    return paper_dir / ".paper-writing" / "metadata"
+
+
 def _metadata_path(paper_dir: Path, metadata_digest: str) -> Path:
-    return paper_dir / ".paper-writing" / "metadata" / f"{metadata_digest}.json"
+    return metadata_dir(paper_dir) / f"{metadata_digest}.json"
 
 
 def cache_metadata(paper_dir: Path, result: dict) -> dict:
     """Caches a `resolve_identifier` result keyed by its own
     `metadata_digest` (`design.md`, Decision 4 -- `paper_bib.py`'s entry
     producer looks it back up by this same key)."""
-    path = _metadata_path(paper_dir, result["metadata_digest"])
+    return cache_metadata_in(metadata_dir(paper_dir), result)
+
+
+def cache_metadata_in(directory: Path, result: dict) -> dict:
+    """The same record, keyed the same way, in a directory the caller names
+    -- for a caller that is not writing a paper (`resolve --cache-dir`).
+    Nothing under `paper/` reads it: `bib` and `full_text` read only
+    `metadata_dir(paper_dir)`."""
+    path = directory / f"{result['metadata_digest']}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return {"path": str(path)}

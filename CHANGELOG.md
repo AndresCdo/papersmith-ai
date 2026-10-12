@@ -207,6 +207,18 @@ number is `0`, breaking changes can still arrive without a major bump.
   block does not already carry kept below it, in order. Malformed markers
   are never guessed at: the file is left as it is, the run reports it as not
   written, and it stays drift until repaired.
+- **The plausibility flow no longer starts a `paper/` tree.** `sota-scout`
+  and `novelty-screener` confirm candidates through paper-writing's
+  `resolve`, which cached every answer under `paper/.paper-writing/metadata/`
+  by default, so exploring an idea wrote paper content before any paper
+  existed. `resolve` gains `--cache-dir <dir>` (caches as
+  `<dir>/<metadata_digest>.json`, refused outside the repository with
+  `PAPER_OUTSIDE_REPOSITORY`, mutually exclusive with `--paper`), and both
+  agents now pass `--cache-dir sota-pool/metadata`, keeping their caches in
+  the pool. paper-writing's own calls pass nothing and keep caching under
+  `paper/`, where `bib` and `full_text` read. The test reads the invocation out
+  of each agent's definition and runs it against a workspace's shipped
+  `paper_cli.py`.
 
 ### Added
 
@@ -366,6 +378,12 @@ number is `0`, breaking changes can still arrive without a major bump.
   committed engine state keeps it in git until `git rm -r --cached
   .proposal-deliberation .experimental-deliberation` is run, which is the
   user's call.
+- The plausibility agents' `resolve` calls cache under `sota-pool/metadata/`
+  instead of `paper/.paper-writing/metadata/`. Caches an earlier run already
+  left under `paper/` are valid paper-writing caches (same record, same key)
+  and keep reading; nothing moves them and no migration is needed. A
+  workspace that wants them gone can delete
+  `paper/.paper-writing/metadata/` while no paper has been started.
 
 ## 0.13.0
 

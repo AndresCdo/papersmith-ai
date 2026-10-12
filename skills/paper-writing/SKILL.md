@@ -664,7 +664,15 @@ by its own digest.
 
 | Verb | What it does | Refuses |
 | --- | --- | --- |
-| `resolve --identifier <id> --resolver {openalex,crossref,arxiv} [--role <role>]` | Resolves one identifier's metadata through one named connector and caches it | `PAPERSMITH_CONFIG_UNREADABLE`, `UNKNOWN_ROLE`, `DISCOVERY_UNAVAILABLE`, `RESOLVER_ROLE_EMPTY`, `RESOLVER_UNREACHABLE`, `IDENTIFIER_UNRESOLVED` |
+| `resolve --identifier <id> --resolver {openalex,crossref,arxiv} [--role <role>] [--paper <dir> \| --cache-dir <dir>]` | Resolves one identifier's metadata through one named connector and caches it: under `<paper>/.paper-writing/metadata/` by default, or as `<dir>/<metadata_digest>.json` with `--cache-dir` | `PAPER_OUTSIDE_REPOSITORY`, `PAPERSMITH_CONFIG_UNREADABLE`, `UNKNOWN_ROLE`, `DISCOVERY_UNAVAILABLE`, `RESOLVER_ROLE_EMPTY`, `RESOLVER_UNREACHABLE`, `IDENTIFIER_UNRESOLVED` |
+
+**`--cache-dir` is for callers that are not writing a paper.** `bib` and
+`full_text` look a resolution up only under `paper/.paper-writing/metadata/`,
+so paper-writing's own calls pass nothing. The plausibility agents borrow
+`resolve` before any paper exists and pass `--cache-dir sota-pool/metadata`,
+which keeps their caches beside the pool and leaves `paper/` untouched. The
+two flags are one choice: passing both is a usage error. A directory outside
+the repository refuses `PAPER_OUTSIDE_REPOSITORY` before any request.
 
 **Every role can be emptied in `papersmith.yaml`.** An empty `resolution`
 role refuses `RESOLVER_ROLE_EMPTY` rather than silently resolving nothing;
