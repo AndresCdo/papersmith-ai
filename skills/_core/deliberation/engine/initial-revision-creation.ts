@@ -11,6 +11,7 @@ import type { ManagedInitialRevisionReceipt } from './revision-receipt.js';
 import { artifact, initialRevisionFilename, isInitialRevision } from './artifact-naming.js';
 import { violations as canonicalFormViolations } from './preservation.js';
 import type { PreservationViolation } from './types.js';
+import { initialCandidateRefusal, type CandidateValidationFailure } from './proposal-workspace.js';
 
 export type { InitialRevisionGuideFragment };
 
@@ -42,7 +43,8 @@ export type CreateInitialRevisionInput = { idea: string; guideFragments?: readon
 export type CreateInitialRevisionResult =
 	| { status: 'created'; filename: string; revision: string; documentSha256: string; canonicalMetadata: CanonicalProposalMetadata; markdown: string }
 	| { status: 'blocked'; code: 'INITIAL_IDEA_REQUIRED' | 'MANAGED_PROPOSAL_ALREADY_EXISTS' | 'INITIAL_IDEA_SINGLE_SENTENCE' }
-	| { status: 'blocked'; code: 'INITIAL_REVISION_CANONICAL_FORM_VIOLATION'; violations: readonly PreservationViolation[] };
+	| { status: 'blocked'; code: 'INITIAL_REVISION_CANONICAL_FORM_VIOLATION'; violations: readonly PreservationViolation[] }
+	| { status: 'blocked'; code: 'INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED'; candidateValidation: CandidateValidationFailure };
 
 /**
  * Explicit, user-triggered creation of the first managed proposal (spec I1). Never auto-bootstraps:
@@ -104,6 +106,14 @@ export class InitialRevisionCreationService {
 		// no-op, which is why the mathematical domain is unaffected.
 		const violations = canonicalFormViolations(composed.markdown);
 		if (violations.length) return { status: 'blocked', code: 'INITIAL_REVISION_CANONICAL_FORM_VIOLATION', violations };
+		// The first revision's pre-publish validation, the SAME set a guarded INITIAL_CREATE write
+		// runs (size and reserved bytes, display blocks, standalone ATX headings). This path writes
+		// through its own filesystem port and used to run none of it, so v1 could publish a line --
+		// a heading fused with prose -- that every later successor's accept turn refuses over the
+		// whole composed document, leaving no successor publishable until unrelated text was
+		// reworded. Refusing it here gives v1, the successor preview and the accept turn one verdict.
+		const candidateValidation = initialCandidateRefusal(composed.markdown);
+		if (candidateValidation) return { status: 'blocked', code: 'INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED', candidateValidation };
 		const filename = initialRevisionFilename(composed.slug);
 		if (!isInitialRevision(filename)) throw new Error('INITIAL_REVISION_FILENAME_INVALID');
 		const candidate: InitialRevisionCandidate = { filename, revision: artifact.revisionLabel(1), markdown: composed.markdown, canonicalMetadata: composed.canonicalMetadata };

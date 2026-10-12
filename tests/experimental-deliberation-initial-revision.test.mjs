@@ -252,6 +252,28 @@ test('a source fragment carrying a filled report-table cell refuses the first re
 });
 
 // ---------------------------------------------------------------------------
+// The composed v1 runs the same pre-publish validation every successor's accept turn runs
+// ---------------------------------------------------------------------------
+
+test('a source fragment with a heading fused into prose refuses the first revision, naming the rule', async () => {
+	const { details, onDisk } = await createInitialRevision(`${PROPOSAL_FRAGMENT}\n\nThe log marks its boundary with ## Results inline.\n`);
+	assert.equal(details.status, 'blocked', `a v1 no successor could ever be published from must not be written: ${JSON.stringify(details)}`);
+	assert.deepEqual(details.blockers?.map((blocker) => blocker.code), ['INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED'],
+		JSON.stringify(details.blockers));
+	assert.match(details.blockers[0].message, /atx-heading-standalone/);
+	assert.match(details.blockers[0].message, /## Results inline/);
+	assert.equal(details.nextAction, 'repair_candidate_markdown');
+	assert.deepEqual(onDisk, [], 'nothing may be written when the composed candidate is refused');
+	assert.equal(details.mutations, 0);
+});
+
+test('a source fragment quoting a heading marker inside a code span still publishes the first revision', async () => {
+	const { details, onDisk } = await createInitialRevision(`${PROPOSAL_FRAGMENT}\n\nThe log marks its boundary with \`## Results\` inline.\n`);
+	assert.equal(details.status, 'created', JSON.stringify(details));
+	assert.deepEqual(onDisk, [details.targetFilename]);
+});
+
+// ---------------------------------------------------------------------------
 // The two declarations a plan owes -- v1 is checked, not only successors
 // ---------------------------------------------------------------------------
 

@@ -109,6 +109,8 @@ If a managed revision already exists, it blocks with `MANAGED_PROPOSAL_ALREADY_E
 }
 ```
 
+The same holds for the structural pre-publish validation every successor's accept turn runs over the whole document. A source fragment with a heading fused into prose (`The log marks its boundary with ## Results inline.`) is refused with `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, `nextAction: "repair_candidate_markdown"`, and a message naming `atx-heading-standalone` and the offending line; the same sentence with the marker in a code span (`` `## Results` ``) publishes.
+
 Driven for real: a source fragment containing one bare URL and nothing else wrong never becomes a file on disk. So there is nothing to repair in v1 for either of those two conditions *after* creation — a v1 that exists already satisfies them, exactly as any successor does; asking the reader to check for a violation that would have blocked the write is asking them to repair a file that cannot exist. What is still worth a read once v1 is created is what the gate does **not** check: whether a pasted source fragment says what you meant it to, and whether the idea text you sent is the document you actually want to build on.
 
 ## Open one `--serve` process for the whole deliberation
@@ -366,7 +368,9 @@ A candidate violating any canonical-form rule fails validation, and the accept t
 2. Every report-table body cell past column one free of digits.
 3. Every baselines-table body row carrying a repository URL and a four-digit venue year, with the year coming from the venue and not from a verification tag.
 4. Every `[tests:X]` / `(Exp. X)` citation resolving to an `[exp:X]` this document declares, and no identifier declared twice.
-5. Well-formed Markdown: complete blocks, blank-line separation preserved at block boundaries.
+5. Well-formed Markdown: complete blocks, blank-line separation preserved at block boundaries, and every ATX heading on its own line (a `## ` inside a backtick code span is text and passes).
+
+The preview runs the same pre-publish validation the accept turn runs, so a candidate the accept turn would refuse is refused at the preview with this same message, and no acceptance token is issued for it.
 
 The same projection applies to a source-authority block:
 

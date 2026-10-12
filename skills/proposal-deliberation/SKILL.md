@@ -267,7 +267,8 @@ For `move`/`copy`: the kind, source, destination, and position are whatever the 
 - **Preserve block-boundary blank lines.** End a block-scoped replacement with the same trailing blank-line separation the original block had, so it does not fuse with the following block (e.g. a section body that ends before the next `## ` heading keeps its terminating `\n\n`).
 - **Display math is its own block.** Write a `$$ … $$` display equation on its own lines with blank lines around it — never inline inside a prose sentence — and keep every `$$` balanced and every LaTeX command well-formed. Inline or unbalanced display math is rejected.
 - Patch only complete Markdown blocks; do not cut a replacement off mid-block.
-If the engine returns `successor-markdown-block-safety`, the fix is a well-formed replacement (fix the spacing / make the equation a standalone block), never a workaround.
+- **Every ATX heading stands on its own line.** A `#`–`######` marker followed by a space anywhere else on a line is refused as `atx-heading-standalone`. A marker inside a backtick code span (`` `## Results` ``) is text, not a heading, and passes.
+If the engine returns `successor-markdown-block-safety` or `atx-heading-standalone`, the fix is a well-formed replacement (fix the spacing / make the equation a standalone block / put the heading on its own line), never a workaround. The preview runs the accept turn's own pre-publish validation, so either refusal arrives at the preview as `CANDIDATE_VALIDATION_FAILED`, before any acceptance token is issued.
 
 #### The canonical form: how this document spells mathematics
 

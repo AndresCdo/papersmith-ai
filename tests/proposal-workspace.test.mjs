@@ -905,6 +905,57 @@ test("derive_successor replaces one exact block while preserving every surroundi
 	);
 });
 
+// An inline code span is not a heading. The standalone-ATX check masks CommonMark code spans
+// before it looks for a fused `#{1,6} ` marker, and only code spans: every case in the second
+// table is a line whose `## ` is real text, so the check must keep refusing it.
+const codeSpanSuccessorCases = [
+	["a single-backtick span", "Read the `## Results` marker.\n"],
+	["a double-backtick span holding a backtick", "Read the ``a ` ## b`` marker.\n"],
+	["a whole line that is one code span", "`## Results`\n"],
+	["a heading line that mentions a marker in code", "## Markers such as `## Results`\n"],
+];
+const fusedOutsideCodeSuccessorCases = [
+	["an unclosed backtick run", "Read the `unclosed ## Fused marker.\n"],
+	["a marker fused right after a span that opens the line", "`a`## Fused marker.\n"],
+	["escaped backticks, which open no span", "Read the \\`## Fused\\` marker.\n"],
+	["mismatched run lengths, which close nothing", "Read the ``## Fused` marker.\n"],
+	["a marker after a closed span on the same line", "Read `code` then ## Fused marker.\n"],
+];
+
+for (const [label, line] of codeSpanSuccessorCases) {
+	test(`derive_successor accepts an ATX-like marker inside ${label}`, async () => {
+		const root = await fixture();
+		const tool = toolFor(root);
+		const sourceBody = "# Current proposal\n\n## Selected block\n\nOld statement.\n";
+		const manifest = await createManagedLatest(root, tool, "code-span-r01", sourceBody);
+		const result = await execute(tool, {
+			action: "derive_successor", resource: "proposal",
+			source: manifest.source.target, sourceSha256: manifest.source.sha256, slug: "code-span-r02",
+			patches: [{ id: "replace-selected-block", kind: "replace", oldText: "Old statement.\n", newText: line }],
+		});
+		assert.equal(result.details.candidateValidation.status, "passed");
+		assert.equal(result.details.candidateValidation.atxHeadingsStandalone, true);
+	});
+}
+
+for (const [label, line] of fusedOutsideCodeSuccessorCases) {
+	test(`derive_successor still refuses a fused ATX marker with ${label}`, async () => {
+		const root = await fixture();
+		const tool = toolFor(root);
+		const sourceBody = "# Current proposal\n\n## Selected block\n\nOld statement.\n";
+		const manifest = await createManagedLatest(root, tool, "fused-span-r01", sourceBody);
+		await candidateFailure(
+			execute(tool, {
+				action: "derive_successor", resource: "proposal",
+				source: manifest.source.target, sourceSha256: manifest.source.sha256, slug: "fused-span-r02",
+				patches: [{ id: "replace-selected-block", kind: "replace", oldText: "Old statement.\n", newText: line }],
+			}),
+			path.join(root, "proposals/research-concept-fused-span-r02.md"),
+			"atx-heading-standalone",
+		);
+	});
+}
+
 test("derive_successor supports one narrowly anchored additive insertion", async () => {
 	const root = await fixture();
 	const tool = toolFor(root);

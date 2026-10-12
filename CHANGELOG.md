@@ -95,6 +95,24 @@ number is `0`, breaking changes can still arrive without a major bump.
   under `decided`. `--done` on a line that names a witness is unchanged, and
   `--unwitnessed` on such a line refuses `SETTLE_WITNESS_PRESENT`. Shared by
   `experimental-implementation`.
+- **Deliberation gives one candidate the same verdict at v1 creation,
+  preview and accept, and a code span is no longer a heading.** The three
+  points ran three validation sets: `CREATE_INITIAL_REVISION` ran only the
+  canonical-form rules, the `CREATE_SUCCESSOR` preview ran only the
+  orchestrator's candidate validator, and only the accept turn ran the
+  workspace's pre-publish set. The shared standalone-ATX check also read a
+  backtick span such as `` `## Results` `` as a heading fused with prose. So
+  a v1 carrying an inline-code `## ` published, every successor preview
+  answered `awaiting_acceptance`, and every accept refused
+  `atx-heading-standalone`: no successor could be published until unrelated
+  text was reworded. The check now masks CommonMark code spans (a backtick
+  run closed by a run of exactly the same length, on one line) before it
+  looks for a fused marker; a marker outside code still refuses, and a span
+  that crosses a line ending stays unmasked. The preview now runs the accept
+  turn's own pre-publish validation (`successorCandidateRefusal`, the same
+  function `derive_successor` runs before writing) and v1 runs the guarded
+  first write's (`initialCandidateRefusal`). Both deliberation skills share
+  the engine.
 
 ### Behaviour changes
 
@@ -151,6 +169,21 @@ number is `0`, breaking changes can still arrive without a major bump.
   line no test could witness. Three new refusals: `SETTLE_UNWITNESSED_CONFLICT`,
   `SETTLE_REASON_REQUIRED` (a work state whose question asks the operator
   why) and `SETTLE_WITNESS_PRESENT`.
+- `proposal-deliberation` and `experimental-deliberation`: a successor
+  preview whose candidate the accept turn would refuse now answers `blocked`
+  / `CANDIDATE_VALIDATION_FAILED` instead of `awaiting_acceptance`; the
+  validation carries the accept turn's refusal under `candidateValidation`,
+  `results.prePublish` and `prePublishApplicable`. Such a token could never
+  be spent, so no publishable flow changes.
+- `CREATE_INITIAL_REVISION` refuses a composed v1 that fails the structural
+  pre-publish validation (oversized or reserved bytes, malformed display
+  blocks, a heading fused into prose outside code) with
+  `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED` and `nextAction:
+  repair_candidate_markdown`, where it used to publish a v1 that blocked
+  every successor. A heading marker inside a code span now passes at all
+  three points. Existing managed revisions, receipts and ledgers are not
+  re-validated and keep reading; a 0.13.0 v1 that carries an inline-code
+  `## ` becomes able to publish successors. No migration is needed.
 
 ## 0.13.0
 

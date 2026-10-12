@@ -58,7 +58,7 @@ node skills/proposal-deliberation/cli.mjs '{
 }'
 ```
 
-This is explicit and user-triggered only: it never runs automatically, and it is rejected outright when a managed proposal already exists (it never overwrites or duplicates one). The engine loads the project's `guidance/paper-guide` directory once and composes v1 from that guide content plus the supplied idea — title, section heading, and filename slug are all derived from the idea, never a fixed generic skeleton. A successful call returns the created filename, revision, and document hash as completion evidence.
+This is explicit and user-triggered only: it never runs automatically, and it is rejected outright when a managed proposal already exists (it never overwrites or duplicates one). The engine loads the project's `guidance/paper-guide` directory once and composes v1 from that guide content plus the supplied idea — title, section heading, and filename slug are all derived from the idea, never a fixed generic skeleton. A successful call returns the created filename, revision, and document hash as completion evidence. Before writing, the composed v1 runs the same structural pre-publish validation every successor's accept turn runs over the whole document (size and reserved bytes, well-formed display blocks, standalone ATX headings); a failure is refused with `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, `nextAction: "repair_candidate_markdown"`, and a message naming the rule and the offending line. A heading marker inside a backtick code span is text and passes.
 
 ## Open one `--serve` process for the whole deliberation
 

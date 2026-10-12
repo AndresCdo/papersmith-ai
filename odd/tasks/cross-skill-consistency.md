@@ -41,7 +41,7 @@ Route legend: D = delegated writer, I = inline.
 - [x] A3 — probe pilot ladder with in-package baselines (D, writer trigger: engine + 2 test files + docs)
 - [x] A4 — scaffold seal file provenance exemption (D, writer trigger: engine + 2 test files + docs)
 - [x] A5 — close for proposal-only targets / witness-less agreements (D, writer trigger: engine + 2 test files + 4 docs + seals)
-- [ ] A6 — deliberation validation parity (code spans)
+- [x] A6 — deliberation validation parity (code spans) (D, writer trigger: 3 engine files + 5 test files + 4 docs)
 - [ ] A7 — shared experiment heading convention
 - [ ] A8 — per-lineage `__implementation__` binding (verify)
 - [ ] D1 — kit provenance record + dirty-kit guard
@@ -139,7 +139,30 @@ Route legend: D = delegated writer, I = inline.
   Seals: `close-e1` (both corpora) +174 bytes = the new detail text only; experiments `propose`
   timestamp noise reverted.
   Commit: `fix(implementation): close needs no position without a flow, and witness-less agreements close by record` (the commit carrying this line)
+- A6 (real): `validateStandaloneAtxMarkers` read a backtick code span as a fused heading, and the
+  three points ran three validation sets (v1: canonical form only; preview: `candidate-validator.ts`
+  only; accept: `derive_successor`'s full pre-publish set). Fix: `maskInlineCodeSpans` (CommonMark,
+  one line, exact-length close, backslash escapes, non-`#`/non-space placeholder) before the fused
+  test; `validateSuccessorManifest` factored out of `deriveSuccessorProposal` and exported as
+  `successorCandidateRefusal` (dry run, same source bytes/digest/patches), joined into
+  `validateCandidate`'s `ok` (`results.prePublish`, `candidateValidation`, `prePublishApplicable` --
+  false only for a marker-less in-memory state); `initialCandidateRefusal` (= `validateInitialCandidate`)
+  run by `InitialRevisionCreationService` -> `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, projected
+  with `nextAction: repair_candidate_markdown`. Audit: after the fix the only accept-only checks are
+  state/IO ones (collision, staleness, source ownership); flat-domain definitions are relative to a
+  predecessor (not applicable at v1). Not unified: the unguarded legacy `write` action publishes
+  without candidate validation (not a deliberation entry point); deleting the FIRST section is refused
+  by `derive_successor`'s block-boundary check (marker line + one newline) -- pre-existing, now
+  surfaced at preview; one composite-successor test switched to deleting the last section.
+  Tests: `tests/deliberation-validation-parity.test.mjs` (10, both skills; RED 8F -> GREEN),
+  `proposal-workspace.test.mjs` code-span cases (9), `experimental-deliberation-initial-revision`
+  public-surface cases (2; RED 1F -> GREEN). Mutations: no mask -> 7 red; space placeholder -> 1 red;
+  no escape handling -> 1 red; any-length close -> 2 red; preview skip -> 2 red; v1 skip -> 2 red.
+  Domain-profile lock "proposal" residue 169 -> 171 (+`candidate-validator.ts`): two module
+  specifiers, recorded in the test. No migration; no seal change.
+  Checks: typecheck clean; test:node 702/702; test:fast 3241 passed.
+  Commit: `fix(deliberation): one validation verdict at v1, preview and accept; code spans are not headings` (the commit carrying this line)
 
 ## Next step
 
-A6 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).
+A7 next. Common writer rules: scratchpad common.md (mirrored in each delegation prompt).

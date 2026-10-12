@@ -578,7 +578,7 @@ function blocked(reason: string, nextStep: string): Error {
 
 type CandidateOperation = "initial_create" | "derive" | "derive_revision" | "derive_successor";
 
-type CandidateValidationFailure = {
+export type CandidateValidationFailure = {
 	status: "failed";
 	phase: "pre-publish";
 	operation: CandidateOperation;
@@ -3182,6 +3182,59 @@ function countByText(items: SourceSpan[]): Map<string, number> {
 	return counts;
 }
 
+/**
+ * The line with every inline code span replaced by placeholder bytes, so the ATX check below
+ * never reads a backtick span such as `## Results` as a heading fused with prose. CommonMark
+ * code spans: a backtick run of length n opens a span that the next run of EXACTLY n closes;
+ * an unclosed run is literal text, and a backslash outside a span makes the next character
+ * literal. Spans are matched within one line only, so a span that crosses a line ending stays
+ * unmasked and keeps failing closed. The placeholder is never `#` and never whitespace: a
+ * masked span must not turn a fused line into a standalone heading (`` `a`## x `` stays fused).
+ */
+function maskInlineCodeSpans(line: string): string {
+	let masked = "";
+	let index = 0;
+	while (index < line.length) {
+		const character = line[index];
+		if (character === "\\" && index + 1 < line.length) {
+			masked += line.slice(index, index + 2);
+			index += 2;
+			continue;
+		}
+		if (character !== "`") {
+			masked += character;
+			index += 1;
+			continue;
+		}
+		let runEnd = index;
+		while (runEnd < line.length && line[runEnd] === "`") runEnd += 1;
+		const length = runEnd - index;
+		let closing = -1;
+		let cursor = runEnd;
+		while (cursor < line.length) {
+			if (line[cursor] !== "`") {
+				cursor += 1;
+				continue;
+			}
+			let closingEnd = cursor;
+			while (closingEnd < line.length && line[closingEnd] === "`") closingEnd += 1;
+			if (closingEnd - cursor === length) {
+				closing = cursor;
+				break;
+			}
+			cursor = closingEnd;
+		}
+		if (closing === -1) {
+			masked += line.slice(index, runEnd);
+			index = runEnd;
+			continue;
+		}
+		masked += "x".repeat(closing + length - index);
+		index = closing + length;
+	}
+	return masked;
+}
+
 function validateStandaloneAtxMarkers(
 	operation: CandidateOperation,
 	source: string,
@@ -3211,8 +3264,9 @@ function validateStandaloneAtxMarkers(
 			cursor = end;
 			continue;
 		}
-		const standalone = /^ {0,3}#{1,6}(?:[ \t]+.*)?[ \t]*$/.test(line);
-		if (!standalone && /(?:^|[^#])#{1,6}[ \t]+/.test(line)) {
+		const scanned = maskInlineCodeSpans(line);
+		const standalone = /^ {0,3}#{1,6}(?:[ \t]+.*)?[ \t]*$/.test(scanned);
+		if (!standalone && /(?:^|[^#])#{1,6}[ \t]+/.test(scanned)) {
 			throw candidateRejected(
 				operation,
 				"atx-heading-standalone",
@@ -4886,6 +4940,86 @@ function validateSuccessorCandidate(
 	};
 }
 
+/**
+ * The successor's whole pre-publish validation over a patch manifest: patch shape, composition,
+ * marker integrity and the fully composed candidate. `derive_successor` runs exactly this before
+ * it writes, and `successorCandidateRefusal` runs exactly this for the CREATE_SUCCESSOR preview,
+ * so the preview can never hand out an acceptance token the accept turn would refuse.
+ */
+function validateSuccessorManifest(
+	latestDocument: string,
+	latestSha256: string,
+	patches: unknown,
+): {
+	validatedPatches: ValidatedSuccessorPatch[];
+	composed: { candidate: string; invariant: UntouchedRegionEvidence };
+	candidateBody: string;
+	candidateValidation: Record<string, unknown>;
+} {
+	const validatedPatches = validateSuccessorPatches(patches, latestDocument, latestSha256);
+	const composed = composeSuccessorCandidate(latestDocument, validatedPatches);
+	if (!composed.candidate.startsWith(ARTIFACT_MARKER) || composed.candidate.slice(ARTIFACT_MARKER.length).includes(ARTIFACT_MARKER_NAMESPACE)) {
+		successorFailure(
+			"successor-artifact-marker",
+			"the fully patched candidate changed or duplicated the immutable artifact marker",
+			"Preserve the exact single artifact marker prefix.",
+		);
+	}
+	const candidateBody = composed.candidate.slice(ARTIFACT_MARKER.length);
+	const candidateValidation = validateSuccessorCandidate(
+		latestDocument.slice(ARTIFACT_MARKER.length),
+		candidateBody,
+		composed.invariant,
+	);
+	return { validatedPatches, composed, candidateBody, candidateValidation };
+}
+
+function refusalOf(error: unknown): CandidateValidationFailure {
+	const failure = (error as { candidateValidation?: CandidateValidationFailure } | null)?.candidateValidation;
+	if (failure && failure.status === "failed") return failure;
+	throw error;
+}
+
+/** Outcome of running a publication point's own pre-publish validation without writing. */
+export type PrePublishVerdict =
+	| { applicable: true; refusal: CandidateValidationFailure | null }
+	| { applicable: false; refusal: null };
+
+/**
+ * Dry run of the accept turn's validation (`derive_successor`) for a preview. `sourceDocument`
+ * is the complete managed document, artifact marker included, and `sourceSha256` its digest --
+ * the same pair the accept turn passes. A document without the artifact marker is not a managed
+ * revision and can never reach `derive_successor` (its read refuses an unowned source), so the
+ * verdict is `applicable: false`, never a pass. Errors that are not candidate refusals propagate.
+ */
+export function successorCandidateRefusal(
+	sourceDocument: string,
+	sourceSha256: string,
+	patches: unknown,
+): PrePublishVerdict {
+	if (!sourceDocument.startsWith(ARTIFACT_MARKER)) return { applicable: false, refusal: null };
+	try {
+		validateSuccessorManifest(sourceDocument, sourceSha256, patches);
+		return { applicable: true, refusal: null };
+	} catch (error) {
+		return { applicable: true, refusal: refusalOf(error) };
+	}
+}
+
+/**
+ * The first managed revision's pre-publish validation (`INITIAL_CREATE`) run over a v1 body
+ * without writing, so CREATE_INITIAL_REVISION refuses exactly what a guarded initial write and
+ * every later successor would refuse.
+ */
+export function initialCandidateRefusal(body: string): CandidateValidationFailure | null {
+	try {
+		validateInitialCandidate(body);
+		return null;
+	} catch (error) {
+		return refusalOf(error);
+	}
+}
+
 export function nextSuccessorTarget(sourceFilename: string): string {
 	const parsed = parseRevisionIncrement(sourceFilename);
 	if (!parsed) throw new Error("INVALID_MANAGED_SUCCESSOR_SOURCE");
@@ -4925,21 +5059,10 @@ async function deriveSuccessorProposal(
 			},
 		);
 	}
-	const latestDocument = `${ARTIFACT_MARKER}${latest.body}`;
-	const validatedPatches = validateSuccessorPatches(patches, latestDocument, latest.sha256);
-	const composed = composeSuccessorCandidate(latestDocument, validatedPatches);
-	if (!composed.candidate.startsWith(ARTIFACT_MARKER) || composed.candidate.slice(ARTIFACT_MARKER.length).includes(ARTIFACT_MARKER_NAMESPACE)) {
-		successorFailure(
-			"successor-artifact-marker",
-			"the fully patched candidate changed or duplicated the immutable artifact marker",
-			"Preserve the exact single artifact marker prefix.",
-		);
-	}
-	const candidateBody = composed.candidate.slice(ARTIFACT_MARKER.length);
-	const candidateValidation = validateSuccessorCandidate(
-		latest.body,
-		candidateBody,
-		composed.invariant,
+	const { validatedPatches, composed, candidateBody, candidateValidation } = validateSuccessorManifest(
+		`${ARTIFACT_MARKER}${latest.body}`,
+		latest.sha256,
+		patches,
 	);
 	await assertContinuitySourceIsLatest("derive_successor", projectRoot, identity.source);
 	const current = await readContinuitySource("derive_successor", projectRoot, identity.source, signal);
@@ -5364,12 +5487,20 @@ const CREATE_INITIAL_REVISION_OPERATION = 'CREATE_INITIAL_REVISION';
  * own canonical form -- carries evidence the other two do not, and a caller told only "blocked"
  * cannot repair a source document it was never shown.
  */
-function projectInitialRevisionRefusal(result:{code:string;violations?:readonly {rule:string;line:number;detail:string}[]}):{nextAction:string;blockers:{code:string;message:string}[]}{
+function projectInitialRevisionRefusal(result:{code:string;violations?:readonly {rule:string;line:number;detail:string}[];candidateValidation?:CandidateValidationFailure}):{nextAction:string;blockers:{code:string;message:string}[]}{
  if(result.code==='MANAGED_PROPOSAL_ALREADY_EXISTS')
   return {nextAction:'use_existing_managed_proposal',blockers:[{code:result.code,message:'A managed proposal already exists; CREATE_INITIAL_REVISION never overwrites or duplicates it.'}]};
  if(result.code==='INITIAL_REVISION_CANONICAL_FORM_VIOLATION'){
   const evidence=(result.violations??[]).map((violation)=>`line ${violation.line}: ${violation.rule} -- ${violation.detail}`).join('; ');
   return {nextAction:'repair_canonical_form',blockers:[{code:result.code,message:`The composed first revision violates this domain's canonical form, so nothing was written. Repair the idea or the declared source it came from, then retry: ${evidence}`}]};
+ }
+ // The composed v1 failed the same pre-publish validation a guarded first write and every
+ // successor's accept turn run (`initialCandidateRefusal`). The rule code, its message, its
+ // repair step and the offending line are the evidence a caller needs to repair the source.
+ if(result.code==='INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED'){
+  const failure=result.candidateValidation;
+  const line=typeof failure?.line==='string'?` Offending line: ${JSON.stringify(failure.line)}.`:'';
+  return {nextAction:'repair_candidate_markdown',blockers:[{code:result.code,message:`The composed first revision fails pre-publish validation (${failure?.code ?? 'unknown'}: ${failure?.message ?? 'no detail'}), so nothing was written. ${failure?.nextStep ?? ''}${line} Repair the idea or the declared source it came from, then retry.`}]};
  }
  return {nextAction:'supply_initial_idea',blockers:[{code:result.code,message:'Provide a non-empty idea in instruction.'}]};
 }
