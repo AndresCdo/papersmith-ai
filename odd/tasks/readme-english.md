@@ -171,10 +171,12 @@ breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
       in `CHANGELOG.md` and in `src/papersmith/__init__.py`, so this half forces
       no further version move and no release. The manual is documentation and
       never forced one either.
-- [ ] T11 — Blocked on a decision, not on work. The citations are re-pointed and
-      `meta.repository.revision` advanced (`3978f19`), and the artifact was **not**
-      regenerated: the six-column layout cannot pass two independent gates (L14).
-      What the drawing is supposed to show is the open question.
+- [x] T11 — Regenerated in five columns, with the plausibility gate as a
+      `security` edge rather than a node (`87ce62a`, over the citations in
+      `3978f19`). The operator chose that over the labeled edge, over dropping the
+      `sota-pool/` node instead, and over leaving the artifact alone. L14 is the
+      measurement that turned it into a choice; L15 is what was verified before
+      the commit.
 - [x] T12 — Reconcile this record with the tree (2026-10-12): T5 closed, T10
       re-measured, `## Log` opened
 - [x] T13 — The manual's mechanical rules become a checkable script,
@@ -324,3 +326,16 @@ remove.
   - Left open on purpose, because it changes what the drawing shows rather than
     where a box sits: whether the gate stays a node, becomes a labeled edge, or
     the pool node is the one that goes.
+- **L15** — T11 closes with the artifact regenerated, and the order of checks is
+  the part worth keeping: `validate` 0 diagnostics at viewBox 1106x1634, then
+  `finalize --quality showcase` returning `ok: true, status: pass` (the four
+  gates, real-browser check included), then `visual-check` on *that* artifact with
+  its desktop captures at 1440x900 and 2048x1320 read, then `check` on the
+  committed file. 78 tests passed across the manual guard, the command-center
+  transcription, the version sources, the harness parity and the MCP docs.
+  Two details that would have gone unrecorded: connection evidence is not part of
+  the provenance schema, so the gate's citation had to move onto the `sota-pool/`
+  node or be lost; and `archify check --require-provenance` fails on the committed
+  file by design, because the delivery sidecar lives in the run's `--out-dir` and
+  is not versioned -- the check without that flag is the one that means something
+  here.
