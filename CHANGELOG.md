@@ -47,6 +47,17 @@ number is `0`, breaking changes can still arrive without a major bump.
   one — and presenting the report while proceeding anyway is the failure the
   section exists to prevent.
 
+### Fixed
+
+- **The board now lists the agents that work in each tramo, and it was missing
+  three.** `AGENT_STAGES` carried 16 of the 19 shipped agent definitions, and the
+  ones it lacked were exactly the plausibility ones — `sota-scout`,
+  `sota-grapher` and `novelty-screener` — so the board's Plausibility tramo
+  showed no agents while the flow drawing beside it showed three. Nothing failed,
+  because an unmapped agent is dropped in silence. A test now holds the mapped
+  set equal to the shipped set, so the next agent that nobody maps fails the
+  build instead of disappearing from the board.
+
 ## 0.13.0
 
 ### Added

@@ -357,8 +357,8 @@ class PipelineFlowTests(unittest.TestCase):
     """The dashboard's flows are the architecture diagram's flows.
 
     The diagram (``docs/diagrams/papersmith-pi-flow.html``, built from
-    ``.archify/architecture-papersmith-pi-20261004-173559/build.mjs``) fixes
-    twelve numbered tramos and the main chain between them. The extractor used
+    ``docs/diagrams/papersmith-pi-flow.build.mjs``) fixes twelve numbered tramos
+    and the main chain between them. The extractor used
     to ship six stages invented in this directory -- ``ingestion``,
     ``deliberation``, ``experiments``, ``drafting``, ``auditing``,
     ``publishing`` -- and nothing compared the two, so the board drew a project
@@ -436,6 +436,37 @@ class PipelineFlowTests(unittest.TestCase):
         assert all(source in ids and target in ids for source, target, _ in chain), (
             "the chain names a stage the stage list does not carry, so the "
             "drawing would drop the edge without saying so")
+
+    #: The three agents that work inside the first tramo. The drawing fills its
+    #: plausibility lane with them.
+    PLAUSIBILITY_AGENTS = ["novelty-screener", "sota-grapher", "sota-scout"]
+
+    def test_the_plausibility_tramo_lists_the_agents_that_work_in_it(self) -> None:
+        root = self.new_workspace()
+        for name in self.PLAUSIBILITY_AGENTS + ["redactor"]:
+            self.write(root / ".claude" / "agents" / f"{name}.md",
+                       f"---\nname: {name}\ntools: Read\n---\n")
+        stages = {
+            stage["id"]: stage
+            for stage in state_extractor.get_workspace_state(root)["pipeline_stages"]
+        }
+
+        assert sorted(stages["plausibility"]["workers"]) == self.PLAUSIBILITY_AGENTS
+        assert stages["writing"]["workers"] == ["redactor"]
+
+    def test_every_shipped_agent_is_mapped_to_a_tramo(self) -> None:
+        """An agent nobody maps is dropped from the board without a word.
+
+        Measured on 2026-10-12: ``AGENT_STAGES`` carried 16 of the 19 shipped
+        definitions and the three it was missing were exactly the plausibility
+        ones, so the tramo the drawing fills with three agents showed none and
+        nothing failed.
+        """
+        repo = Path(__file__).resolve().parents[1]
+        shipped = {path.stem for path in (repo / ".claude" / "agents").glob("*.md")}
+
+        assert shipped, "the repository must define agents"
+        assert set(state_extractor.AGENT_STAGES) == shipped
 
     def test_every_gate_hangs_off_a_known_stage(self) -> None:
         state = state_extractor.get_workspace_state(self.new_workspace())

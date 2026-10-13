@@ -84,6 +84,15 @@ PIPELINE_CHAIN = (
 
 #: Where each quality gate hangs in that flow: the stage whose work it checks.
 #: The gate itself feeds the transversal audit lane, so nothing here names it.
+#:
+#: These are the **verdict** gates: a checker reads artifacts and returns a
+#: verdict that lands in the audit lane. The **human stops** the drawing shows
+#: inline -- the plausibility report's acceptance, the two deliberation
+#: acceptances, the launch authorization -- are a different family and are absent
+#: by decision, not by omission. An acceptance leaves no artifact to read: the
+#: plausibility skill states it in its own words, the gate approves the reading
+#: and "publishes nothing" and "files nothing." A `gate_links` entry for it could
+#: only ever report a verdict the board cannot compute.
 GATE_SOURCES = {
     "writing-readiness": ("proposal", "contracts"),
     "coupling-verification": ("writing", "facts"),
@@ -127,8 +136,14 @@ EXPERIMENTAL_REVISION_GLOB = "experiments-*.md"
 PROPOSAL_GRAPH_GLOB = "*.graph.html"
 
 #: Persona -> pipeline stage, used for the "active worker" pills. Read off the
-#: diagram's own lane placement of each agent, not off the old six stages.
+#: diagram's own lane placement of each agent, not off the old six stages, and
+#: **every shipped definition belongs here**: an agent nobody maps is dropped
+#: from its tramo without a word, which is how the three plausibility ones went
+#: missing while the drawing showed them.
 AGENT_STAGES = {
+    "sota-scout": "plausibility",
+    "sota-grapher": "plausibility",
+    "novelty-screener": "plausibility",
     "paper-ingestion": "ingestion",
     "deliberation-publish": "proposal",
     "experimental-publish": "experimental-deliberation",
