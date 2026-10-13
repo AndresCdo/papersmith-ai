@@ -48,29 +48,29 @@ const nodes=[
  n('grapher','plaus',2,'backend','sota-grapher',agentMeta('sota-grapher').sub,{...(agentMeta('sota-grapher').tag?{tag:agentMeta('sota-grapher').tag}:{}),sources:A('sota-grapher')}),
  n('screener','plaus',3,'backend','novelty-screener',agentMeta('novelty-screener').sub,{...(agentMeta('novelty-screener').tag?{tag:agentMeta('novelty-screener').tag}:{}),sources:A('novelty-screener')}),
  n('plausGate','plaus',4,'security','Human acceptance','report → accepted',{sources:S('skills/plausibility/SKILL.md',139,162)}),
- n('pool','plaus',5,'database','sota-pool/','candidates · atlas.html',{sources:S('README.md',65)}),
+ n('pool','plaus',5,'database','sota-pool/','candidates · atlas.html',{sources:S('README.md',73)}),
 
  n('ingest','ingest',0,'frontend','/paper-ingestion','PDF in guidance/',{tag:'.pi/prompts',sources:K('paper-ingestion',27,29)}),
  n('ingestAgent','ingest',1,'backend','paper-ingestion',agentMeta('paper-ingestion').sub,{...(agentMeta('paper-ingestion').tag?{tag:agentMeta('paper-ingestion').tag}:{}),sources:A('paper-ingestion')}),
- n('guidance','ingest',4,'database','guidance/','Markdown + figures',{sources:S('README.md',64)}),
+ n('guidance','ingest',4,'database','guidance/','Markdown + figures',{sources:S('README.md',74)}),
 
  n('delib','delib',0,'frontend','/proposal-deliberation','bound → published',{tag:'.pi/prompts',sources:K('proposal-deliberation',32,35)}),
  n('delibCli','delib',1,'messagebus','cli.mjs --serve','replace · insert · delete',{tag:'CREATE_SUCCESSOR',sources:S('skills/proposal-deliberation/SKILL.md',251,287)}),
  n('delibGate','delib',2,'security','Human acceptance','preview → accept',{sources:S('skills/proposal-deliberation/SKILL.md',33,62)}),
  n('delibPub','delib',3,'backend','deliberation-publish',agentMeta('deliberation-publish').sub,{...(agentMeta('deliberation-publish').tag?{tag:agentMeta('deliberation-publish').tag}:{}),sources:A('deliberation-publish')}),
- n('proposals','delib',4,'database','proposals/','rNN.md · rNN.graph.html',{sources:[{path:'README.md',line:66},{path:'skills/proposal-deliberation/SKILL.md',line:71,end_line:129}]}),
+ n('proposals','delib',4,'database','proposals/','rNN.md · rNN.graph.html',{sources:[{path:'README.md',line:75},{path:'skills/proposal-deliberation/SKILL.md',line:71,end_line:129}]}),
 
  n('expDelib','expdelib',0,'frontend','/experimental-deliberation','requires data-paper/',{tag:'.pi/prompts',sources:K('experimental-deliberation',34,38)}),
  n('expVal','expdelib',1,'backend','experimental-validation',agentMeta('experimental-validation').sub,{...(agentMeta('experimental-validation').tag?{tag:agentMeta('experimental-validation').tag}:{}),sources:A('experimental-validation')}),
  n('expGate','expdelib',2,'security','Human acceptance','deliberated = operator',{sources:S('skills/experimental-deliberation/SKILL.md',35,65)}),
  n('expPub','expdelib',3,'backend','experimental-publish',agentMeta('experimental-publish').sub,{...(agentMeta('experimental-publish').tag?{tag:agentMeta('experimental-publish').tag}:{}),sources:A('experimental-publish')}),
- n('experiments','expdelib',4,'database','experiments/','experimental protocol',{sources:S('README.md',67)}),
+ n('experiments','expdelib',4,'database','experiments/','experimental protocol',{sources:S('README.md',77)}),
 
  n('impl','impl',0,'frontend','/proposal-implementation','standing → full-scale',{tag:'.pi/prompts',sources:K('proposal-implementation',96,101)}),
  n('implBuild','impl',1,'backend','implementation-build',agentMeta('implementation-build').sub,{...(agentMeta('implementation-build').tag?{tag:agentMeta('implementation-build').tag}:{}),sources:A('implementation-build')}),
  n('implWalk','impl',2,'backend','implementation-walk',agentMeta('implementation-walk').sub,{...(agentMeta('implementation-walk').tag?{tag:agentMeta('implementation-walk').tag}:{}),sources:A('implementation-walk')}),
- n('implGate','impl',3,'security','Authorizes a launch','operator only',{sources:S('README.md',506)}),
- n('repo','impl',4,'database','implementations/<repo>','its own git + .venv',{sources:S('README.md',68)}),
+ n('implGate','impl',3,'security','Authorizes a launch','operator only',{sources:S('README.md',1570)}),
+ n('repo','impl',4,'database','implementations/<repo>','its own git + .venv',{sources:S('README.md',76)}),
 
  n('expImpl','expimpl',0,'frontend','/experimental-implementation','binding → full-scale',{tag:'.pi/prompts',sources:K('experimental-implementation',116,120)}),
  n('expBuild','expimpl',1,'backend','experiments-build',agentMeta('experiments-build').sub,{...(agentMeta('experiments-build').tag?{tag:agentMeta('experiments-build').tag}:{}),sources:A('experiments-build')}),
@@ -79,13 +79,13 @@ const nodes=[
 
  n('kaggle','creds',0,'frontend','/kaggle-accounts','taken-in → decided',{tag:'.pi/prompts',sources:K('kaggle-accounts',28,30)}),
  n('accCli','creds',1,'security','accounts_cli.py','validate --interactive',{tag:'TTY only',sources:S('skills/kaggle-accounts/SKILL.md',218,244)}),
- n('store','creds',2,'database','store/','validated credentials',{sources:S('README.md',70)}),
+ n('store','creds',2,'database','store/','validated credentials',{sources:S('README.md',79)}),
 
  n('guard','remote',4,'security','refuse-offpath-push.js','extension: watches bash',{tag:'tool_call',sources:[{path:'.pi/extensions/refuse-offpath-push.js',line:1,end_line:30},{path:'.pi/APPEND_SYSTEM.md',line:35,end_line:41}]}),
  n('remote','remote',0,'frontend','/remote-execution','reachable → returned',{tag:'.pi/prompts',sources:K('remote-execution',40,44)}),
  n('readiness','remote',1,'security','readiness + gate','single-use token',{sources:S('skills/remote-execution/SKILL.md',42)}),
  n('remoteCli','remote',2,'messagebus','remote_cli.py','submit · poll · fetch',{tag:'9 subcommands',sources:S('skills/remote-execution/SKILL.md',1401,1416)}),
- n('inbox','remote',3,'database','kaggle-inbox/','ledger + results',{sources:S('README.md',71)}),
+ n('inbox','remote',3,'database','kaggle-inbox/','ledger + results',{sources:S('README.md',80)}),
 
  n('pw','write',0,'frontend','/paper-writing','sections/*.md → paper/',{tag:'.pi/prompts',sources:K('paper-writing',1094,1105)}),
  n('insumos','write',1,'backend','insumos-observer',agentMeta('insumos-observer').sub,{...(agentMeta('insumos-observer').tag?{tag:agentMeta('insumos-observer').tag}:{}),sources:A('insumos-observer')}),
@@ -98,7 +98,7 @@ const nodes=[
  n('diagram','figs',1,'backend','diagram-author',agentMeta('diagram-author').sub,{...(agentMeta('diagram-author').tag?{tag:agentMeta('diagram-author').tag}:{}),sources:A('diagram-author')}),
  n('figAud','figs',2,'backend','figure-auditor',agentMeta('figure-auditor').sub,{...(agentMeta('figure-auditor').tag?{tag:agentMeta('figure-auditor').tag}:{}),sources:A('figure-auditor')}),
  n('figRev','figs',3,'frontend','/figure-review','probe · raster, no changes',{tag:'.pi/prompts',sources:K('figure-review',1,12)}),
- n('paper','out',4,'database','paper/','main.tex · refs.bib',{sources:S('README.md',72)}),
+ n('paper','out',4,'database','paper/','main.tex · refs.bib',{sources:S('README.md',81)}),
 
  n('audit','audit',0,'frontend','/skill-audit','subject: any skill',{tag:'.pi/prompts',sources:K('skill-audit',23,23)}),
  n('auditRep','audit',1,'backend','audit-report',agentMeta('audit-report').sub,{...(agentMeta('audit-report').tag?{tag:agentMeta('audit-report').tag}:{}),sources:A('audit-report')}),
@@ -148,7 +148,7 @@ const doc={schema_version:1,diagram_type:'architecture',meta:{
   title:'Papersmith AI in Pi — commands, skills and agents',
   quality_profile:'showcase',
   output:'docs/diagrams/papersmith-pi-flow.html',
-  repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'c16b34ecf21008ea6d7c09d07578b4d61bbe7607'},
+  repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'1cf76a0dc810e162fa70c6726990f87d63fc56db'},
   legend:{mode:'auto',entries:{frontend:{label:'Pi command /skill'},backend:{label:'Pi subagent'},messagebus:{label:'CLI'},security:{label:'Gate (human)'},database:{label:'Artifact on disk'},external:{label:'Pi harness'}}}
  },
  layout:{mode:'grid',origin:[40,48],cols:6,cellW:182,cellH:58,gapX:21,gapY:62},
