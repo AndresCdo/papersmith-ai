@@ -1372,3 +1372,5 @@ Other commits on the branch: 8e3f813 (fixture comment), 5969fcf (feature-doc pro
 ### Closure after X15–X18
 
 X15 (636400d), X16 (1c87d53), X17 (e4cfbee) and X18 (512b78e) fixed the defects the final verification found. After 512b78e: `npm run test:node` 784/784; `npm run test:py:par` 6201 passed, 13 skipped, 3 failed (the three known `.venv` cases); the experimental v1 E2E step re-run without the `sourceWindowBytes` workaround created v01 and published v02; `tests/test_upgrade_v0_13_0_workspace.py` 9 passed, including the fixture's experiments successor after upgrade. Task F closed.
+
+Merge of `origin/main` (53 commits: README in English, `scripts/check_manual.py`, main's 0.14.0 Added entries): merge commit e319c00 (CHANGELOG one `## 0.14.0` with both sides' entries; README = main's English base plus this branch's 15 README hunks translated, `#kit-provenance` anchor), follow-up 9348724 (README guards + `test_paper_evidence` quote re-anchored). After 9348724: `npm run test:node` 784/784; `npm run test:py:par` 6231 passed, 14 skipped, 3 failed (the three known `.venv` cases); `scripts/check_manual.py` 0 errors; `sync-repo-harness.py --check` clean.
