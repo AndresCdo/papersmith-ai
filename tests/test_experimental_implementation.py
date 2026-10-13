@@ -2470,6 +2470,11 @@ class SiblingScaffoldSealProvenanceTests(unittest.TestCase):
     def _cli(self, launcher, profile, *args):
         env = dict(os.environ)
         env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(profile)
+        # `apply` commits in the target; never depend on the operator's
+        # global git identity (CI runs the gate under an empty home).
+        env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "seal-tests"
+        env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = (
+            "seal-tests@example.invalid")
         proc = subprocess.run([sys.executable, str(launcher), *args],
                               capture_output=True, text=True, cwd=FORGE,
                               env=env)
