@@ -171,8 +171,10 @@ breaks to its `?`. Two questions wrap (lines 1410, 1773); both close.
       in `CHANGELOG.md` and in `src/papersmith/__init__.py`, so this half forces
       no further version move and no release. The manual is documentation and
       never forced one either.
-- [ ] T11 — Regenerate the diagram once the manual stops moving, re-pointing every
-      `sources` citation at once and advancing `meta.repository.revision`
+- [ ] T11 — Blocked on a decision, not on work. The citations are re-pointed and
+      `meta.repository.revision` advanced (`3978f19`), and the artifact was **not**
+      regenerated: the six-column layout cannot pass two independent gates (L14).
+      What the drawing is supposed to show is the open question.
 - [x] T12 — Reconcile this record with the tree (2026-10-12): T5 closed, T10
       re-measured, `## Log` opened
 - [x] T13 — The manual's mechanical rules become a checkable script,
@@ -297,3 +299,28 @@ remove.
   this task names had already happened in `94512a4`, and what is left of the
   cycle is T11: the diagram was blocked on the manual moving, which is exactly
   what this pass finished doing.
+- **L14** — T11's citations are done and its artifact is not, and the reason is a
+  measurement rather than an obstacle: **the six-column layout cannot pass the
+  gate battery.** Two independent failures, both reproduced:
+  - *The 24px minimum connection length.* The source ships `gapX: 21`, and every
+    one of the 38 `layout/constraint` reports says 21px. Raising it to 24 clears
+    all 38.
+  - *The 1240px readability cap.* The cap is arithmetic, not taste: the rendered
+    edge labels are 8px and the desktop budget is 930px, so the projected text is
+    `8 * 930 / width` and it has to reach 6px, which puts the ceiling at exactly
+    1240. At a 24px gap and the node width the longest command label needs
+    (186px), six columns floor at `30 + 6*186 + 5*24 + 70 = 1312`, and each term
+    has its own floor: the gap cannot go under 24, the node width cannot go under
+    the 186px that `/experimental-implementation` measures, and the left padding
+    cannot go under the 30px the boundary rectangles need to stay inside the
+    canvas. Shrinking the node to 168 was tried and refused by name.
+  - The 70px on the right is where a legend sits; moving it does not close the
+    72px gap on its own, and 5 columns close it with room to spare (1106px).
+  - With five columns, dropping the `plausGate` node and expressing the gate as a
+    `security`-variant edge `screener -> pool` **validates clean, 0 diagnostics**.
+    The same edge refuses any label at a 24px gap: `gate` needs 46px and `human
+    acceptance` needs 103px, so a labeled gate needs the gap widened, which five
+    columns can afford (up to 57px) and six cannot.
+  - Left open on purpose, because it changes what the drawing shows rather than
+    where a box sits: whether the gate stays a node, becomes a labeled edge, or
+    the pool node is the one that goes.
