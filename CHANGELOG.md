@@ -15,6 +15,11 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Fixed
 
+- **MCP workspace resolution handles symlinked roots on macOS and Linux.**
+  `resolve_under` resolves the workspace root before evaluating `relative_to`,
+  preventing false `WORKSPACE_ESCAPE` refusals when the root path traverses
+  standard operating system symlinks (such as `/var` pointing to `/private/var`
+  on macOS).
 - **An adopted finding reaches a terminal state instead of blocking the
   audit forever.** Once `proposal-deliberation` published a remedy and the
   target was re-bound to the successor revision, four readers disagreed about
@@ -733,6 +738,14 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **Antigravity CLI (`agy`) harness portability and tooling alias.** `papersmith init`
+  and `papersmith upgrade` now accept `--tools agy` as an alias for `antigravity`,
+  enabling direct projection of Google Antigravity configuration files (`.agents/AGENTS.md`
+  and `.agents/skills/`) without duplicate tool registration errors when combining flags.
+  Added `scripts/gen-agy.py` as an alias entrypoint for `scripts/gen-antigravity.py`.
+  Remote execution guard hooks (`refuse_offpath_push.py`) support Antigravity's `PreToolUse`
+  event payload and JSON allow/deny output format, and Antigravity setup instructions
+  are documented in `docs/guard-hooks.md` and `docs/mcp.md`.
 - **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
   `tests/fixtures/workspace_v0_13_0/` holds a workspace produced by the
   0.13.0 release itself (`scripts/build-v0_13_0-fixture.py` drives that
