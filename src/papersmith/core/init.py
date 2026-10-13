@@ -357,7 +357,11 @@ def register(subparsers) -> None:
     parser = subparsers.add_parser("init", help="initialize a standalone paper workspace")
     parser.add_argument("directory", metavar="<dir>")
     parser.add_argument("--title", default="Untitled Paper")
-    parser.add_argument("--tools", default=",".join(ALL_TOOLS), help="comma-separated runtimes")
+    parser.add_argument(
+        "--tools",
+        default=",".join(ALL_TOOLS),
+        help="comma-separated runtimes (claude, opencode, pi, antigravity/agy)",
+    )
     parser.add_argument("--topic", default="unspecified")
     parser.add_argument("--remote", choices=REMOTE_CHOICES, default="kaggle")
     parser.add_argument("--no-npm", action="store_true", help="skip the best-effort npm install")

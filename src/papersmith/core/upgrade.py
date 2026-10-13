@@ -418,7 +418,11 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
 def register(subparsers) -> None:
     parser = subparsers.add_parser("upgrade", help="synchronize framework files in a workspace")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
-    parser.add_argument("--tools", default=None, help="replace active runtime generators")
+    parser.add_argument(
+        "--tools",
+        default=None,
+        help="replace active runtime generators (claude, opencode, pi, antigravity/agy)",
+    )
     parser.add_argument("--force", action="store_true", help="force framework-file writes")
     parser.add_argument("--allow-downgrade", action="store_true",
                         help="permit installing an older framework version")

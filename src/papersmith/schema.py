@@ -68,14 +68,19 @@ def _number(value: Any, path: str, *, integer: bool = False) -> int | float:
     return value
 
 
+TOOL_ALIASES: dict[str, str] = {
+    "agy": "antigravity",
+}
+
+
 def validate_tools(tools: list[str] | tuple[str, ...]) -> list[str]:
-    result = list(tools)
-    unknown = [tool for tool in result if tool not in KNOWN_TOOLS]
+    canonical = [TOOL_ALIASES.get(tool, tool) for tool in tools]
+    unknown = [tool for tool in canonical if tool not in KNOWN_TOOLS]
     if unknown:
         _fail("tools", f"unsupported runtime(s): {', '.join(unknown)}")
-    if len(set(result)) != len(result):
+    if len(set(canonical)) != len(canonical):
         _fail("tools", "must not contain duplicates")
-    return result
+    return canonical
 
 
 def validate_papersmith_yaml(data: Any, *, require_compute: bool = True) -> dict:

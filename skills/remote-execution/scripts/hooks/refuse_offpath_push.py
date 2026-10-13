@@ -122,14 +122,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    is_antigravity = False
+    if command is None:
+        tool_call = payload.get("toolCall")
+        if isinstance(tool_call, dict):
+            is_antigravity = True
+            args = tool_call.get("args")
+            if isinstance(args, dict):
+                command = args.get("CommandLine")
     if not isinstance(command, str) or not command:
+        if is_antigravity:
+            sys.stdout.write(json.dumps({"decision": "allow"}) + "\n")
         return 0
 
     matched = offpath_push(command, _load_push_surfaces())
     if matched is None:
+        if is_antigravity:
+            sys.stdout.write(json.dumps({"decision": "allow"}) + "\n")
         return 0
 
-    sys.stderr.write(
+    refusal_msg = (
         f"refusing: this command names a push surface ({matched!r}) "
         f"without invoking {SUBMIT_MARKER} -- a launch that skips `submit` "
         "skips its own authorization precondition "
@@ -138,6 +150,11 @@ def main(argv: list[str] | None = None) -> int:
         "it: route the launch through `remote_cli.py submit` (or "
         "`--smoke` for a rehearsal) instead.\n"
     )
+    if is_antigravity:
+        sys.stdout.write(json.dumps({"decision": "deny", "reason": refusal_msg}) + "\n")
+        return 0
+
+    sys.stderr.write(refusal_msg)
     return 2
 
 
