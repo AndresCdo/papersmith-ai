@@ -142,7 +142,7 @@ def resolve_under(root: Path, raw: str) -> Path:
         candidate = root / candidate
     resolved = candidate.resolve()
     try:
-        resolved.relative_to(root)
+        resolved.relative_to(root.resolve())
     except ValueError:
         raise ToolRefusal(
             "WORKSPACE_ESCAPE", f"{resolved} is outside the bound workspace {root}"

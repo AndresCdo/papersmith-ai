@@ -61,15 +61,30 @@ Protocol, as far as it is confirmed:
   timeout of its own: if `python3` is missing the hook command fails, and how
   Claude Code treats a non-0/non-2 hook exit is not covered here.
 
-## Antigravity (unsupported until verified)
+## Antigravity / agy (`.agents/hooks.json`)
 
-Antigravity documents `.agents/hooks.json` with `PreToolUse` and a `decision`
-of `deny` (https://antigravity.google/docs/hooks). No guard is generated, because
-the hook input schema is not verified to the standard used for the other
-harnesses. A page summary (not the raw page) suggests the payload names the tool
-in `toolCall.name` and exposes `run_command` arguments as `CommandLine` and
-`Cwd`, and that the output is a `decision` string rather than an exit code. That
-differs from the stdin shape the Python guard reads (`tool_name` and
-`tool_input.command`), so wiring it would need an adapter whose behaviour is
-unverified. Revisit once the raw schema, including the exit and output
-protocol, is read.
+Antigravity uses `.agents/hooks.json` with `PreToolUse` matching `run_command`
+(https://antigravity.google/docs/hooks). The hook payload passes `toolCall.name`
+and `toolCall.args.CommandLine`, and expects a JSON response on stdout with
+`decision: "allow"` or `decision: "deny"` and `reason`.
+
+`skills/remote-execution/scripts/hooks/refuse_offpath_push.py` supports this
+payload natively. To activate the guard in Antigravity, add to `.agents/hooks.json`:
+
+```json
+{
+  "refuse-offpath-push": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ../skills/remote-execution/scripts/hooks/refuse_offpath_push.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```

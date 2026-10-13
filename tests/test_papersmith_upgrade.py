@@ -402,3 +402,13 @@ class UpgradeTests(unittest.TestCase):
         output = buffer.getvalue()
         assert "Upgraded papersmith workspace" in output
         assert config.load_workspace_config(workspace)["active_tools"] == ["claude", "pi"]
+
+    def test_cli_upgrade_routes_agy_alias(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            assert main(["upgrade", str(workspace), "--tools", "claude,agy", "--force"]) == 0
+        output = buffer.getvalue()
+        assert "Upgraded papersmith workspace" in output
+        assert config.load_workspace_config(workspace)["active_tools"] == ["claude", "antigravity"]

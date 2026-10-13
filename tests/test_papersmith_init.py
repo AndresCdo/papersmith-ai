@@ -600,7 +600,7 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         return calls
 
     def new_bare_root(self) -> Path:
-        root = Path(tempfile.mkdtemp(prefix="papersmith-ws-"))
+        root = Path(tempfile.mkdtemp(prefix="papersmith-ws-")).resolve()
         self.addCleanup(shutil.rmtree, root, True)
         return root
 
@@ -616,3 +616,19 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         editable = [call for call in calls if "-e" in call]
         assert len(editable) == 1, calls
         assert str(root) in editable[0], editable
+
+    def test_initialize_with_agy_alias_resolves_to_antigravity(self) -> None:
+        tmp_path = Path(tempfile.mkdtemp(prefix="papersmith-ws-")).resolve()
+        self.addCleanup(shutil.rmtree, tmp_path, True)
+        workspace = tmp_path / "agy-paper"
+        result = init_module.initialize(
+            workspace,
+            tools=("agy",),
+            run_npm=False,
+            run_env=False,
+        )
+        assert result["active_tools"] == ["antigravity"]
+        assert (workspace / ".agents/AGENTS.md").is_file()
+        assert (workspace / ".agents/skills").is_symlink()
+        cfg = json.loads((workspace / ".papersmith/config.json").read_text(encoding="utf-8"))
+        assert cfg["active_tools"] == ["antigravity"]

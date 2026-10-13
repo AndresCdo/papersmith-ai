@@ -48,6 +48,24 @@ authoritative.
 }
 ```
 
+### Antigravity CLI / agy (`.agents/mcp_config.json` or `~/.gemini/config/mcp_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "papersmith": {
+      "command": "papersmith",
+      "args": ["mcp", "serve", "--workspace", "/path/to/your/workspace"]
+    }
+  }
+}
+```
+
+Or register via CLI:
+```bash
+agy mcp add papersmith -- papersmith mcp serve --workspace /path/to/your/workspace
+```
+
 ## Protocol
 
 - Revision `2026-07-28`, with `2025-11-25` accepted for compatibility. Any other
