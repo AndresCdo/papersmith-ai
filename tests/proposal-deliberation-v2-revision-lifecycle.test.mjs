@@ -47,6 +47,8 @@ async function fixture(options={}) {
 async function productiveTool(root) {
  await mkdir(path.join(root,'.pi'),{recursive:true});
  await cp(path.join(repositoryRoot,'skills/_core/deliberation/engine'),path.join(root,'skills/_core/deliberation/engine'),{recursive:true});
+ // The engine reads the shared section-label convention beside it, as the kit ships it.
+ await cp(path.join(repositoryRoot,'skills/_core/conventions'),path.join(root,'skills/_core/conventions'),{recursive:true});
  const workspace=await jiti.import(path.join(root,'skills/_core/deliberation/engine/proposal-workspace.ts'));
  const tools=[];
  workspace.default({registerTool:tool=>tools.push(tool),on:()=>{}});

@@ -57,6 +57,25 @@ class SweepRemovesOrphansTests(unittest.TestCase):
     def test_an_absent_root_is_not_an_error(self) -> None:
         self.assertEqual(orphan_sweep.sweep(roots=(self.root / "nope",)), [])
 
+    def test_a_fixture_its_owner_removes_mid_sweep_is_not_an_error(self) -> None:
+        """X10: a parallel worker's own cleanup can remove its fixture
+        between this sweep's listing and its age check. The sweep runs in
+        `setUpModule`, so raising there errored every test of the file
+        (1801 at once in one `-n 8` run)."""
+        owned = self._aged("_core_guard_x10", age_seconds=30)
+        real = orphan_sweep._is_untracked
+
+        def owner_cleans_up(path):
+            if path == owned:
+                import shutil
+                shutil.rmtree(owned)
+            return real(path)
+
+        from unittest import mock
+        with mock.patch.object(orphan_sweep, "_is_untracked", owner_cleans_up):
+            removed = orphan_sweep.sweep(roots=(self.root,), min_age_seconds=3600)
+        self.assertEqual(removed, [])
+
 
 class TrackedPathsAreUnreachableTests(unittest.TestCase):
     """The guard that keeps `_core` alive, proven against a real git index

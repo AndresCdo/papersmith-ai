@@ -24,7 +24,7 @@ KIT = SRC / "papersmith" / "_kit"
 sys.path.insert(0, str(SRC))
 
 import papersmith  # noqa: E402
-from papersmith.core import manifest  # noqa: E402
+from papersmith.core import manifest, provenance  # noqa: E402
 
 
 def assemble(quiet: bool = False) -> None:
@@ -41,7 +41,13 @@ def assemble(quiet: bool = False) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
 
-    manifest.write_manifest(KIT, papersmith.__version__, files, kind="kit")
+    # The commit and dirty flag of the tree this kit was copied from, so a
+    # workspace initialized from the bundled kit can record which framework
+    # commit it came from. A tree outside git records neither (null), which the
+    # CLI reports as unknown rather than guessing.
+    state = provenance.git_state(ROOT)
+    manifest.write_manifest(KIT, papersmith.__version__, files, kind="kit",
+                            build={"commit": state.commit, "dirty": state.dirty})
     if not quiet:
         print(f"kit: {len(files)} files -> {KIT}")
 

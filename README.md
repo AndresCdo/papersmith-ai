@@ -215,6 +215,21 @@ what's pending and finishes without writing anything; it isn't called
 syncs the files and leaves the artifacts as they are, with the version marker
 where it was.
 
+**Which workspaces can be upgraded.** Re-initializing a live workspace is never
+the answer: `papersmith init` in a fresh directory leaves behind every ledger,
+receipt, seal, managed revision and lock the paper has accumulated. Workspaces
+recorded at 0.12.0 or later are supported, and since 0.14.0 every release that
+changes the shape of something a workspace already has ships its migration in
+the same release (or a compatible read that keeps reading the old shape). A
+workspace older than 0.12.0 also upgrades —the files are synced and the
+convergence migrations run—, but shape changes from before 0.12.0 shipped no
+migration and leftovers may remain (the `.antigravity/` folders of 0.8.0 are not
+removed). With no recorded version, the version-gated migrations stay
+`undetermined` and are not applied; a version that cannot be ordered, or one
+newer than the kit, is refused unless you pass `--allow-downgrade`. The
+maintainer-side policy is in
+[`docs/releasing.md`](docs/releasing.md#workspace-support-policy).
+
 Be careful not to mix up the two `upgrade`s: neither one touches the other.
 `papersmith upgrade` refuses to take a workspace to a version older than the one
 it records, unless you ask it to with `--allow-downgrade`.
@@ -334,7 +349,9 @@ guidance/reference-papers/computers-13-00176-v2-1/
 A **loose PDF** (directly in a source root folder) is pending; a paper that's
 already inside its folder is skipped. To re-ingest, delete the paper's folder
 (leaving the PDF loose) and run the skill again. The configuration lives in
-`papersmith.yaml` (`source_roots`, `mode`, `strip_references`).
+`papersmith.yaml` (`source_roots`, `mode`, `strip_references`, `force_ocr`).
+If a PDF's tables come out scrambled because its text layer is bad, `--force-ocr`
+(or `force_ocr: true`) rebuilds every page by OCR instead of reading that layer.
 
 ### Step 4 — Deliberate over a proposal (`proposal-deliberation`)
 
@@ -418,7 +435,7 @@ my-paper/
 │   ├── runs_ledger.jsonl        #   every dispatched run, in order
 │   └── version                  #   framework version that created it
 ├── .claude/agents/              # the nineteen subagents (single source of truth)
-├── skills/                      # the kit copy: the twelve skills + _core
+├── skills/                      # the kit copy: the skills + _core
 │   └── _core/                   #   the two shared engines (deliberation, implementation)
 ├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
 ├── guidance/
@@ -459,7 +476,7 @@ compute_targets:
     slurm-cluster:     { provider: "remote-ssh", host: "hpc.university.edu", ... }
 
 execution_profiles:
-  smoke_and_invariants:  { target: "local-workstation", entrypoint: "pytest …/tests/test_invariants.py" }
+  smoke_and_invariants:  { target: "local-workstation", entrypoint: "{target_python} -m pytest {target}/tests/test_invariants.py" }
   sweep_training:        { target: "kaggle-gpu-pool", sharding: { … }, artifacts: { … } }
   benchmark_evaluation:  { target: "kaggle-gpu-pool", entrypoint: "papermill …/benchmark.ipynb" }
 
@@ -948,7 +965,8 @@ guidance/reference-papers/<name>/
 
 Keys it honors from `papersmith.yaml`, under the `paper_ingestion:` block: `engine`
 (only `marker`), `mode` (`fast` or `balanced`), `strip_references` (bool, default
-`true`), `source_base` (default `guidance`) and `source_roots`.
+`true`), `force_ocr` (bool, default `false`; same as the `--force-ocr` flag),
+`source_base` (default `guidance`) and `source_roots`.
 
 **The safeguards.**
 
@@ -2096,9 +2114,9 @@ launch — which is hours of somebody's quota.
 
 **The flow.** This skill **is** almost entirely the shared engine under
 `_core/implementation/engine/` —some 21,000 lines across 12 files, the same base that
-holds `proposal-implementation`— and what it adds is about 300 bytes of its own: a
-domain profile (`impl_profile.py`, 278 lines), a byte-for-byte copy of the sibling's
-launcher (`scripts/implementation_cli.py`, 24 lines), this `SKILL.md`, two agents and its
+holds `proposal-implementation`— and what it adds is small and its own: a
+domain profile (`impl_profile.py`), a byte-for-byte copy of the sibling's
+launcher (`scripts/implementation_cli.py`), this `SKILL.md`, two agents and its
 own sealed corpus under `tests/`. No line of the engine changed to admit this
 second host.
 
@@ -2129,7 +2147,7 @@ verdict on which side should change. Only with `agree` free of pending discrepan
 | File | What it does and why it exists |
 |---------|---------------------------|
 | `impl_profile.py` | The entire domain profile: two documents, each with its own vocabulary overlay. Every path is derived from the location of **this** file, never from the engine's —so the same shape the sibling uses resolves to this profile without a single domain-specific line. |
-| `scripts/implementation_cli.py` | The launcher, 24 lines, byte-for-byte identical to the sibling's. It does nothing of its own: it only sets `IMPLEMENTATION_DOMAIN_PROFILE` to this profile before handing control to the shared engine. Every argument, subcommand and exit code is the engine's. |
+| `scripts/implementation_cli.py` | The launcher, byte-for-byte identical to the sibling's. It implements no command: it sets `IMPLEMENTATION_DOMAIN_PROFILE` to this profile before handing control to the shared engine, and before that it refuses (`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`, exit 2) if the environment already carries another skill's profile. Every remaining argument, subcommand and exit code is the engine's. |
 | `SKILL.md` | This skill's doctrine: the two documents, their vocabulary, its own flows A and B, and what is unavailable (`materialize --stage scaffold`) and why. |
 | `tests/test_experimental_implementation.py`, `tests/test_experimental_implementation_mutation.py` | The skill's own sealed corpus, outside this folder (it lives in the repository's `tests/`), which anchors the two-document behavior against the shared engine. |
 
@@ -2604,7 +2622,7 @@ flowchart TD
     P --> Q["fetch"]
     Q --> R{"Is the result still current?"}
     R -- No --> S["Quarantine, outside the results tree"]
-    R -- Yes --> T["Materializes in a partial directory"]
+    R -- Yes --> T["Writes into a partial directory"]
     T --> U{"Did it arrive complete?"}
     U -- No --> V["Nothing is recorded. It can be retried"]
     U -- Yes --> W["Atomic rename into place"]
@@ -3155,6 +3173,7 @@ papersmith init ~/papers/sparse-ae \
 | `--no-env` | Skips provisioning the workspace's Python environment; `papersmith ui` refuses until `python3 scripts/setup_env.py install` is run |
 | `--progress` | Forces a plain-text progress log with an estimate of the time left; useful in CI, where the bar is noise and the log is what matters |
 | `--no-progress` | Draws no progress even when the output is a terminal |
+| `--allow-dirty-kit` | Initializes even when the kit has uncommitted changes in its distributed paths, or when its git state cannot be read; the workspace records that it came from such a kit (see [Kit provenance](#kit-provenance)) |
 
 The step that dominates the run is environment provisioning, and until 0.9.0 it
 ran with its output captured: several minutes with no signal at all. `init` now
@@ -3183,12 +3202,38 @@ papersmith upgrade ~/papers/sparse-ae
 | `--allow-downgrade` | Allows installing a framework version older than the one the workspace records |
 | `--no-migrate` | Syncs the framework files without migrating artifacts; the recorded version does not advance |
 | `--plan-migrations` | Reports the pending artifact migrations and exits without writing anything |
+| `--allow-dirty-kit` | Syncs even when the kit has uncommitted changes or an unreadable git state; the workspace records it |
 
 It only touches files the framework manages — never `guidance/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
 `papersmith.yaml`, `package.json`, `README.md` or the `.env*` files.
 Against a kit checkout without reinstalling:
 `PAPERSMITH_KIT_ROOT=/path/to/papersmith-ai papersmith upgrade <dir>`.
+
+#### Kit provenance
+
+Since 0.14.0, `init` and every `upgrade` write `.papersmith/kit-source.json`:
+the framework version, the commit the kit came from, whether it had uncommitted
+changes (`dirty`) and where the CLI resolved it from (`checkout`, `bundled` or
+`override`). `papersmith status` shows it on the `Kit source:` line. A workspace
+created before 0.14.0 does not have it and `status` says
+`unknown (recorded before 0.14.0)`; the next `upgrade` writes it, so no
+migration is needed.
+
+With an editable install (`pipx install -e`) the kit is the live checkout,
+uncommitted edits included. That is why `init` and `upgrade` refuse, before
+writing a byte, when the paths the kit distributes (`skills/`, `sections/`,
+`.claude/agents/`, the provisioning scripts, `requirements.txt` and
+`src/papersmith/`) have changes or untracked files, and also when the kit's git
+state cannot be determined (no `git`, the tree is not a repository): unknown is
+treated as dirty, not as clean. Commit or stash the changes, or repeat with
+`--allow-dirty-kit`; the record then carries `allowedDirty: true`. The bundled
+kit of a wheel install records the commit `scripts/build-kit.py` captured when
+it was built; a kit built from a dirty tree is refused too. If that kit carries
+no provenance (it was built before 0.14.0 or without git), it is admitted with
+the commit unknown, because its bytes are a frozen copy, not live edits. The
+variable `PAPERSMITH_ALLOW_DIRTY_KIT=1` is equivalent to the flag; it exists for
+the test suite, which runs from a checkout that is almost always dirty.
 
 #### Artifact migrations
 
@@ -3255,6 +3300,24 @@ papersmith status --json
 | Flag | Effect |
 |------|--------|
 | `--json` | Machine-readable snapshot (versions, proposals, runs, inbox) |
+| `--verbose` | Also prints the projection notes (`note: ...`) to stderr |
+
+The projection notes (for example `agent 'x': tool 'WebSearch' has no Pi tool;
+not granted`, a Claude tool another runtime cannot grant) are emitted by `init`
+and `upgrade` when they write the projections. `status` no longer repeats them
+as a `UserWarning` on every call: they go into `framework.generator_notes` in
+the JSON and are printed only with `--verbose`.
+
+It includes the kit provenance the workspace recorded (`Kit source:`; see
+[Kit provenance](#kit-provenance)).
+
+The proposal stage (`Proposal: <file> (<stage>)`) is derived from the engine's
+state for the latest managed revision: `published` when its publication receipt
+(`.proposal-deliberation/receipts/<file>.json`) is committed and its
+`documentShaAfter` is the document's current digest, `edited-after-publication`
+when the bytes changed afterwards, and `draft` when there is no committed
+receipt. The legacy `proposals/deliberated/` and `proposals/accepted/` folders
+are still read first, for old workspaces.
 
 Reports the drifted files by name; the exit code stays `0` while drift is
 reported (a non-zero code is a known gap, recorded as a follow-up).
@@ -3274,17 +3337,25 @@ Downloads/classifies the reference, extracts it to Markdown with LaTeX equations
 and figure files (one folder per paper) and refreshes the index. The first run
 downloads ~1.5 GB of Surya weights when the environment was not pre-provisioned.
 
+It accepts only PDFs (a local `.pdf` or an arXiv/OpenReview/PDF URL); any other
+source is refused, and the message names the two routes for material that is
+already text, both owned by `proposal-deliberation`: Markdown to seed a new
+proposal goes in `guidance/paper-guide/` (read by `CREATE_INITIAL_REVISION`),
+and an existing draft that must become v1 as it stands goes in `proposals/` and
+is adopted with `ADOPT_INITIAL_REVISION`.
+
 ### `papersmith deliberate [<dir>]`
 
 ```bash
 papersmith deliberate . --action status
-papersmith deliberate . --action init
+papersmith deliberate . --action init --instruction "First sentence. Second sentence."
+papersmith deliberate . --action adopt --revision draft.md --instruction "Adopt as v1."
 papersmith deliberate . --request-file request.json
 ```
 
 | Flag | Effect |
 |------|--------|
-| `--action ACTION` | The engine's real operation (`status`, `init`, successors…) or a supported alias |
+| `--action ACTION` | The engine's real operation (`status`, `init`, `adopt`, successors…) or a supported alias |
 | `--request JSON` / `--request-file FILE` | Raw JSON object / the file holding it |
 | `--serve` | Persistent JSON-lines mode |
 | `--revision FILE` | Managed source file the operation applies to |
@@ -3297,6 +3368,16 @@ papersmith deliberate . --request-file request.json
 Runs the deterministic, AST-verified deliberation engine, keyless and local (no
 state operation calls a model).
 
+`--action adopt` is `ADOPT_INITIAL_REVISION`: it turns an unmanaged `.md` in
+`proposals/`, named with `--revision`, into v1, and like every operation except
+`status` and `resolve` it requires `--instruction`. The bridge has no
+`--dry-run`; a preview of `init` or `adopt` is requested with `--request` and
+`"dryRun": true`, which the bridge passes to the engine unchanged:
+
+```bash
+papersmith deliberate . --request '{"operation":"ADOPT_INITIAL_REVISION","sourceFilename":"draft.md","instruction":"Adopt as v1.","dryRun":true}'
+```
+
 ### `papersmith implement [<dir>]`
 
 ```bash
@@ -3304,11 +3385,35 @@ papersmith implement . --action verify --target implementations/demo
 papersmith implement . --action probe --target implementations/demo
 ```
 
-`--action` is required. Common actions: `env`, `plan`, `apply` (alias
-`materialize`), `admit`, `handoff`, `compose`, `probe` (alias `benchmark`),
+`--action` is required. The bridge runs only these actions: `env`, `name`,
+`plan`, `apply`, `admit`, `handoff`, `compose`, `probe` (alias `benchmark`) and
 `verify`. Supporting flags: `--target`, `--name`, `--plan`, `--finding`,
 `--entry-text`, `--python`, `--shards`, `--revision`; whatever follows the known
 flags is forwarded as `extra` to `implementation_cli.py`.
+
+`--action materialize` still works, but it is an alias of `apply` (the layout
+migration approved with `--plan`), **not** of the engine's `materialize`
+(`--stage`/`--authored`/`--adopt`). Every use prints a note to stderr; write it
+as `--action apply`.
+
+The rest of the engine's commands do not go through the bridge and are run
+directly with the skill's launcher, which sets the domain profile:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py materialize \
+  --target implementations/demo --name Demo --stage scaffold --plan plan.json --seed 7
+```
+
+Direct: `walk`, `materialize`, `adopt`, `position`, `discuss`, `propose`,
+`gate`, `offer`, `close`, `step`, `settle`, `defect` (and `agree` in
+`experimental-implementation`, with its own `implementation_cli.py`). Asking the
+bridge for one of them (except `materialize`, the alias above) refuses and names
+this route. If you set `IMPLEMENTATION_DOMAIN_PROFILE` by hand, it must be an
+absolute path (a relative one is refused with
+`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE`). The commands that write the
+ledger (`position`, `propose`, `gate`, `offer`, `close`, `step`, `settle`,
+`defect`, `walk`) require `--session <id>`; what that id is is in
+`skills/proposal-implementation/references/usage.md`, "Session ids".
 
 ### `papersmith run <profile> [<dir>]`
 
@@ -3323,9 +3428,26 @@ papersmith run sweep_training --target kaggle-gpu-pool --consent <token>
 | `--dry-run` | Plans only — records the command, dispatches nothing |
 | `--shard VALUE` | Runs a single shard of the campaign |
 | `--consent TOKEN` | Consent token for remote submission (forwarded, enforced downstream) |
+| `--implementation NAME` | The `implementations/` directory that `{target}` and `{target_python}` name (default: the only one there is) |
+
+Profile placeholders: `{paper_slug}` (the workspace folder name), `{job_id}`,
+`{shard_value}`, and since 0.14.0 `{target}` (`implementations/<name>`) and
+`{target_python}` (the interpreter of the target's own `.venv`, created by the
+implementation skill's `env` command). The default `smoke_and_invariants`
+profile runs `{target_python} -m pytest {target}/tests/test_invariants.py`,
+never a `pytest` from the PATH. If the target cannot be resolved (none or
+several in `implementations/` without `--implementation`, or no `.venv` when the
+profile names `{target_python}`), `run` refuses before dispatching or recording
+anything; `--dry-run` does not refuse and reports it in `target_resolution`. A
+pre-0.14.0 profile that names `implementations/{paper_slug}` keeps working
+while that directory exists; if it does not, `run` refuses and says which lines
+to change (`papersmith.yaml` is yours: `upgrade` does not rewrite it).
 
 Dispatches per provider (local subprocess / Kaggle submit / `sbatch` over ssh)
-and appends each job to `.papersmith/runs_ledger.jsonl`.
+and appends each job to `.papersmith/runs_ledger.jsonl`. The Python processes it
+launches on the local machine (the local job and the Kaggle submit) run with
+`PYTHONDONTWRITEBYTECODE=1`, as do the skill scripts the CLI invokes: they leave
+no `__pycache__` inside the workspace.
 
 ### `papersmith remote {pack,push,status,pull,sync} [<dir>]`
 
@@ -3368,6 +3490,7 @@ papersmith audit --check-drift
 | Flag | Effect |
 |------|--------|
 | `--check-drift` | Also reports drift in generated files as findings (never repairs) |
+| `--verbose` | With `--check-drift`, also prints the projection notes to stderr (the same as `status --verbose`) |
 
 Audits the workspace's structure and consistency. It is bound to the `skill-audit`
 subject today; drift is reported, not fixed.
@@ -3792,7 +3915,9 @@ serve without a domain profile. `npm test` sets it, and so does the skill's CLI.
 The same holds for the implementation engines:
 `IMPLEMENTATION_DOMAIN_PROFILE_REQUIRED` means they are being invoked directly
 instead of through `implementation_cli.py`, which is what starts them with their
-profile.
+profile. If you invoke them directly on purpose, set the variable to an
+**absolute** path: a relative one is refused with
+`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE`.
 
 **"The workspace has no `.claude/skills`."** That is the default state: a
 workspace ships the whole `skills/` tree and `.claude/agents/`, and its routing

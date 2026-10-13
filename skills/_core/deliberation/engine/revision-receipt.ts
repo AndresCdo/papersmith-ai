@@ -32,6 +32,8 @@ export type ManagedInitialRevisionReceipt = {
 	documentShaAfter: string;
 	derivedStateStatus: 'COMMITTED';
 	createdAt: string;
+	/** Present only on a first revision `ADOPT_INITIAL_REVISION` produced: the file it was adopted from (the revision's own name when an existing hand-adopted revision was recorded in place). Absent on every composed v1 and on every receipt before 0.14.0. */
+	adoptedFrom?: string;
 };
 
 export type PublicationReceipt = RevisionReceipt | InitialPublicationReceipt;

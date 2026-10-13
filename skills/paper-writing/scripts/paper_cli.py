@@ -1482,12 +1482,25 @@ def cmd_observe(args: argparse.Namespace) -> dict:
 
 
 def cmd_resolve(args: argparse.Namespace) -> dict:
-    paper_dir = paper_scaffold.resolve_paper_dir(args.paper)
+    """`resolve`: one identifier through one connector, cached by its own
+    digest. Under `paper/.paper-writing/metadata/` by default, where `bib`
+    and `full_text` read it; under `--cache-dir` instead for a caller that is
+    not writing a paper (the plausibility agents pass their own pool), so
+    confirming a reference never starts a `paper/` tree. Both locations are
+    resolved, and refused if outside the repository, before any request."""
+    if args.cache_dir is not None:
+        cache_dir = _resolve_repo_path(args.cache_dir)
+        paper_dir = None
+    else:
+        paper_dir = paper_scaffold.resolve_paper_dir(args.paper)
     config = paper_resolve.load_config()
     result = paper_resolve.resolve_identifier(
         args.identifier, resolver=args.resolver, role=args.role, config=config,
     )
-    paper_resolve.cache_metadata(paper_dir, result)
+    if paper_dir is None:
+        paper_resolve.cache_metadata_in(cache_dir, result)
+    else:
+        paper_resolve.cache_metadata(paper_dir, result)
     return result
 
 
@@ -3281,9 +3294,16 @@ def build_parser() -> argparse.ArgumentParser:
         "resolve",
         help="resolve one identifier's metadata through a named connector, keyless",
     )
-    p_resolve.add_argument(
+    resolve_cache = p_resolve.add_mutually_exclusive_group()
+    resolve_cache.add_argument(
         "--paper", default=None,
         help="override paper/ location; must resolve inside the repository root",
+    )
+    resolve_cache.add_argument(
+        "--cache-dir", default=None,
+        help="cache the resolution as <dir>/<metadata_digest>.json instead of under "
+             "paper/, for a caller that is not writing a paper; must resolve inside "
+             "the repository root",
     )
     p_resolve.add_argument("--identifier", required=True, help="DOI or arXiv id to resolve")
     p_resolve.add_argument(

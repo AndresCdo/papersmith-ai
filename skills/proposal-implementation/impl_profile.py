@@ -52,6 +52,7 @@ four carry their own recorded reasons in design.md D1.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 # The canonical tree is `skills/<skill>/impl_profile.py`, one level
@@ -59,6 +60,16 @@ from pathlib import Path
 # root is `parents[1]`, not `parents[2]`.
 _SKILL = Path(__file__).resolve().parent
 _FORGE_ROOT = _SKILL.parents[1]
+
+#: The ONE section-label convention, shared with `experimental-implementation`:
+#: what a section heading's leading label looks like, so `verify`'s
+#: per-section drift speaks in the labels a managed revision actually carries
+#: (`cross-skill-consistency`, B1). Read, never respelled here.
+SECTION_CONVENTION = {
+    key: value for key, value in json.loads(
+        (_SKILL.parent / "_core" / "conventions" / "sections.json")
+        .read_text(encoding="utf-8")).items()
+    if not key.startswith("$")}
 
 #: WHY THIS SKILL WAS INVOKED, AND WHERE IT HAS TO ARRIVE.
 #:
@@ -247,6 +258,9 @@ PROFILE = {
             # opens a file for a `None` entry (D1 property 1), so this
             # sibling's 28 sealed digests stay byte-identical.
             "dataset_marker": None,
+            # `cross-skill-consistency` (B1): the shared section-label
+            # convention `verify`'s per-section drift speaks in.
+            "section_heading": SECTION_CONVENTION,
             # `the-agreement-nothing-computes` (Slice D, task 1.7):
             # TODAY'S EXACT HARDCODED BYTES, written down rather than
             # inherited from the engine -- the whole reason this leaf is a

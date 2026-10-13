@@ -18,13 +18,24 @@ The contract, checked statically by `implementation_cli.py verify`:
 - `adoption.absent` is text present in the revision today whose disappearance
   signals the remedy was taken in; `expect` are forms that confirm it;
 - `becomes_invariant` names what the remedy turns into once published: at that
-  point the remedy test retires and the claim moves to the invariant suite;
+  point the remedy test retires and the claim moves to the invariant suite.
+  The finding itself stays here, with its `test_finding_<id>`, as evidence;
+  once adopted it owes no `test_remedy_<id>` and no longer holds the audit
+  below `ok`;
 - `remedy_block` is the corrected equation written out, exactly as it should
   read in the document, carrying the same `\\tag{n}` it replaces. A finding of
   local reach that omits it cannot be settled inline: the handoff defers it to
   a session of its own, because describing a correction in prose is not the
   same as writing it, and nothing here will paraphrase mathematics into a
-  document. Findings that add notation are structural anyway and need none.
+  document. Findings that add notation are structural anyway and need none;
+- `remedy_in_prose: True` declares a defect that lives in the prose (an
+  overstated sentence, a term used before it is defined) rather than in a
+  numbered equation. Such a finding leaves `remedy_equations` empty and
+  carries no `remedy_block`: there is no `\\tag{n}` to substitute at, so
+  `verify` never asks for one and `handoff` defers it to a deliberation
+  session of its own (`prose-remedy`). It still owes `uses`, `adoption` and
+  both tests like any other finding. Declaring it beside remedy equations is
+  ruled inadmissible.
 
 Remedies live in the tests, never in src/. Establishing that a correction is
 sound is not the same as adopting it.
@@ -47,5 +58,14 @@ FINDINGS = [
     #     "statement": "<the defect, stated precisely>",
     #     "remedy": "<the correction, and why it is expressible in the proposal>",
     #     "remedy_block": "$$\n<the corrected equation>\n\\tag{<n>}\n$$",
+    # },
+    # A defect in the prose instead: no remedy equation, no remedy_block.
+    # {
+    #     "id": "<short_snake_case_id>",
+    #     "kind": "overstated-claim",
+    #     "equations": [],
+    #     "remedy_equations": [],
+    #     "remedy_in_prose": True,
+    #     ...the remaining fields exactly as above, minus remedy_block...
     # },
 ]

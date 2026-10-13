@@ -15,9 +15,9 @@ from ..generators import (
     read_workspace_version,
     render_files,
 )
-from ..kit import resolve_and_validate
+from ..kit import resolve_and_validate_origin
 from ..schema import validate_tools
-from . import config, fs, manifest, migrations, wiring
+from . import config, fs, manifest, migrations, provenance, wiring
 from .exit_codes import EXECUTION_ERROR
 
 #: Dynamic rendered outputs — one file per discovered skill, so their membership
@@ -198,13 +198,14 @@ def _empty_migration_report() -> dict:
 
 def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
             force: bool = False, allow_downgrade: bool = False,
-            migrate: bool = True, plan_migrations: bool = False) -> dict:
+            migrate: bool = True, plan_migrations: bool = False,
+            allow_dirty_kit: bool = False) -> dict:
     root = Path(workspace).expanduser().resolve()
     stored = manifest.load_manifest(root)
     if stored is None:
         raise UserError(f"not a papersmith workspace: missing {root / '.papersmith/manifest.json'}")
 
-    kit_root = resolve_and_validate()
+    kit_root, kit_origin = resolve_and_validate_origin()
     kit_files = manifest.kit_files(kit_root)
     version = manifest.kit_version(kit_root)
     # Read once, before this run can rewrite it: every later decision about
@@ -229,7 +230,12 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
         }
 
     # Before a single byte is written, and never after: by the time the kit
-    # files are copied the rollback is already the workspace's state.
+    # files are copied the rollback is already the workspace's state. The kit
+    # source guard is the same decision for the same reason: uncommitted kit
+    # edits copied into a workspace are its state from then on.
+    kit_source = provenance.describe(kit_root, kit_origin)
+    allowed_dirty = provenance.require_admissible(kit_source, verb="upgrade",
+                                                  allow_dirty=allow_dirty_kit)
     _refuse_a_downgrade(root, version, allowed=allow_downgrade)
     # Same reason, same place: a damaged migration ledger cannot be told from
     # an empty one, and discovering that after the files are synchronized
@@ -264,7 +270,8 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     # Rendered files are framework-owned projections. Context is read after
     # raw agent/config files have been synchronized so the new roster appears.
     context = context_for_workspace(root)
-    generated = apply_generated(root, context, active_tools, skipped=unsynchronized)
+    generated = apply_generated(root, context, active_tools, skipped=unsynchronized,
+                                baseline=stored["files"])
     for relpath in generated:
         if relpath not in changed:
             changed.append(relpath)
@@ -351,6 +358,17 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     if artifacts_reached_this_version and read_workspace_version(root, "") != version:
         if fs.write_text(root / ".papersmith" / "version", version + "\n"):
             changed.append(".papersmith/version")
+            # The routing docs state the recorded version, and they were
+            # rendered above against the marker this run just moved. Left
+            # alone, every upgrade across a release ended with
+            # `audit --check-drift` reporting those docs as generator drift
+            # until a second upgrade re-rendered them.
+            skipped_again: list[str] = []
+            rerendered = apply_generated(root, context_for_workspace(root), active_tools,
+                                         skipped=skipped_again, baseline=stored["files"])
+            changed.extend(relpath for relpath in rerendered if relpath not in changed)
+            unsynchronized.extend(relpath for relpath in skipped_again
+                                  if relpath not in unsynchronized)
         else:
             unsynchronized.append(".papersmith/version")
 
@@ -373,10 +391,17 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
         if relpath not in framework_files:
             framework_files[relpath] = UNSYNCHRONIZED
     manifest.write_manifest(root, version, framework_files, kind="workspace")
+    # Every upgrade rewrites the record, including the first one a workspace
+    # created before 0.14.0 receives -- which is why that case needs no
+    # migration: the files moved, so the record of where they came from moves.
+    source_record, source_written = provenance.write_record(root, kit_source,
+                                                            allowed_dirty=allowed_dirty)
     return {
         "workspace": str(root),
         "version": version,
         "planned": False,
+        "kit_source": source_record,
+        "kit_source_unwritten": [] if source_written else [provenance.KIT_SOURCE_RECORD],
         "migrations": migration_report,
         "recorded_version": read_workspace_version(root, "").strip(),
         "active_tools": active_tools,
@@ -397,6 +422,10 @@ def register(subparsers) -> None:
     parser.add_argument("--force", action="store_true", help="force framework-file writes")
     parser.add_argument("--allow-downgrade", action="store_true",
                         help="permit installing an older framework version")
+    parser.add_argument("--allow-dirty-kit", action="store_true",
+                        help="upgrade even when the kit source has uncommitted changes "
+                             "under its shipped paths, or its git state cannot be "
+                             "determined; the workspace records it")
     parser.add_argument("--no-migrate", dest="migrate", action="store_false",
                         help="synchronize framework files without migrating workspace "
                              "artifacts; the recorded version stays where it is")
@@ -434,7 +463,8 @@ def run_cli(args) -> int:
         tools = [item.strip() for item in args.tools.split(",") if item.strip()]
     result = upgrade(args.directory, tools=tools, force=args.force,
                      allow_downgrade=args.allow_downgrade, migrate=args.migrate,
-                     plan_migrations=args.plan_migrations)
+                     plan_migrations=args.plan_migrations,
+                     allow_dirty_kit=args.allow_dirty_kit)
 
     if result["planned"]:
         report = result["migrations"]
@@ -450,6 +480,10 @@ def run_cli(args) -> int:
 
     print(f"Upgraded papersmith workspace: {result['workspace']}")
     print(f"Framework version: {result['version']}; changed files: {len(result['changed_files'])}")
+    print(f"Kit source: {provenance.describe_record({'recorded': True, **result['kit_source']})}")
+    for relpath in result["kit_source_unwritten"]:
+        print(f"Warning: could not write '{relpath}'; `status` will report the kit "
+              "source as unknown")
     for relpath in result["unsynchronized"]:
         print(f"Warning: could not write '{relpath}'; it stays reported as drift")
     print("Harness wiring:")

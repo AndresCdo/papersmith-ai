@@ -17,6 +17,46 @@ and `materialize` until somebody closes it. Check with `python3 --version` befor
 first command; this is not the same thing as `env`'s `--python` floor for the TARGET's
 venv, which is enforced and refuses `PYTHON_BELOW_FLOOR`.
 
+The launcher sets `IMPLEMENTATION_DOMAIN_PROFILE` to this skill's own
+`impl_profile.py` only when the environment does not already carry the
+variable, so an explicit fixture profile wins. When the inherited value is
+another skill's own `impl_profile.py` (for example `experimental-implementation`'s,
+left exported by a shell or an earlier process), the launcher refuses
+`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` with exit `2` before the engine loads,
+naming both profiles, instead of reading the other skill's documents and
+holder. Unset the variable and run the command again. "Another skill's" is the
+skill the profile declares (the skill directory of its `PROFILE["cli"]["path"]`),
+so a sibling's profile from a different checkout or workspace is refused as
+well, while this skill's own profile is accepted wherever it lives.
+
+If you set `IMPLEMENTATION_DOMAIN_PROFILE` yourself — a fixture profile, or
+running the engine without this launcher — it must be an **absolute** path. A
+relative one refuses `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any
+command runs, because it would resolve against whatever working directory a
+child process happens to have.
+
+`papersmith implement --action <command>` (the workspace CLI's bridge) runs only
+`env`, `name`, `plan`, `apply`, `admit`, `handoff`, `compose`, `probe` and
+`verify`; every other command on this page runs through this launcher directly.
+Its `--action materialize` is a kept alias of `apply`, not of the `materialize`
+documented below.
+
+### Session ids
+
+`position`, `propose`, `gate`, `offer`, `close`, `step`, `settle`, `defect` and
+`walk` require `--session <id>` (`adopt --apply` accepts one). The id is yours:
+the engine never mints, looks up or validates it. It is stamped verbatim into
+every event the call appends to `<Name>/.implementation/position.jsonl` and, for
+`position`, into the position block's header, so a later reader can tell which
+working session made each write. Use one id for one working session (a
+conversation, a sitting at the terminal) and pass the same id to every write in
+it; a new session gets a new id. Write it as one shell-safe token with no
+whitespace — for example `2026-10-12-a`, or your agent harness's own session
+id — because the commands `offer` publishes (its `launch` and `run-step` actions)
+carry it unquoted. It is an attribution, not a credential: `close` uses it only
+to recognize a repeat close by the same session over an unmoved position, which
+reports `not_open` instead of recording a second close.
+
 ## 0. Bind the revision
 
 ```bash
@@ -102,9 +142,27 @@ Check `pythonVersion` in the response: the templates declare `requires-python
     "absentNote": "…"
   },
   "lfs": {"status": "none", "patterns": []},
+  "excluded": [".venv/", "*.egg-info/"],
   "note": "Run every target command through this interpreter. Never the forge's."
 }
 ```
+
+Before it builds anything, `env` appends `.venv/` and `*.egg-info/` to the
+clone's own `.git/info/exclude` (`excluded` lists what it added; `[]` on a
+rerun). Those are the two things `env` brings into the target — the virtualenv
+and the metadata the printed `pip install -e .` creates under `src/` — so a
+fresh `git init` target is still clean for the `plan` that follows, and no file
+of the target's tracked tree changes. Anything else untracked still refuses
+`DIRTY_WORKTREE`. The tracked `.gitignore` gets the same entries later, from
+`apply` or `materialize --stage scaffold`, so a clone carries them too.
+
+`--torch cpu|gpu` (with optional `--torch-version X`) adds a torch build to
+the same invocation and reports it as `torch`: `cpu` appends
+`--extra-index-url https://download.pytorch.org/whl/cpu torch==X+cpu` (X from
+the flag or the one exact `torch==X` pin a manifest carries, else
+`TORCH_VERSION_REQUIRED`), `gpu` appends `torch` or `torch==X` from the
+default index, whose Linux build is the CUDA one. Without the flag, `torch` is
+`{"variant": null, "args": []}`.
 
 `nextCommand` is one invocation: the forge's own dev requirements first, then
 every manifest the target declares and this flow can honour — `-r
@@ -253,6 +311,24 @@ without that check `apply` would rewrite a file that was never on the list the
 user approved. On success everything lands in one commit — `git revert <commit>`
 undoes the whole migration.
 
+### The plan, apply and materialize lifecycle
+
+A plan describes the tree it was taken from. `apply` carries out its renames,
+moves and `createDirs` (on a fresh `git init` target, `createDirs` is the whole
+plan), so once `apply` has run that plan is `PLAN_STALE` for `materialize` by
+design: the gate cannot tell "applied" from "moved by somebody else", and it
+must refuse the second. Re-plan once `apply` has run, and pass the new plan to
+`materialize`:
+
+```text
+env -> plan (A) -> [GATE] apply --plan A -> plan (B) -> materialize --stage scaffold --plan B
+```
+
+Plan B normally lists nothing to move (`decisionCount: 0`), so it needs no
+second reorganization approval; it is what binds `materialize` to the tree
+that `apply` left. When `plan` A was already `compliant` and nothing was
+applied, A itself is current and `materialize` takes it.
+
 ## Adopt an external folder (survey, then apply)
 
 When the work starts as a folder outside the workspace — prior code, a paper
@@ -349,7 +425,7 @@ in one commit, exactly as `apply` performs it; the scaffold stage writes
 (`--seed` substitutes `{{SEED}}`, default `7`); each surveyed file is
 recorded through the unchanged per-file adopt, which keeps its own refusals
 intact — `ALREADY_RECORDED` on a path the receipt already carries,
-`NOT_A_KIT_DESTINATION` outside the seventeen, `MATERIALIZE_PATH_ABSENT`
+`NOT_A_KIT_DESTINATION` outside the sealed set (listed under "The sealed set" below), `MATERIALIZE_PATH_ABSENT`
 with no bytes on disk. The run closes with the `verify` report, read-only.
 The migration commit reverts as one; the scaffold writes and the adoptions
 stay uncommitted for review, then commit.
@@ -408,7 +484,17 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py materialize
 ```
 
 The three destinations SKILL.md step 9 names: `src/<Package>/module.py`,
-`tests/test_invariants.py`, `tests/test_synthetic.py`. Same plan/clean-worktree
+`tests/test_invariants.py`, `tests/test_synthetic.py`. The first follows the
+approved map rather than the kit's file name. `--module <name>` writes it as
+`src/<Package>/<name>.py` (from the same template; sealed in the receipt and
+released by `--authored` like the default), refusing `MODULE_NAME_INVALID` for
+anything but an importable identifier that is not a keyword, `__init__` or a
+kit-owned file such as `report_digest`, and `MODULE_STAGE_MISMATCH` with any
+other mode. Without the flag, `module.py` is written only while the package
+holds no `.py` file of its own (its `__init__.py` and the kit's seal do not
+count); once the map's modules exist under their own names it is not written,
+and `verify`'s `structure.objectGaps` stops naming it. A target that already
+carries `module.py` keeps verifying unchanged. Same plan/clean-worktree
 preflight as `--stage scaffold`, plus one more: it refuses
 `OBJECT_MAP_NOT_APPROVED` until `src/<Package>/__init__.py`'s `__implementation__`
 carries step 8's `revision`/`premises` — or, on a target scaffolded before this
@@ -416,13 +502,25 @@ literal existed and whose old `src/<Package>_Benchmark/__init__.py` still binds
 them, `OBJECT_MAP_AT_OLD_HOME`, naming both locations (SKILL.md step 8's
 migration procedure). Unlike scaffold, this write is **not** gated on
 the result parsing — `writable_at_scaffold_time`'s `ast.parse` check is scoped
-to the scaffold stage on purpose. All three templates carry tokens
-(`{{FUNCTION_NAME}}`, `{{INVARIANT_ID}}`, `{{EXPECTATION}}`, ...) sitting
-inside Python identifiers that only step 9's own authoring can answer, so this
-stage writes them as scaffolding for the agent to author over, left standing
-exactly like `{{MODULE}}` is in a freshly scaffolded `test_smoke.py`. Author
-the real module and tests, then run `materialize --authored <path>` on each of
-the three so `verify` stops reading them as drift.
+to the scaffold stage on purpose. It fills in what it knows: `{{REVISION}}`
+(the declaration the gate just read), `{{NAME}}`, and `{{MODULE}}` whenever it
+writes the module (the `--module` name, or `module`). The rest
+(`{{FUNCTION_NAME}}`, `{{INVARIANT_ID}}`, `{{EXPECTATION}}`, ...) sit inside
+Python identifiers that only step 9's own authoring can answer, so this stage
+writes them as scaffolding for the agent to author over. Until then the kit's
+`conftest.py` collects a test file that does not parse because of them as one
+failing item naming the placeholders and the step that answers them, instead
+of a collection `SyntaxError`. Author the real module and tests, then run
+`materialize --authored <path>` on each of the three so `verify` stops reading
+them as drift.
+
+The same call fills `{{REVISION}}`, `{{NAME}}` and `{{MODULE}}` into every
+scaffold destination that still carries them **and** is still byte-identical
+to what its receipt sealed (typically `tests/test_smoke.py`,
+`tests/admissibility.py` and the verification notebook, scaffolded before the
+revision was declared), re-sealing each entry with the new bytes; the result
+lists them under `filled` (present only when it filled something). A scaffold
+file somebody edited, adopted or declared authored is never touched.
 
 ## Materialize the harness
 
@@ -459,6 +557,11 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py materialize
 `--authored <path>` releases the drift seal on one receipt-recorded
 destination after the agent has genuinely authored over it — the record's
 `writtenSha256` is updated to the new bytes and `kind` becomes `"authored"`.
+For a notebook it also records `writtenSourceSha256`, the digest of its cell
+types and sources, so running the notebook in place afterwards is not drift;
+editing a cell's source is. Executing the kit's own `verification.ipynb` or
+`probe.ipynb` needs no `--authored` at all: the stage that wrote them recorded
+the same digest.
 It refuses `NO_RECEIPT_ENTRY` on a path the engine never wrote in the first
 place; that path is adopted, not re-sealed. The release is per-declaration:
 a second silent edit after this drifts again.
@@ -481,11 +584,49 @@ who wrote them," not "the engine owns the bytes." Adopt one path at a time,
 deliberately — there is no batch or automatic adopt, because auto-adopting
 would record engine confidence in bytes the engine never saw.
 
+#### The sealed set
+
+`--authored` and `--adopt` accept exactly these paths — the scaffold, objects
+and harness destination lists, in that order (`all_kit_destinations`). Any
+other path refuses `NOT_A_KIT_DESTINATION`, and the refusal lists the paths it
+would have accepted. `<Name>` is the product folder (`--name`), `<Package>` its
+importable form (hyphens become underscores).
+
+- `src/<Package>/__init__.py` (scaffold)
+- `src/<Package>/report_digest.py` (scaffold)
+- `tests/test_smoke.py` (scaffold)
+- `tests/findings.py` (scaffold)
+- `tests/conftest.py` (scaffold)
+- `tests/sweep.py` (scaffold)
+- `tests/admissibility.py` (scaffold)
+- `tests/test_audit.py` (scaffold)
+- `tests/test_remedies.py` (scaffold)
+- `<Name>/Notebooks/verification.ipynb` (scaffold)
+- `src/<Package>/module.py` (objects)
+- `tests/test_invariants.py` (objects)
+- `tests/test_synthetic.py` (objects)
+- `src/<Package>_Benchmark/__init__.py` (harness)
+- `src/<Package>_Benchmark/benchmark.py` (harness)
+- `src/<Package>_Benchmark/verdict.py` (harness)
+- `<Name>/Notebooks/probe.ipynb` (harness)
+
+`--authored` also accepts a file `materialize --stage objects --module <stem>`
+wrote under its own name (`src/<Package>/<stem>.py`), because its receipt entry
+already names it; `--adopt` does not, since such a file was never unrecorded.
+`.gitignore` and `pyproject.toml` are merge anchors, not destinations, and
+`src/<Package>_Benchmark/wiring.py` is authored by hand and never sealed: none
+of the three is accepted by either mode.
+
 Substitute these placeholders. Every one of them occurs in some template, and
 no template carries any other. `materialize --stage scaffold` substitutes
-`{{PKG}}` and `{{SEED}}` itself; every other token is left standing on
-purpose, and refuses `STAGE_CANNOT_ANSWER` if a scaffold-stage `.py`
-destination still fails to parse after that substitution.
+`{{PKG}}`, `{{SEED}}` and `{{NAME}}` itself, and `{{REVISION}}` when it is
+already known: the target's `__implementation__` declares one, or the approved
+plan was taken with `plan --revision` (its `boundTo`). It never guesses one; an
+unknown revision stays a token, and the kit's `admissibility.py` and
+`test_smoke.py` then fail saying so, until `--stage objects` fills it in after
+step 8. Every other token is left standing on purpose, and the stage refuses
+`STAGE_CANNOT_ANSWER` if a scaffold-stage `.py` destination still fails to
+parse after substitution. The receipt records each entry's substitutions.
 
 `Answered at` says when the value exists, which is not the same as when the file
 carrying the token is written. `tests/test_smoke.py` is placed by the scaffold and
@@ -549,6 +690,24 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py verify \
 }
 ```
 
+`fidelity.drift` lists, per stale module, the `changedSections` between the
+revision it declares and the current one and the `touchedSections` it declares
+among them. Section labels follow `skills/_core/conventions/sections.json`: the
+first token of a heading, a number (`3`), a dotted number (`3.1`) or an
+identifier (`O1`), with an optional `.`, `)` or `:` after it. A nested
+labelled heading also counts for its parent (`3.1` moving reports `3` and
+`3.1`). Before 0.14.0 only a leading bare number followed by a space counted,
+so identifier, dotted and label-only headings produced no sections.
+
+`missingProvenance` never lists the kit's own seal,
+`src/<Package>/report_digest.py`, while it is still the kit's file: its path
+is a scaffold destination with a kit source and its bytes equal either today's
+kit source or the `writtenSha256` of the scaffold receipt's `materialized`
+entry for it (so a seal written by an earlier release still counts). An
+`adopted` or `authored` entry does not count, and any other bytes are reported
+like any other module. A freshly scaffolded target therefore reports no
+provenance gap until it has modules of its own.
+
 ### `--shards` — the refusal a split campaign needs
 
 A campaign divided across machines comes back as a directory of shards, one
@@ -594,7 +753,12 @@ answerable without running anything:
 | `executed` | every non-empty code cell has an `execution_count` and none raised |
 | `stale` | the file is there but some cells never ran — `unexecuted` lists them |
 | `errored` | a cell raised; `errors` names the cell and the exception |
-| `missing` / `unreadable` / `empty` | no file, unparsable JSON, or no code cells |
+| `missing` / `unreadable` / `empty` | no file, not a notebook document (not UTF-8, not JSON, or JSON whose top level is not an object), or no code cells |
+
+An `unreadable` file is a finding, never a traceback: `verify` and `probe` report
+it with `sealed: false` and `sourcesMatch: null`, list it under `unsealed`, and
+the notebooks verdict reads `drift`, so it never passes for a sealed or current
+report.
 
 `errored` is caught even when the notebook was executed with `--allow-errors`,
 which otherwise writes a red cell and exits zero.
@@ -619,6 +783,22 @@ vanishes          += remedy_global_loss(losses, means) < 1e-5   # the remedy doe
 Measured on this repository, one of the four remedy tests had no control: it
 only ever called its own proposal. `audit.status` is `incomplete` while any
 remains.
+
+What counts as exercising the declared formulation is read statically from
+`tests/test_remedies*.py`: a `test_remedy_<id>` must call something bound to
+the target's own package, spelled any of three ways —
+
+- a name imported from it, called bare: `from <Package>.kernel import f` then
+  `f(...)`;
+- an attribute call rooted at a name bound to it: `from <Package> import
+  kernel` then `kernel.f(...)`, `import <Package>.kernel as k` then `k.f(...)`,
+  or `import <Package>` then `<Package>.kernel.f(...)`;
+- a call to a function defined in the same file that does either, followed
+  through any number of such helpers.
+
+Importing the package without calling into it, handing a function along
+without calling it, or calling a method of an unrelated import is still no
+control.
 
 ### Assertions that cannot fail
 
@@ -647,6 +827,11 @@ section. The contract mirrors the invariant bridge: every declared finding needs
 a `test_finding_<id>` proving the defect is real and a `test_remedy_<id>`
 proving the proposed correction resolves it without breaking anything already
 established.
+A finding whose remedy the bound revision has adopted is the one exception to
+the second half: its remedy test is retired by design (see
+[After adoption](#after-adoption-the-remedy-becomes-an-invariant)), so it is
+listed under `audit.adopted` (present only when some finding is adopted)
+instead of `remediesWithoutValidation`.
 
 ```json
 {
@@ -693,6 +878,34 @@ The ruling is written into the target and the remedy suite reads it before
 measuring anything: without it every `test_remedy_<id>` fails immediately, and a
 finding ruled inadmissible is never measured while the others still run. Only
 the verdict travels — the revision's text stays in the forge.
+
+Ruled against a successor that already took a remedy in, the finding is not
+inadmissible for its adoption marker being gone — that absence is the adoption.
+Its verdict is admissible, introduces nothing, and carries
+`"adopted": {"revision": "<successor>", "matched": [<expected forms found>]}`;
+the command's output lists it under `adopted` (a key present only when some
+finding is adopted). The key is optional: a ruling
+without it reads exactly as before. A marker gone with no expected form in its
+place (`changed-unrecognized`) is still ruled inadmissible.
+
+An audit that found nothing is ruled on explicitly, never by default:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py admit \
+  --target implementations/<repo> --name <Name> --revision research-concept-r05.md \
+  --no-findings
+```
+
+With `tests/findings.py` declaring `FINDINGS = []`, plain `admit` still
+refuses `NO_FINDINGS` (its detail names `--no-findings`): a list nobody has
+filled in yet reads exactly like an audit that found nothing, so only the flag
+records the second. It writes an empty ruling (`"findings": {}`,
+`"noFindings": true`) bound to the revision's bytes, and answers
+`"status": "no-findings"`. `verify` then reads `audit.status` as `ok` and adds
+`"noFindings": true` to `audit`. The ruling voids itself like any other: a new
+revision makes it `stale` (`audit` back to `incomplete` until it is ruled
+again), and a finding declared afterwards is unruled. With findings declared,
+`--no-findings` refuses `FINDINGS_DECLARED` and writes nothing.
 
 Refuses `REVISION_UNREADABLE` when the pinned document 0 revision cannot be
 read, and, under a profile declaring more than one document,
@@ -762,7 +975,8 @@ Two independent findings, reported separately:
   because fallback probes for optional dataset roots are legitimately absent
   and burying the real finding is worse. Fix with `plan` → `apply`.
 - **fidelity drift** — `staleModules` implement an older revision than the one
-  in `--revision`; `invariantsWithoutTest` are claims declared in code with no
+  in `--revision` (a module bound to another document label's lineage under a
+  keyed `revision` is listed in `otherLineageModules` instead); `invariantsWithoutTest` are claims declared in code with no
   test enforcing them. Both need the user's decision before you touch anything.
 
 Twelve more are reported and none of them is a finding, which is exactly why
@@ -799,7 +1013,11 @@ they were easy to leave undocumented:
   even a token whose function name *is* found among `test_<id>` functions
   stays `unmeasured`, never "proven"), and `disagrees` (declared, `tests/`
   is readable and fully parsed, the item is ticked, and the declared
-  function is absent). `summary` prints `"N of M witnessed"` on every run,
+  function is absent). Two more keys appear only when non-empty: `decided`
+  (ticked witness-less lines closed by `settle --done --unwitnessed`, each
+  `{text, reason, session, at}`) and `handTicked` (ticked witness-less lines
+  with no such recorded act); neither counts as witnessed, and both lines
+  stay listed under `unwitnessed`. `summary` prints `"N of M witnessed"` on every run,
   including a target with zero declared tokens (`"0 of 0 witnessed"`) —
   silence never stands in for "nothing is declared". It **never gates
   here** — `close` is the one place `disagrees` refuses
@@ -895,7 +1113,10 @@ they were easy to leave undocumented:
   answers `RUNG_NOT_ATTAINED` on every call, naming a rung nothing that can
   run will reach. Two exits, both the target's own: declare at most three
   rungs, or drop the `:level` marker from that item and record it two-state
-  (the grammar's default). The forge takes neither on its own — a launch floor
+  (the grammar's default). A sequence with no leveled item attains the rung
+  its position aims at, so after the second exit the position must aim at
+  the launch rung (`position --target-level <requiredLevel>`) before `gate`
+  passes. The forge takes neither on its own — a launch floor
   that moved with whatever the sequence happens to hold would let *adding* a
   leveled item quietly *lower* the threshold for every item beside it. `null`
   when the ladder and the sequence can meet, and `null` below two rungs, where
@@ -1137,6 +1358,10 @@ does.
 That separation is also published: `position`'s state carries
 `attainedLevel` beside `targetLevel`, so the gap between what a pass aims
 at and what backs it can be read without tripping a refusal to find it.
+`attainedLevel` never claims more than ran: with no leveled (`:level`)
+witness in the sequence, nothing measured a scale, and it reports the aim
+(`targetLevel`), never a rung above it. Before 0.14.0 such a sequence
+reported the ladder's top.
 
 Three boundaries, each of them decided rather than fallen into:
 
@@ -1198,7 +1423,9 @@ block — a malformed witness is refused here, not left to surface at the next
 `POSITION_BLOCK_EXISTS` unless `--replace` is also given.
 
 The holder is found by shape, never by a fixed filename — the same rule
-`agreements_state` already applies. Refuses `POSITION_HOLDER_ABSENT` when no
+`agreements_state` already applies — except that a sibling skill's own
+declared holder (`Experimental_AGREED.md`) is never a candidate, for reading
+or for writing. Refuses `POSITION_HOLDER_ABSENT` when no
 markdown file in the product folder holds anything to append into, and
 `POSITION_HOLDER_AMBIGUOUS` when more than one candidate exists and none is
 decidable without a human choosing. A malformed existing block —  no witness,
@@ -1306,9 +1533,16 @@ earlier answer. Refuses `SETTLE_NOT_DISCUSSED` when no `discuss` event names
 it at all, `SETTLE_DISCUSSION_UNANSWERED` when one does but none is answered.
 
 `--under` is matched by exact equality against a heading line, hash marks
-included — `## Figures` never matches `## Figures — phase 2` — and the item
-is inserted at the first non-blank line after it, so the document's own
-`heading / blank / bullets` shape survives untouched. Refuses
+included — `## Figures` never matches `## Figures — phase 2`. The item is
+appended after the section's last checklist item, so a section reads in the
+order its items were settled (oldest first). The section runs to the next
+heading of any level. The position block's own lines are never the section's
+items: on the holder `position` creates (block directly under `## Ladder`),
+the first item lands directly after `<!-- /position -->`. A section with no
+item and no block receives the item at its first non-blank line. Nothing
+already in the holder moves: a holder written by 0.13.0 or earlier, whose
+section reads newest first, keeps those lines in place and gains the new item
+after them. Refuses
 `SETTLE_HEADING_ABSENT` or `SETTLE_HEADING_AMBIGUOUS` when it occurs zero, or
 more than one, times across every markdown file `agreements_state` already
 knows holds checklist items; `SETTLE_HOLDER_ABSENT` when none does at all.
@@ -1354,8 +1588,8 @@ one, so `verify` and `close` evaluate either exactly the same way.
 `--text` only ever CREATES with the shape above; there was no way to bind
 `--witness` onto an agreement a prior `settle` call already placed, ticked
 or not, without either hand-editing `AGREED.md` (unsupported) or
-re-`settle`ing it (which would write a fresh `[ ]` line and un-tick
-whatever was already reached). `--attach` closes that gap:
+re-`settle`ing it (which would write a second, fresh `[ ]` line beside one
+that may already be ticked). `--attach` closes that gap:
 
 ```bash
 python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
@@ -1575,12 +1809,11 @@ under `## Reversed` — this mode writes a NEW explanation together with
 the deletion, and would duplicate one the document already has. In that
 state the explanation already exists and only the deletion is still
 pending; plain `--remove` (above) is the reachable command for exactly
-that case. Refuses `SETTLE_HEADING_ABSENT` when no `## Reversed` heading
-exists in the holder at all — this mode places its entry under an
-existing section and never authors one, the identical restraint the
-create path's own `--under` already keeps for a heading it is given —
-and `SETTLE_HEADING_AMBIGUOUS` when more than one `## Reversed` heading
-occurs in the same holder.
+that case. When the holder has no `## Reversed` heading yet, the first
+reversal opens one at the end of the file (a blank line, `## Reversed`, a
+blank line, then the entry); nothing above it moves. Refuses
+`SETTLE_HEADING_AMBIGUOUS` when more than one `## Reversed` heading occurs in
+the same holder.
 
 **Conflicts.** `--under`, `--supersedes` and `--witness` name nothing in
 this mode (the identical reasoning `--remove`'s own conflict already
@@ -1620,16 +1853,60 @@ same way.
 **The guard: a tick must rest on a witness.** Refused `SETTLE_NOT_WITNESSED`
 unless the located line already carries a `` `test_<id>` `` token — bind
 one first with `--attach`. A tick asserts the work is done; a line nobody
-can point a test at cannot assert that through this command. This is
-decided, not merely present: a real target carries agreements ticked with
-no witness at all — irreducible arguments no test could ever measure — and
-this guard leaves those permanently unreachable through `--done`, on
-purpose. An unwitnessed line already reports `unwitnessed` in
-`agreements_state`, a state this file treats as legitimate; a human may
-still tick one by hand, the same "unsupported, never technically
-prevented" doctrine that already covers a hand-typed `--witness` token.
-Refused `SETTLE_ALREADY_DONE` if the located mark is already `x`/`X` —
-`--done` never re-ticks an already-ticked line.
+can point a test at cannot assert that through this command. Refused
+`SETTLE_ALREADY_DONE` if the located mark is already `x`/`X` — `--done`
+never re-ticks an already-ticked line.
+
+**An agreement no test could ever witness closes by a recorded decision.**
+A scoping decision, a premise, a deferral, a design tradeoff: nothing about
+them is executable, so no witness can be bound and plain `--done` refuses
+them. Ask the operator whether the item is closed and why, then pass their
+answer:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --done --unwitnessed --reason "<the operator's reason>" \
+  --text "<the exact line text>"
+```
+
+The same one byte flips. The `settle` ledger event and the response carry
+`unwitnessed: true` and `reason` beside the session; both keys are absent
+from every other `settle` call. The act is never counted as witnessed:
+`agreements.witness` keeps the line under `unwitnessed`, out of the
+`summary` count, and names it under `witness.decided` as `{text, reason,
+session, at}`. A ticked witness-less line with no such recorded act (a hand
+tick) reads exactly as it always has and is named under
+`witness.handTicked`; both keys appear only when non-empty, so a holder
+carrying neither reads as before. Refused `SETTLE_REASON_REQUIRED` when
+`--reason` is missing or blank (the reason is the operator's, never the
+agent's), `SETTLE_WITNESS_PRESENT` when the located line names a witness
+(that line closes through plain `--done`, which its test answers for), and
+`SETTLE_UNWITNESSED_CONFLICT` when `--unwitnessed` is given with neither
+`--done` nor `--under`, or `--reason` without `--unwitnessed`.
+`SETTLE_ALREADY_DONE` is checked first.
+
+**When the line does not exist yet, place it the same way.** A witness-less
+agreement often has no position sequence and no discussion to bind it to, and
+placing a line otherwise needs `--about`. Pass `--unwitnessed --reason` with
+`--under` instead:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py settle \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --under "## Ladder" --unwitnessed --reason "<the operator's reason>" \
+  --text "<the agreement>"
+```
+
+It places one unticked `- [ ] <text>` line, creating the declared holder if it
+is missing, with no discussion gate (the line names no witness to discuss).
+The ledger event carries `about: null`, `unwitnessed: true`, `done: false`
+and the reason. It closes nothing: the line stays open until the `--done
+--unwitnessed` act above, and only that act is named under
+`witness.decided`. Refused `SETTLE_UNWITNESSED_CONFLICT` with `--about`,
+`--witness` or `--supersedes`, `SETTLE_REASON_REQUIRED` without a reason,
+and `SETTLE_UNDER_REQUIRED` / `SETTLE_HEADING_ABSENT` as any placement is.
+Before 0.14.0 this line had to be written by hand.
 
 **Only the mark moves.** `--text`, any witness token the line already
 carries, and every other byte in the holder file are byte-identical
@@ -1641,14 +1918,15 @@ the only thing this writes. `--under`, `--supersedes`, `--witness` and
 identical reason `--attach` skips it: a line `--done` matches was already
 discussed and placed by a prior `settle` call.
 
-**Un-ticking is deliberately out of scope.** `--done` closes a measured
-gap — no composition of the other modes could ever produce a tick.
-Retracting one is a different kind of assertion (a prior claim was wrong,
-not that a fact came true) and would need its own guard, designed on its
-own terms; nothing measured against a real target found a mistakenly
-ticked agreement this command needed to correct. A human may still
-un-tick a line by hand today, the same doctrine that already covers every
-other hand edit this file does not itself perform.
+**A tick cannot be undone, only corrected on the record.** No mode turns
+`[x]` back into `[ ]`: a tick asserts that something came true, and taking it
+back is a different assertion (the earlier claim was wrong), which the holder
+keeps in writing, never by editing a mark. To correct a mistaken tick, run
+`settle --reverse --text "<the ticked text>" --paragraph "<why it was
+wrong>"` (it works on a ticked line exactly as on an open one: the line is
+removed, the explanation lands under `## Reversed`, and the ledger records the
+`reverse` event), then place the corrected agreement again with `discuss` and
+`settle --under`, which writes it as a fresh `[ ]` line.
 
 ## `defect` — declare a forge file broken
 
@@ -1803,7 +2081,18 @@ nothing, which is exactly what makes them easy to walk past:
   so staleness was never attempted and a blank cell would have read as "nothing
   wrong".
 
-Neither one is a rung on the ladder, and that is a position rather than an
+A third fact rides inside `search.costForecast` (and the benchmark's
+`projectedCost`): **`contention`**. A forecast scales one recorded duration,
+and concurrent runs on one machine compete for it. With `parallelism` (a
+positive integer) in the record's `reduction`, the forecast echoes it and reads
+`contention: "included"`: it is that run's own duration and holds at that
+parallelism only. Without it, `parallelism` is `null`, `contention` is
+`"unmeasured"` and `basis` says the projection is single-process; no
+contention factor is supplied. A `parallelism` of another shape comes back as
+`parallelismMalformed`. Before planning eight concurrent runs from a
+single-process forecast, pilot at eight and record `parallelism: 8`.
+
+The first two are not rungs on the ladder, and that is a position rather than an
 oversight: the fact as computed cannot tell a repository that is not ready apart
 from one that never sends work anywhere. `SKILL.md`'s Output Contract carries the
 argument and states what would change it.
@@ -1903,7 +2192,10 @@ While it is `"incomplete"` the answer is `pilot-first` and the offer of the
 declared scale is withheld: the outputs are what anybody reads to know the agreed
 thing is there, and there are none yet. Once it is `"complete"` the answer is
 `pilot-decisions` until every step has been decided — one `discuss` bucket per
-step, asking how the full run carries it. Read `remoteExecution.necessity`
+step, asking how the full run carries it. Both rungs fire with nothing to
+compare as well: a target with no prior-work package under `src/` answers
+`pilot-first` and then `pilot-decisions` while either condition holds, and
+`nothing-to-compare` only after both are settled. Read `remoteExecution.necessity`
 alongside those questions; it classifies job folders rather than steps, so it
 informs the decisions and never makes them.
 
@@ -2223,7 +2515,8 @@ python3 skills/proposal-implementation/scripts/implementation_cli.py close \
 Checked against the position exactly as recorded, before the refresh that
 follows — the identical ladder `gate` calls first
 (`impl_availability.position_honest`, shared rather than reimplemented):
-`POSITION_ABSENT` when no section was ever generated, `POSITION_STALE` when
+`POSITION_ABSENT` when no section was ever generated and the target
+declares a flow, `POSITION_STALE` when
 it is bound to a revision that has moved on, `POSITION_UNBACKED` when a
 sequence item is ticked and its witness was never measured, `POSITION_
 SHARDS_UNDECLARED` when the ticked item carries a `@shard` witness and
@@ -2233,13 +2526,27 @@ shardsRoot` — so the tick cannot be checked at all, a different fact from
 `POSITION_UNBACKED`'s "checked, and found silent", and `POSITION_DISAGREES`
 when a recorded mark still contradicts its own measured evidence. Right
 after that ladder, a second and independent axis: `AGREEMENT_DISAGREES`
-when a ticked `AGREEMENTS.md`-style checklist item's own declared
+when a ticked `AGREED.md` checklist item's own declared
 `test_<id>` witness (`settle --witness`) is absent from a fully-parsed
 `tests/` — the only place in the whole CLI this ever gates; `verify` and
 `probe` only ever report it. Only once both checks are clean does `close`
 refresh — picking up any position witness that has become measurable since
 — and record the transition. A second `close` over the identical, unmoved
 position reports `"not_open"` rather than appending a second event.
+
+**A position is owed only where a flow is declared.** Every position
+witness is an execution one (`@step`, `@notebook`, `@record`, `@rehearsal`,
+`@shard`), so a target declaring none of `__levels__`, `__steps__`,
+`__records__`, a shard root (`distribution.shardsRoot`) or a job folder
+under `tools/` has nothing a sequence could honestly name — a proposal-only
+target, before any experimental stage defines a ladder. There `close` does
+not refuse `POSITION_ABSENT`: it checks `AGREEMENT_DISAGREES` and
+`DISCUSSION_UNANSWERED` as always, skips the refresh, records the close
+over an empty sequence, and its response carries `"positionOwed": false`
+(the key is absent whenever a position was owed). Declare any part of a
+flow and the position is owed again; an existing position block is always
+held to the full ladder. `POSITION_ABSENT`'s detail names what the target
+declares.
 
 ## `step` — run one declared local step, isolated
 
@@ -2275,6 +2582,22 @@ refreshes the position and records that step's product, because `step`
 refuses on a dirty tree and every step dirties it with its own output; the
 message names the step and narrates nothing, which is the half that stays
 yours.
+
+The subject defaults to `walk: <step>`. A target whose history is held to a
+convention (a Conventional Commits hook, a CI lint) passes its own shape with
+`--commit-template`, where `{step}` is the one placeholder:
+
+```bash
+python3 skills/proposal-implementation/scripts/implementation_cli.py walk \
+  --target implementations/<repo> --name <Name> --session <your-session-id> \
+  --revision research-concept-r17.md --commit-template 'chore(walk): {step}'
+```
+
+A template with no `{step}`, any other brace, or more than one line is refused
+`WALK_COMMIT_TEMPLATE_MALFORMED` before anything runs: a commit nobody can
+trace back to its step is worse than the mechanical default. No receipt or
+ledger records the message, so changing it between walks changes nothing on
+disk but the history.
 
 It stops, rather than refusing, and says where: at a `launch`, at a `blocked`
 step nobody routed, or at the first act that refused -- returning `performed`
@@ -2404,7 +2727,20 @@ witness in `position`'s own sequence folds the ledger's latest event per
 name (latest wins) against a live digest: `True` for a current `returned`,
 `False` for a current `raised`, `unmeasured` for a stale digest, a
 pre-change event with no digest at all, or no event at all — never a false
-`True`/`False` over code nobody ran against. **Stated non-goal**: this does
+`True`/`False` over code nobody ran against.
+
+The digest is not narrowed to the code a step executes, and that is
+deliberate: a step's callable may run the suite, read a file under `tests/`
+or spawn a subprocess, and the engine cannot see which. A narrower scope
+would let a mark stay satisfied over an edit the step actually runs. The cost
+is that any edit under `src/` or `tests/` (a test-only edit included) or to
+one of the manifests makes every earlier step mark unmeasured until that
+step runs again, so commit the code and the tests before the first pilot
+step and run the steps last. Each unmeasured `@step` item in a position
+state's `unmeasured` list carries `reason`,
+which says whether the step never produced a verdict or its last run no
+longer counts and gives the exact `step` command that clears it, and
+`digestScope`, which states this scope. **Stated non-goal**: this does
 not distinguish a fully-executed suite from one that skipped tests —
 `pytest` exits 0 on skips, so `returned` grades green over a skipped suite
 exactly as a notebook report already does. An unknown `--step` name is
@@ -2442,6 +2778,7 @@ A deferred item says why in `deferredBecause`:
 | `structural-reach` | the remedy rewrites more than one equation, adds notation, or touches an equation the text leans on |
 | `remedy-text-missing` | local reach, but nobody wrote the corrected block (`remedy_block`) |
 | `remedy-locus-missing` | it measures as local only because `remedy_equations` is empty, so there is no equation to resolve against |
+| `prose-remedy` | the finding declares `"remedy_in_prose": True`: its remedy rewrites prose, which carries no `\tag{n}` to substitute at, so only a session of its own can decide the new wording |
 
 Measured on this repository: three remedies are local, and the confidence one is
 not — it rewrites two equations, adds three symbols, and touches Eq. (24), which
@@ -2457,8 +2794,11 @@ the text cites three times.
 | `unknown` | the finding declares no marker |
 
 Inference is textual, so it is built to fail toward `open`. An adopted finding
-stops counting as introducing notation: the deliberation settled that when it
-published.
+stops counting as introducing notation — in `admit`'s `introducesNotation` and
+in `verify`'s `audit.compatibility` alike: the deliberation settled that when it
+published. Every reader (`admit`, `verify`'s audit, `migration`, `handoff`)
+reads adoption from the same text: the document(s) the finding names, or
+document 0 when it names none.
 
 ### After adoption: the remedy becomes an invariant
 
@@ -2479,6 +2819,11 @@ __provenance__["invariants"] declares <becomes_invariant> in the module
 move; writing it is the agent's work, as with any other code. Leaving the
 remedy in place would keep reporting a defect the revision no longer has.
 
+Once all three hold the finding is in its terminal state: `audit.adopted` names
+it with the revision and the expected form that confirmed it, it stays in
+`tests/findings.py` with its `test_finding_<id>` as evidence, and it no longer
+holds `audit.status` below `ok`.
+
 ## Guard codes
 
 A guard's failure is silent by definition: when one stops working, every happy
@@ -2494,20 +2839,24 @@ state, alongside the scenarios — not verified by hand once.
 | `DIRTY_WORKTREE` | Uncommitted or untracked changes. Commit or stash first. |
 | `FORGE_INTERPRETER` | The CLI is running from a forge venv. Use system `python3`. |
 | `PLAN_STALE` | The repository changed after approval — a rename, a move, a directory **or a reference update**. Re-plan, re-approve. |
-| `MALFORMED_FINDINGS` | `tests/findings.py` exists but cannot be read as a list of mappings each carrying an `id`. Reading it as empty would answer `audit: none`, which is what an audited, clean repository answers. |
+| `MALFORMED_FINDINGS` | `tests/findings.py` exists but cannot be read as a list of mappings each carrying an `id`. Reading it as empty would answer `audit: none`, which is what a repository that declares no finding answers. |
+| `NO_FINDINGS` | `admit` was run while `tests/findings.py` declares no finding. Write the findings, or, when the audit found nothing, record that with `admit --no-findings`. |
+| `FINDINGS_DECLARED` | `admit --no-findings` was run while `tests/findings.py` declares findings. The flag records an empty audit only; drop it to rule on the findings. |
 | `DESTINATION_CONFLICT` | A destination is taken, or two sources target one path. For `materialize --stage`, a destination appeared between the destination set's computation and the write; the whole stage refuses before any byte lands. |
 | `UNCLASSIFIED_FILES` | No rule covers some files. Ask where they belong. |
 | `APPLY_ABORTED` | Something failed mid-migration, or mid-`materialize`. Nothing was committed/written and the tree was restored; re-run `plan`. |
 | `MATERIALIZE_MODE_REQUIRED` | `materialize` needs exactly one of `--stage`/`--authored`/`--adopt`; none was given. |
 | `MATERIALIZE_MODE_CONFLICT` | Two or more of `--stage`/`--authored`/`--adopt` were given together; the three modes are mutually exclusive. |
 | `PLAN_REQUIRED` | `materialize --stage` needs `--plan <approved plan JSON>`. |
+| `MODULE_STAGE_MISMATCH` | `materialize --module` was given with a mode other than `--stage objects`, the only one that writes a module. |
+| `MODULE_NAME_INVALID` | `materialize --module` names something that cannot be the module's file: not an importable identifier, a keyword, `__init__`, or a file the kit owns (`report_digest`). |
 | `SEED_REQUIRED` | `materialize --stage scaffold` needs `--seed`, substituted into `{{SEED}}`. |
 | `STAGE_CANNOT_ANSWER` | A scaffold-stage `.py` destination still fails `ast.parse` after `{{PKG}}`/`{{SEED}}` substitution — its remaining token answers a later step. Names the file. Never raised by `objects`/`harness`: their three destinations are either written with tokens deliberately left standing (`objects`) or already parse cleanly (`harness`'s two `.py` files). |
 | `OBJECT_MAP_NOT_APPROVED` | `materialize --stage objects` ran before step 8's `revision`/`premises` were recorded in `src/<Package>/__init__.py`'s `__implementation__`. The detail names whichever of the two is still blank, so a half-written map does not send you back to re-read the half that is already right. Get that declaration approved and written first. |
 | `OBJECT_MAP_AT_OLD_HOME` | `materialize --stage objects` ran on a target scaffolded before this change: `src/<Package>_Benchmark/__init__.py` still binds `revision`/`premises` there, and `src/<Package>/__init__.py`'s `__implementation__` is blank. Distinct from `OBJECT_MAP_NOT_APPROVED` — this target once declared, at the old home — and names both locations. Follow SKILL.md step 8's migration procedure: scaffold, hand-move the literals (including any this skill has no reader for), `materialize --authored`, delete the orphaned seal copy, re-execute notebooks. |
-| `SCAFFOLD_DRIFT` | (`verify`, reported in `structure.scaffoldDrift`, never raised) A receipt-recorded scaffold destination's on-disk bytes no longer match its `writtenSha256`. Release the seal with `materialize --authored <path>` after declaring the edit. `objects`/`harness` destinations get the identical check under `structure.objectDrift`/`structure.harnessDrift`. |
+| `SCAFFOLD_DRIFT` | (`verify`, reported in `structure.scaffoldDrift`, never raised) A receipt-recorded scaffold destination's on-disk bytes no longer match its `writtenSha256`. For a notebook (`.ipynb`), its source content (each cell's type and source, in order) is compared as well, against the entry's `writtenSourceSha256`: executing it in place, which rewrites outputs, execution counts and kernel metadata, is not drift, and a changed cell source or cell type is. An entry written by an earlier release has no `writtenSourceSha256`; for an engine-written entry the source content is rebuilt from the kit and trusted only when it hashes to `writtenSha256`, and any other entry is compared on full bytes alone until its next `--authored`. Release the seal with `materialize --authored <path>` after declaring the edit. `objects`/`harness` destinations get the identical check under `structure.objectDrift`/`structure.harnessDrift`. |
 | `UNRECORDED_SCAFFOLD` | (`verify`, reported in `structure.unrecordedScaffold`, never raised) A scaffold destination exists on disk with no receipt entry — most often because the target was scaffolded before this command existed. Remedy: `materialize --adopt <path>`, one path at a time, deliberately. **This degrades the guarantee**: adoption records who is responsible for the bytes, never that they came from the kit — the record names who wrote them, not that the engine owns them. `objects`/`harness` destinations get the identical check under `structure.unrecordedObjects`/`structure.unrecordedHarness`. |
-| `NOT_A_KIT_DESTINATION` | `materialize --authored`/`--adopt` named a path outside `all_kit_destinations` — the scaffold, objects and harness destination lists, concatenated. The receipt is not a general-purpose ledger. |
+| `NOT_A_KIT_DESTINATION` | `materialize --authored`/`--adopt` named a path outside `all_kit_destinations` — the scaffold, objects and harness destination lists, concatenated (the paths listed under "The sealed set"); `--authored` also accepts a file the objects stage recorded under a `--module` name. The detail lists every accepted path. The receipt is not a general-purpose ledger. |
 | `MATERIALIZE_PATH_ABSENT` | `materialize --authored`/`--adopt` named a path with no bytes on disk. |
 | `NO_RECEIPT_ENTRY` | `materialize --authored <path>` named a path the engine never wrote. There is no seal to release; use `--adopt`. |
 | `ALREADY_RECORDED` | `materialize --adopt <path>` named a path the receipt already carries. Adoption is not a re-seal; use `--authored`. |
@@ -2529,12 +2878,12 @@ them. Which refusals carry the extra key is itself the answer to a question:
 > the repository?
 
 **Yes — an invocation defect.** The detail already names the flag, the token or
-the mutual exclusion. Fifty-three codes, and nothing is published beside them:
+the mutual exclusion. Fifty-eight codes, and nothing is published beside them:
 `SETTLE_STDIN_CONFLICT`, `OFFER_ANSWER_NOT_A_TOKEN`, `MATERIALIZE_MODE_REQUIRED`,
 `NOT_A_GIT_REPO`, `GATE_ELECTION_REQUIRED` and the rest. Retype the call.
 
 **No — a work state.** Somebody has to act on the repository, so the payload
-carries a `resolve` key saying what. Seventy-one codes, including
+carries a `resolve` key saying what. Seventy-two codes, including
 `POSITION_DISAGREES`, `AGREEMENT_DISAGREES`, `POSITION_STALE`, `DIRTY_WORKTREE`,
 `GATE_AUTHORIZATION_CONSUMED`, `STEP_MODULE_MISSING`,
 `POSITION_RUNG_SKIPPED`, `POSITION_STEP_UNKNOWN`, `STEPS_UNDECLARED`,

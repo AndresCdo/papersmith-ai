@@ -1,9 +1,19 @@
 """Fail-closed validator for a plausibility constellation atlas.
 
-Reads one ``sota-pool/atlas.json`` and refuses every malformed atlas. Exit
-0 means well-formed, never true: this process reads the atlas alone, so a
-green run certifies shape against the contract, not fidelity against the
-abstracts. Truth stays the agents' burden.
+Reads one ``sota-pool/atlas.json`` and refuses every malformed atlas.
+
+With ``--pool sota-pool/candidates.json`` it also holds every quote to the
+abstract it claims: each planet's ``evidence.origin`` must name a pool
+candidate (its ``identifier``, ``source_url`` or ``url``), and its ``quote``
+must be a verbatim substring of that candidate's ``abstract``. Whitespace
+runs compare collapsed -- the resolver itself collapses arXiv's multi-line
+summaries, and a line break is layout, not authorship -- and nothing else is
+normalized: case, punctuation and words must match. A candidate without an
+abstract can be quoted by nothing. Without ``--pool`` a green run certifies
+shape alone; with it, a green run certifies that every quote is in the
+stored abstract, which is still not that the abstract supports the planet.
+
+Usage: check_atlas.py <atlas.json> [--pool <candidates.json>]
 
 Exit codes: 0 well-formed, 1 at least one violation (all named), 2 usage
 or unreadable input (nothing was judged).
@@ -42,10 +52,76 @@ PROVENANCE = {"stated", "grouped"}
 
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+#: The candidate fields a planet's `evidence.origin` may name.
+ORIGIN_KEYS = ("identifier", "source_url", "url")
 
-def _failures(atlas: object) -> list[str]:
+
+class PoolError(Exception):
+    """The pool could not be read as a list of candidates; nothing was judged."""
+
+
+def _collapsed(text: str) -> str:
+    return " ".join(text.split())
+
+
+def pool_abstracts(pool: object) -> dict[str, object]:
+    """Map every origin a candidate answers to (its identifier and URLs) to
+    its abstract. A top-level list or ``{"candidates": [...]}``. Raises
+    `PoolError` on any other shape."""
+    candidates = pool.get("candidates") if isinstance(pool, dict) else pool
+    if not isinstance(candidates, list):
+        raise PoolError("POOL_MALFORMED: expected a list of candidates or "
+                        "{\"candidates\": [...]}")
+    abstracts: dict[str, object] = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            raise PoolError("POOL_MALFORMED: a candidate is not an object")
+        for key in ORIGIN_KEYS:
+            value = candidate.get(key)
+            if isinstance(value, str) and value.strip():
+                abstracts[value.strip()] = candidate.get("abstract")
+    return abstracts
+
+
+def _fidelity_failures(atlas: dict, abstracts: dict[str, object]) -> list[str]:
+    """Every planet whose quote is not verbatim in the abstract it names."""
+    found: list[str] = []
+    for system in atlas.get("systems") or []:
+        if not isinstance(system, dict):
+            continue
+        sid = system.get("id")
+        for planet in system.get("planets") or []:
+            if not isinstance(planet, dict) or not isinstance(planet.get("evidence"), dict):
+                continue
+            evidence = planet["evidence"]
+            origin, quote = evidence.get("origin"), evidence.get("quote")
+            if not isinstance(origin, str) or not isinstance(quote, str) or not quote.strip():
+                continue  # already named by the shape check
+            where = f"{sid}.{planet.get('id')}"
+            if origin.strip() not in abstracts:
+                found.append(f"{where}: EVIDENCE_ORIGIN_NOT_IN_POOL: {origin!r}")
+                continue
+            abstract = abstracts[origin.strip()]
+            if not isinstance(abstract, str) or not abstract.strip():
+                found.append(f"{where}: EVIDENCE_ABSTRACT_MISSING: {origin!r} has no "
+                             "stored abstract to quote")
+            elif _collapsed(quote) not in _collapsed(abstract):
+                found.append(f"{where}: EVIDENCE_QUOTE_NOT_IN_ABSTRACT: {quote!r} is not "
+                             f"verbatim in the abstract of {origin!r}")
+    return found
+
+
+def _failures(atlas: object, abstracts: dict[str, object] | None = None) -> list[str]:
     """Every violation, so one red run names all of them rather than the
-    first — an atlas fixed one refusal at a time is a loop nobody budgeted."""
+    first — an atlas fixed one refusal at a time is a loop nobody budgeted.
+    ``abstracts`` (from `pool_abstracts`) adds the quote-fidelity check."""
+    found = _shape_failures(atlas)
+    if abstracts is not None and isinstance(atlas, dict):
+        found.extend(_fidelity_failures(atlas, abstracts))
+    return found
+
+
+def _shape_failures(atlas: object) -> list[str]:
     found: list[str] = []
     if not isinstance(atlas, dict):
         return ["ATLAS_NOT_AN_OBJECT"]
@@ -172,10 +248,18 @@ def _failures(atlas: object) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print("usage: check_atlas.py sota-pool/atlas.json", file=sys.stderr)
+    args = argv[1:]
+    pool_path = None
+    if "--pool" in args:
+        at = args.index("--pool")
+        if at + 1 < len(args):
+            pool_path = Path(args[at + 1])
+            args = args[:at] + args[at + 2:]
+    if len(args) != 1 or args[0].startswith("--"):
+        print("usage: check_atlas.py sota-pool/atlas.json [--pool sota-pool/candidates.json]",
+              file=sys.stderr)
         return 2
-    target = Path(argv[1])
+    target = Path(args[0])
     try:
         raw = target.read_text(encoding="utf-8")
     except OSError as error:
@@ -186,14 +270,28 @@ def main(argv: list[str]) -> int:
     except json.JSONDecodeError as error:
         print(f"ATLAS_NOT_JSON: {error}", file=sys.stderr)
         return 2
-    violations = _failures(atlas)
+    abstracts = None
+    if pool_path is not None:
+        try:
+            abstracts = pool_abstracts(json.loads(pool_path.read_text(encoding="utf-8")))
+        except OSError as error:
+            print(f"POOL_UNREADABLE: {error}", file=sys.stderr)
+            return 2
+        except json.JSONDecodeError as error:
+            print(f"POOL_NOT_JSON: {error}", file=sys.stderr)
+            return 2
+        except PoolError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+    violations = _failures(atlas, abstracts)
     if violations:
         for violation in violations:
             print(violation)
         return 1
     systems = len(atlas["systems"])
     planets = sum(len(system["planets"]) for system in atlas["systems"])
-    print(f"ATLAS_WELL_FORMED: {systems} systems, {planets} planets, {len(atlas['links'])} links")
+    print(f"ATLAS_WELL_FORMED: {systems} systems, {planets} planets, {len(atlas['links'])} links"
+          + ("; every quote verbatim in its pool abstract" if abstracts is not None else ""))
     return 0
 
 

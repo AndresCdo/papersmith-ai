@@ -1235,8 +1235,10 @@ class RefusalProbeTests(unittest.TestCase):
     def test_the_refusal_yields_the_accepted_set(self):
         result, payload = roster_json(PD_SPEC, PD)
         self.assertEqual(result.returncode, 0, result.stderr)
+        # 9 -> 10: the adoption operation (0.14.0) joined the deliberation
+        # host's accepted operations, a real, measured widening.
         self.assertEqual(
-            len(payload["code"]), 9,
+            len(payload["code"]), 10,
             f"the running host names its own accepted set: {payload['code']}")
         for name in payload["code"]:
             with self.subTest(name=name):
@@ -8969,7 +8971,7 @@ class NewlyCoveredSubjectRosterTests(unittest.TestCase):
     #: (subject directory name, expected accepted-operations count). The
     #: count is asserted rather than re-derived here, for the same reason
     #: `RefusalProbeTests.test_the_refusal_yields_the_accepted_set` above
-    #: hardcodes `9` for `proposal-deliberation`: it is the number the
+    #: hardcodes `10` for `proposal-deliberation`: it is the number the
     #: subject's own refusal names today, and a real change to that number
     #: is exactly what a hardcoded count exists to catch.
     #:
@@ -8979,8 +8981,11 @@ class NewlyCoveredSubjectRosterTests(unittest.TestCase):
     #: so a new verb that reached the CLI and not this number would be the
     #: drift this table exists to report, not a stale expectation to relax.
     _CASES = (
-        ("paper-ingestion", 4),
-        ("experimental-deliberation", 9),
+        # 4 -> 5: `--force-ocr` (0.14.0), measured from the usage line.
+        ("paper-ingestion", 5),
+        # 9 -> 10: the adoption operation (0.14.0), the shared host's own
+        # widening, measured from its refusal.
+        ("experimental-deliberation", 10),
         ("experimental-implementation", 22),
         ("kaggle-accounts", 5),
         # 27 -> 28: this fork's own `figure` namespace (`figure optimize` /

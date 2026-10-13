@@ -9,7 +9,12 @@ name = "{{NAME_LOWER}}"
 version = "0.1.0"
 description = "Implementation of {{REVISION}}"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24"]
+# Backend-neutral: the kit's own numpy needs come from the forge's
+# requirements-dev.txt. List the backend this package computes with here, and
+# state it as `__backend__` in src/<Package>/__init__.py. For torch, prefer
+# `env --torch cpu|gpu` over a bare `torch` here: PyPI's plain torch is the
+# CUDA build, and a CPU venv needs the CPU index and an exact `+cpu` pin.
+dependencies = []
 
 [tool.setuptools.packages.find]
 where = ["src"]

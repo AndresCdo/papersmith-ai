@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from papersmith import kit as kit_module
 from papersmith.cli import main
 from papersmith.core import init as init_module, manifest, migrations as migrations_module
 from papersmith.core import status as status_module, upgrade as upgrade_module
@@ -76,7 +77,7 @@ class UpgradeMigrationTests(unittest.TestCase):
     def newer_kit(self, tmp_path: Path) -> str:
         """Install a minimal kit one minor above the version a fresh workspace
         records, so the version marker has somewhere to move."""
-        live = manifest.kit_version(upgrade_module.resolve_and_validate())
+        live = manifest.kit_version(kit_module.resolve_and_validate())
         major, minor, _ = (int(part) for part in live.split(".")[:3])
         version = f"{major}.{minor + 1}.0"
         kit = tmp_path / f"kit-{version}"

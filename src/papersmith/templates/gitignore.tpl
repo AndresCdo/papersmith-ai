@@ -41,3 +41,12 @@ implementations/*
 # default — `atlas.html` alone inlines the whole 3D viewer bundle.
 sota-pool/*
 !sota-pool/.gitkeep
+# Engine state beside that content. Each deliberation skill keeps its
+# revisions' state, receipts and permanent locks in its own sidecar folder, and
+# that state embeds and hashes the very revisions the lines above keep local:
+# it is content, and committing it publishes them. The same skills move
+# revisions and their sidecars to `backup/<folder>/` when reconciling a base.
+.proposal-deliberation/
+.experimental-deliberation/
+backup/proposals/
+backup/experiments/

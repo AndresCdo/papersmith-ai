@@ -76,6 +76,51 @@ const CAPABILITY_LENGTH = 43;
 const ARTIFACT_MARKER = DOMAIN.artifact.marker;
 const ARTIFACT_MARKER_NAMESPACE = "proposal-workspace:artifact";
 const ARTIFACT_MARKER_BUFFER = artifact.marker;
+/**
+ * Every reserved engine-marker namespace a managed document's body may never carry: the
+ * artifact marker (owned by the head line alone) and the legacy revision marker. One list, so
+ * the source neutraliser below and the guards that refuse these bytes cannot drift apart.
+ */
+const REVISION_MARKER_NAMESPACE = "proposal-workspace:revision";
+const RESERVED_MARKER_NAMESPACES = [ARTIFACT_MARKER_NAMESPACE, REVISION_MARKER_NAMESPACE] as const;
+const RESERVED_MARKER_PATTERN = RESERVED_MARKER_NAMESPACES.map((namespace) => namespace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+const RESERVED_MARKER_LINE = new RegExp(`^[ \\t]*<!--[^\\n]*?(?:${RESERVED_MARKER_PATTERN})[^\\n]*?-->[ \\t]*(?:\\r?\\n|$)`, "gm");
+const RESERVED_MARKER_RESIDUE = new RegExp(RESERVED_MARKER_PATTERN, "g");
+
+/**
+ * Source material loaded into a new document with every reserved engine marker neutralised.
+ * A declared source may itself be a managed revision (a downstream domain declares another
+ * skill's managed directory), and that document's own head marker is not this one's: pasted verbatim it
+ * made the first revision unpublishable. A whole marker comment line is removed; any other
+ * occurrence of a reserved namespace (a truncated comment, an inline quotation) loses its colon,
+ * so it reads the same and is no longer reserved; NUL bytes are dropped. `removed` counts every
+ * neutralised occurrence. The guards that refuse reserved bytes are unchanged: this only keeps
+ * another document's markers out of the bytes they judge.
+ */
+export function neutralizeReservedMarkers(text: string): { text: string; removed: number } {
+	let removed = 0;
+	const lines = text.replace(RESERVED_MARKER_LINE, () => { removed++; return ""; });
+	const residue = lines.replace(RESERVED_MARKER_RESIDUE, (namespace) => { removed++; return namespace.replace(":", " "); });
+	const clean = residue.replace(/\0/g, () => { removed++; return ""; });
+	return { text: clean, removed };
+}
+
+/**
+ * A first revision created before 0.14.0 pasted its declared sources verbatim, so a source that
+ * was itself a managed revision left whole copies of the artifact marker line inside the body.
+ * Those copies confer nothing: ownership is the head line alone. These two helpers find them
+ * (an exact marker line that starts after a newline) so a successor can read such a source and
+ * drop them, while the composed candidate is still refused if any reserved byte survives.
+ */
+const COPIED_ARTIFACT_MARKER = new RegExp(`(?<=\\n)${ARTIFACT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g");
+
+function copiedArtifactMarkerOffsets(text: string): number[] {
+	return [...text.matchAll(COPIED_ARTIFACT_MARKER)].map((match) => match.index ?? 0);
+}
+
+function withoutCopiedArtifactMarkers(text: string): string {
+	return text.replace(COPIED_ARTIFACT_MARKER, "");
+}
 export const OVERWRITE_CAPABILITY_TTL_MS = 5 * 60 * 1000;
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -578,7 +623,7 @@ function blocked(reason: string, nextStep: string): Error {
 
 type CandidateOperation = "initial_create" | "derive" | "derive_revision" | "derive_successor";
 
-type CandidateValidationFailure = {
+export type CandidateValidationFailure = {
 	status: "failed";
 	phase: "pre-publish";
 	operation: CandidateOperation;
@@ -1415,7 +1460,7 @@ function validateRevisionBody(content: string | undefined): string {
 	}
 	if (
 		content.includes("\0") ||
-		content.includes("proposal-workspace:revision") ||
+		content.includes(REVISION_MARKER_NAMESPACE) ||
 		content.includes(ARTIFACT_MARKER_NAMESPACE)
 	) {
 		throw blocked(
@@ -3182,6 +3227,59 @@ function countByText(items: SourceSpan[]): Map<string, number> {
 	return counts;
 }
 
+/**
+ * The line with every inline code span replaced by placeholder bytes, so the ATX check below
+ * never reads a backtick span such as `## Results` as a heading fused with prose. CommonMark
+ * code spans: a backtick run of length n opens a span that the next run of EXACTLY n closes;
+ * an unclosed run is literal text, and a backslash outside a span makes the next character
+ * literal. Spans are matched within one line only, so a span that crosses a line ending stays
+ * unmasked and keeps failing closed. The placeholder is never `#` and never whitespace: a
+ * masked span must not turn a fused line into a standalone heading (`` `a`## x `` stays fused).
+ */
+function maskInlineCodeSpans(line: string): string {
+	let masked = "";
+	let index = 0;
+	while (index < line.length) {
+		const character = line[index];
+		if (character === "\\" && index + 1 < line.length) {
+			masked += line.slice(index, index + 2);
+			index += 2;
+			continue;
+		}
+		if (character !== "`") {
+			masked += character;
+			index += 1;
+			continue;
+		}
+		let runEnd = index;
+		while (runEnd < line.length && line[runEnd] === "`") runEnd += 1;
+		const length = runEnd - index;
+		let closing = -1;
+		let cursor = runEnd;
+		while (cursor < line.length) {
+			if (line[cursor] !== "`") {
+				cursor += 1;
+				continue;
+			}
+			let closingEnd = cursor;
+			while (closingEnd < line.length && line[closingEnd] === "`") closingEnd += 1;
+			if (closingEnd - cursor === length) {
+				closing = cursor;
+				break;
+			}
+			cursor = closingEnd;
+		}
+		if (closing === -1) {
+			masked += line.slice(index, runEnd);
+			index = runEnd;
+			continue;
+		}
+		masked += "x".repeat(closing + length - index);
+		index = closing + length;
+	}
+	return masked;
+}
+
 function validateStandaloneAtxMarkers(
 	operation: CandidateOperation,
 	source: string,
@@ -3211,8 +3309,9 @@ function validateStandaloneAtxMarkers(
 			cursor = end;
 			continue;
 		}
-		const standalone = /^ {0,3}#{1,6}(?:[ \t]+.*)?[ \t]*$/.test(line);
-		if (!standalone && /(?:^|[^#])#{1,6}[ \t]+/.test(line)) {
+		const scanned = maskInlineCodeSpans(line);
+		const standalone = /^ {0,3}#{1,6}(?:[ \t]+.*)?[ \t]*$/.test(scanned);
+		if (!standalone && /(?:^|[^#])#{1,6}[ \t]+/.test(scanned)) {
 			throw candidateRejected(
 				operation,
 				"atx-heading-standalone",
@@ -3756,7 +3855,7 @@ async function readContinuitySource(
 			if (
 				!Buffer.from(text, "utf8").equals(bytes) ||
 				body.includes("\0") ||
-				body.includes(ARTIFACT_MARKER_NAMESPACE)
+				withoutCopiedArtifactMarkers(body).includes(ARTIFACT_MARKER_NAMESPACE)
 			) {
 				continuityFailure(operation, "continuity-source-unowned", "the continuity source contains invalid or reserved bytes", "Use an unchanged marker-owned latest target.", "source", { sourceTarget: target });
 			}
@@ -4485,6 +4584,7 @@ function validateSuccessorPatchText(
 	field: string,
 	allowEmpty: boolean,
 	allowArtifactMarkerPrefix = false,
+	allowCopiedMarkerLines = false,
 ): string {
 	if (typeof value !== "string") {
 		successorFailure(
@@ -4495,13 +4595,16 @@ function validateSuccessorPatchText(
 		);
 	}
 	const bytes = Buffer.byteLength(value, "utf8");
-	const markerOccurrences = value.split(ARTIFACT_MARKER_NAMESPACE).length - 1;
-	const hasAllowedMarkerPrefix = allowArtifactMarkerPrefix && value.startsWith(ARTIFACT_MARKER) && markerOccurrences === 1;
+	// A field that only READS the source (oldText, anchor) may span marker lines a first
+	// revision copied from another managed document before 0.14.0; writing fields never may.
+	const judged = allowCopiedMarkerLines ? withoutCopiedArtifactMarkers(value) : value;
+	const markerOccurrences = judged.split(ARTIFACT_MARKER_NAMESPACE).length - 1;
+	const hasAllowedMarkerPrefix = allowArtifactMarkerPrefix && judged.startsWith(ARTIFACT_MARKER) && markerOccurrences === 1;
 	if (
 		(!allowEmpty && bytes === 0) ||
 		bytes > MAX_SUCCESSOR_PATCH_BYTES ||
 		value.includes("\0") ||
-		(value.includes(ARTIFACT_MARKER_NAMESPACE) && !hasAllowedMarkerPrefix)
+		(judged.includes(ARTIFACT_MARKER_NAMESPACE) && !hasAllowedMarkerPrefix)
 	) {
 		successorFailure(
 			"successor-patch-limit",
@@ -4562,7 +4665,7 @@ function validateSuccessorPatches(
 					{ patchId: id },
 				);
 			}
-			const oldText = validateSuccessorPatchText(candidate.oldText, id, "oldText", false, true);
+			const oldText = validateSuccessorPatchText(candidate.oldText, id, "oldText", false, true, true);
 			const oldTextIncludesMarker = oldText.startsWith(ARTIFACT_MARKER);
 			const newText = validateSuccessorPatchText(candidate.newText, id, "newText", true, oldTextIncludesMarker);
 			if (oldTextIncludesMarker !== newText.startsWith(ARTIFACT_MARKER)) {
@@ -4617,8 +4720,13 @@ function validateSuccessorPatches(
 			if (blockScoped) {
 				const before = source.slice(0, start);
 				const after = source.slice(end);
+				// A removal joins `before` to `after`. When `before` is exactly the artifact marker,
+				// the removed span was the document's first block: the marker is an HTML comment line
+				// that ends in its own single newline and that no Markdown block can fuse into, and
+				// the source itself joins it to its first heading with that one newline. Any other
+				// left side still needs a blank line.
 				const safe = newText.length === 0
-					? hasMarkdownBlockSeparation(before, after)
+					? hasMarkdownBlockSeparation(before, after) || before === ARTIFACT_MARKER
 					: (hasMarkdownBlockSeparation(before, newText) ||
 						preservesExistingMarkdownBoundaryOnRight(before, oldText, newText)) &&
 						(hasMarkdownBlockSeparation(newText, after) ||
@@ -4652,7 +4760,7 @@ function validateSuccessorPatches(
 					{ patchId: id },
 				);
 			}
-			const anchor = validateSuccessorPatchText(candidate.anchor, id, "anchor", false, true);
+			const anchor = validateSuccessorPatchText(candidate.anchor, id, "anchor", false, true, true);
 			const content = validateSuccessorPatchText(candidate.content, id, "content", false);
 			if (candidate.position !== "before" && candidate.position !== "after") {
 				successorFailure(
@@ -4886,6 +4994,126 @@ function validateSuccessorCandidate(
 	};
 }
 
+/**
+ * The successor's whole pre-publish validation over a patch manifest: patch shape, composition,
+ * marker integrity and the fully composed candidate. `derive_successor` runs exactly this before
+ * it writes, and `successorCandidateRefusal` runs exactly this for the CREATE_SUCCESSOR preview,
+ * so the preview can never hand out an acceptance token the accept turn would refuse.
+ */
+function validateSuccessorManifest(
+	latestDocument: string,
+	latestSha256: string,
+	patches: unknown,
+): {
+	validatedPatches: ValidatedSuccessorPatch[];
+	composed: { candidate: string; invariant: UntouchedRegionEvidence };
+	candidateBody: string;
+	candidateValidation: Record<string, unknown>;
+} {
+	const validatedPatches = validateSuccessorPatches(patches, latestDocument, latestSha256);
+	const composed = composeSuccessorCandidate(latestDocument, validatedPatches);
+	refuseInheritedCopiedMarkers(composed.candidate);
+	if (!composed.candidate.startsWith(ARTIFACT_MARKER) || composed.candidate.slice(ARTIFACT_MARKER.length).includes(ARTIFACT_MARKER_NAMESPACE)) {
+		successorFailure(
+			"successor-artifact-marker",
+			"the fully patched candidate changed or duplicated the immutable artifact marker",
+			"Preserve the exact single artifact marker prefix.",
+		);
+	}
+	const candidateBody = composed.candidate.slice(ARTIFACT_MARKER.length);
+	const candidateValidation = validateSuccessorCandidate(
+		latestDocument.slice(ARTIFACT_MARKER.length),
+		candidateBody,
+		composed.invariant,
+	);
+	return { validatedPatches, composed, candidateBody, candidateValidation };
+}
+
+/**
+ * The heading path ("## A > ### B") enclosing `offset` in `text`, outside fenced code. It names
+ * where a copied marker sits in words a caller can resolve.
+ */
+function enclosingHeadings(text: string, offset: number): string {
+	const stack: { level: number; heading: string }[] = [];
+	let fenced = false;
+	for (const line of text.slice(0, offset).split("\n")) {
+		if (/^ {0,3}(?:```|~~~)/.test(line)) fenced = !fenced;
+		const match = fenced ? null : /^ {0,3}(#{1,6})[ \t]+\S/.exec(line);
+		if (!match) continue;
+		const level = match[1].length;
+		while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+		stack.push({ level, heading: line.trim() });
+	}
+	return stack.map((entry) => entry.heading).join(" > ") || "the document's opening";
+}
+
+/**
+ * A candidate whose only reserved bytes are marker lines inherited from a legacy first revision
+ * (see `copiedArtifactMarkerOffsets`) is refused with its own code, the sections that hold them,
+ * and the repair: replace those sections without the marker lines. The source revision is never
+ * rewritten; the repaired successor is the clean one. Any other reserved byte falls through to
+ * the general marker refusal below.
+ */
+function refuseInheritedCopiedMarkers(candidate: string): void {
+	if (!candidate.startsWith(ARTIFACT_MARKER)) return;
+	const body = candidate.slice(ARTIFACT_MARKER.length);
+	if (!body.includes(ARTIFACT_MARKER_NAMESPACE) || withoutCopiedArtifactMarkers(body).includes(ARTIFACT_MARKER_NAMESPACE)) return;
+	const offsets = copiedArtifactMarkerOffsets(body);
+	const sections = [...new Set(offsets.map((offset) => enclosingHeadings(body, offset)))];
+	successorFailure(
+		"successor-copied-artifact-marker",
+		`the candidate still carries ${offsets.length} copied artifact marker line${offsets.length === 1 ? "" : "s"} inherited from its source, under ${sections.map((section) => JSON.stringify(section)).join(", ")}: a first revision created before 0.14.0 pasted them from another managed document, and no revision may carry them. The source is never rewritten.`,
+		"In this successor, also replace each section named above (RESOLVE_TARGET it, then a replace decision whose content is the section without the marker lines); the successor is then clean and every later one reads it normally.",
+		{ copiedMarkers: offsets.length, sections },
+	);
+}
+
+function refusalOf(error: unknown): CandidateValidationFailure {
+	const failure = (error as { candidateValidation?: CandidateValidationFailure } | null)?.candidateValidation;
+	if (failure && failure.status === "failed") return failure;
+	throw error;
+}
+
+/** Outcome of running a publication point's own pre-publish validation without writing. */
+export type PrePublishVerdict =
+	| { applicable: true; refusal: CandidateValidationFailure | null }
+	| { applicable: false; refusal: null };
+
+/**
+ * Dry run of the accept turn's validation (`derive_successor`) for a preview. `sourceDocument`
+ * is the complete managed document, artifact marker included, and `sourceSha256` its digest --
+ * the same pair the accept turn passes. A document without the artifact marker is not a managed
+ * revision and can never reach `derive_successor` (its read refuses an unowned source), so the
+ * verdict is `applicable: false`, never a pass. Errors that are not candidate refusals propagate.
+ */
+export function successorCandidateRefusal(
+	sourceDocument: string,
+	sourceSha256: string,
+	patches: unknown,
+): PrePublishVerdict {
+	if (!sourceDocument.startsWith(ARTIFACT_MARKER)) return { applicable: false, refusal: null };
+	try {
+		validateSuccessorManifest(sourceDocument, sourceSha256, patches);
+		return { applicable: true, refusal: null };
+	} catch (error) {
+		return { applicable: true, refusal: refusalOf(error) };
+	}
+}
+
+/**
+ * The first managed revision's pre-publish validation (`INITIAL_CREATE`) run over a v1 body
+ * without writing, so CREATE_INITIAL_REVISION refuses exactly what a guarded initial write and
+ * every later successor would refuse.
+ */
+export function initialCandidateRefusal(body: string): CandidateValidationFailure | null {
+	try {
+		validateInitialCandidate(body);
+		return null;
+	} catch (error) {
+		return refusalOf(error);
+	}
+}
+
 export function nextSuccessorTarget(sourceFilename: string): string {
 	const parsed = parseRevisionIncrement(sourceFilename);
 	if (!parsed) throw new Error("INVALID_MANAGED_SUCCESSOR_SOURCE");
@@ -4925,21 +5153,10 @@ async function deriveSuccessorProposal(
 			},
 		);
 	}
-	const latestDocument = `${ARTIFACT_MARKER}${latest.body}`;
-	const validatedPatches = validateSuccessorPatches(patches, latestDocument, latest.sha256);
-	const composed = composeSuccessorCandidate(latestDocument, validatedPatches);
-	if (!composed.candidate.startsWith(ARTIFACT_MARKER) || composed.candidate.slice(ARTIFACT_MARKER.length).includes(ARTIFACT_MARKER_NAMESPACE)) {
-		successorFailure(
-			"successor-artifact-marker",
-			"the fully patched candidate changed or duplicated the immutable artifact marker",
-			"Preserve the exact single artifact marker prefix.",
-		);
-	}
-	const candidateBody = composed.candidate.slice(ARTIFACT_MARKER.length);
-	const candidateValidation = validateSuccessorCandidate(
-		latest.body,
-		candidateBody,
-		composed.invariant,
+	const { validatedPatches, composed, candidateBody, candidateValidation } = validateSuccessorManifest(
+		`${ARTIFACT_MARKER}${latest.body}`,
+		latest.sha256,
+		patches,
 	);
 	await assertContinuitySourceIsLatest("derive_successor", projectRoot, identity.source);
 	const current = await readContinuitySource("derive_successor", projectRoot, identity.source, signal);
@@ -5344,7 +5561,7 @@ export function createProposalWorkspaceTool(
 	};
 }
 
-import { ChatDeliberationService, createFilesystemInitialRevisionPublicationPort, DraftMaterializationService, InitialRevisionCreationService, LifecycleV1PublicRouter, ProposalDeliberationOrchestrator, ProposalWorkspaceAdapter, defaultPiSessionDraftLifecycleAdapter, getRuntimeMetrics, getSharedPiSessionDraftRegistry, loadDocumentState, MAX_CHAT_DOCUMENT_CONTEXT_BYTES, MAX_CHAT_GUIDE_CONTEXT_BYTES, recordLifecycleMetric, recordRouteMetric, resolveIntent, resolveLatestManagedRevision, runConsistencyAudit, runProposalDeliberationSelfAudit, type ChatDocumentContext, type ChatGuideFragment, type DraftMaterializationPolicy, type EditAction, type DraftMaterializationRequest, type PiSessionDraftLifecycleAdapter, type PiSessionDraftRegistry, type ReviewerAdapter, type SemanticEditPlanner, type TutorAdapter } from './exports.js';
+import { adoptInitialRevision, ChatDeliberationService, createFilesystemInitialRevisionPublicationPort, initialRevisionLockState, DraftMaterializationService, InitialRevisionCreationService, LifecycleV1PublicRouter, ProposalDeliberationOrchestrator, ProposalWorkspaceAdapter, defaultPiSessionDraftLifecycleAdapter, getRuntimeMetrics, getSharedPiSessionDraftRegistry, loadDocumentState, MAX_CHAT_DOCUMENT_CONTEXT_BYTES, MAX_CHAT_GUIDE_CONTEXT_BYTES, recordLifecycleMetric, recordRouteMetric, resolveIntent, resolveLatestManagedRevision, runConsistencyAudit, runProposalDeliberationSelfAudit, type ChatDocumentContext, type ChatGuideFragment, type DraftMaterializationPolicy, type EditAction, type DraftMaterializationRequest, type PiSessionDraftLifecycleAdapter, type PiSessionDraftRegistry, type ReviewerAdapter, type SemanticEditPlanner, type TutorAdapter } from './exports.js';
 import { createSuccessorAcceptanceRegistry, type SuccessorAcceptanceRegistry } from './successor-acceptance-registry.js';
 
 type GlobalRouteStage = 'LIFECYCLE' | 'DIRECT_DOCUMENT' | 'CHAT_DELIBERATION' | 'DRAFT_MATERIALIZATION' | 'MAINTENANCE' | 'CREATE_INITIAL_REVISION' | 'EXISTING_FALLBACK';
@@ -5356,6 +5573,41 @@ const DIRECT_DOCUMENT_INTENTS = new Set(['MODIFY', 'INSERT', 'DELETE', 'MOVE', '
 const MAINTENANCE_OPERATION = 'MAINTENANCE';
 const CREATE_SUCCESSOR_OPERATION = 'CREATE_SUCCESSOR';
 const CREATE_INITIAL_REVISION_OPERATION = 'CREATE_INITIAL_REVISION';
+/** The longest `rationale` a successor receipt records. */
+const MAX_RATIONALE_CHARACTERS = 2_000;
+
+/**
+ * The optional decision record a successor receipt carries beside its `instructionHash`:
+ * `rationale` (why) and `decider` (`agent` or `human`, who). Validated before anything runs, so a
+ * malformed record is refused at the preview rather than published, and refused on any operation
+ * that writes no successor receipt rather than silently dropped.
+ */
+function decisionRecordBlocker(params:{operation?:string;rationale?:unknown;decider?:unknown}):{code:string;message:string}|undefined{
+ if(params.rationale===undefined&&params.decider===undefined) return undefined;
+ if(params.operation!==CREATE_SUCCESSOR_OPERATION) return {code:'DECISION_RECORD_UNSUPPORTED',message:'rationale and decider are recorded only in a CREATE_SUCCESSOR receipt; nothing was run.'};
+ if(params.rationale!==undefined&&!(typeof params.rationale==='string'&&params.rationale.trim().length>0&&params.rationale.length<=MAX_RATIONALE_CHARACTERS)) return {code:'DECISION_RECORD_INVALID',message:`rationale must be a non-blank string of at most ${MAX_RATIONALE_CHARACTERS} characters; nothing was run.`};
+ if(params.decider!==undefined&&params.decider!=='agent'&&params.decider!=='human') return {code:'DECISION_RECORD_INVALID',message:`decider must be "agent" or "human"; got ${JSON.stringify(params.decider)}. Nothing was run.`};
+ return undefined;
+}
+
+/** Operations that accept `dryRun`: the ones that publish without a preview turn of their own. */
+const ADOPT_INITIAL_REVISION_OPERATION = 'ADOPT_INITIAL_REVISION';
+const DRY_RUN_OPERATIONS = new Set([CREATE_INITIAL_REVISION_OPERATION, ADOPT_INITIAL_REVISION_OPERATION]);
+
+/**
+ * The longest `instruction` any operation accepts, in characters (UTF-16 code units, what a
+ * JavaScript string's `length` counts). For `CREATE_INITIAL_REVISION` the instruction IS the idea,
+ * so this is also the largest idea a first revision can start from. Declared once: the tool schema
+ * below states it, and `tool.execute` enforces it, because the CLI host calls `execute` directly
+ * and no validating dispatcher ever reads that schema on its path.
+ */
+export const MAX_INSTRUCTION_CHARACTERS = 65_536;
+
+/** How much of the instruction cap a request used, reported on the successor preview and on the first revision's result. `remaining` is negative only on the refusal. */
+export function instructionBudget(instruction:unknown):{limit:number;used:number;remaining:number}{
+ const used=typeof instruction==='string'?instruction.length:0;
+ return {limit:MAX_INSTRUCTION_CHARACTERS,used,remaining:MAX_INSTRUCTION_CHARACTERS-used};
+}
 
 /**
  * The caller-facing projection of a `CREATE_INITIAL_REVISION` refusal: its `nextAction` and its
@@ -5364,12 +5616,25 @@ const CREATE_INITIAL_REVISION_OPERATION = 'CREATE_INITIAL_REVISION';
  * own canonical form -- carries evidence the other two do not, and a caller told only "blocked"
  * cannot repair a source document it was never shown.
  */
-function projectInitialRevisionRefusal(result:{code:string;violations?:readonly {rule:string;line:number;detail:string}[]}):{nextAction:string;blockers:{code:string;message:string}[]}{
+function projectInitialRevisionRefusal(result:{code:string;violations?:readonly {rule:string;line:number;detail:string}[];candidateValidation?:CandidateValidationFailure}):{nextAction:string;blockers:{code:string;message:string}[]}{
  if(result.code==='MANAGED_PROPOSAL_ALREADY_EXISTS')
   return {nextAction:'use_existing_managed_proposal',blockers:[{code:result.code,message:'A managed proposal already exists; CREATE_INITIAL_REVISION never overwrites or duplicates it.'}]};
  if(result.code==='INITIAL_REVISION_CANONICAL_FORM_VIOLATION'){
   const evidence=(result.violations??[]).map((violation)=>`line ${violation.line}: ${violation.rule} -- ${violation.detail}`).join('; ');
   return {nextAction:'repair_canonical_form',blockers:[{code:result.code,message:`The composed first revision violates this domain's canonical form, so nothing was written. Repair the idea or the declared source it came from, then retry: ${evidence}`}]};
+ }
+ // The composed v1 failed the same pre-publish validation a guarded first write and every
+ // successor's accept turn run (`initialCandidateRefusal`). The rule code, its message, its
+ // repair step and the offending line are the evidence a caller needs to repair the source.
+ if(result.code==='INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED'){
+  const failure=result.candidateValidation;
+  const line=typeof failure?.line==='string'?` Offending line: ${JSON.stringify(failure.line)}.`:'';
+  return {nextAction:'repair_candidate_markdown',blockers:[{code:result.code,message:`The composed first revision fails pre-publish validation (${failure?.code ?? 'unknown'}: ${failure?.message ?? 'no detail'}), so nothing was written. ${failure?.nextStep ?? ''}${line} Repair the idea or the declared source it came from, then retry.`}]};
+ }
+ // A one-sentence idea is not an empty one: the first sentence becomes the title and the
+ // second the section heading, so the refusal names that requirement instead.
+ if(result.code==='INITIAL_IDEA_SINGLE_SENTENCE'){
+  return {nextAction:'supply_initial_idea',blockers:[{code:result.code,message:'The idea in instruction needs at least two sentences, and it has one, so nothing was written: the first sentence becomes the title and the second the section heading. A sentence ends with ".", "!" or "?"; a line break does not end one. Add a second sentence and retry.'}]};
  }
  return {nextAction:'supply_initial_idea',blockers:[{code:result.code,message:'Provide a non-empty idea in instruction.'}]};
 }
@@ -5403,26 +5668,65 @@ export function resolveChatDocumentFilename(rawFilename: unknown): { filename?: 
  * directory delivered nothing at all until the flat pass existed.
  */
 async function loadGuideDirectoryFragments(projectRoot: string): Promise<ChatGuideFragment[]> {
+ return (await loadSourceWindow(projectRoot, MAX_CHAT_GUIDE_CONTEXT_BYTES)).fragments;
+}
+
+/** The largest source window one `CREATE_INITIAL_REVISION` may ask for: the managed document's own size limit, since every loaded byte is pasted into v1. */
+export const MAX_SOURCE_WINDOW_BYTES = MAX_WRITE_BYTES;
+
+/** What the source window read: every Markdown document the declared sources offer, in load order, and how much of each reached the fragments. */
+export type SourceWindowReport = {
+ limitBytes: number;
+ loadedBytes: number;
+ sources: { path: string; bytes: number; loadedBytes: number; status: 'loaded' | 'truncated' | 'not-loaded'; reservedMarkersRemoved?: number }[];
+};
+
+/**
+ * The fragments `loadGuideDirectoryFragments` hands a first revision, plus the report of what the
+ * window did. Same walk, same order (declared sources in profile order; nested before flat inside
+ * each), same `limit` semantics: the window is a total across every source, a document that
+ * crosses it is cut at the limit, and every document after it is not read at all. The report
+ * lists every document regardless, so a cut or a left-out source is visible instead of silent.
+ */
+async function loadSourceWindow(projectRoot: string, limit: number): Promise<{ fragments: ChatGuideFragment[]; report: SourceWindowReport }> {
+ const report: SourceWindowReport = { limitBytes: limit, loadedBytes: 0, sources: [] };
  let root: string;
  try {
   root = await canonicalProjectRoot(projectRoot);
  } catch {
-  return [];
+  return { fragments: [], report };
  }
  const fragments: ChatGuideFragment[] = [];
  let bytes = 0;
  for (const source of DOMAIN.sources) {
-  if (bytes >= MAX_CHAT_GUIDE_CONTEXT_BYTES) break;
   for (const file of await sourceMarkdownFiles(root, source.path)) {
-   if (bytes >= MAX_CHAT_GUIDE_CONTEXT_BYTES) break;
+   let size = 0;
+   try { size = (await stat(file.canonical)).size; } catch { continue; }
+   if (bytes >= limit) {
+    report.sources.push({ path: file.relative, bytes: size, loadedBytes: 0, status: 'not-loaded' });
+    continue;
+   }
    const buffer = await readFile(file.canonical);
-   const text = buffer.subarray(0, MAX_CHAT_GUIDE_CONTEXT_BYTES - bytes).toString("utf8");
-   if (!text) continue;
-   bytes += Buffer.byteLength(text);
+   const raw = buffer.subarray(0, limit - bytes).toString("utf8");
+   const loaded = Buffer.byteLength(raw);
+   const { text, removed } = neutralizeReservedMarkers(raw);
+   report.sources.push({ path: file.relative, bytes: buffer.length, loadedBytes: Math.min(loaded, buffer.length), status: loaded >= buffer.length ? 'loaded' : 'truncated', ...(removed ? { reservedMarkersRemoved: removed } : {}) });
+   if (!raw) continue;
+   bytes += loaded;
    fragments.push({ path: file.relative, content: text });
   }
  }
- return fragments;
+ report.loadedBytes = bytes;
+ return { fragments, report };
+}
+
+/** The `SOURCE_WINDOW_TRUNCATED` warning for a report that cut or left out a document, or none. */
+function sourceWindowWarnings(report: SourceWindowReport): { code: string; message: string }[] | undefined {
+ const truncated = report.sources.filter((source) => source.status === 'truncated').map((source) => `${source.path} (${source.loadedBytes} of ${source.bytes} bytes)`);
+ const left = report.sources.filter((source) => source.status === 'not-loaded').map((source) => source.path);
+ if (!truncated.length && !left.length) return undefined;
+ const parts = [truncated.length ? `cut at the window: ${truncated.join(', ')}` : '', left.length ? `not read at all: ${left.join(', ')}` : ''].filter(Boolean).join('; ');
+ return [{ code: 'SOURCE_WINDOW_TRUNCATED', message: `The first revision reads at most ${report.limitBytes} bytes across its declared sources, in declaration order; ${parts}. Pass sourceWindowBytes (up to ${MAX_SOURCE_WINDOW_BYTES}) to widen it for this creation, shorten the sources, or carry what matters in the idea text.` }];
 }
 
 /**
@@ -5645,16 +5949,19 @@ export function projectLifecycleV1PublicResult(operation:'WITHDRAW_REVISION'|'RE
  return {status:'blocked',operation,requestId,revisionId:null,withdrawalId:null,lifecycleState:null,activeRevisionId:null,semanticCode,transitionEvidence,auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',modelCalls:0,plannerCalls:0,warnings:[]};
 }
 
-export function projectProposalDeliberationPublicResult(input:{result:any;operation:string;sourceFilename?:string;metricsBefore:any;metricsAfter:any;audit?:any;selfAudit?:any}){
+export function projectProposalDeliberationPublicResult(input:{result:any;operation:string;sourceFilename?:string;instruction?:string;metricsBefore:any;metricsAfter:any;audit?:any;selfAudit?:any}){
  const {result}=input,delta=(key:string)=>Math.max(0,(input.metricsAfter[key]??0)-(input.metricsBefore[key]??0));
  const calls={modelCalls:result.modelCalls??delta('totalModelCalls'),plannerCalls:result.plannerCalls??delta('totalPlannerCalls'),tutorCalls:delta('totalTutorCalls'),reviewerCalls:delta('totalReviewerCalls')};
  const base={operation:input.operation,sourceFilename:result.published?.sourceFilename??result.sourceFilename??input.sourceFilename??null,...calls,mutations:result.mutations??0,warnings:input.audit?.warnings??[]};
- if(result.status==='awaiting_acceptance')return {...base,status:'awaiting_acceptance',targetFilename:result.targetFilename,acceptanceToken:result.acceptanceToken,patchCount:result.patchCount,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'accept_successor',...(result.mathDelta?{mathDelta:result.mathDelta,preservationDelta:result.preservationDelta}:{})};
+ if(result.status==='awaiting_acceptance')return {...base,status:'awaiting_acceptance',targetFilename:result.targetFilename,acceptanceToken:result.acceptanceToken,patchCount:result.patchCount,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'accept_successor',...(typeof input.instruction==='string'?{instructionBudget:instructionBudget(input.instruction)}:{}),...(result.mathDelta?{mathDelta:result.mathDelta,preservationDelta:result.preservationDelta}:{}),...(result.staleCompanionReferences?{staleCompanionReferences:result.staleCompanionReferences}:{})};
  if(result.status==='published'){
   const unresolved=input.audit?.status==='FAIL'||input.selfAudit?.status==='FAIL';
-  return {...base,status:unresolved?'blocked':'published',...(unresolved?{category:'audit',message:'Terminal audit failed; inspect the receipt before retrying.'}:{}),targetFilename:result.published.targetFilename,targetSha256:result.published.publishedSha256,patchCount:result.published.patchCount,receiptId:`${result.published.targetFilename}:${result.published.targetRevision}`,manifestStatus:result.derived.derivedStateManifest.status,auditStatus:input.audit?.status??'NOT_RUN',selfAuditStatus:input.selfAudit?.status??'NOT_RUN',recoveryStatus:unresolved?'required':'not_required',nextAction:unresolved?'inspect_receipt':null};
+  return {...base,status:unresolved?'blocked':'published',...(unresolved?{category:'audit',message:'Terminal audit failed; inspect the receipt before retrying.'}:{}),targetFilename:result.published.targetFilename,targetSha256:result.published.publishedSha256,patchCount:result.published.patchCount,receiptId:`${result.published.targetFilename}:${result.published.targetRevision}`,manifestStatus:result.derived.derivedStateManifest.status,auditStatus:input.audit?.status??'NOT_RUN',selfAuditStatus:input.selfAudit?.status??'NOT_RUN',recoveryStatus:unresolved?'required':'not_required',nextAction:unresolved?'inspect_receipt':null,...(result.staleCompanionReferences?{staleCompanionReferences:result.staleCompanionReferences}:{})};
  }
- return {...base,status:result.status,category:errorCategory(result),message:result.reason??result.question??'Execution did not complete.',patchCount:0,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:result.status==='published-derived-failed'?'required':'not_required',nextAction:result.status==='budget_block'?'reduce_request_or_raise_budget':result.status==='needs-clarification'||result.status==='ambiguous'?'clarify_request':'inspect_error',...(result.assessment?{assessment:result.assessment}:{}),...(Array.isArray(result.alternatives)?{alternatives:result.alternatives}:{}),...(Array.isArray(result.risks)?{risks:result.risks}:{}),...(Array.isArray(result.unresolvedQuestions)?{unresolvedQuestions:result.unresolvedQuestions}:{}),...(result.budget?{budget:result.budget}:{})};
+ // A preview refused by the accept turn's own pre-publish validation names that refusal (its
+ // code, message and repair step), never a bare CANDIDATE_VALIDATION_FAILED the caller cannot act on.
+ const candidateRefusal=result.reason==='CANDIDATE_VALIDATION_FAILED'&&result.validation?.candidateValidation?.status==='failed'?result.validation.candidateValidation as CandidateValidationFailure:null;
+ return {...base,status:result.status,category:errorCategory(result),message:result.reason??result.question??'Execution did not complete.',patchCount:0,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:result.status==='published-derived-failed'?'required':'not_required',nextAction:result.status==='budget_block'?'reduce_request_or_raise_budget':result.status==='needs-clarification'||result.status==='ambiguous'?'clarify_request':candidateRefusal?'repair_candidate':'inspect_error',...(candidateRefusal?{blockers:[{code:candidateRefusal.code,message:`${candidateRefusal.message.replace(/\.?$/,'.')} ${candidateRefusal.nextStep}`}]}:{}),...(result.assessment?{assessment:result.assessment}:{}),...(Array.isArray(result.alternatives)?{alternatives:result.alternatives}:{}),...(Array.isArray(result.risks)?{risks:result.risks}:{}),...(Array.isArray(result.unresolvedQuestions)?{unresolvedQuestions:result.unresolvedQuestions}:{}),...(result.budget?{budget:result.budget}:{})};
 }
 
 /**
@@ -5712,8 +6019,8 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
   promptSnippet:'Deliberate conversationally or execute a resolved Proposal Deliberation V2 instruction.',
   promptGuidelines:['Use operation CHAT_DELIBERATION for non-mutating tutor conversation; it is session-local, mode-first, and cannot mint document or task authority. Materialize chat only with draftMaterialization INITIAL_CREATE plus explicit current-turn authorization and an exact validated route or approval of the pending proposed route; UPDATE and REPLACE are forbidden. Use document mutation verbs only for explicit principal-local managed edits, which retain exact target resolution and guarded publication. Use operation CREATE_INITIAL_REVISION, with instruction as the idea, only to explicitly create the first managed proposal (v1); it never runs automatically and is rejected outright whenever a managed proposal already exists. MAINTENANCE is an explicit external-controller handoff only; V2 does not create or resume workers or grant document authority. For managed-revision withdrawal or restore, pass the typed lifecycle operation and an exact sourceFilename or restore withdrawalOperationId; omit withdrawalOperationId for withdrawal because V2 generates it. Supply only user-facing semantic selectors and content; never construct patches, offsets, manifests, receipts, or internal revision mechanics.'],
   parameters:Type.Object({
-   instruction:Type.String({minLength:1,maxLength:65536}),
-   operation:Type.Optional(StringEnum(['WITHDRAW_REVISION','RESTORE_WITHDRAWN_REVISION','CREATE_SUCCESSOR','CREATE_INITIAL_REVISION','CHAT_DELIBERATION','CLOSE_DELIBERATION','MAINTENANCE'] as const,{description:'Explicit lifecycle, managed-successor edit, explicit first-managed-version creation, session-local chat, explicit chat close, external-maintenance handoff, or persistent scientific-workflow operation. Omit for existing direct-document classification.'})),
+   instruction:Type.String({minLength:1,maxLength:MAX_INSTRUCTION_CHARACTERS}),
+   operation:Type.Optional(StringEnum(['WITHDRAW_REVISION','RESTORE_WITHDRAWN_REVISION','CREATE_SUCCESSOR','CREATE_INITIAL_REVISION','ADOPT_INITIAL_REVISION','CHAT_DELIBERATION','CLOSE_DELIBERATION','MAINTENANCE'] as const,{description:'Explicit lifecycle, managed-successor edit, explicit first-managed-version creation, session-local chat, explicit chat close, external-maintenance handoff, or persistent scientific-workflow operation. Omit for existing direct-document classification.'})),
        editIntent:Type.Optional(StringEnum(['MODIFY','CONCEPTUAL_REVISION'] as const,{description:'Required only with CREATE_SUCCESSOR; identifies the bounded inner document edit.'})),
        sectionRange:Type.Optional(Type.String({minLength:5,maxLength:64,pattern:'^(?:sections?\\s+)?\\d+(?:\\.\\d+)*\\s*[–-]\\s*\\d+(?:\\.\\d+)*$',description:'Required only with CREATE_SUCCESSOR. Exact numbered Markdown-heading range, for example sections 1–2.2.'})),
        acceptSuccessor:Type.Optional(Type.Boolean({description:'Set true only for an explicit current-turn acceptance of a previously previewed successor.'})),
@@ -5740,8 +6047,52 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
        },{additionalProperties:false})),
        maintenanceTaskId:Type.Optional(Type.String({minLength:13,maxLength:256,pattern:'^maintenance-[a-z0-9][a-z0-9-]{0,242}$'})),
        idempotencyKey:Type.Optional(Type.String({minLength:1,maxLength:256})),
+       rationale:Type.Optional(Type.String({minLength:1,maxLength:MAX_RATIONALE_CHARACTERS,description:'CREATE_SUCCESSOR only: why the change was made, recorded verbatim in the successor receipt. Optional.'})),
+       decider:Type.Optional(StringEnum(['agent','human'] as const,{description:'CREATE_SUCCESSOR only: who took the decision, recorded in the successor receipt. Optional.'})),
+       sourceWindowBytes:Type.Optional(Type.Integer({minimum:1,maximum:MAX_SOURCE_WINDOW_BYTES,description:'CREATE_INITIAL_REVISION only: how many bytes of the declared sources, in total and in declaration order, v1 reads (default 4000). Refused on every other operation.'})),
+       dryRun:Type.Optional(Type.Boolean({description:'CREATE_INITIAL_REVISION only: run every check and compose the first revision, then stop before the creation lock and any write (status preview). Refused on every other operation.'})),
   }),
   async execute(_toolCallId,params,_signal,_onUpdate,ctx){
+   /** ADOPT_INITIAL_REVISION: an existing document becomes v1 under CREATE_INITIAL_REVISION's own gate, state and receipt (`adoptInitialRevision`). */
+   const runAdoption=async(request:{sourceFilename?:unknown;dryRun?:boolean})=>{
+    const authority=resolveV2ExecutionAuthority('CREATE_INITIAL_REVISION');
+    const base={operation:ADOPT_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,sourceFilename:typeof request.sourceFilename==='string'?request.sourceFilename:null};
+    const result=await adoptInitialRevision({projectRoot,sourceFilename:request.sourceFilename,dryRun:request.dryRun===true,hasManagedProposal:async()=>(await safeResolveLatestManagedRevision(projectRoot)).status!=='empty'});
+    if(result.status==='preview')return {...base,status:'preview' as const,dryRun:true as const,mode:result.mode,targetFilename:result.filename,targetRevision:result.revision,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'adopt_initial_revision'};
+    if(result.status==='adopted'){
+     let auditStatus='FAIL';
+     try{auditStatus=(await runConsistencyAudit({projectRoot})).status;}catch{auditStatus='FAIL';}
+     return {...base,status:'adopted' as const,mode:result.mode,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'COMMITTED',auditStatus,selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:result.mode==='rename'?'move_adopted_source_to_backup':null,...(result.mode==='rename'?{sourceLeftInPlace:true}:{})};
+    }
+    const blockers='detail' in result
+     ?{nextAction:result.code==='ADOPTION_ALREADY_RECORDED'||result.code==='MANAGED_PROPOSAL_ALREADY_EXISTS'?'use_existing_managed_proposal':'fix_adoption_source',blockers:[{code:result.code,message:`${result.detail} Nothing was written.`}]}
+     :projectInitialRevisionRefusal(result);
+    return {...base,status:'blocked' as const,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...blockers};
+   };
+   // The schema's `maxLength`, enforced on every host: refused before any route runs, nothing written.
+   if(typeof params.instruction==='string'&&params.instruction.length>MAX_INSTRUCTION_CHARACTERS){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'shorten_instruction',instructionBudget:instructionBudget(params.instruction),blockers:[{code:'INSTRUCTION_TOO_LONG',message:`instruction is ${params.instruction.length} characters; every operation accepts at most ${MAX_INSTRUCTION_CHARACTERS}. Nothing was written. Shorten it, or move long reference material into a declared source instead of the instruction.`}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
+   // A dry run exists only where an operation has no preview of its own; anywhere else it would
+   // silently mutate a caller who believed nothing would be written, so it is refused instead.
+   const decisionRecordRefusal=decisionRecordBlocker(params as {operation?:string;rationale?:unknown;decider?:unknown});
+   if(decisionRecordRefusal){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'fix_decision_record',blockers:[decisionRecordRefusal]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
+   if((params as {sourceWindowBytes?:unknown}).sourceWindowBytes!==undefined&&params.operation!==CREATE_INITIAL_REVISION_OPERATION){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_source_window',blockers:[{code:'SOURCE_WINDOW_UNSUPPORTED',message:'sourceWindowBytes applies only to CREATE_INITIAL_REVISION, the one operation that reads the declared sources into a document; nothing was run.'}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
+   if(params.dryRun!==undefined&&!DRY_RUN_OPERATIONS.has(params.operation??'')){
+    const publicResult={status:'blocked' as const,operation:params.operation??null,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'drop_dry_run',blockers:[{code:'DRY_RUN_UNSUPPORTED',message:`dryRun applies only to ${[...DRY_RUN_OPERATIONS].join(', ')}; nothing was run. CREATE_SUCCESSOR previews without it; STATUS and RESOLVE_TARGET never write.`}]};
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
+   if(params.operation===ADOPT_INITIAL_REVISION_OPERATION){
+    const publicResult=await runAdoption(params as {sourceFilename?:unknown;dryRun?:boolean});
+    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+   }
    const openDeliberation=params.conversationId?chatDeliberation.isOpen(sessionIdentity(ctx),params.conversationId):false;
    const route=resolveGlobalRoute({...params,openDeliberation});
    if(route.stage==='DRAFT_MATERIALIZATION'){
@@ -5828,11 +6179,29 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
       :{code:'REQUIRED_SOURCE_EMPTY',message:`Required source "${source.path}" exists but holds no Markdown document; CREATE_INITIAL_REVISION cannot proceed without its content. Ingest at least one document into it, as "${source.path}/<name>/<name>.md" or as a Markdown file directly inside it.`})};
      return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
     }
-    const guideFragments=await loadGuideDirectoryFragments(projectRoot);
-    const result=await initialRevisionCreation.execute({idea:params.instruction,...(guideFragments.length?{guideFragments}:{})});
+    const windowRequest=params.sourceWindowBytes;
+    if(windowRequest!==undefined&&!(typeof windowRequest==='number'&&Number.isInteger(windowRequest)&&windowRequest>=1&&windowRequest<=MAX_SOURCE_WINDOW_BYTES)){
+     const publicResult={status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'fix_source_window',blockers:[{code:'SOURCE_WINDOW_INVALID',message:`sourceWindowBytes must be an integer from 1 to ${MAX_SOURCE_WINDOW_BYTES}; got ${JSON.stringify(windowRequest)}. Nothing was composed.`}]};
+     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+    }
+    const window=await loadSourceWindow(projectRoot,windowRequest??MAX_CHAT_GUIDE_CONTEXT_BYTES);
+    const guideFragments=window.fragments;
+    const windowWarnings=sourceWindowWarnings(window.report);
+    const windowFields={sourceWindow:window.report,...(windowWarnings?{warnings:windowWarnings}:{})};
+    const dryRun=params.dryRun===true;
+    const result=await initialRevisionCreation.execute({idea:params.instruction,...(guideFragments.length?{guideFragments}:{}),...(dryRun?{dryRun}:{})});
+    if(result.status==='preview'){
+     // The real call would also take the slug-independent creation lock; predict its refusal
+     // rather than report a v1 that could never be created. The lock itself is never touched.
+     const lock=await initialRevisionLockState(projectRoot);
+     const publicResult=lock.present
+      ?{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'use_existing_managed_proposal',blockers:[{code:'MANAGED_PROPOSAL_ALREADY_EXISTS',message:`The creation lock ${lock.path} is present, so a real CREATE_INITIAL_REVISION would be refused. It records that a first revision was already created here; it is never removed by the engine.`}]}
+      :{status:'preview' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,dryRun:true as const,targetFilename:result.filename,targetRevision:result.revision,canonicalMetadata:result.canonicalMetadata,markdown:result.markdown,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:'create_initial_revision',instructionBudget:instructionBudget(params.instruction),...windowFields};
+     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
+    }
     const publicResult=result.status==='created'
-     ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null}
-     :{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...projectInitialRevisionRefusal(result)};
+     ?{status:'created' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:result.filename,targetRevision:result.revision,targetSha256:result.documentSha256,canonicalMetadata:result.canonicalMetadata,mutations:1 as const,receiptId:`${result.filename}:${result.revision}`,manifestStatus:'NOT_TRACKED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',nextAction:null,instructionBudget:instructionBudget(params.instruction),...windowFields}
+     :{status:'blocked' as const,operation:CREATE_INITIAL_REVISION_OPERATION,routeStage:'CREATE_INITIAL_REVISION',authority,targetFilename:null,mutations:0 as const,receiptId:null,manifestStatus:'NOT_PUBLISHED',auditStatus:'NOT_RUN',selfAuditStatus:'NOT_RUN',recoveryStatus:'not_required',...projectInitialRevisionRefusal(result),...windowFields};
     return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
    }
    const resolvedIntent=resolveIntent(params.instruction).intent;
@@ -5868,7 +6237,7 @@ export function createProposalDeliberationExtension(options: ProposalDeliberatio
      selfAudit=await runProposalDeliberationSelfAudit({projectRoot});
     } catch { audit={status:'FAIL',warnings:[]};selfAudit={status:'FAIL'}; }
    }
-   const projected=lifecycle?projectRevisionLifecyclePublicResult(result):projectProposalDeliberationPublicResult({result,operation,sourceFilename:params.sourceFilename,metricsBefore,metricsAfter:getRuntimeMetrics(),audit,selfAudit});
+   const projected=lifecycle?projectRevisionLifecyclePublicResult(result):projectProposalDeliberationPublicResult({result,operation,sourceFilename:params.sourceFilename,instruction:params.instruction,metricsBefore,metricsAfter:getRuntimeMetrics(),audit,selfAudit});
    const publicResult=route.stage==='DIRECT_DOCUMENT'?{...projected,authority:resolveV2ExecutionAuthority(route.stage)}:projected;
    return {content:[{type:'text',text:JSON.stringify(publicResult)}],details:publicResult};
   },

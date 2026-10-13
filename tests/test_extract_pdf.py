@@ -482,5 +482,70 @@ class SingleTargetTests(unittest.TestCase):
         self.assertFalse(EXTRACTOR.is_loose(Path("/papers/foo/foo.pdf")))
 
 
+class ForceOcrTests(_BaseFixture):
+    """Marker rebuilds a digital table from the PDF's own text layer
+    (`tables_pdftext`) whenever one exists, in both modes. A poor text layer
+    garbles those tables, and the only lever that skips the text layer is
+    Marker's `force_ocr`. These tests check that the lever reaches the options
+    handed to Marker -- they never load Marker itself."""
+
+    def test_default_options_leave_the_text_layer_on(self) -> None:
+        options = EXTRACTOR.marker_options(None, False)
+        self.assertEqual(options, {"output_format": "markdown"})
+
+    def test_force_ocr_reaches_the_marker_options(self) -> None:
+        options = EXTRACTOR.marker_options("balanced", True)
+        self.assertEqual(options, {"output_format": "markdown",
+                                   "mode": "balanced", "force_ocr": True})
+
+    def test_the_configuration_accepts_a_boolean_force_ocr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "papersmith.yaml"
+            path.write_text("paper_ingestion:\n  force_ocr: true\n", encoding="utf-8")
+            self.assertTrue(EXTRACTOR.load_config(path)["force_ocr"])
+
+    def test_a_non_boolean_force_ocr_is_a_config_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "papersmith.yaml"
+            path.write_text("paper_ingestion:\n  force_ocr: sometimes\n", encoding="utf-8")
+            with self.assertRaises(EXTRACTOR.ConfigError):
+                EXTRACTOR.load_config(path)
+
+    def _converter_arguments(self, argv: list[str], cfg: dict) -> tuple:
+        """Run `main` up to the engine load and return what it asked for."""
+        self.topic("reference-papers", "paper.pdf")
+        seen: list[tuple] = []
+
+        def refuse(*args):
+            seen.append(args)
+            raise EXTRACTOR.EngineError("not loaded in a unit test")
+
+        real_load, real_build = EXTRACTOR.load_config, EXTRACTOR.build_converter
+        EXTRACTOR.load_config = lambda: {**self.cfg, **cfg}
+        EXTRACTOR.build_converter = refuse
+        real_argv = sys.argv
+        sys.argv = ["extract_pdf.py", *argv]
+        try:
+            from contextlib import redirect_stderr, redirect_stdout
+            import io
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(EXTRACTOR.main(), 2)
+        finally:
+            EXTRACTOR.load_config, EXTRACTOR.build_converter = real_load, real_build
+            sys.argv = real_argv
+        self.assertEqual(len(seen), 1)
+        return seen[0]
+
+    def test_the_flag_forces_ocr_for_this_run(self) -> None:
+        self.assertEqual(self._converter_arguments(["--force-ocr"], {}), (None, True))
+
+    def test_the_configuration_forces_ocr_when_no_flag_is_given(self) -> None:
+        self.assertEqual(self._converter_arguments([], {"force_ocr": True, "mode": "fast"}),
+                         ("fast", True))
+
+    def test_without_either_the_text_layer_stays_on(self) -> None:
+        self.assertEqual(self._converter_arguments([], {}), (None, False))
+
+
 if __name__ == "__main__":
     unittest.main()

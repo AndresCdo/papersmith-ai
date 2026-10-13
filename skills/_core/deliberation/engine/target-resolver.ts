@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { buildStructuralIndex } from './document-index.js';
 import { DOMAIN } from './domain-profile.js';
 /** How this domain names a numbered display, and what its documents are about. Both stateless (no `g`), so one instance each is safe; the stripping form below needs `g` and is built per call. */
@@ -199,7 +200,52 @@ export function resolveSectionRange(state:DocumentState,raw:string):SectionRange
 }
 
 function successorSelectionQuery(query:string){const selected=/(?:\bsecci[oó]n|\bsubsecci[oó]n|\bsection|\bsubsection|\bapartado)\s+(?:de(?:l|\s+la)?\s+)?(.+?)(?=[,;:.]|\b(?:para|pero|donde|que|conserva|preserva|mant(?:é|e)n|keep)\b|$)/iu.exec(query)?.[1];return dropStopwords((selected??query).replace(new RegExp(DOMAIN.vocabulary.displayNounStripPattern,'giu'),' ').trim());}
-function collapseNestedSuccessorCandidates(candidates:TargetCandidate[]){return candidates.filter(candidate=>!candidates.some(other=>other.entryId!==candidate.entryId&&other.composite!.startByte>=candidate.composite!.startByte&&other.composite!.endByte<=candidate.composite!.endByte&&(other.composite!.startByte!==candidate.composite!.startByte||other.composite!.endByte!==candidate.composite!.endByte)));}
+/**
+ * The section-label convention (`_core/conventions/sections.json`), read rather
+ * than restated: a heading whose first token is a label (`3.1`, `O1.`) is
+ * matched exactly with or without that label.
+ */
+const SECTION_CONVENTION=JSON.parse(readFileSync(new URL('../../conventions/sections.json',import.meta.url),'utf8')) as {label:string;closer:string};
+const SECTION_LABEL=new RegExp(`^(?:${SECTION_CONVENTION.label})(?:${SECTION_CONVENTION.closer})?$`,'u');
+/** A query that opens with ATX level marks (`## Data`) names a heading at exactly that level. */
+const LEVEL_MARKS=/^[ \t]{0,3}(#{1,6})[ \t]+(?=\S)/u;
+/** What an exact heading match is worth over the same words matched inside a longer heading: more than the gate's margin of 4. */
+const EXACT_HEADING=6;
+/**
+ * Lowercased tokens of a heading or a query. A dotted identifier (`3.1`,
+ * `H2.1`) stays one token, so an identifier is compared whole: `o1` is not a
+ * token of `O10`.
+ */
+const headingTokens=(value:string)=>(value.toLowerCase().match(/[\p{L}\p{N}_-]+(?:\.\p{N}+)*/gu)??[]).filter(token=>token.length>=2);
+/** A heading's matchable tokens: each whole token plus the parts of a hyphenated or underscored one, so `entropy` still reaches `Cross-entropy`. */
+const matchableTokens=(title:string)=>{const whole=headingTokens(title);return new Set([...whole,...whole.flatMap(token=>token.split(/[-_]/u)).filter(part=>part.length>=2)]);};
+const contentTokens=(tokens:Iterable<string>)=>new Set([...tokens].filter(token=>!STOPWORDS.has(token)));
+const sameSet=(left:Set<string>,right:Set<string>)=>left.size===right.size&&[...left].every(token=>right.has(token));
+type HeadingOutlineEntry={entry:StructuralEntry;level:number;title:string;path:string[]};
+/**
+ * Every ATX heading with its level, its title and its REAL ancestor path (the
+ * nearest shallower heading at each level). The structural index's own
+ * `headingPath` lists preceding headings, siblings included, so it cannot tell
+ * two `### Setup` sections apart; this can.
+ */
+function headingOutline(state:DocumentState):HeadingOutlineEntry[]{
+ const stack:{level:number;title:string}[]=[];
+ return state.structuralIndex.entries.filter(entry=>['section','subsection','heading'].includes(entry.type)).sort((left,right)=>left.startByte-right.startByte).flatMap(entry=>{
+  const match=/^[ \t]{0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/u.exec(entryText(state,entry.entryId).split(/\r?\n/u,1)[0]);
+  if(!match)return [];
+  const level=match[1].length,title=match[2].trim();
+  while(stack.length&&stack.at(-1)!.level>=level)stack.pop();
+  stack.push({level,title});
+  return [{entry,level,title,path:stack.map(item=>item.title)}];
+ });
+}
+/** True when the query's content words are exactly the heading's, with or without its leading section label. */
+function exactHeading(title:string,query:Set<string>){
+ if(!query.size)return false;
+ const [first,...rest]=title.split(/\s+/u);
+ const variants=[title,...(first&&rest.length&&SECTION_LABEL.test(first)?[rest.join(' ')]:[])];
+ return variants.some(variant=>sameSet(contentTokens(headingTokens(variant)),query));
+}
 
 /**
  * Builds a successor locus candidate directly from a matched heading's natural
@@ -223,18 +269,36 @@ function successorLocusCandidate(state:DocumentState,entry:StructuralEntry,evide
  return compositeCandidate(state,[entry,last],startByte,endByte,evidence);
 }
 
-/** Resolves a semantic successor target into one Markdown heading's natural span, inferred from the request/deliberation without requiring a numbered range. */
+/**
+ * Resolves a semantic successor target into one Markdown heading's natural span, inferred from the request/deliberation without requiring a numbered range.
+ *
+ * A query term matches a heading when it equals one of the heading's tokens
+ * (never a substring of one), and a heading whose words are exactly the
+ * query's earns `EXACT_HEADING` on top, so `Alignment loss` names the section
+ * of that name rather than tying with `Alignment loss weighting`. A query that
+ * opens with level marks (`## Data`) only considers headings of that level,
+ * which is how an outer section is named when a nested heading shares its
+ * words. Nested matches are NOT collapsed to the innermost: the gate decides
+ * on the scores, and a tie lists every candidate with its level and path.
+ */
 export function resolveSuccessorTarget(state:DocumentState,query:string):SuccessorTargetResolution {
- const semanticQuery=successorSelectionQuery(query);
+ const marks=LEVEL_MARKS.exec(query);
+ const requestedLevel=marks?marks[1].length:undefined;
+ // A level-marked query is a heading spelled out, so it is read literally:
+ // the section-noun and display-noun stripping below would eat a heading word.
+ const semanticQuery=marks?query.slice(marks[0].length).trim():successorSelectionQuery(query);
+ const allTerms=[...new Set(headingTokens(semanticQuery))],content=allTerms.filter(term=>!STOPWORDS.has(term));
+ const terms=content.length?content:allTerms,querySet=new Set(terms);
  // Scored on the heading LINE alone, never on `resolveTargets`. That scorer
  // reads an entry's body, its neighbours and its `headingPath`, so a section
  // inherited its parent's title words and every section competed with the root
  // block's introduction, which paraphrases the whole paper. Matching a heading
  // means matching what the heading says.
- const direct=state.structuralIndex.entries.filter(entry=>['section','subsection','heading'].includes(entry.type)).flatMap(entry=>{
-  const heading=entryText(state,entry.entryId).split(/\r?\n/u,1)[0].toLowerCase(),matchedTerms=words(semanticQuery).filter(term=>heading.includes(term));
+ const direct=headingOutline(state).filter(heading=>requestedLevel===undefined||heading.level===requestedLevel).flatMap(heading=>{
+  const tokens=matchableTokens(heading.title),matchedTerms=terms.filter(term=>tokens.has(term));
   if(!matchedTerms.length)return [];
-  return [{entryId:entry.entryId,type:entry.type,headingPath:entry.headingPath,matchedTerms,matchedLabels:[],matchedTags:[],matchedSymbols:[],score:matchedTerms.length*3,confidence:Math.min(1,matchedTerms.length/3),shortPreview:entryText(state,entry.entryId).slice(0,180),evidence:matchedTerms}];
+  const exact=exactHeading(heading.title,querySet);
+  return [{heading,matchedTerms,score:matchedTerms.length*3+(exact?EXACT_HEADING:0),confidence:exact?1:Math.min(1,matchedTerms.length/3),evidence:exact?[...matchedTerms,'exact heading']:matchedTerms}];
  });
  // A successor locus must be matched by its own heading line. Falling back to
  // `headingCandidates` would accept a section scored on its BODY — including a
@@ -242,16 +306,17 @@ export function resolveSuccessorTarget(state:DocumentState,query:string):Success
  // so a query like "3-3" silently resolved to whichever section owns equation 3.
  // A wrong target is worse than none: report NOT_FOUND and let the caller name
  // the section.
- const semantic=direct;
- if(!semantic.length)return {candidates:[],reason:'SUCCESSOR_TARGET_NOT_FOUND'};
- const candidates=semantic.flatMap(candidate=>{
-  const entry=state.structuralIndex.byId[candidate.entryId],structural=entry&&successorLocusCandidate(state,entry,`semantic successor target: ${candidate.evidence.join(', ')}`);
-  return structural?[{...structural,matchedTerms:candidate.matchedTerms,matchedLabels:candidate.matchedLabels,matchedTags:candidate.matchedTags,matchedSymbols:candidate.matchedSymbols,score:candidate.score,confidence:candidate.confidence,evidence:[...structural.evidence,...candidate.evidence]}]:[];
+ if(!direct.length)return {candidates:[],reason:'SUCCESSOR_TARGET_NOT_FOUND'};
+ const candidates=direct.flatMap(match=>{
+  const structural=successorLocusCandidate(state,match.heading.entry,`semantic successor target: ${match.evidence.join(', ')}`);
+  return structural?[{...structural,headingPath:match.heading.path,headingLevel:match.heading.level,matchedTerms:match.matchedTerms,score:match.score,confidence:match.confidence,evidence:[...structural.evidence,...match.evidence]}]:[];
  });
  // `ambiguityGate` reads candidates[0] as the best and measures the margin to
  // candidates[1], so they must arrive sorted by score. Document order would
  // hand it the weakest first and turn a clear win into a negative margin.
- const canonical=collapseNestedSuccessorCandidates(candidates).sort((left,right)=>right.score-left.score||left.entryId.localeCompare(right.entryId));
+ // Equal scores always block, so their order only shapes the menu: document
+ // order reads the way the document does.
+ const canonical=candidates.sort((left,right)=>right.score-left.score||left.composite!.startByte-right.composite!.startByte);
  return canonical.length?{candidates:canonical}:{candidates:[],reason:'SUCCESSOR_TARGET_NOT_FOUND'};
 }
 

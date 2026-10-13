@@ -28,13 +28,25 @@ def _slug(value: str) -> str:
     return value or "paper"
 
 
+#: Ingestion runs Marker over a PDF and nothing else. Material that is not a
+#: PDF still has two routes into a proposal, both through
+#: `proposal-deliberation`; the refusal names them where the reader meets it.
+NON_PDF_ROUTES = (
+    "ingest takes PDFs only (a local .pdf, or an arXiv/OpenReview/PDF URL). "
+    "For Markdown (.md) you want a new proposal seeded from, put it under "
+    "guidance/paper-guide/ (CREATE_INITIAL_REVISION reads it); for an existing "
+    "draft that should become v1 as written, place it in proposals/ and adopt it "
+    "with ADOPT_INITIAL_REVISION. See skills/proposal-deliberation/SKILL.md."
+)
+
+
 def classify_source(source: str) -> dict[str, str]:
     """Classify local/PDF/arXiv/OpenReview inputs without network access."""
     parsed = urllib.parse.urlparse(source)
     if parsed.scheme not in {"http", "https"}:
         path = Path(source)
         if path.suffix.lower() != ".pdf":
-            raise UserError("ingest source must be a PDF path or an arXiv/OpenReview/PDF URL")
+            raise UserError(f"ingest source must be a PDF path: {NON_PDF_ROUTES}")
         return {"kind": "file", "url": "", "slug": _slug(path.stem)}
     host = parsed.netloc.lower()
     path = parsed.path.rstrip("/")
@@ -55,7 +67,8 @@ def classify_source(source: str) -> dict[str, str]:
             return {"kind": "openreview", "url": source, "slug": _slug(identifier)}
     if Path(parsed.path).suffix.lower() == ".pdf":
         return {"kind": "url", "url": source, "slug": _slug(Path(parsed.path).stem)}
-    raise UserError("URL must point to a PDF, arXiv /abs or /pdf route, or an OpenReview forum")
+    raise UserError(
+        f"URL must point to a PDF, arXiv /abs or /pdf route, or an OpenReview forum: {NON_PDF_ROUTES}")
 
 
 def _download(url: str, destination: Path) -> None:

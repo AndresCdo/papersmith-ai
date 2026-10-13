@@ -9,7 +9,7 @@
 // to a different one by `package.json`'s `test` script.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -182,4 +182,35 @@ test('the cross-document [claims:N] form is not a citation this domain resolves'
     // recognize it.
     const { CLAIMS_CROSSING_ONLY: result } = await loaded();
     assert.deepEqual(result.cites, []);
+});
+
+test('the declaration, citation and prose forms come from the one shared convention file', async () => {
+    // A7 (`cross-skill-consistency`): `skills/_core/conventions/experiments.json` is
+    // read by this domain and by `experimental-implementation` alike. This skill's
+    // own modules, placed in a scratch tree whose convention file says something
+    // else, must follow that file -- never a spelling of their own.
+    const root = await mkdtemp(path.join(os.tmpdir(), 'experimental-convention-'));
+    const scratchSkill = path.join(root, 'skills', 'experimental-deliberation');
+    await mkdir(scratchSkill, { recursive: true });
+    for (const name of await readdir(skillDir)) {
+        if (name.endsWith('.ts')) await copyFile(path.join(skillDir, name), path.join(scratchSkill, name));
+    }
+    await mkdir(path.join(root, 'skills', '_core', 'conventions'), { recursive: true });
+    await symlink(path.join(repoRoot, 'skills', '_core', 'deliberation'), path.join(root, 'skills', '_core', 'deliberation'));
+    const shipped = JSON.parse(await readFile(path.join(repoRoot, 'skills', '_core', 'conventions', 'experiments.json'), 'utf8'));
+    const mutated = { ...shipped, declares: 'trial', cites: 'probe', proseReference: '\\(Trial\\s+({identifier})\\)' };
+    await writeFile(path.join(root, 'skills', '_core', 'conventions', 'experiments.json'), JSON.stringify(mutated), 'utf8');
+    const harnessPath = path.join(root, 'harness.mjs');
+    await writeFile(harnessPath, HARNESS, 'utf8');
+    const source = '## Trial [trial:T7]\n\nSee (Trial T7) and [probe:T7].\n\n## Old [exp:E1]\n\n(Exp. E1) [tests:E1]\n';
+    const { stdout } = await execFileAsync('node', [harnessPath], { env: {
+        ...process.env,
+        DELIBERATION_DOMAIN_PROFILE: path.join(scratchSkill, 'profile.ts'),
+        ENGINE_DIR: engineDir,
+        REFERENCES_MODULE: path.join(scratchSkill, 'reference-experimental.ts'),
+        DOCUMENTS: JSON.stringify({ RELOCATED: source }),
+    } });
+    const { RELOCATED: result } = JSON.parse(stdout.trim().split('\n').pop());
+    assert.deepEqual(result.declares, [{ kind: 'tag', value: 'T7' }]);
+    assert.deepEqual(result.cites.map((entry) => `${entry.kind}:${entry.value}`).sort(), ['prose:T7', 'ref:T7']);
 });

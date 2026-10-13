@@ -87,8 +87,10 @@ abstracts bear most directly on the graded claims. Confirm each one's
 metadata through the borrowed front door — the one shell command this
 stretch may invoke:
 `python skills/paper-writing/scripts/paper_cli.py resolve
---identifier <id> --resolver {openalex,crossref,arxiv} --role resolution`.
-Report identifier, resolver, title, year, venue, and whether its own
+--identifier <id> --resolver {openalex,crossref,arxiv} --role resolution
+--cache-dir sota-pool/metadata`.
+Its cache lands in `sota-pool/metadata/`, beside the pool, never under
+`paper/`. Report identifier, resolver, title, year, venue, and whether its own
 `full_text_url` names a reachable PDF. Quote refusals
 (`RESOLVER_ROLE_EMPTY`, `RESOLVER_UNREACHABLE`, `IDENTIFIER_UNRESOLVED`)
 rather than working around them. Ranking is not filing: the PDFs stay where

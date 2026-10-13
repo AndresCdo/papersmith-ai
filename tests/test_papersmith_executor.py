@@ -609,3 +609,150 @@ class ExecutorTests(unittest.TestCase):
             assert '"dry_run": true' in output
             assert "submit" in output
             assert "tok123" in output
+
+
+class DefaultProfileResolvesTheTargetTests(unittest.TestCase):
+    """B9: the default `smoke_and_invariants` profile substituted the
+    workspace folder name for `{paper_slug}` (no implementation is named
+    after the workspace) and ran `pytest` from PATH (never the target's own
+    venv). It now names `{target}` and `{target_python}`, resolved from
+    `implementations/` and the target's `.venv`, and refuses before
+    dispatch when either cannot be resolved."""
+
+    def new_workspace(self) -> Path:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        return _workspace(Path(holder.name).resolve())
+
+    def add_target(self, workspace: Path, name: str, *, venv: bool = True) -> Path:
+        root = workspace / "implementations" / name
+        (root / "tests").mkdir(parents=True)
+        if venv:
+            python = root / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+            python.parent.mkdir(parents=True)
+            python.symlink_to(sys.executable)
+        return root
+
+    def dispatch(self, workspace: Path, **kwargs) -> tuple[dict, list]:
+        calls: list = []
+
+        def _record(command, **options):
+            calls.append((command, options))
+            return SimpleNamespace(returncode=0)
+
+        with mock.patch.object(executor.subprocess, "run", side_effect=_record):
+            result = executor.run_profile(workspace, "smoke_and_invariants", **kwargs)
+        return result, calls
+
+    def test_the_default_profile_runs_the_targets_own_interpreter(self) -> None:
+        workspace = self.new_workspace()
+        target = self.add_target(workspace, "Some-Method")
+        result, calls = self.dispatch(workspace)
+        self.assertEqual(result["status"], "ok")
+        command, options = calls[0]
+        self.assertEqual(Path(command[0]), target / ".venv" / "bin" / "python")
+        self.assertEqual(command[1:3], ["-m", "pytest"])
+        self.assertEqual(command[3], "implementations/Some-Method/tests/test_invariants.py")
+        self.assertEqual(options["env"]["PYTHONPATH"], "implementations/Some-Method/src")
+        self.assertNotIn(workspace.name, " ".join(command[1:]))
+
+    def test_several_targets_need_an_explicit_choice(self) -> None:
+        workspace = self.new_workspace()
+        self.add_target(workspace, "One")
+        self.add_target(workspace, "Two")
+        with self.assertRaises(UserError) as caught:
+            self.dispatch(workspace)
+        self.assertIn("--implementation", str(caught.exception))
+        result, calls = self.dispatch(workspace, implementation="Two")
+        self.assertIn("implementations/Two/tests", calls[0][0][3])
+
+    def test_no_target_refuses_before_anything_runs_or_is_recorded(self) -> None:
+        workspace = self.new_workspace()
+        with self.assertRaises(UserError) as caught:
+            self.dispatch(workspace)
+        self.assertIn("implementations/", str(caught.exception))
+        self.assertEqual(ledger.read(workspace), [])
+
+    def test_a_target_without_its_venv_refuses_and_names_env(self) -> None:
+        workspace = self.new_workspace()
+        self.add_target(workspace, "Some-Method", venv=False)
+        with self.assertRaises(UserError) as caught:
+            self.dispatch(workspace)
+        self.assertIn(".venv", str(caught.exception))
+        self.assertIn("env", str(caught.exception))
+
+    def test_an_unknown_or_unsafe_implementation_name_refuses(self) -> None:
+        workspace = self.new_workspace()
+        self.add_target(workspace, "Some-Method")
+        for name in ("Missing", "../elsewhere", "Some-Method/tests"):
+            with self.subTest(name=name):
+                with self.assertRaises(UserError):
+                    self.dispatch(workspace, implementation=name)
+
+    def test_a_dry_run_states_an_unresolved_target_and_dispatches_nothing(self) -> None:
+        workspace = self.new_workspace()
+        result, calls = self.dispatch(workspace, dry_run=True)
+        self.assertEqual(calls, [])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["jobs"][0]["target_resolution"]["status"], "unresolved")
+
+    def test_an_explicit_profile_without_the_new_placeholders_is_unchanged(self) -> None:
+        workspace = self.new_workspace()
+        _write_local_manifest(workspace)
+        calls: list = []
+
+        def _record(command, **options):
+            calls.append(command)
+            return SimpleNamespace(returncode=0)
+
+        with mock.patch.object(executor.subprocess, "run", side_effect=_record):
+            result = executor.run_profile(workspace, "smoke")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(calls[0][0], sys.executable)
+        self.assertNotIn("target_resolution", result["jobs"][0])
+
+    def test_the_cli_accepts_the_implementation_flag(self) -> None:
+        workspace = self.new_workspace()
+        self.add_target(workspace, "Some-Method")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            rc = main(["run", "smoke_and_invariants", "--dry-run", "--implementation",
+                       "Some-Method", str(workspace)])
+        self.assertEqual(rc, SUCCESS)
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["jobs"][0]["target_resolution"]["status"], "resolved")
+
+    def test_a_remote_profile_naming_only_the_target_needs_no_local_venv(self) -> None:
+        workspace = self.new_workspace()
+        self.add_target(workspace, "Some-Method", venv=False)
+        result = executor.run_profile(workspace, "sweep_training", dry_run=True)
+        resolution = result["jobs"][0]["target_resolution"]
+        self.assertEqual(resolution["status"], "resolved")
+        self.assertIn("implementations/Some-Method/src/train.py", " ".join(result["jobs"][0]["command"]))
+
+    def legacy_profile(self, workspace: Path) -> None:
+        text = (workspace / "papersmith.yaml").read_text(encoding="utf-8")
+        text = text.replace('"{target_python} -m pytest {target}/tests/test_invariants.py"',
+                            '"pytest implementations/{paper_slug}/tests/test_invariants.py"')
+        text = text.replace('PYTHONPATH: "{target}/src"',
+                            'PYTHONPATH: "implementations/{paper_slug}/src"')
+        (workspace / "papersmith.yaml").write_text(text, encoding="utf-8")
+
+    def test_a_pre_0_14_default_naming_no_existing_target_refuses_with_the_fix(self) -> None:
+        workspace = self.new_workspace()
+        self.legacy_profile(workspace)
+        self.add_target(workspace, "Some-Method")
+        with self.assertRaises(UserError) as caught:
+            self.dispatch(workspace)
+        self.assertIn("{target}", str(caught.exception))
+        self.assertEqual(ledger.read(workspace), [])
+        result, calls = self.dispatch(workspace, dry_run=True)
+        self.assertEqual(result["jobs"][0]["target_resolution"]["status"], "unresolved")
+
+    def test_a_pre_0_14_default_whose_target_shares_the_workspace_name_still_runs(self) -> None:
+        workspace = self.new_workspace()
+        self.legacy_profile(workspace)
+        self.add_target(workspace, workspace.name)
+        result, calls = self.dispatch(workspace)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(calls[0][0][0], "pytest")

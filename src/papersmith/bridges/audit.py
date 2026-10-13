@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from ..core import manifest
@@ -58,7 +59,7 @@ def _surplus_static_files(root: Path, active: tuple[str, ...]) -> list[str]:
     return sorted(set(found))
 
 
-def execute(workspace: str | Path, *, check_drift: bool = False) -> int:
+def execute(workspace: str | Path, *, check_drift: bool = False, verbose: bool = False) -> int:
     root = Path(workspace).expanduser().resolve()
     spec = root / "skills/skill-audit/references/probes/skill-audit.subcommands.json"
     if not fs.is_regular_file(spec):
@@ -82,12 +83,18 @@ def execute(workspace: str | Path, *, check_drift: bool = False) -> int:
     # workspace that reaches the resolver below always has a valid one.
     context = context_for_workspace(root)
     active = workspace_tools(root)
-    drift = check_generated(root, context, active)
+    # Projection notes are collected, not warned: ``init``/``upgrade`` report
+    # them when they write the projections, and this read only compares them.
+    notes: list[str] = []
+    drift = check_generated(root, context, active, warnings=notes)
     stored = manifest.load_manifest(root)
     if stored is None:
         raise UserError(f"not a papersmith workspace: missing {root / '.papersmith/manifest.json'}")
     kit_root = resolve_and_validate()
-    current = manifest.workspace_framework_files(root, kit_root)
+    current = manifest.workspace_framework_files(root, kit_root, notes=[])
+    if verbose:
+        for note in notes:
+            print(f"note: {note}", file=sys.stderr)
     manifest_drift = sorted({
         path for path in set(current) | set(stored["files"])
         if current.get(path) != stored["files"].get(path)
@@ -109,8 +116,10 @@ def register(subparsers) -> None:
     parser = subparsers.add_parser("audit", help="audit workspace structure and consistency")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
     parser.add_argument("--check-drift", action="store_true")
+    parser.add_argument("--verbose", action="store_true",
+                        help="with --check-drift, also print the projection notes to stderr")
     parser.set_defaults(handler=run_cli)
 
 
 def run_cli(args) -> int:
-    return execute(args.directory, check_drift=args.check_drift)
+    return execute(args.directory, check_drift=args.check_drift, verbose=args.verbose)

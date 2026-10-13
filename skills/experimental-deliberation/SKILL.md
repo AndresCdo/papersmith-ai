@@ -71,6 +71,20 @@ approving its own document.
 What moves is execution, never doctrine: every rule stays here, and each
 agent's first instruction is to load this file.
 
+## When a delegated agent cannot be spawned
+
+Each stretch this skill delegates is defined in full by its own agent file:
+`.claude/agents/experimental-publish.md`,
+`.claude/agents/experimental-validation.md`. When an agent cannot be spawned —
+the harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read that
+agent's definition file and follow it as written, from the beginning it states
+to the end it states, holding any gate this skill sets before the stretch, and
+returning the report shape it specifies. Its `tools:` line still bounds the
+stretch: an act that would need a tool outside that list is a stop, not a
+workaround. Say in the reply that the stretch ran inline and why the agent
+could not be spawned.
+
 ## The question that governs every turn
 
 **Does this experiment sustain the proposal's claim, and would it survive a reviewer?**
@@ -115,11 +129,13 @@ and names both shapes that would answer it. Creating the empty directory does no
 satisfy the declaration — that was the older behaviour, and it let `v1` render
 against nothing.
 
-Two facts about how the engine actually reads these, both worth knowing before you rely on it:
+How the engine actually reads these, worth knowing before you rely on it (`proposal-workspace.ts`, `loadSourceWindow`):
 
-- **Only `<source>/<folder>/<folder>.md` is ever loaded.** The loader descends one level into each source directory and reads the Markdown file named after the folder (`proposal-workspace.ts`, `loadGuideDirectoryFragments`). A data paper ingested as `guidance/data-paper/<name>/<name>.md` is picked up; a loose file directly under the source directory is not.
-- **`proposals/` contributes presence, not content.** Managed revisions are flat `.md` files, and the loader only descends into subdirectories — so the proposal's text never enters v1 through the engine. Its directory must exist; its claims reach the document because *you* carry them there, in the idea text you send and in the deliberation that follows.
-- The total content loaded across all sources is capped at 4000 bytes (`MAX_CHAT_GUIDE_CONTEXT_BYTES`), and is truncated, not summarized.
+- **Two shapes per source, nested first.** In each source directory the loader reads every `<folder>/<folder>.md` (one level down, the file named after its folder), then every `*.md` sitting directly in the directory, each group in name order. A data paper ingested as `guidance/data-paper/<name>/<name>.md` is picked up, and so is a managed revision, which is a flat file in `proposals/`. Any other layout (a file two levels down, a Markdown file not named after its folder) is not read.
+- **Sources are read in declaration order: the data paper first, then `proposals/`, then the paper guide.** That order decides what survives the window below.
+- **The source window: 4000 bytes in total, by default.** The loader stops once 4000 bytes have been read across all sources together. The document that crosses the limit is cut at it (truncated, not summarized) and every document after it is not read at all — so a data paper over 4000 bytes leaves the proposal out of v1 entirely. `CREATE_INITIAL_REVISION` reports what happened in `sourceWindow` (`limitBytes`, `loadedBytes`, and one `{path, bytes, loadedBytes, status}` per document, `status` being `loaded`, `truncated` or `not-loaded`) and adds a `SOURCE_WINDOW_TRUNCATED` warning naming every document it cut or left out. Pass `sourceWindowBytes` (an integer from 1 to 262144) to widen the window for that one creation; anything else is refused `SOURCE_WINDOW_INVALID`, and the field on any other operation is refused `SOURCE_WINDOW_UNSUPPORTED`. Run it with `--dry-run` first to read the report before anything is written. A deliberation chat's first turn reads the same sources through a fixed 4000-byte window.
+- **Reserved markers are neutralised on the way in.** Every published proposal revision opens with the engine's reserved artifact marker line, and it belongs to that document, not to v1. The loader removes each reserved marker comment line from what it reads, turns any other occurrence of a reserved marker name into plain text, and drops NUL bytes; the document entry in `sourceWindow` then carries `reservedMarkersRemoved: <count>`. Before 0.14.0 the markers were pasted verbatim, so v1 was refused `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED` (`initial-candidate-limit`) whenever a proposal fitted in the window, and earlier still the v1 was written but could never take a successor. For such a v1 see [usage](references/usage.md#a-v1-created-before-0140-that-carries-copied-markers).
+- Whatever the window leaves out still reaches the document only because *you* carry it there, in the idea text you send and in the deliberation that follows.
 
 ## External validation, before any draft
 
@@ -176,12 +192,13 @@ A `[verified: …]` date also makes staleness visible instead of permanent. When
 
 In a report table's body, every cell past column one must contain no digit (`report-table-fabricated-value`). A report table is a **promise about a future run**: its body cells are slots, and a number in one is a result nobody measured.
 
-Two exemptions, and the distinction between them is the rule:
+Three exemptions, and the distinction between them is the rule:
 
 - **Column one is exempt.** It is the row *label* — what is being reported on, not a reported value. `| Adapted (k=3) | | |` is a name, not a result.
 - **Baselines tables are exempt entirely.** A baselines table is a **reference**, not a promise: a venue year, a parameter count, a published figure all legitimately belong in its cells.
+- **Parameters tables are exempt entirely.** A parameters table is a **declaration** of settings the plan fixes now — a learning rate, a batch size, a seed list — not a slot a run fills, so its numbers are decided rather than measured.
 
-What makes a table a baselines table is one thing and one thing only: its **first header cell** reads `Baseline` or `Baselines` (case-insensitively). Nothing else distinguishes them, so if you want the exemption, spell the header that way; if you do not want it, do not.
+What declares either kind is one thing and one thing only: the table's **first header cell**, read whole and case-insensitively. `Baseline` or `Baselines` makes a baselines table; `Parameter`, `Parameters`, `Hyperparameter` or `Hyperparameters` makes a parameters table. Nothing else distinguishes them: a first header cell that merely contains the word (`Parameter count`), or the word in any other column, leaves the table a report table under the rule. So if you want an exemption, spell the header that way; if you do not want it, do not — and never put a result in a parameters table to get past the rule, because a measured value there is exactly the fabrication the rule exists to refuse.
 
 Numbers in prose, outside any table, are never touched by this rule. A learning rate, a seed count, a split year in a protocol paragraph are all fine.
 
@@ -230,7 +247,11 @@ Before you acknowledge anything, tell the user in plain language what is leaving
 
 ## Reference integrity: an experiment declares, a claim cites
 
-From `reference-experimental.ts`:
+From `reference-experimental.ts`, whose markers, identifier class and prose
+form are read from `skills/_core/conventions/experiments.json` (through
+`experiment-convention.ts`). `experimental-implementation` reads the same file
+to locate experiments, so what this skill validates is exactly what that skill
+finds; change the convention there, never here:
 
 - An experiment **declares** its identifier as `[exp:E1]`. Identifiers are alphanumeric, with hyphens, dots or underscores after the first character. They are deliberately **not** positional ordinals: experiments get added, split and retired, and a positional number would silently re-point every citation the first time one is removed.
 - A claim **cites** an experiment as `[tests:E1]`, or in prose as `(Exp. E1)` / `(Experiment. E1)`.
@@ -242,13 +263,15 @@ That single pair makes both failure directions visible, which is exactly the tut
 
 Two experiments declaring the same identifier are a duplicate and fail the uniqueness check. A document that declares and cites nothing reports *not applicable*, never a vacuous pass.
 
-Put the declaration in the experiment's own heading. An experiment headed `## Experiment [exp:E1] — …` resolves from a `RESOLVE_TARGET` query of `E1` (measured), which makes the identifier a usable locus handle as well as a citation target. `reference-experimental.ts` declares under the core's own `tag` kind rather than a domain word for the same reason: that is the half of the core's label/tag split that feeds the resolver's aliases and lets a citation resolve instead of reporting as dangling.
+Put the declaration in the experiment's own heading. `experimental-implementation` locates an experiment only by a heading carrying the declaration, and takes its block to run to the next heading of the same or a higher level; a declaration placed in body text resolves citations here but is no locus there. An experiment headed `## Experiment [exp:E1] — …` resolves from a `RESOLVE_TARGET` query of `E1` (measured), which makes the identifier a usable locus handle as well as a citation target. `reference-experimental.ts` declares under the core's own `tag` kind rather than a domain word for the same reason: that is the half of the core's label/tag split that feeds the resolver's aliases and lets a citation resolve instead of reporting as dangling.
 
 ### A second, unrelated citation form: `[claims:N]`
 
 An experiment may also cite a claim the mathematical proposal declares, as `[claims:9]` — this document sustaining `\tag{9}` in the proposal's own numbered form. This is **not** a reference-integrity citation and `cites()` never recognizes it: `[claims:N]` is resolved by an entirely different engine, `_core/implementation/`'s own `crossing_state` (`the-agreement-nothing-computes`), against the proposal's own declared claims — never against anything `reference-experimental.ts` declares or cites. Adding it to `cites()` "for completeness" would make every crossing an unresolved reference in this document's own reference-integrity check, since `checkReferenceIntegrity` resolves `cited` against `declared` in the **same** document — the exact cost the operator's own citation-key ruling paid to avoid.
 
 The check this form feeds — a citation to a claim the proposal no longer declares, or a declared claim no experiment cites — is `implementation-cross-document-agreement`'s, run through `agree`, not through anything in this skill. It refuses and names the discrepancy; it computes no verdict over which document is right, exactly `implementation-cross-document-agreement`'s own boundary.
+
+A claim the plan deliberately does not test is declared here, in the document, with `[out-of-scope:N]` — the marker `skills/_core/conventions/experiments.json` registers as `outOfScope`. `agree` subtracts a declared claim marked that way from its untested list on every call, instead of the operator retyping `--acknowledge untested:N` each time; it never clears a citation to a claim the proposal does not declare. Like `[claims:N]`, `cites()` never reads it, so it is invisible to this document's own reference-integrity check. Write it only when the user has decided that claim is outside this plan, and say which claim in the change summary.
 
 ## The bound on claims
 
@@ -260,18 +283,20 @@ Note `achiev(es|ed)` in particular. It is easy to write "the criterion is met wh
 
 Advisory means the conflict does not block preview; it blocks the **accept** turn unless every conflict id is echoed in `acknowledgedSourceConflicts`. That escape exists so the document can legitimately quote somebody else's published result. It is not a way past your own discipline: if you are acknowledging a conflict, say out loud to the user which sentence it is and whose result it quotes.
 
-**Be aware of what the CLI does not hand you.** The public CLI response projects a blocked result down to `status`, `category` and `message`, so `SOURCE_AUTHORITY_CONFLICT` arrives without the conflict list, and `CANDIDATE_VALIDATION_FAILED` arrives without naming which rule failed (`proposal-workspace.ts`, `projectProposalDeliberationPublicResult`). The remedy is not to fish for detail from the engine — it is to write the candidate correctly in the first place, using the rules above.
+**Be aware of what the CLI does not hand you.** The public CLI response projects a blocked result down to `status`, `category` and `message`, so `SOURCE_AUTHORITY_CONFLICT` arrives without the conflict list, and a `CANDIDATE_VALIDATION_FAILED` raised by a canonical-form rule arrives without naming which rule failed (`proposal-workspace.ts`, `projectProposalDeliberationPublicResult`). One that the accept turn's own pre-publish validation raised does name it: `nextAction: "repair_candidate"` and one blocker carrying that rule's code, message and repair step. The remedy is not to fish for detail from the engine — it is to write the candidate correctly in the first place, using the rules above.
 
 ## Creating v1, checked by the same gate as every successor
 
 When `STATUS` reports zero managed revisions, create v1 explicitly with `CREATE_INITIAL_REVISION` (see [usage examples](references/usage.md)). The engine loads the declared sources for this one call and composes v1 from your idea text plus those source fragments, included **verbatim** under a `## Reference Sources` heading, one `### <path>` subsection per fragment (`initial-revision-renderer.ts`, `renderFromIdea`).
 
-**v1 is checked, not exempt.** `initial-revision-creation.ts` imports `violations` from the canonical-form gate and runs it against the composed v1 markdown before any write: a candidate that fails [The canonical form](#the-canonical-form) is refused with `status: 'blocked'`, `code: 'INITIAL_REVISION_CANONICAL_FORM_VIOLATION'`, and nothing is written. This is the same `violations()` check the successor path runs — not a second gate, the identical one.
+**v1 is checked, not exempt.** `initial-revision-creation.ts` imports `violations` from the canonical-form gate and runs it against the composed v1 markdown before any write: a candidate that fails [The canonical form](#the-canonical-form) is refused with `status: 'blocked'`, `code: 'INITIAL_REVISION_CANONICAL_FORM_VIOLATION'`, and nothing is written. This is the same `violations()` check the successor path runs — not a second gate, the identical one. The composed v1 also runs the structural pre-publish validation every later accept turn runs over the whole document (size and reserved bytes, well-formed display blocks, standalone ATX headings): a failure is refused with `code: 'INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED'`, its message naming the rule (for example `atx-heading-standalone`) and the offending line, and nothing is written. Without it, a v1 carrying a heading fused into prose would publish and then block every successor.
 
 So the concrete consequence: because v1 has no skeleton and injects no placeholder, **both of this domain's declared labels must already exist in your idea text or in a required source** (`proposals/`, `guidance/data-paper/`) before `CREATE_INITIAL_REVISION` can succeed at all — a `**Validation scheme:** TBD` skeleton would block every v1 forever, since the denylist refuses it too. The same discipline applies to a filled results table pasted verbatim from the area benchmark's guide: it fails `report-table-fabricated-value` at v1 exactly as it would on any successor. Strip it to headers with empty cells, or cite the source instead of pasting it. The same applies to any URL arriving from a source without a verification tag.
 
 **Your idea needs at least two sentences.** The engine derives the document's
-title from the first sentence and its section heading from the second. With no
+title from the first sentence and its section heading from the second, each
+without its terminal `.`, `!` or `?`, and then writes the whole idea verbatim
+as that section's body: the headings are labels, the body keeps your full text. With no
 second sentence both resolve to the same text, `# X` and `## X` come out
 byte-identical, and every later attempt to name a place in that document is
 ambiguous. `CREATE_INITIAL_REVISION` refuses that outright --
@@ -292,7 +317,7 @@ It reports `managedRevisions` (each with `lineage`/`revisionNumber`/`isLatest`),
 
 1. **`sourceClassification` is `LATEST`.** Work on it directly.
 2. **`sourceClassification` is `OLDER_MANAGED`.** Ask the user: move the newer revisions to `backup/experiments/<timestamp>/` and resume from the older one, or keep working on the real latest? Never default silently.
-3. **`sourceClassification` is `UNMANAGED`.** Ask the user: start fresh from that file's content as the new v1, or adopt it as v1 directly by adding the marker and renaming it to `experiments-<slug>-v01.md`? Adoption preserves an already-developed document's real structure. The user's call, never yours.
+3. **`sourceClassification` is `UNMANAGED`.** Ask the user: start fresh from that file's content as the new v1, or adopt it as v1 directly with `ADOPT_INITIAL_REVISION` (`sourceFilename` = that file)? Adoption preserves an already-developed document's real structure. The user's call, never yours. Adopt through the engine, never by hand: it runs [the canonical form](#the-canonical-form) and the pre-publish validation exactly as for a created v1, and writes the same committed state and receipt, under `experiments-<slug of its first # title>-v01.md`; a marker prepended and a file renamed by hand gets no state, no receipt (`MISSING_MANIFEST` in the consistency audit) and no validation. The source file stays where it is; moving it to a backup is your confirmed step. An old hand-adopted v1 keeps reading as before; `ADOPT_INITIAL_REVISION` with `sourceFilename` set to that revision records its state and receipt after the same validation, bytes untouched, and refuses one that already has a receipt (`ADOPTION_ALREADY_RECORDED`).
 4. **No path in mind, a latest exists, `multipleActive: false`.** Work on `latest`.
 5. **No path in mind, zero managed revisions, `nonManagedFiles: []`.** A pure initial creation — proceed to `CREATE_INITIAL_REVISION`.
 6. **Zero managed revisions and exactly one non-managed file.** Ask whether that file is the base — do not assume it.
@@ -322,7 +347,7 @@ Full request shapes and a worked transcript are in [usage examples](references/u
 node skills/experimental-deliberation/cli.mjs --serve
 ```
 
-**Resolve the real entry ID first.** Send `RESOLVE_TARGET` on that same stdin. Write the query as distinctive words from the target's *heading*, not as a sentence: no punctuation (the query truncates at the first `,;:.`), no section number, accents exactly as the heading spells them. If it comes back `blocked`, **remove words, never add them** — every extra word matches more headings. If it comes back `SUCCESSOR_TARGET_NOT_FOUND`, you described the section's content instead of its title.
+**Resolve the real entry ID first.** Send `RESOLVE_TARGET` on that same stdin. Write the query as distinctive words from the target's *heading*, not as a sentence: no punctuation (the query truncates at the first `,;:.`), no section number, accents exactly as the heading spells them. A query word matches a heading only when it equals one of the heading's own words, never part of one: `O1` matches `### O1. Objective` and not `### O10. Scope`, and `entropy` still reaches `Cross-entropy` because each part of a hyphenated word counts. A heading whose words are exactly the query's (ignoring its section label and stopwords) outranks one that merely contains them, so `Alignment loss` names `## Alignment loss`, not `## Alignment loss weighting`. To name an outer section when a nested heading shares its words, open the query with its level marks (`## Data`); only headings of that level are considered. If it comes back `blocked`, **remove words, never add them** — every extra word matches more headings. When a query is blocked, `question` and `candidates` list every candidate with its level marks and its real heading path (`### Methods › Setup`); name the one you meant by its own heading words, or by level marks for the outer one. If it comes back `SUCCESSOR_TARGET_NOT_FOUND`, you described the section's content instead of its title.
 
 **Build one `EditAction` per resolved locus.**
 
@@ -333,13 +358,17 @@ node skills/experimental-deliberation/cli.mjs --serve
 | `delete` | `targetEntryId`, `instructionEvidence`, `reason` |
 | `move` / `copy` | `sourceEntryIds` (one entry), `destinationAnchorId`, `position`, `moveMode` (`LITERAL`\|`ADAPTIVE`), `removeSource`, `cleanupLevel`, `transformedContent`? |
 
-Everything outside the declared locus is left byte-identical — enforced structurally, not by convention. Keep replacement content well-formed Markdown: preserve the block-boundary blank lines, and patch complete blocks, or the candidate is refused by `successor-markdown-block-safety`.
+Everything outside the declared locus is left byte-identical — enforced structurally, not by convention. Keep replacement content well-formed Markdown: preserve the block-boundary blank lines, and patch complete blocks, or the candidate is refused by `successor-markdown-block-safety`. Put every ATX heading on its own line: a `#`–`######` marker followed by a space anywhere else on a line is refused as `atx-heading-standalone`. A marker inside a backtick code span (`` `## Results` ``) is text, not a heading, and passes. The preview runs the accept turn's own pre-publish validation, so either refusal arrives at the preview as `CANDIDATE_VALIDATION_FAILED`, before any acceptance token is issued.
+
+**The instruction cap: 65,536 characters.** Every operation's `instruction` — for `CREATE_INITIAL_REVISION`, the whole idea — is at most 65,536 characters (JavaScript string length, UTF-16 code units). A longer one is refused before anything runs, `status: "blocked"`, `code: "INSTRUCTION_TOO_LONG"`, `nextAction: "shorten_instruction"`, nothing written. The successor preview and the first revision's result carry `instructionBudget: { "limit": 65536, "used": <n>, "remaining": <65536 - n> }`, so you can see the room left before you grow an instruction further.
 
 **`changeSummary` is required on every preview turn.** This domain declares a change header, so a `CREATE_SUCCESSOR` preview without `changeSummary: { "what": …, "why": … }` is blocked with `CHANGE_SUMMARY_REQUIRED`. It is always written into the revision receipt.
 
 Whether it also rewrites the document's own `## Changes` block depends on the batch, and this is worth knowing before you trust the block: the engine appends that rewrite only when it plans the batch itself, which for a `resolvedDecisions` request means **a batch of `replace` decisions only** (`orchestrator.ts`, `ambientBatchNeedsComposite`). A batch containing any `insert`, `delete`, `move` or `copy` is precompiled, the header injection is skipped, and the new version's `## Changes` block still reads what the previous version's said. If the header must read correctly for such a batch, replace it yourself as one of your loci. On an all-`replace` batch, do *not* also target it yourself — two edits over one span is what `OVERLAPPING_PATCHES` refuses.
 
 **Preview, then accept, on the same stdin.** `CREATE_SUCCESSOR` returns `status: "awaiting_acceptance"`, an `acceptanceToken`, the would-be `targetFilename`, and `preservationDelta`. Nothing is written. To publish, resend the identical request with `acceptSuccessor: true`, the returned token, `acknowledgedRemovals` for every lost atom, and `acknowledgedSourceConflicts` if a conflict was raised. A success returns `status: "published"`, the new filename and hash, a `receiptId`, `manifestStatus: "COMMITTED"`, and `auditStatus`/`selfAuditStatus: "PASS"`. Anything else means it is not done — do not tell the user the edit landed. **Read the next section before you promise a user a published successor.**
+
+**Record why, and who decided.** The receipt keeps an `instructionHash`, not the instruction, so on its own it cannot say why the revision exists. Add `"rationale": "<why, at most 2000 characters>"` and `"decider": "agent"` or `"human"` to the request and the successor's receipt (`.experimental-deliberation/receipts/<file>.json`) records both verbatim beside the hash. Both are optional: a receipt without them, including every receipt written before 0.14.0, validates exactly as before. Send them on the accept line (sending them on the preview too is harmless); `decider` states who took the decision — `human` when the user accepted the change, `agent` when you decided it yourself — and never what you would have liked it to be. A blank or over-long `rationale` or any other `decider` is refused `DECISION_RECORD_INVALID` before anything runs, and either field on an operation other than `CREATE_SUCCESSOR` is refused `DECISION_RECORD_UNSUPPORTED`.
 
 ### Resolved: the accept turn publishes in this domain
 
@@ -378,7 +407,7 @@ Do not import the mathematical rigor doctrine here. Necessity-before-formalizati
 - Never assert an achieved result. This document plans work that has not happened.
 - Never invent a repository, a URL, a venue, a year, or a metric value.
 - Every external URL carries `[pending-verification]` or `[verified: YYYY-MM-DD]`, immediately after it.
-- Report-table body cells stay empty until a run fills them.
+- Report-table body cells stay empty until a run fills them. Only a baselines table (references) or a parameters table (settings the plan fixes) carries numbers.
 - Every success criterion is declared before the run it judges.
 - Never invent an entry ID, offset, hash, patch, or receipt field. Resolve, don't guess.
 
@@ -392,7 +421,8 @@ This skill **does not run experiments**, **does not ingest real results**, and *
 | --- | --- |
 | `STATUS` | Read-only, keyless inventory of `experiments/`. Never mutates. Run it at the start of every deliberation. |
 | `RESOLVE_TARGET` | Read-only locus resolution, using the exact resolver `CREATE_SUCCESSOR` uses internally. |
-| `CREATE_INITIAL_REVISION` | Creates v1 from your idea plus the declared sources. Only when no managed revision exists; never overwrites or duplicates one. |
+| `ADOPT_INITIAL_REVISION` | Makes an existing document in `experiments/` v1, or records the missing state and receipt of an old hand-adopted v1. Same gate, state and receipt as `CREATE_INITIAL_REVISION`; accepts `--dry-run`. See [usage](references/usage.md#adopting-an-existing-document-as-v1). |
+| `CREATE_INITIAL_REVISION` | Creates v1 from your idea plus the declared sources. Only when no managed revision exists; never overwrites or duplicates one. A success leaves a permanent creation lock (`.experimental-deliberation/locks/initial-revision.lock`), so preview it first with `--dry-run` (or `"dryRun": true`): every check and the composed `markdown`, no lock, no write. See [usage](references/usage.md#dry-run-first-see-v1-before-it-exists). |
 | `WITHDRAW_REVISION` | Withdraws one eligible managed revision, preserving an audited recovery copy. Not content deletion. |
 | `RESTORE_WITHDRAWN_REVISION` | Restores a previously withdrawn revision from its audited copy. |
 
@@ -402,7 +432,8 @@ This skill **does not run experiments**, **does not ingest real results**, and *
 
 - **Launch only through this skill's own `cli.mjs`.** The shared core refuses to start without a domain profile, so an instruction to invoke the core's own launcher directly is an instruction that errors. `node skills/experimental-deliberation/cli.mjs` is the entry point, and it is the only one.
 - The environment the engine reads is `PROPOSAL_DELIBERATION_PROJECT_ROOT` (defaults to cwd) and `PROPOSAL_DELIBERATION_SESSION_ID` — shared core names, not renamed for this domain. No `ANTHROPIC_API_KEY` and no model configuration is ever required: no call on this path reaches a network or a model.
-- `CREATE_INITIAL_REVISION` is the only way to create a managed revision, and only when none exists.
+- `CREATE_INITIAL_REVISION` and `ADOPT_INITIAL_REVISION` are the only ways to create a managed revision, and only when none exists.
+- An `instruction` longer than 65,536 characters is refused with `INSTRUCTION_TOO_LONG` on every operation, nothing written; the preview and v1's result report `instructionBudget`.
 - If more than one active managed revision resolves, the engine reports `MULTIPLE_ACTIVE_REVISIONS` with the candidate list — never silently pick one.
 - Do not modify engine infrastructure, tests, or this skill during normal deliberation work.
 - Do not expose or ask the user to supply internal patch, offset, hash or publication mechanics. Only the resolved entry ID ever crosses that boundary, and only because the engine itself produced it.

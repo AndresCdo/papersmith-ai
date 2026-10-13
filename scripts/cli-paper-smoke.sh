@@ -10,7 +10,9 @@ PY="$ROOT/.venv/bin/python"
 unset KAGGLE_API_TOKEN KAGGLE_KEY KAGGLE_USERNAME KAGGLE_CONFIG_DIR 2>/dev/null || true
 # `--no-env`: this wrapper is offline by contract, and `init` provisions a
 # multi-gigabyte micromamba environment unless it is told not to.
-"$PY" -m papersmith.cli init "$WS" --title "Smoke Paper" --topic "smoke" --remote local --no-npm --no-env
+# `--allow-dirty-kit`: the kit is this checkout, which may carry uncommitted
+# edits; the smoke exercises the working tree, not a release.
+"$PY" -m papersmith.cli init "$WS" --title "Smoke Paper" --topic "smoke" --remote local --no-npm --no-env --allow-dirty-kit
 "$PY" -m papersmith.cli status "$WS"
 mkdir -p "$WS/guidance/reference-papers/paper"
 cp "$ROOT/tests/fixtures/e2e/paper.pdf" "$WS/guidance/reference-papers/paper.pdf"

@@ -130,10 +130,14 @@ MUTATIONS: dict[str, tuple[str, str, str]] = {
     # branch's own group in place, producing a 1-group pattern that the
     # resolver now refuses outright before this test's own fresh-import
     # ever runs.
+    # A7 (`cross-skill-consistency`): group 1 now comes from the shared
+    # convention file (`_PROSE_REFERENCE`); the literal this mutation edits
+    # is the profile's own legacy half, which still carries groups 2 and 3,
+    # so the replacement keeps exactly two groups and the total stays three.
     "findings.citation_pattern": (
-        'r"Exps?\\.?\\s*\\(?(\\d+)\\)?|Experiment\\.?\\s*\\(?(\\d+)\\)?|"\n'
+        'r"|(?:Exps?|Experiment)\\.?\\s*\\(?(\\d+)\\)?|"\n'
         '            r"Experimentos?\\s*\\((\\d+)\\)"',
-        'r"Zzs?\\.?\\s*\\(?(\\d+)\\)?|Zzk\\.?\\s*\\(?(\\d+)\\)?|Zzq\\s*\\((\\d+)\\)"',
+        'r"|Zzs?\\.?\\s*\\(?(\\d+)\\)?|Zzq\\s*\\((\\d+)\\)"',
         "CITATION_PATTERN"),
     "vocabulary.subject_singular": (
         '"subject_singular": "experiment",', '"subject_singular": "claim",',

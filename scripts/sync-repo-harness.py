@@ -55,7 +55,12 @@ GENERATED_TOOLS = ("opencode", "claude", "pi", "antigravity")
 def _render(holder: Path) -> tuple[Path, list[str]]:
     """Build a throwaway workspace and return it plus its skip warnings."""
     workspace = holder / "workspace"
-    init_module.initialize(workspace, remote="local", run_npm=False, run_env=False)
+    # The projection is derived from the working tree on purpose, uncommitted
+    # skill edits included: that is what this script exists to project. The
+    # throwaway workspace is never handed to anyone, so its kit-source record
+    # saying "dirty" is the truth and nothing to refuse.
+    init_module.initialize(workspace, remote="local", run_npm=False, run_env=False,
+                           allow_dirty_kit=True)
     skipped: list[str] = []
     apply_generated(workspace, context_for_workspace(workspace), GENERATED_TOOLS, warnings=skipped)
     return workspace, skipped

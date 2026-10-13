@@ -144,7 +144,10 @@ test('CREATE_SUCCESSOR resolves a no-range semantic target to one minimal sectio
    operation: 'CREATE_SUCCESSOR',
    editIntent: 'CONCEPTUAL_REVISION',
    sourceFilename: 'research-concept-r01.md',
-   instruction: 'Modifica la sección Framing; se recupera el promedio y preserva la conclusión.',
+   // Names the nested heading by its own words. A bare `Framing` now names
+   // `# 2 Framing` itself (an exact heading match), no longer collapsing to the
+   // innermost section that shares the word (B3).
+   instruction: 'Modifica la sección Framing average; se recupera el promedio y preserva la conclusión.',
   };
   const preview = await run.execute(request);
   assert.equal(preview.status, 'awaiting_acceptance', JSON.stringify(preview));
@@ -156,7 +159,7 @@ test('CREATE_SUCCESSOR resolves a no-range semantic target to one minimal sectio
   assert.equal(Object.hasOwn(run.plannerPayloads.at(-1), 'destination'), false);
   assert.equal(Object.hasOwn(run.plannerPayloads.at(-1), 'publication'), false);
   assert.equal(Object.hasOwn(run.plannerPayloads.at(-1), 'actions'), false);
-  assert.equal(run.plannerPayloads.at(-1).context.fragments[0].text, originalTarget, 'nested semantic candidates collapse to the minimal section');
+  assert.equal(run.plannerPayloads.at(-1).context.fragments[0].text, originalTarget, 'the nested section named by its own heading words is the minimal locus');
   assert.deepEqual(await readFile(r01Path), sourceBefore, 'preview preserves the byte-identical source');
   await assert.rejects(readFile(r02Path), { code: 'ENOENT' });
 

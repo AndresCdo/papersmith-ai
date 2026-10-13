@@ -452,6 +452,151 @@ class SetdefaultOverrideTests(unittest.TestCase):
         self.assertNotIn("IMPLEMENTATION_DOMAIN_PROFILE", proc.stdout + proc.stderr)
 
 
+def _skill_launchers() -> list[tuple[Path, Path]]:
+    """Every skill that enters the shared engine through its own launcher,
+    derived from the tree (`skills/*/scripts/implementation_cli.py` beside an
+    `impl_profile.py`), never listed: a third host is held to the same
+    property without editing this test."""
+    pairs = []
+    for launcher in sorted(FORGE.glob("skills/*/scripts/implementation_cli.py")):
+        profile = launcher.parents[1] / "impl_profile.py"
+        if profile.is_file():
+            pairs.append((launcher, profile))
+    return pairs
+
+
+class InheritedSiblingProfileTests(unittest.TestCase):
+    """X8: the launcher `setdefault`s its own profile, so a value inherited
+    from a shell or an earlier process wins. An arbitrary override stays a
+    deliberate feature (`SetdefaultOverrideTests`), but an inherited value
+    that names ANOTHER skill's own profile can only be an accident: this
+    skill would then read the other skill's holder and documents. Refused,
+    by name, before the engine is imported."""
+
+    def test_there_are_at_least_two_hosts_to_confuse(self):
+        self.assertGreaterEqual(len(_skill_launchers()), 2)
+
+    def test_a_sibling_profile_inherited_from_the_environment_is_refused(self):
+        pairs = _skill_launchers()
+        for launcher, own in pairs:
+            for _other_launcher, other in pairs:
+                if other == own:
+                    continue
+                with self.subTest(launcher=launcher.parents[1].name,
+                                  inherited=other.parent.name):
+                    env = dict(os.environ)
+                    env[_ENV_VAR] = str(other)
+                    proc = subprocess.run(
+                        [sys.executable, str(launcher), "verify", "--target",
+                         "/tmp/_x8_sibling_probe_does_not_exist",
+                         "--name", "Method"],
+                        capture_output=True, text=True, env=env)
+                    self.assertEqual(proc.returncode, 2,
+                                     proc.stdout + proc.stderr)
+                    self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING",
+                                  proc.stderr)
+                    self.assertIn(str(other), proc.stderr)
+                    self.assertIn(str(own), proc.stderr)
+                    self.assertNotIn("Traceback", proc.stderr)
+                    self.assertEqual(proc.stdout, "")
+
+    def test_the_same_refusal_holds_for_a_non_canonical_spelling(self):
+        """`..` segments or a symlinked parent must not slip past the
+        comparison: the launcher compares resolved paths."""
+        pairs = _skill_launchers()
+        launcher, own = pairs[0]
+        other = next(p for _l, p in pairs if p != own)
+        spelled = other.parent / "scripts" / ".." / other.name
+        env = dict(os.environ)
+        env[_ENV_VAR] = str(spelled)
+        proc = subprocess.run(
+            [sys.executable, str(launcher), "verify", "--target",
+             "/tmp/_x8_sibling_probe_does_not_exist", "--name", "Method"],
+            capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING", proc.stderr)
+
+    def test_its_own_profile_named_explicitly_still_runs(self):
+        for launcher, own in _skill_launchers():
+            with self.subTest(launcher=launcher.parents[1].name):
+                env = dict(os.environ)
+                env[_ENV_VAR] = str(own)
+                proc = subprocess.run(
+                    [sys.executable, str(launcher), "verify", "--target",
+                     "/tmp/_x8_sibling_probe_does_not_exist",
+                     "--name", "Method"],
+                    capture_output=True, text=True, env=env)
+                self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+                self.assertNotIn("IMPLEMENTATION_DOMAIN_PROFILE",
+                                 proc.stdout + proc.stderr)
+
+    # X8c: the guard compared skills roots only, so a sibling's profile
+    # from ANOTHER skills tree (a second checkout or workspace) was accepted
+    # and this skill read the sibling's holder. Identity is now the skill a
+    # profile declares (`PROFILE["cli"]["path"]`'s skill directory).
+
+    def _copied_tree(self, skill: str) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="x8c-tree-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        ignore = shutil.ignore_patterns("__pycache__")
+        shutil.copytree(FORGE / "skills" / "_core", root / "skills" / "_core", ignore=ignore)
+        shutil.copytree(FORGE / "skills" / skill, root / "skills" / skill, ignore=ignore)
+        return root / "skills" / skill / "impl_profile.py"
+
+    def _run(self, launcher: Path, profile: Path) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env[_ENV_VAR] = str(profile)
+        return subprocess.run(
+            [sys.executable, str(launcher), "verify", "--target",
+             "/tmp/_x8_sibling_probe_does_not_exist", "--name", "Method"],
+            capture_output=True, text=True, env=env)
+
+    def test_a_sibling_profile_from_another_skills_tree_is_refused(self):
+        pairs = _skill_launchers()
+        for launcher, own in pairs:
+            for _other_launcher, other in pairs:
+                if other == own:
+                    continue
+                with self.subTest(launcher=launcher.parents[1].name,
+                                  inherited=other.parent.name):
+                    elsewhere = self._copied_tree(other.parent.name)
+                    proc = self._run(launcher, elsewhere)
+                    self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+                    self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING", proc.stderr)
+                    self.assertIn(str(elsewhere), proc.stderr)
+                    self.assertEqual(proc.stdout, "")
+
+    def test_a_profile_declaring_a_siblings_launcher_is_refused_wherever_it_lives(self):
+        pairs = _skill_launchers()
+        launcher, own = pairs[0]
+        other_launcher = next(l for l, p in pairs if p != own)
+        holder = Path(tempfile.mkdtemp(prefix="x8c-anywhere-"))
+        self.addCleanup(shutil.rmtree, holder, ignore_errors=True)
+        profile = holder / "any_name.py"
+        profile.write_text(
+            "from pathlib import Path\n"
+            f"PROFILE = {{'kit': {{'root': Path({str(holder)!r})}}, "
+            f"'cli': {{'path': Path({str(other_launcher)!r})}}}}\n",
+            encoding="utf-8")
+        proc = self._run(launcher, profile)
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING", proc.stderr)
+
+    def test_its_own_profile_from_another_skills_tree_still_runs(self):
+        for launcher, own in _skill_launchers():
+            with self.subTest(launcher=launcher.parents[1].name):
+                elsewhere = self._copied_tree(own.parent.name)
+                proc = self._run(launcher, elsewhere)
+                self.assertNotIn("IMPLEMENTATION_DOMAIN_PROFILE_SIBLING",
+                                 proc.stdout + proc.stderr)
+
+    def test_both_launchers_stay_byte_identical(self):
+        """Each launcher derives its own profile from its own location, so
+        the refusal costs no per-skill text."""
+        blobs = {launcher.read_bytes() for launcher, _p in _skill_launchers()}
+        self.assertEqual(len(blobs), 1)
+
+
 class LauncherExposesNoEngineAttributeTests(unittest.TestCase):
     """D1's pin against silent re-aliasing: `sys.modules[__name__] = _engine`
     would make `import implementation_cli as impl` yield the engine's own
@@ -465,8 +610,20 @@ class LauncherExposesNoEngineAttributeTests(unittest.TestCase):
             "impl_launcher_for_alias_pin", LAUNCHER)
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+        # `seeded_profile` restores the variable afterwards, so the launcher's
+        # own `setdefault` cannot outlive this load (X8).
+        with seeded_profile(LAUNCHER.parents[1] / "impl_profile.py"):
+            spec.loader.exec_module(module)
         return module
+
+    def test_loading_the_launcher_leaves_the_environment_as_it_found_it(self):
+        """X8: executing the launcher in-process runs its `setdefault`. Left
+        in `os.environ`, that value leaked into every later subprocess in the
+        same test process, so a later test driving the OTHER skill's launcher
+        ran under this skill's profile."""
+        before = os.environ.get(_ENV_VAR)
+        self._launcher_module()
+        self.assertEqual(os.environ.get(_ENV_VAR), before)
 
     def test_the_launcher_exposes_no_engine_attribute(self):
         launcher = self._launcher_module()

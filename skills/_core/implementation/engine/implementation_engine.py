@@ -25,9 +25,11 @@ import argparse
 import ast
 import calendar
 import fnmatch
+import functools
 import hashlib
 import importlib.util
 import json
+import keyword
 import os
 import re
 import shlex
@@ -51,7 +53,7 @@ from pathlib import Path
 # This engine now lives INSIDE `_core/implementation/` (the `engine/` subdirectory), so
 # the shared core is simply its own parent directory -- no longer host-supplied.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from impl_domain_profile import PROFILE  # noqa: E402
+from impl_domain_profile import PROFILE, declared_holder_filenames  # noqa: E402
 # `LFS_POINTER_PREFIX` is re-exported on purpose: nothing in here uses it, but
 # `tests/test_proposal_implementation.py` reads it as `impl.LFS_POINTER_PREFIX`.
 # Reaching a name through this namespace is a consumer, and a search for uses
@@ -187,6 +189,24 @@ DOCUMENTS_LABEL = DOCUMENTS[0]["label"]  # S9
 HOLDER_FILENAME = PROFILE["holder"]["filename"]
 HOLDER_HEADINGS = tuple(PROFILE["holder"]["headings"])
 HOLDER_SCAFFOLD = PROFILE["holder"]["scaffold"]
+
+
+@functools.cache
+def sibling_holder_filenames() -> frozenset[str]:
+    """The holder filenames every OTHER profile sharing this engine copy
+    declares -- `impl_domain_profile.declared_holder_filenames` over the
+    skills root this engine file sits under (`<root>/_core/implementation/
+    engine/`), minus this skill's own `HOLDER_FILENAME`.
+
+    Derived from the sibling profiles themselves, never a hand-kept list,
+    and read lazily, once per process, by the two by-shape readers that
+    pick this skill's own holder: `agreements_state` (and through it
+    `holder_resolution`) and `position_state`'s fallback scan. A
+    sibling profile that cannot be read contributes nothing, so its file
+    stays an ordinary by-shape candidate and still refuses (fail-closed).
+    """
+    skills_root = Path(__file__).resolve().parents[3]
+    return declared_holder_filenames(skills_root) - {HOLDER_FILENAME}
 
 SUBJECT_SINGULAR = PROFILE["vocabulary"]["subject_singular"]  # S10.1
 SUBJECT_PLURAL = PROFILE["vocabulary"]["subject_plural"]  # S10.2
@@ -401,8 +421,10 @@ def agreements_state(target: Path, name: str) -> dict:
     declares its own holder filename (`holder_resolution`, beside this
     function), and that declared name owns where a write lands. The engine
     still invents no *filename* of its own — it holds none to invent, the
-    skill's own `PROFILE["holder"]["filename"]` does — and this function's
-    own code, the by-shape scan above, is untouched by that change.
+    skill's own `PROFILE["holder"]["filename"]` does. The one narrowing of
+    the scan itself: a file another skill sharing this engine declares as
+    ITS holder is that skill's checklist, never this one's, so it is set
+    aside and listed under `siblingHolders` (present only when one exists).
 
     **A located position block never counts as an agreement.** Its own
     sequence items are excluded before this scan sees a single line
@@ -443,6 +465,15 @@ def agreements_state(target: Path, name: str) -> dict:
     product = target / name
     files = sorted(p for p in product.glob(AGREEMENTS_GLOB) if p.is_file()) \
         if product.is_dir() else []
+    # A sibling skill's own declared holder is that skill's checklist, never
+    # this one's (`sibling_holder_filenames`): set aside ahead of the scan,
+    # and listed under `siblingHolders` so the skip is visible, never silent.
+    # The key appears only when such a file exists, so a target without one
+    # reads exactly as it always has.
+    sibling_names = sibling_holder_filenames()
+    siblings = [str(p.relative_to(target)) for p in files if p.name in sibling_names]
+    files = [p for p in files if p.name not in sibling_names]
+    sibling_key = {"siblingHolders": siblings} if siblings else {}
 
     # Computed once per call, never per item: whether `tests/` at the
     # target's own root (the same directory `cmd_verify`'s own
@@ -452,6 +483,21 @@ def agreements_state(target: Path, name: str) -> dict:
     tests_dir = target / "tests"
     tests_readable = tests_dir.is_dir() and not unparsable_tests(tests_dir)
     tested_names = test_function_names(tests_dir) if tests_readable else set()
+
+    # The logged closing acts for witness-less lines (`settle --done
+    # --unwitnessed`), keyed by (holder, exact text); the latest wins. Read
+    # only to tell such a tick apart from a hand tick -- neither is ever
+    # counted as witnessed, and a missing or unreadable ledger simply
+    # keeps every unwitnessed tick reading as a hand tick.
+    decisions = {
+        (event.get("holder"), event.get("text")): event
+        for event in impl_position.read_events(
+            product / ".implementation" / "position.jsonl")
+        if isinstance(event, dict) and event.get("kind") == "settle"
+        and event.get("unwitnessed") is True and event.get("done") is True
+    } if files else {}
+    decided: list[dict] = []
+    hand_ticked: list[str] = []
 
     open_items: list[str] = []
     settled = 0
@@ -491,6 +537,16 @@ def agreements_state(target: Path, name: str) -> dict:
                 settled += 1
             if not witness:
                 unwitnessed.append(text)
+                if mark != " ":
+                    decision = decisions.get(
+                        (str(path.relative_to(target)), text))
+                    if decision is None:
+                        hand_ticked.append(text)
+                    else:
+                        decided.append({
+                            "text": text, "reason": decision.get("reason"),
+                            "session": decision.get("session"),
+                            "at": decision.get("at")})
             elif (tests_readable and mark in ("x", "X")
                   and witness not in tested_names):
                 disagrees.append(text)
@@ -510,7 +566,8 @@ def agreements_state(target: Path, name: str) -> dict:
                 "note": "no markdown file in the product folder holds checklist "
                         "items; if a gate happened, its agreements were lost",
                 "witness": {"unwitnessed": [], "unmeasured": [], "disagrees": [],
-                           "summary": "0 of 0 witnessed"}}
+                           "summary": "0 of 0 witnessed"},
+                **sibling_key}
 
     witnessed = len(unmeasured) + len(disagrees)
     return {
@@ -526,7 +583,12 @@ def agreements_state(target: Path, name: str) -> dict:
             "unmeasured": unmeasured,
             "disagrees": disagrees,
             "summary": f"{witnessed} of {total_items} witnessed",
+            # Both present only when they hold an item, so a holder with no ticked
+            # witness-less line reads exactly as it always has.
+            **({"decided": decided} if decided else {}),
+            **({"handTicked": hand_ticked} if hand_ticked else {}),
         },
+        **sibling_key,
     }
 
 
@@ -544,6 +606,13 @@ def holder_resolution(target: Path, name: str) -> dict:
     is what a READ falls back to when the declared name is absent; that
     function's code is not touched by this one at all.
 
+    A sibling skill's declared holder is never a candidate.
+    `agreements_state` already sets aside every filename another profile
+    sharing this engine declares (`sibling_holder_filenames`), so `byShape`
+    never holds one; its `siblingHolders` is carried here as `siblings`,
+    never hidden, and never offered as a file to rename or adopt: that file
+    is the sibling's, exactly as `HOLDER_FILENAME` is this skill's.
+
     Five outcomes, decided in this order:
       declared file exists                          -> "declared"
       declared absent, byShape == 0, product is_dir  -> "create"
@@ -552,9 +621,9 @@ def holder_resolution(target: Path, name: str) -> dict:
       declared absent, byShape > 1                   -> "ambiguous"
 
     `read`: the declared path when found; else the single by-shape
-    candidate when there is exactly one; else `None` -- there is nothing a
-    caller may read without a human choosing (`undeclared` needs a rename
-    or a declaration; `ambiguous` needs a human pick).
+    candidate when there is exactly one; else `None` -- there is nothing a caller may read
+    without a human choosing (`undeclared` needs a rename or a declaration;
+    `ambiguous` needs a human pick).
 
     `write`: the declared path, present or not -- the file a caller may
     write into, or create. `None` for every action a write must instead
@@ -567,7 +636,9 @@ def holder_resolution(target: Path, name: str) -> dict:
     product = target / name
     declared_path = product / HOLDER_FILENAME
     declared_is_file = declared_path.is_file()
-    by_shape = agreements_state(target, name)["holders"]
+    agreements = agreements_state(target, name)
+    by_shape = agreements["holders"]
+    siblings = agreements.get("siblingHolders", [])
 
     if declared_is_file:
         action = "declared"
@@ -591,6 +662,7 @@ def holder_resolution(target: Path, name: str) -> dict:
         "declared": HOLDER_FILENAME,
         "path": declared_path if declared_is_file else None,
         "byShape": by_shape,
+        "siblings": siblings,
         "read": read,
         "write": write,
         "create": action == "create",
@@ -735,6 +807,29 @@ def _absent_position_state(multi: bool) -> dict:
     }
 
 
+def _step_unmeasured_entry(target: Path, name: str, entry: dict,
+                           evidence: dict) -> dict:
+    """An unmeasured `@step` item, with why and what clears it.
+
+    Two facts read differently: a step with no verdict on the ledger at all,
+    and one with a latest run that does not count now (it did not report, or
+    the code under `STEP_DIGEST_SCOPE` changed since). `_step_verdicts` folds
+    both to `None`; the operand's presence in `stepVerdicts` is what separates
+    them. A copy, so the `sequence` entry keeps its shape."""
+    operand = entry["witness"].get("operand") or ""
+    rerun = (f"`step --target {target} --name {name} --step {operand} "
+             "--session <session>`")
+    if operand in (evidence.get("stepVerdicts") or {}):
+        reason = (f"the latest run of step {operand!r} does not count now: it "
+                  "did not report a verdict, or a file in its digest scope "
+                  "(every .py under src/ and tests/, plus the environment "
+                  f"manifests) changed since it ran. Run it again: {rerun}")
+    else:
+        reason = (f"no run of step {operand!r} has a verdict on the ledger; run it: "
+                  f"{rerun}")
+    return {**entry, "reason": reason, "digestScope": STEP_DIGEST_SCOPE}
+
+
 def position_state(target: Path, name: str, evidence: dict,
                    revision: str | None, source: str | None,
                    extra_sources: list[str | None] | None = None) -> dict:
@@ -795,8 +890,13 @@ def position_state(target: Path, name: str, evidence: dict,
         # every markdown file at the top of the product folder is a
         # candidate holder, never a fixed filename that would decide for
         # the repository.
+        # A sibling skill's own declared holder is never this skill's
+        # position (`sibling_holder_filenames`), the same exclusion
+        # `agreements_state` applies to its own by-shape scan.
+        sibling_names = sibling_holder_filenames()
         holders = []
-        for candidate in sorted(p for p in product.glob("*.md") if p.is_file()):
+        for candidate in sorted(p for p in product.glob("*.md")
+                                if p.is_file() and p.name not in sibling_names):
             candidate_block = impl_position.locate_block(candidate.read_bytes())
             if candidate_block is not None:
                 holders.append((candidate, candidate_block))
@@ -837,7 +937,8 @@ def position_state(target: Path, name: str, evidence: dict,
         if result["disagrees"]:
             disagreements.append(entry)
         if result["derived"] is None:
-            unmeasured.append(entry)
+            unmeasured.append(_step_unmeasured_entry(target, name, entry, evidence)
+                              if item["witness"]["kind"] == "step" else entry)
         # An item can be both unmeasured and unbacked -- it is unbacked only
         # BECAUSE it is unmeasured -- so it appears in both lists rather than
         # in whichever one is tested first. `unmeasured` answers "what could
@@ -1193,11 +1294,16 @@ def prose_of(path: Path) -> list[tuple[int, str]]:
         return list(enumerate(text.splitlines(), 1))
     if path.suffix == ".ipynb":
         try:
-            cells = json.loads(text).get("cells") or []
+            document = json.loads(text)
         except json.JSONDecodeError:
             return []
+        # Valid JSON is not yet a notebook: a top level or a cell that is not
+        # a mapping has no prose to read; `notebook_execution` names the file.
+        cells = document.get("cells") if isinstance(document, dict) else None
         lines = []
-        for cell in cells:
+        for cell in cells if isinstance(cells, list) else []:
+            if not isinstance(cell, dict):
+                continue
             body = "".join(cell.get("source") or [])
             if cell.get("cell_type") == "markdown":
                 lines += list(enumerate(body.splitlines(), 1))
@@ -1220,6 +1326,40 @@ def prose_of(path: Path) -> list[tuple[int, str]]:
                 found += [(start + i, ln) for i, ln in enumerate(doc.splitlines())]
     found += [(n, ln) for n, ln in enumerate(text.splitlines(), 1)
               if ln.lstrip().startswith("#")]
+    return found
+
+
+def holder_prose(path: Path) -> list[tuple[int, str]]:
+    """A checklist holder's prose, minus what this engine wrote into it.
+
+    Three structures in a holder are the engine's, not an author's, and
+    reading them as prose reports the engine on its own writes
+    (`cross-skill-consistency`, B10): the position block's opener and
+    closer lines (the opener names the revision the block was derived
+    derived from, which `position` reports on its own terms), the
+    `` `test_<id>` `` witness token `settle` writes at the end of an
+    agreement line, and the append-only `## Reversed` section, which keeps
+    what was turned over exactly as it was and is history by construction.
+    Everything else stays prose -- an agreement's own text, and any line
+    outside those sections -- so a stale mention or a renamed symbol an
+    author wrote in the same file is still read.
+    """
+    found: list[tuple[int, str]] = []
+    in_reversed = False
+    for number, line in enumerate(
+            path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        stripped = line.strip()
+        if re.match(r"^##[ \t]", stripped):
+            in_reversed = stripped[2:].strip() == "Reversed"
+        if in_reversed:
+            continue
+        if (re.match(r"<!--\s*position\b", stripped)
+                or impl_position.BLOCK_CLOSE.decode("ascii") in stripped):
+            continue
+        agreement = AGREEMENT_LINE.match(line)
+        if agreement and agreement.group("witness"):
+            line = line[:agreement.start("witness") - 1].rstrip()
+        found.append((number, line))
     return found
 
 
@@ -1285,6 +1425,10 @@ def prose_state(target: Path, revision: str | None,
             elif isinstance(node, ast.arg):
                 known.add(node.arg)
 
+    # The holder names every skill sharing this engine declares: each writes
+    # its own holder into the same product folder.
+    holder_names = {HOLDER_FILENAME} | set(sibling_holder_filenames())
+
     pattern = None
     if revision:
         stem = re.sub(r"\d+", r"\\d+", re.escape(Path(revision).name))
@@ -1302,7 +1446,10 @@ def prose_state(target: Path, revision: str | None,
                 or "__pycache__" in inside.parts):
             continue
         relative = str(inside)
-        for number, line in prose_of(file):
+        lines = (holder_prose(file)
+                 if file.suffix == ".md" and file.name in holder_names
+                 else prose_of(file))
+        for number, line in lines:
             if pattern:
                 for named in pattern.findall(line):
                     if named != Path(revision).name:
@@ -1525,7 +1672,40 @@ def _projected_cost(reduction: dict, target_scale: dict) -> dict | None:
         if have and want:
             factor *= want / have
     return {"measuredSeconds": ran, "factor": round(factor, 2),
-            "projectedSeconds": round(ran * factor)}
+            "projectedSeconds": round(ran * factor),
+            **_projection_parallelism(reduction)}
+
+
+def _projection_parallelism(reduction: dict) -> dict:
+    """What the duration a projection scales was taken under.
+
+    Runs sharing a machine compete for it, so a duration taken from one run
+    alone understates what the same run costs next to seven others; one
+    eight-worker run took 2.42 times such a projection. That gap is known
+    from a run or not at all: when the record names the `parallelism` it ran
+    at (a positive integer), the projection is that run's own duration and
+    holds at that parallelism; otherwise it is labelled single-process with
+    contention unmeasured, and no factor for contention is supplied, because
+    any number here would be chosen. Anything else under that key is named
+    back and never read as the parallelism a run had."""
+    if "parallelism" not in reduction:
+        malformed = {}
+    else:
+        given = reduction["parallelism"]
+        if isinstance(given, int) and not isinstance(given, bool) and given >= 1:
+            return {"parallelism": given, "contention": "included",
+                    "basis": (f"the record's duration, taken with {given} "
+                              f"concurrent runs; the projection holds at "
+                              f"{given} concurrent runs and not at another "
+                              "parallelism")}
+        malformed = {"parallelismMalformed": given}
+    return {"parallelism": None, "contention": "unmeasured",
+            "basis": ("single-process: the record names no parallelism, so its "
+                      "duration is read as one run alone. Runs that share a "
+                      "machine compete for it and nothing here knows by how "
+                      "much; record `parallelism` in the reduction of a run "
+                      "at the planned parallelism to replace this"),
+            **malformed}
 
 
 def distribution_state(contract: dict, dimensions: dict,
@@ -3226,17 +3406,45 @@ def benchmark_unfaithfulness(target: Path, name: str) -> list[dict]:
         modules, declaration, benchmark_reach(target, package, bench_package))
 
 
+#: The package-level literal a target names its array backend with, in
+#: `src/<Package>/__init__.py`: `"numpy"` or one of `TENSOR_BACKENDS`. Absent
+#: or `None` means undeclared, and the backend is then inferred from imports.
+BACKEND_DECLARATION = "__backend__"
+
+
+def _declared_backend(package: Path) -> tuple[str | None, str | None]:
+    """`(backend, error)` from the package's `__backend__` literal."""
+    raw = read_declaration(package / "__init__.py", BACKEND_DECLARATION)
+    if raw is None:
+        return None, None
+    if isinstance(raw, dict) and "__error__" in raw:
+        return None, raw["__error__"]
+    if raw == "numpy" or raw in TENSOR_BACKENDS:
+        return raw, None
+    accepted = ", ".join(["numpy", *TENSOR_BACKENDS])
+    return None, f"{BACKEND_DECLARATION} = {raw!r} names no known backend ({accepted})"
+
+
 def backend_state(target: Path, name: str) -> dict:
     """Which array backend the implementation and its tests actually compute with.
 
     Reported per file, because a half-converted implementation is the dangerous
     state: the modules train and the tests still assert over numpy, so the suite
     passes while measuring something the trained model never touched.
+
+    A target can state its backend instead (`BACKEND_DECLARATION`). Then what
+    it states decides, because a helper importing numpy for a seeded
+    generator is not a computation in numpy; the per-file lists still appear.
+    A stated tensor backend no file of the package imports is
+    `declared-unmet`, and an unknown one is `unrecognized-backend`: neither is
+    trainable. With nothing stated, the import inference below is the
+    reading, unchanged.
     """
     package = target / "src" / package_name(name)
     tests = target / "tests"
     numpy_files: list[str] = []
     tensor_files: list[str] = []
+    package_tensors: set[str] = set()
     for root in (package, tests):
         if not root.is_dir():
             continue
@@ -3245,9 +3453,18 @@ def backend_state(target: Path, name: str) -> dict:
             rel = str(file.relative_to(target))
             if modules & set(TENSOR_BACKENDS):
                 tensor_files.append(rel)
+                if root == package:
+                    package_tensors |= modules & set(TENSOR_BACKENDS)
             elif "numpy" in modules:
                 numpy_files.append(rel)
-    if not numpy_files and not tensor_files:
+    declared, error = _declared_backend(package)
+    if error is not None:
+        state = "unrecognized-backend"
+    elif declared == "numpy":
+        state = "numpy"
+    elif declared is not None:
+        state = "tensor" if declared in package_tensors else "declared-unmet"
+    elif not numpy_files and not tensor_files:
         state = "unknown"
     elif numpy_files and tensor_files:
         state = "mixed"
@@ -3255,13 +3472,18 @@ def backend_state(target: Path, name: str) -> dict:
         state = "tensor"
     else:
         state = "numpy"
-    return {
+    report = {
         "state": state,
+        "declared": declared,
+        "source": "imports" if declared is None and error is None else "declared",
         "numpyFiles": numpy_files,
         "tensorFiles": tensor_files,
         # Only a tensor backend can be trained, so only that state can be benchmarked.
         "trainable": state == "tensor",
     }
+    if error is not None:
+        report["declarationError"] = error
+    return report
 
 
 def previous_implementations(target: Path, name: str) -> list[str]:
@@ -3394,6 +3616,22 @@ ACQUISITION_PATTERNS = (
 # absence — see `foundNothingFor`.
 
 
+def read_notebook_document(path: Path) -> dict | None:
+    """A notebook file's top-level JSON mapping, or `None` when it has none.
+
+    `None` covers every way the file fails to be a notebook document: bytes
+    that are not UTF-8, text that is not JSON, JSON with a list or a scalar at
+    the top level, and a file that cannot be read. Every reader below shares
+    this one answer, so a single malformed `.ipynb` reads the same to each of
+    them and never ends in a traceback from whichever reaches it first.
+    """
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None
+    return document if isinstance(document, dict) else None
+
+
 def notebook_sources(path: Path) -> list[str]:
     """The code cells of a notebook, as plain text.
 
@@ -3401,11 +3639,8 @@ def notebook_sources(path: Path) -> list[str]:
     other source rather than counted as documentation. A cell may hold shell magics
     that no parser accepts, so callers treat this as text and parse what they can.
     """
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-        return []
-    cells = document.get("cells")
+    document = read_notebook_document(path)
+    cells = document.get("cells") if document is not None else None
     if not isinstance(cells, list):
         return []
     sources = []
@@ -3832,7 +4067,8 @@ def cmd_probe(args) -> dict:
     # wrong formula, and for a proposal nobody is going to train it can be the last
     # stage. The conversion exists to make a comparison possible — asking for it when
     # there is nothing to compare would demand work with no purpose and read as though
-    # the implementation were unfinished when it is done.
+    # the implementation were unfinished when it is done. It settles the
+    # comparison only: the declared flow's own rungs still fire below.
     if not baselines:
         next_step = "nothing-to-compare"
     elif not backend["trainable"]:
@@ -3998,6 +4234,13 @@ def cmd_probe(args) -> dict:
     # computed once and reused both for the override near the bottom and for
     # the `decisions.comparison` payload member (D16/D9).
     comparison_question = _benchmark_offer_question(target, name, baselines)
+    # The flow's own two conditions, computed once and read twice: by the
+    # ladder below when a comparison is possible, and past its end when
+    # nothing is comparable -- one reading, so the two never disagree.
+    flow_status = pilot["status"]
+    flow_short = flow_status == "incomplete"
+    flow_undecided = flow_status == "complete" and bool(
+        pilot_undecided or report_unacknowledged)
     # The one construction site for the acid-test offer's own text (D14),
     # computed the identical "once, reused" way -- both for the three-way
     # branch near the bottom and for the `decisions.validation` payload
@@ -4064,10 +4307,9 @@ def cmd_probe(args) -> dict:
     # was validated at pilot", and nothing had been produced for anybody to
     # read. A question that offers the expensive run at that point is an
     # invitation to say yes.
-    elif next_step in ("benchmark", "piloted") and (
-            pilot["status"] == "incomplete"):
+    elif next_step in ("benchmark", "piloted") and flow_short:
         next_step = "pilot-first"
-    # And what a finished pilot unlocks is NOT permission to launch. The flow
+    # And what a finished flow unlocks is NOT permission to launch. The flow
     # returns to its first step and each one owes its own decision about how
     # it is carried out in the full run; only once every one of those is on
     # the record does the ladder fall through to the rung that offers the
@@ -4083,9 +4325,7 @@ def cmd_probe(args) -> dict:
     # would be two answers for one state. `report-first` below is unchanged and
     # still fires on any report that is not `ok`; this only says, before the
     # decisions are taken, what that rung would otherwise say after them.
-    elif next_step in ("benchmark", "piloted") and (
-            pilot["status"] == "complete"
-            and (pilot_undecided or report_unacknowledged)):
+    elif next_step in ("benchmark", "piloted") and flow_undecided:
         next_step = "pilot-decisions"
     elif next_step in ("benchmark", "piloted") and (
             search["recordFound"] is False
@@ -4108,6 +4348,20 @@ def cmd_probe(args) -> dict:
     elif next_step in ("benchmark", "piloted") and (
             resolved["status"] != "absent" and report["status"] != "ok"):
         next_step = "report-first"
+    # Comparability does not gate the declared flow. `nothing-to-compare`
+    # is about the comparison -- no prior-work package under `src/` -- and
+    # says nothing about whether the flow this target declared has run short
+    # or whether each step has been placed. The defect that named this: a
+    # target with its comparison arms inside its own package finished every
+    # declared step short, and this ladder still said `nothing-to-compare`,
+    # so neither the rung question nor one placement question per step was
+    # ever published. `flow_short` and `flow_undecided` are the identical
+    # conditions the ladder above reads; once neither holds the comparison's
+    # terminal answer stands.
+    if next_step == "nothing-to-compare" and flow_short:
+        next_step = "pilot-first"
+    elif next_step == "nothing-to-compare" and flow_undecided:
+        next_step = "pilot-decisions"
     # The comparison and the acid test, checked LAST among the overrides
     # (design D13's own stated placement -- "last among the overrides, after
     # `report-first`"): neither a declined comparison nor an open acid test
@@ -4753,6 +5007,49 @@ def read_findings(target: Path) -> list[dict]:
 IGNORE_ENTRIES = (".venv/", "__pycache__/", ".ipynb_checkpoints/",
                   ".implementation/")
 
+#: The two things `env` brings into a target: the virtualenv, and the
+#: metadata directory its printed editable install (`pip install -e`) creates
+#: under `src/`. `env` keeps both out of `git status` through the clone's own
+#: `.git/info/exclude`, so the next clean-requiring step (`plan`) is not
+#: refused over files this skill created, and no file of the target's
+#: tracked tree changes.
+ENV_PRODUCT_IGNORES = (".venv/", "*.egg-info/")
+
+#: Carried by every ignore block this skill authors for the target
+#: (`apply`, `materialize --stage scaffold`), so a clone that installs the
+#: package editable stays clean too. Not a scaffold gap: a target with a
+#: `.gitignore` lacking it still has every scaffold entry, since `env` excludes it anyway.
+AUTHORED_IGNORE_EXTRAS = ("*.egg-info/",)
+
+
+def authored_ignore_lines(target: Path, missing: list[str]) -> list[str]:
+    """`missing` plus each extra the target's `.gitignore` does not carry yet."""
+    path = target / ".gitignore"
+    text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+    present = {line.strip() for line in text.splitlines()}
+    return [*missing, *(extra for extra in AUTHORED_IGNORE_EXTRAS
+                        if extra not in present and extra not in missing)]
+
+
+def exclude_env_products(target: Path) -> list[str]:
+    """Append `ENV_PRODUCT_IGNORES` to the clone's `.git/info/exclude`.
+
+    Returns the lines added (none on a rerun). The file belongs to the clone,
+    not to its history, so nothing here can dirty the tree; a worktree or a
+    `.git` file is resolved through `git rev-parse --git-path`.
+    """
+    raw = git(target, "rev-parse", "--git-path", "info/exclude").strip()
+    exclude = Path(raw) if Path(raw).is_absolute() else target / raw
+    text = exclude.read_text(encoding="utf-8", errors="replace") if exclude.exists() else ""
+    present = {line.strip() for line in text.splitlines()}
+    added = [entry for entry in ENV_PRODUCT_IGNORES if entry not in present]
+    if added:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "" if not text or text.endswith("\n") else "\n"
+        exclude.write_text(text + prefix + "".join(f"{entry}\n" for entry in added),
+                           encoding="utf-8")
+    return added
+
 
 def ignore_gaps(target: Path) -> list[str]:
     """Entries the target's own .gitignore must carry.
@@ -4901,8 +5198,63 @@ def object_destinations(name: str) -> list[str]:
             "tests/test_synthetic.py"]
 
 
+def package_own_modules(target: Path, name: str) -> list[str]:
+    """The `.py` files the method's package holds of its own: every one under
+    `src/<Package>/` except `__init__.py` files and the kit-owned files
+    (`kit_owned_package_files`, the seal today). These are what the step-8
+    map was written as, whatever their names."""
+    package = target / "src" / package_name(name)
+    if not package.is_dir():
+        return []
+    kit_owned = kit_owned_package_files(name)
+    return sorted(rel for rel in (str(file.relative_to(target))
+                                  for file in package.rglob("*.py")
+                                  if file.name != "__init__.py")
+                  if rel not in kit_owned)
+
+
 def object_gaps(target: Path, name: str) -> list[str]:
-    return [w for w in object_destinations(name) if not (target / w).exists()]
+    """The `objects` paths still owed. The first of them, the kit's
+    own default file (`object_destinations(name)[0]`), is owed only while
+    the package holds no file of its own: once the step-8 map has been
+    written, under whatever names it chose, that path is nobody's answer.
+    A target that carries it reads exactly as it always did."""
+    owed = [w for w in object_destinations(name) if not (target / w).exists()]
+    default = object_destinations(name)[0]
+    if default in owed and package_own_modules(target, name):
+        owed.remove(default)
+    return owed
+
+
+def recorded_object_modules(target: Path, name: str) -> list[str]:
+    """Files the `objects` stage wrote under a name its flag chose: the
+    receipt's own `objects` entries inside `src/<Package>/` that are not one
+    of `object_destinations`. Sealed and releasable exactly like the
+    default one."""
+    package = f"src/{package_name(name)}/"
+    fixed = set(object_destinations(name))
+    try:
+        entries = read_materialization_receipt(target)["entries"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return sorted(e["path"] for e in entries
+                  if isinstance(e, dict) and e.get("stage") == "objects"
+                  and isinstance(e.get("path"), str)
+                  and e["path"].startswith(package) and e["path"].endswith(".py")
+                  and e["path"] not in fixed)
+
+
+def object_module_name_problem(stem: str, name: str) -> str | None:
+    """Why `stem` cannot name the file `materialize --stage objects` writes
+    into the package, or `None` when it can: an importable identifier that
+    is not a keyword, not `__init__`, and not a file the kit itself owns."""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", stem) or keyword.iskeyword(stem):
+        return f"{stem!r} is not an importable Python identifier"
+    if stem == "__init__":
+        return "`__init__` is the package's own file, authored at scaffold time"
+    if f"src/{package_name(name)}/{stem}.py" in kit_owned_package_files(name):
+        return f"{stem}.py is a file the kit itself owns"
+    return None
 
 
 def object_kit_source(destination: str, name: str) -> Path | None:
@@ -5015,9 +5367,11 @@ def scaffold_kit_source(destination: str, name: str) -> Path | None:
 #: instruction to remember four field names by heart.
 _DEFAULT_PACKAGE_DECLARATIONS = (
     "__implementation__ = {\n"
-    '    # The managed revision this declaration is bound to, e.g. "r01.md" --\n'
-    "    # a filename under proposals/,\n"
-    "    # asked for by the flow, never invented here.\n"
+    "    # The managed revision this declaration is bound to -- a filename under\n"
+    f"    # {Path(DOCUMENTS[0]['directory']).name}/, asked for by the flow, never invented here.\n"
+    "    # When another skill shares this package, name one revision per\n"
+    "    # document label instead, so each skill reads its own lineage:\n"
+    f'    #     "revision": {{"{DOCUMENTS[0]["label"]}": "<filename>", "<label>": "<filename>"}},\n'
     '    "revision": "",\n'
     "\n"
     "    # What kind of prediction the protocol assumes, over which unit,\n"
@@ -5245,6 +5599,28 @@ def scaffold_substitute_body(text: str, name: str, seed: str) -> str:
     return text.replace("{{PKG}}", package_name(name)).replace("{{SEED}}", seed)
 
 
+def kit_substitute_body(text: str, substitutions: dict) -> str:
+    """Every `{{KEY}}` in `substitutions` filled in, and nothing else.
+
+    The writers' one substitution path (`cross-skill-consistency`, C12): a
+    stage fills every token it holds the text for -- the product name
+    always, the bound revision once it is declared, the file step 9 names
+    once it is named -- and the rest stay standing for the step that owns
+    them. The receipt keeps exactly this mapping, so a later reader rebuilds
+    the same bytes from the same input.
+    """
+    for key, given in substitutions.items():
+        text = text.replace("{{" + key + "}}", given)
+    return text
+
+
+def declared_revision(target: Path, name: str) -> str | None:
+    """The revision `__implementation__` binds this host's document to, or
+    `None` while nothing has declared one."""
+    revision = resolve_implementation_declaration(target, name)["contract"].get("revision")
+    return revision if isinstance(revision, str) and revision else None
+
+
 def read_materialization_receipt(target: Path) -> dict:
     path = target / MATERIALIZATION_RECEIPT
     if not path.exists():
@@ -5281,7 +5657,113 @@ def set_receipt_entry(receipt: dict, entry: dict) -> None:
     entries.append(entry)
 
 
-def _kit_structure_gaps(target: Path, destinations: list[str]) -> dict:
+def notebook_source_sha256(data: bytes) -> str | None:
+    """The digest of a notebook's source content: each cell's type and source,
+    in order, and nothing else. Running a notebook where it lies rewrites its
+    outputs, execution counts, cell and kernel metadata and often its
+    serialization, none of which is what was sealed; a changed cell source or
+    cell type is. `None` when the bytes are not a readable notebook (not JSON,
+    no `cells` list, a cell without a string `cell_type`, a source that is
+    neither a string nor a list of strings): nothing about the source is
+    known, so a caller falls back to the full bytes."""
+    try:
+        notebook = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    cells = notebook.get("cells") if isinstance(notebook, dict) else None
+    if not isinstance(cells, list):
+        return None
+    content = []
+    for cell in cells:
+        if not isinstance(cell, dict) or not isinstance(cell.get("cell_type"), str):
+            return None
+        source = cell.get("source", "")
+        if isinstance(source, list) and all(isinstance(p, str) for p in source):
+            source = "".join(source)
+        if not isinstance(source, str):
+            return None
+        content.append([cell["cell_type"], source])
+    return hashlib.sha256(
+        json.dumps(content, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _is_notebook_path(path: str) -> bool:
+    return path.endswith(".ipynb")
+
+
+def _legacy_notebook_source_sha256(entry: dict, destination: str,
+                                   name: str | None) -> str | None:
+    """The source digest of what a receipt entry sealed when that entry
+    predates `writtenSourceSha256`, and only when it can be KNOWN: an engine
+    (`RECEIPT_KIND_ENGINE`) entry names the stage that wrote it, the stage's kit body
+    is rebuilt from today's kit with the substitutions the entry records, and
+    it is trusted only when it hashes to the entry's own `writtenSha256`. Any
+    other entry (re-sealed by hand, adopted), a kit that has moved since, or
+    a stage the entry carries no substitutions for gives `None`, and the
+    caller reads full bytes only -- the reading those receipts always had.
+    """
+    if name is None or entry.get("kind") != RECEIPT_KIND_ENGINE:
+        return None
+    stage = entry.get("stage")
+    try:
+        if stage == "scaffold":
+            subs = entry.get("substitutions") or {}
+            seed = subs.get("SEED")
+            source = scaffold_kit_source(destination, name)
+            if source is None or not isinstance(seed, str):
+                return None
+            body = kit_substitute_body(
+                source.read_text(encoding="utf-8"),
+                {"PKG": package_name(name),
+                 **{k: v for k, v in subs.items() if isinstance(v, str)}})
+        elif stage == "harness":
+            source = harness_kit_source(destination, name)
+            if source is None:
+                return None
+            body = harness_substitute_body(source.read_text(encoding="utf-8"), name)
+        else:
+            return None
+    except (OSError, UnicodeDecodeError):
+        return None
+    data = body.encode("utf-8")
+    if hashlib.sha256(data).hexdigest() != entry.get("writtenSha256"):
+        return None
+    return notebook_source_sha256(data)
+
+
+def recorded_bytes_match(entry: dict, destination: str, current: bytes,
+                         name: str | None = None) -> bool:
+    """Whether `current` is still what the receipt entry sealed.
+
+    The full bytes always count (every receipt ever written records them).
+    For a notebook, the source content counts too: the entry's own
+    `writtenSourceSha256`, or, for an entry older than that key,
+    the source digest `_legacy_notebook_source_sha256` can establish."""
+    if hashlib.sha256(current).hexdigest() == entry.get("writtenSha256"):
+        return True
+    if not _is_notebook_path(destination):
+        return False
+    current_source = notebook_source_sha256(current)
+    if current_source is None:
+        return False
+    sealed = entry.get("writtenSourceSha256")
+    if not isinstance(sealed, str):
+        sealed = _legacy_notebook_source_sha256(entry, destination, name)
+    return sealed is not None and sealed == current_source
+
+
+def notebook_source_fields(destination: str, data: bytes) -> dict:
+    """The receipt key a notebook destination carries next to `writtenSha256`;
+    `{}` for every other file, and for a notebook with a source it cannot read
+    (it is then sealed on its full bytes alone)."""
+    if not _is_notebook_path(destination):
+        return {}
+    digest = notebook_source_sha256(data)
+    return {} if digest is None else {"writtenSourceSha256": digest}
+
+
+def _kit_structure_gaps(target: Path, destinations: list[str],
+                        name: str | None = None) -> dict:
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD`, generalized over any one
     stage's own destination list — never a merge anchor, whose correctness is
     re-derived presence (`ignore_gaps`/`pytest_anchor_missing`), not a hash,
@@ -5305,10 +5787,67 @@ def _kit_structure_gaps(target: Path, destinations: list[str]) -> dict:
         if entry is None:
             unrecorded.append(destination)
             continue
-        current_sha256 = hashlib.sha256(full.read_bytes()).hexdigest()
-        if current_sha256 != entry.get("writtenSha256"):
+        if not recorded_bytes_match(entry, destination, full.read_bytes(), name):
             drift.append(destination)
     return {"drift": sorted(drift), "unrecorded": sorted(unrecorded)}
+
+
+#: The receipt `kind` the engine's own stage copies carry -- unlike
+#: `adopted` and `authored`, which name a person as the bytes' owner. Every
+#: stage copy is a `materialized` entry; spelled once, here.
+RECEIPT_KIND_ENGINE = "materialized"
+
+
+def kit_owned_package_files(name: str) -> set[str]:
+    """The scaffold paths inside `src/<Package>/` that the kit supplies,
+    derived from `scaffold_destinations` and `scaffold_kit_source` and never a
+    hand list. Today that is the seal alone: the package's `__init__.py` has
+    no kit source. These files prove nothing, so they declare no
+    `__provenance__`, and `verify` reads every other file of the package for
+    one.
+    """
+    package = f"src/{package_name(name)}/"
+    return {path for path in scaffold_destinations(name)
+            if path.startswith(package)
+            and scaffold_kit_source(path, name) is not None}
+
+
+def is_unmodified_kit_file(target: Path, name: str, rel: str) -> bool:
+    """Whether `rel` is still the kit's own file, and so owes no provenance.
+
+    Fail-closed on both halves. The path must be one of
+    `kit_owned_package_files`, and its bytes must be the kit's: either the
+    kit source as the scaffold stage would copy it today, or exactly the
+    bytes an engine-kind scaffold receipt entry names -- which keeps a target
+    set up by an earlier release, carrying that release's seal, from reading
+    as drift. An `adopted` or `authored` entry is not enough: either names a
+    person as the owner of the bytes. A changed copy matches neither and is
+    read like any other file.
+    """
+    if rel not in kit_owned_package_files(name):
+        return False
+    full = target / rel
+    try:
+        current = full.read_bytes()
+        entry = receipt_entry(read_materialization_receipt(target), rel)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if (isinstance(entry, dict) and entry.get("kind") == RECEIPT_KIND_ENGINE
+            and entry.get("stage") == "scaffold"
+            and entry.get("writtenSha256")
+            == hashlib.sha256(current).hexdigest()):
+        return True
+    source = scaffold_kit_source(rel, name)
+    try:
+        text = source.read_text(encoding="utf-8")
+        written = full.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    if "{{SEED}}" in text:
+        # The seed is the operator's answer; without a receipt naming it the
+        # kit body cannot be reproduced here, so nothing is assumed.
+        return False
+    return written == scaffold_substitute_body(text, name, "")
 
 
 def scaffold_structure_gaps(target: Path, name: str) -> dict:
@@ -5318,7 +5857,7 @@ def scaffold_structure_gaps(target: Path, name: str) -> dict:
     and never a destination absent from disk, which is a gap `scaffold_gaps`
     already reports, not drift or an unrecorded write.
     """
-    return _kit_structure_gaps(target, scaffold_destinations(name))
+    return _kit_structure_gaps(target, scaffold_destinations(name), name)
 
 
 def object_structure_gaps(target: Path, name: str) -> dict:
@@ -5330,14 +5869,15 @@ def object_structure_gaps(target: Path, name: str) -> dict:
     — `scaffold_gaps`/`scaffold_structure_gaps` stay scoped to the scaffold
     destinations, as every existing caller and test already assumes.
     """
-    return _kit_structure_gaps(target, object_destinations(name))
+    return _kit_structure_gaps(
+        target, [*object_destinations(name), *recorded_object_modules(target, name)], name)
 
 
 def harness_structure_gaps(target: Path, name: str) -> dict:
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD` over the `harness`
     destinations only — see `object_structure_gaps` for why this is a
     sibling function rather than a widening of the scaffold one."""
-    return _kit_structure_gaps(target, harness_destinations(name))
+    return _kit_structure_gaps(target, harness_destinations(name), name)
 
 
 # --------------------------------------------------------------------------
@@ -5781,6 +6321,9 @@ _BLOCK_LOCATORS: tuple[dict, ...] = tuple(
         "pattern": re.compile(DOCUMENTS[index]["block_locator"]["pattern"]),
         "block_pattern": re.compile(DOCUMENTS[index]["block_locator"]["block_pattern"]),
         "identity": DOCUMENTS[index]["block_locator"]["identity"],
+        # Optional, default off: ids one block declares together are
+        # aliases of that one locus (see `cmd_compose`).
+        "block_aliases": DOCUMENTS[index]["block_locator"].get("block_aliases", False),
     }
     for index in range(len(DOCUMENTS))
 )
@@ -5803,6 +6346,11 @@ _CROSS_CITATIONS: tuple[dict | None, ...] = tuple(
         {
             "pattern": re.compile(DOCUMENTS[index]["cross_citation"]["pattern"]),
             "resolves_against": DOCUMENTS[index]["cross_citation"]["resolves_against"],
+            # Optional: the form this document uses to say a target entry is
+            # out of its scope. Absent, nothing is ever subtracted.
+            **({"out_of_scope": re.compile(
+                    DOCUMENTS[index]["cross_citation"]["out_of_scope"])}
+               if DOCUMENTS[index]["cross_citation"].get("out_of_scope") else {}),
         }
         if DOCUMENTS[index]["cross_citation"] is not None else None
     )
@@ -5888,6 +6436,20 @@ def finding_declared_loci(finding: dict) -> tuple[list | None, list | None, str]
             remedy = list(got_remedy) if remedy is None else remedy + list(got_remedy)
             remedy_key = vocab["remedy_locus_key"]
     return loci, remedy, remedy_key
+
+
+def remedy_in_prose(finding: dict) -> bool:
+    """Whether a finding declares that its correction rewrites prose, not a
+    numbered locus: `"remedy_in_prose": True` exactly, with no correction
+    locus of its own. Such a correction has no tag to substitute at, so it
+    is never asked for a `remedy_block` and never settled inline; `handoff`
+    defers it to a deliberation session of its own. Anything other than
+    `True`, or the flag next to declared loci, declares nothing here --
+    `admit` rules that finding inadmissible instead of guessing which was
+    meant.
+    """
+    return (finding.get("remedy_in_prose") is True
+            and not finding_declared_loci(finding)[1])
 
 
 def finding_named_source(finding: dict, source: str,
@@ -6001,7 +6563,10 @@ def remedy_compatibility(findings: list[dict], revision: str | None,
             undefined_notation.append(f"{finding['id']}: {absent}")
         if not finding.get("uses"):
             undefined_notation.append(f"{finding['id']}: declares no notation at all")
-        if finding.get("introduces"):
+        # Once adopted, nothing is introduced any more: the deliberation
+        # settled that notation when it published (the same rule `admit` keeps).
+        if finding.get("introduces") and finding_adoption(
+                finding, source, sources_by_document)["state"] != "adopted":
             introduces.append(f"{finding['id']}: {finding['introduces']}")
 
     if unknown_loci or undefined_notation:
@@ -6012,6 +6577,51 @@ def remedy_compatibility(findings: list[dict], revision: str | None,
         status = "ok"
     return {"status": status, NOTATION_KEYS["unknown"]: unknown_loci,
             "undefinedNotation": undefined_notation, "introducesNotation": introduces}
+
+
+def _package_bindings(tree: ast.AST, package: str) -> tuple[set[str], set[str]]:
+    """The names a test file binds to `package`: `(names, modules)`.
+
+    `names` -- what `from <package>[.x] import y [as z]` binds (a function, a
+    class or a submodule alike: `z`, else `y`). `modules` -- what
+    `import <package>[.x] [as z]` binds: `z`, else `<package>` itself, which
+    is the root every `<package>.x.y(...)` chain starts from. A relative
+    import names no package and binds nothing here.
+    """
+    names: set[str] = set()
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.ImportFrom) and not node.level
+                and (node.module or "").split(".")[0] == package):
+            names.update(alias.asname or alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] != package:
+                    continue
+                modules.add(alias.asname or package)
+    return names, modules
+
+
+def _called_roots(function: ast.AST) -> tuple[set[str], set[str]]:
+    """`(bare, rooted)` for every call inside `function`: `bare` the names
+    called directly (`f(...)`), `rooted` the names an attribute call starts
+    from (`m.f(...)`, `m.x.f(...)` -> `m`). A call on anything else (a
+    subscript, a call's result) roots at no name and counts for neither."""
+    bare: set[str] = set()
+    rooted: set[str] = set()
+    for inner in ast.walk(function):
+        if not isinstance(inner, ast.Call):
+            continue
+        func = inner.func
+        if isinstance(func, ast.Name):
+            bare.add(func.id)
+        elif isinstance(func, ast.Attribute):
+            root = func.value
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name):
+                rooted.add(root.id)
+    return bare, rooted
 
 
 def remedies_without_control(tests_dir: Path, package: str) -> list[str]:
@@ -6025,6 +6635,15 @@ def remedies_without_control(tests_dir: Path, package: str) -> list[str]:
     The control is the other pole: the declared form must be shown to fail the
     same criterion the remedy satisfies. Requiring the test to call into the
     package is the machine-checkable part of that.
+
+    "Call into the package" is read the three ways a test spells it: a bare
+    call to a name imported from it (`f(...)`), an attribute call rooted at
+    a name bound to it (`mod.f(...)`, `pkg.mod.f(...)`), or a call to a
+    function defined in the same file that does either, followed to a fixed
+    point (`helper()` -> `other()` -> `mod.f(...)`). What it still never
+    accepts: importing without calling, referring to a function without
+    calling it, or calling a method of an unrelated import -- none of those
+    can reach the implementation from the test.
     """
     missing: list[str] = []
     if not tests_dir.is_dir():
@@ -6034,20 +6653,23 @@ def remedies_without_control(tests_dir: Path, package: str) -> list[str]:
             tree = ast.parse(file.read_text(encoding="utf-8"), filename=str(file))
         except (SyntaxError, UnicodeDecodeError):
             continue
-        declared = {
-            alias.name for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and (node.module or "").split(".")[0] == package
-            for alias in node.names
-        }
+        names, modules = _package_bindings(tree, package)
+        functions = {node.name: _called_roots(node) for node in tree.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        # Same-file functions that reach the package, grown until nothing new
+        # joins: a helper counts once a call in it is already known to.
+        reaching: set[str] = set()
+        while True:
+            grown = {fname for fname, (bare, rooted) in functions.items()
+                     if fname not in reaching
+                     and (bare & (names | reaching) or rooted & (names | modules))}
+            if not grown:
+                break
+            reaching |= grown
         for node in tree.body:
             if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_remedy_"):
                 continue
-            called = {
-                inner.func.id for inner in ast.walk(node)
-                if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
-            }
-            if not called & declared:
+            if node.name not in reaching:
                 missing.append(node.name)
     return missing
 
@@ -6158,11 +6780,8 @@ def _dotted_calls(source: str) -> list[str]:
 
 
 def _notebook_cells(path: Path) -> list[dict]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return []
-    cells = document.get("cells")
+    document = read_notebook_document(path)
+    cells = document.get("cells") if document is not None else None
     return cells if isinstance(cells, list) else []
 
 
@@ -7440,6 +8059,74 @@ IMPLEMENTATION_DECLARATION = "__implementation__"
 IMPLEMENTATION_BLOCKS = {"revision": "", "premises": {}}
 
 
+def _unbound_after_lineage(contract: dict) -> str | None:
+    """Narrow `contract["revision"]` to this host's own lineage (mutating it)
+    and say why the result binds nothing -- or `None` when it binds.
+
+    One package, one literal, possibly more than one engine host reading it:
+    `revision` may name one revision per document label, and this host reads
+    only its own document 0's (the mapping is kept as `revisionByDocument`).
+    A bare string keeps its old meaning, this host's document 0. A label
+    missing from the mapping reads as unanswered, never as another lineage's
+    name; anything under it that is not a string refuses outright.
+    """
+    label = DOCUMENTS[0]["label"]
+    keyed = contract.get("revision")
+    if isinstance(keyed, dict):
+        own = keyed.get(label, "")
+        if not isinstance(own, str):
+            return (f"{IMPLEMENTATION_DECLARATION}['revision'][{label!r}] is "
+                    f"{own!r}, not a revision filename string")
+        contract["revision"] = own
+        contract["revisionByDocument"] = keyed
+    if not _declaration_is_blank(contract, IMPLEMENTATION_BLOCKS):
+        return None
+    if isinstance(keyed, dict) and label not in keyed:
+        return (f"{IMPLEMENTATION_DECLARATION}['revision'] names no revision "
+                f"under {label!r} (it names {sorted(keyed)}), and premises are "
+                "still unanswered: nothing binds this skill's own document yet")
+    return (f"{IMPLEMENTATION_DECLARATION} parses, but both blocks "
+            "are still at their empty value: neither a revision "
+            "nor premises have been answered yet")
+
+
+def _revision_family(name: str) -> str:
+    """A revision filename with every run of digits wildcarded: the family
+    key `discover_document_revision` groups candidates by."""
+    return re.sub(r"\d+", "#", Path(name).name)
+
+
+def other_lineage_modules(bound: list[dict], mapping) -> list[dict]:
+    """The provenance entries bound to ANOTHER document label's lineage in a
+    per-label `__implementation__.revision` mapping.
+
+    Lineage is the family of the mapped name (digits wildcarded), so an
+    older revision of the sibling's lineage is still the sibling's. An entry
+    in this host's own family is never foreign, and without a mapping (a bare
+    string, the pre-0.14.0 shape) nothing is: every entry is judged here,
+    as it always was.
+    """
+    if not isinstance(mapping, dict):
+        return []
+    own_label = DOCUMENTS[0]["label"]
+    own = mapping.get(own_label)
+    own_family = _revision_family(own) if isinstance(own, str) and own else None
+    others = {label: _revision_family(text) for label, text in mapping.items()
+              if label != own_label and isinstance(text, str) and text}
+    found = []
+    for entry in bound:
+        revision = entry.get("revision")
+        if not isinstance(revision, str) or not revision:
+            continue
+        family = _revision_family(revision)
+        if family == own_family:
+            continue
+        label = next((label for label, other in sorted(others.items()) if other == family), None)
+        if label is not None:
+            found.append({"module": entry["module"], "label": label, "revision": revision})
+    return found
+
+
 def resolve_implementation_declaration(target: Path, name: str) -> dict:
     """The one place every reader gets `__implementation__` from.
 
@@ -7482,14 +8169,10 @@ def resolve_implementation_declaration(target: Path, name: str) -> dict:
     if "__error__" in declaration:
         return {"status": "undeclared", "path": str(found.relative_to(target)),
                 "detail": declaration["__error__"], "contract": {}}
-    if _declaration_is_blank(declaration, IMPLEMENTATION_BLOCKS):
-        return {
-            "status": "undeclared", "path": str(found.relative_to(target)),
-            "detail": f"{IMPLEMENTATION_DECLARATION} parses, but both blocks "
-                      "are still at their empty value: neither a revision "
-                      "nor premises have been answered yet",
-            "contract": {},
-        }
+    detail = _unbound_after_lineage(declaration)
+    if detail is not None:
+        return {"status": "undeclared", "path": str(found.relative_to(target)),
+                "detail": detail, "contract": {}}
     return {"status": "declared", "path": str(found.relative_to(target)),
             "detail": None, "contract": declaration}
 
@@ -7689,31 +8372,81 @@ def declared_dimension_names(target: Path, package: str) -> list[str] | None:
     return None
 
 
+#: The section-label grammar (`documents[0].section_heading`, optional): the
+#: host's profile hands over the shared convention
+#: (`skills/_core/conventions/sections.json`) and, where a document names its
+#: unit inside a heading marker and not as a leading label, that marker. Read,
+#: never respelled here, so a document and the reader that reports on it cannot
+#: come to disagree about what a section heading is. Undeclared: no heading is
+#: a section, and only file-level revision drift is read.
+_SECTION_GRAMMAR = DOCUMENTS[0].get("section_heading") or {}
+_SECTION_HEADING = (re.compile(
+    r"^(#{1,6})\s+(" + _SECTION_GRAMMAR["label"] + r")"
+    + _SECTION_GRAMMAR["closer"] + r"?(?:\s|$)")
+    if _SECTION_GRAMMAR else None)
+_SECTION_MARKER = (re.compile(_SECTION_GRAMMAR["marker"])
+                   if _SECTION_GRAMMAR.get("marker") else None)
+
+
+def _section_heading(line: str) -> tuple[int, str] | None:
+    """`(level, label)` when `line` is a section heading, else `None`."""
+    level = re.match(r"^(#{1,6})\s", line)
+    if level is None:
+        return None
+    if _SECTION_MARKER is not None:
+        marked = _SECTION_MARKER.search(line)
+        if marked:
+            return len(level.group(1)), marked.group(1)
+    heading = _SECTION_HEADING.match(line) if _SECTION_HEADING else None
+    if heading:
+        return len(heading.group(1)), heading.group(2)
+    return None
+
+
 def revision_sections(source: str | None) -> dict[str, str]:
-    """Each numbered section of a revision, keyed by its number, hashed by content.
+    """Each labelled section of a revision, keyed by its label, hashed by content.
 
     Sections are what modules declare, so sections are the unit a drift report has to
-    speak in. Anything before the first numbered heading belongs to no section and is
-    ignored rather than attributed to one.
+    speak in. A section heading starts with a label in the shared
+    convention (`3`, `3.1`, `O1`), or that carries the document's declared marker.
+    Its body runs to the next section heading of the same or a lower level; a
+    labelled heading nested deeper is its own section AND stays part of every
+    enclosing one, line for line, so a parent's digest covers exactly the bytes
+    it covered when only leading numbers were read. An unlabelled heading never
+    closes the outermost open section; it closes only nested sections deeper
+    than itself. Anything before the first section heading belongs to no section and
+    is ignored rather than attributed to one.
     """
     if not source:
         return {}
     sections: dict[str, list[str]] = {}
-    current = None
+    open_sections: list[tuple[int, str]] = []
     for line in source.splitlines():
-        heading = re.match(r"^#{1,6}\s+(\d+)[.)]?\s", line)
+        heading = _section_heading(line)
         if heading:
-            current = heading.group(1)
-            sections.setdefault(current, [])
+            level, label = heading
+            open_sections = [(lvl, lab) for lvl, lab in open_sections if lvl < level]
+            for _, enclosing in open_sections:
+                sections[enclosing].append(line)
+            open_sections.append((level, label))
+            sections.setdefault(label, [])
             continue
-        if current is not None:
-            sections[current].append(line)
-    return {number: hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
-            for number, body in sections.items()}
+        unlabelled = re.match(r"^(#{1,6})\s", line)
+        if unlabelled and len(open_sections) > 1:
+            # A shallower unlabelled heading ends the nested sections it
+            # outranks, never the outermost one: that one keeps every
+            # line up to the next section heading, as it always has.
+            depth = len(unlabelled.group(1))
+            open_sections = open_sections[:1] + [
+                entry for entry in open_sections[1:] if entry[0] <= depth]
+        for _, label in open_sections:
+            sections[label].append(line)
+    return {label: hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
+            for label, body in sections.items()}
 
 
 def changed_sections(old: str | None, new: str | None) -> list[str]:
-    """Which numbered sections differ between two revisions, added and removed too."""
+    """Which labelled sections differ between two revisions, added and removed too."""
     before, after = revision_sections(old), revision_sections(new)
     if not before or not after:
         return []
@@ -7832,6 +8565,23 @@ SUITE_ENVIRONMENT_MANIFESTS = (
 )
 
 
+#: What a `kind: "step"` event's `suiteDigest` covers, carried on every
+#: unmeasured `@step` item so the reader meets the scope where it costs them.
+#: Not narrowed to what a step executes, because the engine cannot know it: a
+#: step's callable may run the suite, read files under `tests/` or spawn
+#: anything, and a scope that missed one of those would let a mark read as
+#: satisfied over code it never ran under.
+STEP_DIGEST_SCOPE = (
+    "every .py under src/ and tests/, plus the environment manifests "
+    f"({', '.join(SUITE_ENVIRONMENT_MANIFESTS)}). A step's callable may run any "
+    "of them -- the suite, a file under tests/, a subprocess -- and the engine "
+    "cannot see which, so any edit there, a test-only edit included, turns "
+    "every earlier step mark unmeasured until that step runs again. Commit "
+    "src/ and tests/ first and run each step last; a later edit costs a re-run "
+    "of each step, never a guess."
+)
+
+
 def suite_digest(target: Path) -> str:
     """One hash over everything a `step`'s suite run depends on: `src/`,
     `tests/`, and the environment declaration that decides what runs
@@ -7887,10 +8637,10 @@ def notebook_execution(path: Path) -> dict:
     if not path.exists():
         return {"status": "missing", "codeCells": 0, "unexecuted": [],
                 "errors": [], "executedBy": None}
-    try:
-        notebook = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return {"status": "unreadable", "detail": str(exc)[:160],
+    notebook = read_notebook_document(path)
+    if notebook is None:
+        return {"status": "unreadable",
+                "detail": "not a notebook document: UTF-8 JSON with a mapping at the top level",
                 "codeCells": 0, "unexecuted": [], "errors": [],
                 "executedBy": None}
 
@@ -8339,8 +9089,10 @@ def notebooks_state(target: Path, name: str, package: str) -> dict:
         state["digestScope"] = DIGEST_SCOPE
         # Estático, y antes de que corra nada: `unstamped` mira las SALIDAS y por
         # eso sólo puede hablar de un cuaderno que ya corrió. Éste mira la fuente.
-        state["sealed"] = notebook_seals(json.loads(
-            notebook.read_text(encoding="utf-8")))
+        # A file that is not a notebook document cannot seal: `False`, never a
+        # traceback, so it is named in `unsealed` like one without the seal cell.
+        document = read_notebook_document(notebook)
+        state["sealed"] = document is not None and notebook_seals(document)
         reports.append(state)
     return {
         "sourcesDigest": current,
@@ -8568,14 +9320,72 @@ def _refuse_if_below_floor(
     )
 
 
+#: The PyTorch index serving CPU-only wheels. PyPI's plain `torch` is the
+#: CUDA build on Linux, so a CPU venv needs this index and an exact `+cpu`
+#: pin; an unpinned `torch` with the extra index is free to resolve to
+#: either build.
+TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
+TORCH_VARIANTS = ("cpu", "gpu")
+_RELEASE = re.compile(r"[0-9]+(?:\.[0-9]+){0,3}")
+_TORCH_PIN = re.compile(r"^\s*[\"']?torch\s*==\s*([0-9]+(?:\.[0-9]+){0,3})(?:\+[A-Za-z0-9.]+)?\s*[\"',]*\s*(?:#.*)?$")
+
+
+def _manifest_torch_pin(target: Path) -> str | None:
+    """The exact `torch==X` release a target manifest pins, if exactly one."""
+    found: set[str] = set()
+    for candidate in ("requirements.txt", "requirements-dev.txt", "pyproject.toml"):
+        path = target / candidate
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for row in text.replace(",", "\n").splitlines():
+            match = _TORCH_PIN.match(row.strip().strip("[]"))
+            if match:
+                found.add(match.group(1))
+    return found.pop() if len(found) == 1 else None
+
+
+def torch_provisioning(target: Path, variant: str | None, version: str | None) -> dict:
+    """The pip arguments `env --torch <variant>` appends to `nextCommand`.
+
+    `cpu`: the CPU index plus `torch==<X>+cpu`, with `<X>` from
+    `--torch-version` or the one exact pin a manifest carries; with neither it
+    refuses `TORCH_VERSION_REQUIRED`. `gpu`: PyPI's default build, pinned when
+    a version is known. No variant: nothing, the pre-existing behaviour.
+    """
+    if variant is None:
+        return {"variant": None, "args": []}
+    if version is not None and not _RELEASE.fullmatch(version):
+        raise Refused("TORCH_VERSION_REQUIRED",
+                      f"--torch-version {version!r} is not a plain release such as 2.4.1.")
+    release = version or _manifest_torch_pin(target)
+    if variant == "cpu":
+        if release is None:
+            raise Refused(
+                "TORCH_VERSION_REQUIRED",
+                "A CPU torch install needs an exact release: the CPU wheels carry a `+cpu` "
+                "label and an unpinned `torch` may resolve to the CUDA build. Pass "
+                "--torch-version X, or pin torch==X in the target's manifest.")
+        requirement = f"torch=={release}+cpu"
+        return {"variant": "cpu", "requirement": requirement, "indexUrl": TORCH_CPU_INDEX,
+                "args": ["--extra-index-url", TORCH_CPU_INDEX, requirement]}
+    requirement = f"torch=={release}" if release else "torch"
+    return {"variant": "gpu", "requirement": requirement, "indexUrl": None,
+            "args": [requirement]}
+
+
 def cmd_env(args: argparse.Namespace) -> dict:
     require_non_forge_interpreter()
     target = resolve_target(args.target)
+    torch = torch_provisioning(target, getattr(args, "torch", None),
+                               getattr(args, "torch_version", None))
     venv_dir = target / ".venv"
     floor, floor_source = _python_floor(target)
     interpreter = target_interpreter(target)
     pip = interpreter.parent / ("pip.exe" if os.name == "nt" else "pip")
     created = False
+    # First, so the virtualenv is never visible to `git status` at all.
+    excluded = exclude_env_products(target)
     if not (venv_dir / "pyvenv.cfg").exists():
         # Check site 1: BEFORE spending the work of building a venv from an
         # under-floor interpreter, which the reuse-path check below could
@@ -8624,7 +9434,8 @@ def cmd_env(args: argparse.Namespace) -> dict:
     # target's own pins are what that conflict is reported against.
     manifests = manifest_provisioning(target)
     next_command = [str(pip), "install", "-r",
-                    str(SKILL_ROOT / "assets" / "requirements-dev.txt"), *manifests["args"]]
+                    str(SKILL_ROOT / "assets" / "requirements-dev.txt"), *manifests["args"],
+                    *torch["args"]]
     return {
         "command": "env",
         "target": str(target),
@@ -8634,6 +9445,8 @@ def cmd_env(args: argparse.Namespace) -> dict:
         "pip": str(pip),
         "nextCommand": " ".join(next_command),
         "manifests": manifests,
+        "excluded": excluded,
+        "torch": torch,
         # Reported here because this is the command that runs first after a clone,
         # which is exactly when a repository full of placeholders looks complete.
         "lfs": lfs_state(target),
@@ -8747,7 +9560,7 @@ def migrate(target: Path, current: dict) -> None:
         ignore_file.write_text(
             existing + prefix
             + "\n# Created by proposal-implementation: the target's own environment\n"
-            + "\n".join(missing_ignores) + "\n",
+            + "\n".join(authored_ignore_lines(target, missing_ignores)) + "\n",
             encoding="utf-8",
         )
 
@@ -8830,7 +9643,16 @@ def crossing_state(index: int, revision: str | None) -> dict:
     `documents[index].cross_citation` being `None` keeps every
     membership blank: a document declaring no crossing participates in
     no discrepancy, in either direction (design.md's own Open Question,
-    settled)."""
+    settled).
+
+    `outOfScope` (only when it names any): entries `documents[index]` marks
+    with its own optional `cross_citation.out_of_scope` form, that the
+    target declares and that no citation reaches. They drop out of `untested`
+    -- the document said, in its own bytes, that it does not cover them.
+    The marker clears nothing else: an `absent` citation stays absent, a
+    marker naming an entry the target does not declare subtracts nothing,
+    and a cited entry is crossed whatever a marker says. A crossing that
+    declares no such form reads exactly as it always did."""
     crossing = document_cross_citation(index)
     if crossing is None:
         return {"crossed": [], "declared": [], "absent": [], "untested": []}
@@ -8842,9 +9664,13 @@ def crossing_state(index: int, revision: str | None) -> dict:
     declared = sorted(set(
         document_block_locator(target_index)["pattern"].findall(target_source or "")))
     absent = sorted(set(crossed) - set(declared))
-    untested = sorted(set(declared) - set(crossed))
+    marked = (set(crossing["out_of_scope"].findall(source or ""))
+              if "out_of_scope" in crossing else set())
+    out_of_scope = sorted((marked & set(declared)) - set(crossed))
+    untested = sorted(set(declared) - set(crossed) - set(out_of_scope))
     return {"crossed": crossed, "declared": declared,
-            "absent": absent, "untested": untested}
+            "absent": absent, "untested": untested,
+            **({"outOfScope": out_of_scope} if out_of_scope else {})}
 
 
 def _impact_class(remedy_loci: list, introduces: int, source: str,
@@ -8984,6 +9810,31 @@ def adoption_state(finding: dict, source: str) -> dict:
                       "confirm by hand before treating it as adopted"}
 
 
+def finding_adoption(finding: dict, source: str,
+                     sources_by_document: dict | None = None) -> dict:
+    """`adoption_state` over the text the finding itself names.
+
+    The one adoption read every consumer shares -- `admit`, `verify`'s
+    `remediesWithoutValidation`, `migration`, the compatibility reader and the
+    handoff. They used to read adoption separately, and disagreed about the
+    end of the lifecycle: one reader demanded a test another demanded be
+    retired, so an adopted finding could never reach `ok`. Under one document
+    `finding_named_source` returns `source` itself, so this is
+    `adoption_state(finding, source)` byte for byte.
+    """
+    return adoption_state(finding, finding_named_source(finding, source, sources_by_document))
+
+
+def adopted_record(adoption: dict, revision: str | None) -> dict | None:
+    """The terminal state of an adopted finding: which revision took the
+    correction in, and which expected form confirmed it. `None` for every
+    other state, including `changed-unrecognized`, which stays a question for
+    a human, never an adoption."""
+    if adoption.get("state") != "adopted":
+        return None
+    return {"revision": revision, "matched": adoption["matched"]}
+
+
 def declared_invariants(package_dir: Path) -> set[str]:
     """Every invariant the implementation's modules claim."""
     invariants: set[str] = set()
@@ -8999,7 +9850,7 @@ def declared_invariants(package_dir: Path) -> set[str]:
 
 
 def migration_state(target: Path, findings: list[dict], source: str | None,
-                    package: str) -> dict:
+                    package: str, sources_by_document: dict | None = None) -> dict:
     """What an adopted remedy still owes.
 
     Once the deliberation publishes a remedy, it stops being a proposal: it is
@@ -9021,7 +9872,7 @@ def migration_state(target: Path, findings: list[dict], source: str | None,
     pending: list[str] = []
 
     for finding in findings:
-        if adoption_state(finding, source).get("state") != "adopted":
+        if finding_adoption(finding, source, sources_by_document).get("state") != "adopted":
             continue
         invariant = finding.get("becomes_invariant")
         if not invariant:
@@ -9094,7 +9945,7 @@ def cmd_handoff(args: argparse.Namespace) -> dict:
                         "Publish a revision there before this finding can be "
                         "sized.")
         impact = finding_impact(finding, source, sources_by_document)
-        adoption = adoption_state(finding, source)
+        adoption = finding_adoption(finding, source, sources_by_document)
         # Key names stay document 0's (D6, "representation only"); the
         # values are the finding's own.
         own_loci, own_remedy, own_remedy_key = finding_declared_loci(finding)
@@ -9143,7 +9994,12 @@ def cmd_handoff(args: argparse.Namespace) -> dict:
             # Until 2026-09-14 this branch also emitted a sentence of its own,
             # in one fixed human tongue, next to the identical machine code:
             # a second copy that could only ever be right for one reader.
-            if local_reach(impact) and not own_remedy:
+            if remedy_in_prose(finding):
+                # Declared on purpose: the correction rewrites prose, so there is
+                # no locus to swap and no block to compose. Only a session of
+                # its own can decide the new wording.
+                item["deferredBecause"] = "prose-remedy"
+            elif local_reach(impact) and not own_remedy:
                 # No locus at all, so there is nothing the deliberation could
                 # be asked to swap out. The key it left blank travels too, so
                 # the agent can say which one without guessing at it.
@@ -9209,6 +10065,18 @@ def cmd_handoff(args: argparse.Namespace) -> dict:
 DISPLAY_BLOCK_RE = document_block_locator(0)["block_pattern"]
 
 
+def _one_aliased_block(locator: dict, text: str, named: set) -> bool:
+    """Whether several ids in `text` are aliases of ONE locus: the document
+    declares `block_aliases`, `text` holds exactly one block, and that block
+    declares every one of them. Off by default, so a document that does not
+    opt in keeps refusing a replacement with more than one id."""
+    if not locator.get("block_aliases") or len(named) < 2:
+        return False
+    blocks = list(locator["block_pattern"].finditer(text))
+    return (len(blocks) == 1
+            and set(locator["pattern"].findall(blocks[0].group(0))) == named)
+
+
 def cmd_compose(args: argparse.Namespace) -> dict:
     """Rewrite one resolved entry so a finding's remedy takes its place.
 
@@ -9246,14 +10114,17 @@ def cmd_compose(args: argparse.Namespace) -> dict:
     # `DISPLAY_BLOCK_RE`'s own re-derivation -- byte-unchanged.
     locator = document_block_locator(_single_named_document_index(finding))
     tags = locator["pattern"].findall(block)
-    if len(set(tags)) != 1:
+    named = set(tags)
+    if len(named) != 1 and not _one_aliased_block(locator, block, named):
         raise Refused("AMBIGUOUS_REMEDY_TAG",
                       f"remedy_block must carry exactly one {SUBJECT_SINGULAR} tag, "
                       f"found {tags}.")
     tag = tags[0]
 
+    # Every id the replacement carries must be declared by the one entry block it
+    # replaces -- under a single id, exactly the membership test it always was.
     matches = [m for m in locator["block_pattern"].finditer(entry)
-              if tag in locator["pattern"].findall(m.group(0))]
+              if named <= set(locator["pattern"].findall(m.group(0)))]
     if len(matches) != 1:
         raise Refused("TAG_NOT_UNIQUE_IN_ENTRY",
                       f"{SUBJECT_SINGULAR} ({tag}) appears in {len(matches)} display "
@@ -9297,8 +10168,23 @@ def cmd_admit(args: argparse.Namespace) -> dict:
 
     tags = set(TAG_RE.findall(source))
     findings = read_findings(target)
-    if not findings:
-        raise Refused("NO_FINDINGS", "tests/findings.py declares no finding to rule on.")
+    # Finding nothing is a ruling too, but only when somebody says so:
+    # `--no-findings` is the explicit act, never the default. A bare `[]`
+    # keeps refusing, because a file nobody has filled in yet reads exactly
+    # like one that found nothing.
+    no_findings = bool(getattr(args, "no_findings", False))
+    if no_findings and findings:
+        raise Refused("FINDINGS_DECLARED",
+                      f"tests/findings.py declares {sorted(f['id'] for f in findings)}; "
+                      "--no-findings records that nothing was found and cannot "
+                      "stand in for ruling on a declared finding. Drop the flag.")
+    if not findings and not no_findings:
+        raise Refused("NO_FINDINGS",
+                      "tests/findings.py declares no finding to rule on. If the "
+                      "revision was looked over and nothing was found, say so "
+                      "explicitly with `admit --no-findings`.")
+    if no_findings:
+        return _admit_no_findings(target, args.revision, source)
 
     # Cut 3 (`a-revision-is-two-documents`, C7/D6): additive, `None` under
     # one document -- `finding_impact`'s own per-document reshape never
@@ -9332,12 +10218,26 @@ def cmd_admit(args: argparse.Namespace) -> dict:
                 reasons.append(
                     f"{field} cites entries absent from the revision "
                     f"({DOCUMENTS[label_index]['label']}): {missing}")
+        prose = finding.get("remedy_in_prose")
+        if prose is not None and prose is not True:
+            reasons.append(f"declares remedy_in_prose as {prose!r}; only True "
+                           "says the correction rewrites prose")
+        elif prose is True and finding_declared_loci(finding)[1]:
+            reasons.append("declares remedy_in_prose next to declared loci; a "
+                           "correction in prose names no locus to rewrite")
         marker = (finding.get("adoption") or {}).get("absent")
+        adoption = finding_adoption(finding, source, sources_by_document)
+        adopted = adopted_record(adoption, args.revision)
         if not marker:
             reasons.append("declares no adoption marker, so adoption could never be read back")
-        elif marker not in finding_source:
+        elif marker not in finding_source and adopted is None:
             # A marker that does not describe the document today is meaningless:
-            # its absence later would be indistinguishable from adoption.
+            # its absence later would be indistinguishable from adoption. The
+            # one exception is adoption itself, read positively: the marker is
+            # gone AND an expected form is present. That is the terminal state
+            # (`adopted`), not a finding that stopped describing the document.
+            # `changed-unrecognized` (gone, nothing expected instead) still
+            # lands here and stays inadmissible.
             reasons.append("its adoption marker is not present in the revision, so the "
                            "finding does not describe this document")
         if not finding.get("uses"):
@@ -9346,15 +10246,17 @@ def cmd_admit(args: argparse.Namespace) -> dict:
             absent = [s for s in finding["uses"] if s not in finding_source]
             if absent:
                 reasons.append(f"relies on notation the revision does not define: {absent}")
-        adoption = adoption_state(finding, source)
         verdicts[finding["id"]] = {
             "admissible": not reasons,
             "reasons": reasons,
             # A remedy already taken into the revision no longer introduces
             # anything: the deliberation settled that when it published.
-            "introduces": [] if adoption["state"] == "adopted" else finding.get("introduces", []),
+            "introduces": [] if adopted else finding.get("introduces", []),
             "adoption": adoption,
             "impact": finding_impact(finding, source, sources_by_document),
+            # Additive and optional: present only on an adopted finding, so a
+            # ruling written without this key reads exactly as it always did.
+            **({"adopted": adopted} if adopted else {}),
         }
 
     record = {
@@ -9383,8 +10285,48 @@ def cmd_admit(args: argparse.Namespace) -> dict:
         "admitted": sorted(i for i, v in verdicts.items() if v["admissible"]),
         "inadmissible": {i: verdicts[i]["reasons"] for i in inadmissible},
         "introducesNotation": {i: v["introduces"] for i, v in verdicts.items() if v["introduces"]},
+        # Terminal: the revision already says what these findings proposed.
+        # They owe only the move `migration` checks, never another run.
+        # Present only when some finding is adopted, so every other ruling's
+        # output stays byte-identical to what it was.
+        **({"adopted": {i: v["adopted"] for i, v in verdicts.items() if "adopted" in v}}
+           if any("adopted" in v for v in verdicts.values()) else {}),
         "record": str(path.relative_to(target)),
         "note": "Only admitted remedies may be measured. Efficacy comes after this.",
+    }
+
+
+def _admit_no_findings(target: Path, revision: str, source: str) -> dict:
+    """`admit --no-findings`: record that `revision` was looked over and
+    nothing was found, bound to the revision's bytes exactly like any other
+    ruling -- a later revision turns it `stale` and it is owed again.
+
+    `noFindings` is additive: a ruling written without it reads exactly as
+    it always did, and `verify` reads no findings as `ok` only when this
+    key is present on a ruling that is still `present`.
+    """
+    record = {
+        "revision": revision,
+        "revisionSha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "findings": {},
+        "noFindings": True,
+        **({"documents": _admissibility_extra_documents(revision)}
+           if len(DOCUMENTS) > 1 else {}),
+    }
+    path = target / "tests" / "admissibility.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "command": "admit",
+        "target": str(target),
+        "revision": revision,
+        "status": "no-findings",
+        "admitted": [],
+        "inadmissible": {},
+        "introducesNotation": {},
+        "record": str(path.relative_to(target)),
+        "note": "Written on request: nothing was found in this revision. "
+                "Declaring a finding later, or a new revision, voids this ruling.",
     }
 
 
@@ -9438,7 +10380,29 @@ def cmd_agree(args: argparse.Namespace) -> dict:
             f"no citation anywhere in document 0. Unacknowledged: "
             f"{unacknowledged!r}.")
     return {"command": "agree", "target": str(target), "revision": args.revision,
-            "status": "agreed", "crossed": crossed, "declared": declared}
+            "status": "agreed", "crossed": crossed, "declared": declared,
+            # What document 0 itself marks out of scope, echoed only when it
+            # marks an entry -- every other payload is unchanged.
+            **({"outOfScope": state["outOfScope"]} if "outOfScope" in state else {})}
+
+
+def admissibility_ruling(target: Path, revision: str | None) -> dict:
+    """`admissibility_record`, plus `noFindings: True` when the ruling on
+    file came from `admit --no-findings` -- whatever its freshness, so a
+    stale one still reads as owed again, not as one nobody ever wrote.
+    Absent on every other ruling.
+    """
+    result = admissibility_record(target, revision)
+    if result["status"] in ("missing", "unreadable"):
+        return result
+    try:
+        record = json.loads((target / "tests" / "admissibility.json")
+                            .read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return result
+    if isinstance(record, dict) and record.get("noFindings") is True:
+        result["noFindings"] = True
+    return result
 
 
 def admissibility_record(target: Path, revision: str | None) -> dict:
@@ -12053,7 +13017,20 @@ def _create_declared_holder(write: Path) -> None:
         expect_digest=impl_position.digest_bytes(b""))
 
 
-def _chosen_holder(target: Path, name: str, product: Path) -> Path:
+def _sibling_holders_note(resolution: dict) -> str:
+    """The tail every `HOLDER_UNDECLARED` detail carries when a sibling
+    skill's declared holder sits next to the candidate(s): named, so a
+    reader sees it was recognized, and explicitly left alone -- a refusal
+    never proposes renaming, removing or adopting another skill's holder.
+    `""` when there is none."""
+    siblings = resolution.get("siblings") or []
+    if not siblings:
+        return ""
+    return (" Sibling skills' own declared holders are recognized and left "
+            f"alone: {', '.join(siblings)}.")
+
+
+def _chosen_holder(target: Path, name: str, product: Path, *, create: bool = True) -> Path:
     """Which markdown file receives a FRESH block, dispatched off
     `holder_resolution`'s own `action` (`the-holder-each-skill-declares`,
     design D2/D9) — never a fixed filename, and never a guess between two
@@ -12070,7 +13047,9 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     block splice ever runs against it -- never a bare position block with
     no heading at all.
     `"undeclared"` -- the D3 middle row, a candidate found by shape but not
-    by name -- refuses the new `HOLDER_UNDECLARED`, naming both exits.
+    by name, and not a sibling skill's declared holder either -- refuses
+    the new `HOLDER_UNDECLARED`, naming both exits and, when present, the
+    sibling holder(s) it recognized and left alone.
     `"absent"` narrows `POSITION_HOLDER_ABSENT` to "no product folder"
     only (D9; `require_named_product_dir` does not itself refuse a merely
     absent `<name>/`). `"ambiguous"` keeps `POSITION_HOLDER_AMBIGUOUS`
@@ -12080,7 +13059,11 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
     resolution = holder_resolution(target, name)
     action = resolution["action"]
     if action == "create":
-        _create_declared_holder(resolution["write"])
+        # `create=False` (X17): `cmd_position` names the path now and writes
+        # the scaffold only once every refusal it can still raise has had its
+        # chance -- a refused call writes nothing.
+        if create:
+            _create_declared_holder(resolution["write"])
         return resolution["write"]
     if action == "declared":
         return resolution["write"]
@@ -12089,12 +13072,15 @@ def _chosen_holder(target: Path, name: str, product: Path) -> Path:
             "HOLDER_UNDECLARED",
             f"{resolution['byShape'][0]} holds checklist items under "
             f"{product.relative_to(target)}/, but this skill declares its "
-            f"own holder as {resolution['declared']}; rename "
+            f"own holder as {resolution['declared']} and no skill sharing "
+            "this engine declares "
+            f"{Path(resolution['byShape'][0]).name!r}; rename "
             f"{resolution['byShape'][0]} to {resolution['declared']} in the "
             "target repository, or declare "
             f"{Path(resolution['byShape'][0]).name!r} in this skill's own "
             "PROFILE[\"holder\"][\"filename\"] if that name should become "
-            "this skill's convention for every target.")
+            "this skill's convention for every target."
+            + _sibling_holders_note(resolution))
     if action == "absent":
         raise Refused(
             "POSITION_HOLDER_ABSENT",
@@ -12630,6 +13616,11 @@ def cmd_position(args: argparse.Namespace) -> dict:
               "derivedAt": _now_iso8601(), "session": args.session,
               "target": "__pending__"}
     structure_changed = False
+    # Whether the declared holder still has to be created (design D5's
+    # scaffold) before the block is spliced into it. Deferred to the write
+    # itself (X17): every refusal below runs first, so a refused call writes
+    # no holder.
+    scaffold_pending = False
 
     if args.sequence is not None:
         if existing_block is not None and not args.replace:
@@ -12669,19 +13660,9 @@ def cmd_position(args: argparse.Namespace) -> dict:
         rendered = impl_position.render(header, items)
         items = impl_position.parse_items(
             impl_position.locate_block(rendered.encode("utf-8"))["body"])
-        target_path = existing_path or _chosen_holder(target, name, product)
-        if target_path not in holder_digests:
-            # `_chosen_holder` may have just run design D5's creation write
-            # (`the-holder-each-skill-declares`, `action == "create"`) --
-            # `holder_digests` was built from the glob ABOVE, before that
-            # write could have happened, so a freshly created file is not a
-            # key in it yet. The empty-digest fallback this dict lookup
-            # otherwise carries (`write_spliced`'s own absent-path rule) is
-            # only ever correct for a path that is STILL absent; reading the
-            # pre-image fresh, right now, is what keeps this splice's own
-            # compare-and-swap honest about bytes this same call just wrote.
-            holder_digests[target_path] = impl_position.digest_bytes(
-                target_path.read_bytes() if target_path.exists() else b"")
+        target_path = existing_path or _chosen_holder(
+            target, name, product, create=False)
+        scaffold_pending = not target_path.exists()
     elif args.reconcile:
         existing = (impl_position.parse_items(existing_block["body"])
                    if existing_block else [])
@@ -12699,19 +13680,9 @@ def cmd_position(args: argparse.Namespace) -> dict:
         items = existing + appended
         for ordinal, item in enumerate(items, start=1):
             item["ordinal"] = ordinal
-        target_path = existing_path or _chosen_holder(target, name, product)
-        if target_path not in holder_digests:
-            # `_chosen_holder` may have just run design D5's creation write
-            # (`the-holder-each-skill-declares`, `action == "create"`) --
-            # `holder_digests` was built from the glob ABOVE, before that
-            # write could have happened, so a freshly created file is not a
-            # key in it yet. The empty-digest fallback this dict lookup
-            # otherwise carries (`write_spliced`'s own absent-path rule) is
-            # only ever correct for a path that is STILL absent; reading the
-            # pre-image fresh, right now, is what keeps this splice's own
-            # compare-and-swap honest about bytes this same call just wrote.
-            holder_digests[target_path] = impl_position.digest_bytes(
-                target_path.read_bytes() if target_path.exists() else b"")
+        target_path = existing_path or _chosen_holder(
+            target, name, product, create=False)
+        scaffold_pending = not target_path.exists()
     elif existing_block is None:
         # Nothing to refresh is a state, not a failure -- the same doctrine
         # `agreements_state` and `position_state` already report absence
@@ -12885,6 +13856,12 @@ def cmd_position(args: argparse.Namespace) -> dict:
                if len(DOCUMENTS) > 1 else {}),
         }
 
+    if scaffold_pending:
+        # Design D5's creation write, here and not in `_chosen_holder`
+        # (X17), and its bytes are the pre-image this splice is checked
+        # against: read fresh from disk once written, never assumed empty.
+        _create_declared_holder(target_path)
+        holder_digests[target_path] = impl_position.digest_bytes(target_path.read_bytes())
     before_bytes = target_path.read_bytes() if target_path.exists() else b""
     new_block = impl_position.render(header, items).encode("utf-8")
     spliced = impl_position.splice(before_bytes, new_block, existing_block)
@@ -14364,7 +15341,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     delete that same line in ONE call (design "a reversal is one write")
     -- OR, with `--done`, flip an already-settled line's own mark from
     `[ ]` to `[x]`, matched the identical way once more (design "the tick
-    this class closes"). All five modes go through this one command; there
+    this class closes"); `--done --unwitnessed --reason` is that same flip
+    for a line no test could witness, logged as a decision. All five modes go through this one command; there
     is still no second write path. `--attach` also takes `--replace`, which
     re-points an EXISTING witness onto a different test instead of adding a
     first one (`re-pointing-a-proof-is-not-retracting-a-claim`) -- a
@@ -14420,41 +15398,40 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     **Measured against the weighing this decision requires, not assumed.**
     A real adopting target's `AGREED.md` carries agreements ticked with no
     witness at all -- irreducible arguments (a design tradeoff, a scoping
-    decision) that no test could ever contradict, because nothing about
-    them is executable. A guard requiring a witness cannot mark THOSE done
-    through this command, ever -- and that is read here as correct, not as
-    a gap needing an escape hatch. Two reasons, not one: first, an
-    argument is not the kind of claim `[x]` was ever meant to certify in
-    this file's own grammar -- `disagrees`/`unmeasured` (`agreements_
-    state`, above) only exist for a claim a witness token could measure,
-    and an unwitnessed line already reports `unwitnessed`, a state this
-    file treats as legitimate and permanent, never as an error. Second,
-    the "unsupported, never technically prevented" doctrine this same
-    file already states for hand-typing a witness token (`--witness`'s
-    own CLI help, `usage.md`) already covers exactly this case: a human
-    may still tick an irreducible argument by hand, the identical way
-    those existing lines were ticked, and `verify`/`close` evaluate a
-    hand-ticked mark exactly the same as one this command would have
-    written. An escape flag on `--done` would not add a capability this
-    programme lacks; it would only let an AUTOMATED call assert "done"
-    over an argument nobody can measure, the one assertion this guard
-    exists to keep a human, not a command, responsible for.
+    decision, a premise, a deferral) that no test could ever contradict,
+    because nothing about them is executable. A guard requiring a witness
+    cannot mark THOSE done through this command, and the first answer here
+    was that it never should: an argument is not the kind of claim a
+    witness certifies, so a human ticks it by hand. That answer left a
+    requirement the skill itself could not answer -- `agreements` read
+    `open` until someone edited the holder outside every command, and a
+    hand tick is an act no record tells apart from any other edit made
+    before it.
 
-    **Un-ticking does not belong in this change.** `--done` closes a
-    measured gap: no composition of the other four modes could ever
-    produce a tick. The inverse has no equivalent gap to close -- a human
-    can already un-tick a line by hand today, the same "unsupported,
-    never technically prevented" doctrine that already governs every
-    hand edit this file does not itself perform, and nothing measured
-    against a real target found a ticked-in-error agreement this command
-    needed to correct. Un-ticking is also not this guard's mirror image:
+    **`--done --unwitnessed --reason <why>` is the logged act for that
+    case, and it certifies nothing a witness would.** It flips the same one
+    byte plain `--done` flips, and only on a line that names NO witness
+    (`SETTLE_WITNESS_PRESENT` otherwise: a line a test speaks for is
+    closed by that test, through plain `--done`). The reason is required
+    (`SETTLE_REASON_REQUIRED`) and never authored here -- it is the
+    operator's statement, asked for as a question -- and it lands in the
+    ledger event together with `--session`. Nothing reads it as evidence:
+    `agreements_state` keeps the line under `witness.unwitnessed`, out of
+    the witnessed count, and names it under `witness.decided` with its
+    reason, so the act stays visible as a decision, never as a reading.
+    A hand tick still reads exactly as it always has (`settled`, under
+    `unwitnessed`), and is named under `witness.handTicked`: nothing an
+    existing holder already carries changes meaning, and no claim this
+    command did not log is ever presented as one it did.
+
+    **No mode un-ticks; a mistaken tick is corrected on the record.**
     `--done` asserts a fact came true and rests that assertion on a
     witness; retracting a tick asserts a PRIOR assertion was wrong, which
-    is closer in shape to `--reverse` (a written admission that something
-    changed) than to any read this command already performs -- it would
-    need its own guard, arguably its own required explanation, designed
-    on its own terms rather than inherited from `--done`'s. Left open,
-    not overlooked.
+    is a written admission of change -- exactly what `--reverse` records.
+    `--reverse` works on a ticked line as on an open one: the line goes,
+    the explanation stays under `## Reversed`, and the ledger keeps the
+    event; a fresh `[ ]` placement then states the corrected agreement.
+    Nothing ever turns `[x]` back into `[ ]` silently.
 
     **Why `--reverse` exists at all, and why it is not merely
     `--remove` with extra steps.** `--remove` shipped guarded by
@@ -14522,17 +15499,12 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     codebase's own adopted target carries today.
 
     **What happens when `## Reversed` does not exist at all in a holder --
-    refused, not authored.** `--reverse` reuses `SETTLE_HEADING_ABSENT`
-    (the identical code the create path already raises for a missing
-    `--under` heading) rather than inventing the section. The create
-    path's own restraint already applies here: `settle` places items UNDER
-    a heading, it never authors headings, and a freshly-invented `##
-    Reversed` section would need its own preamble prose -- the real
-    target's own preamble ("Written rather than deleted...") is exactly
-    the kind of scoped, once-per-target writing this command has never
-    performed for any OTHER heading either. A human adds the heading (and
-    whatever preamble the target wants) once, the same one-time step
-    `--under` already requires for any other missing heading.
+    the first reversal opens it.** The section is appended at the end of
+    the file (a blank line, the heading, a blank line, then the entry), in
+    the same single splice as the deletion; nothing above it moves.
+    The engine writes the heading only, never preamble prose: the entry's
+    own bold quote and paragraph are the record, and a target that wants a
+    preamble adds it by hand.
 
     **Why `--attach` skips the discussion precondition -- decided, not
     inherited from where the check happened to sit.** `SETTLE_NOT_DISCUSSED`
@@ -14691,7 +15663,10 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         create path still needs a folder to create the file in);
         `HOLDER_UNDECLARED` is new, for a checklist found by shape but not
         by the declared name -- the same doctrine `_chosen_holder` already
-        states for a fresh position block. Also raised, same code, when
+        states for a fresh position block. A sibling skill's own declared
+        holder is never such a checklist (`holder_resolution`'s
+        `siblings`): it is set aside, and is never named as a file to
+        rename, remove or adopt. Also raised, same code, when
         MORE than one such shape-matching candidate exists (Phase 3 review
         finding): the detail differs, because the remedy differs -- one
         candidate names a rename-or-declare choice, more than one names
@@ -14716,8 +15691,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     14. `--reverse` path only, checked after the text search narrows to one
         holder's own bytes: `SETTLE_ALREADY_REVERSED` -- see "What happens
         when the section already quotes the text," above -- THEN
-        `SETTLE_HEADING_ABSENT` / `SETTLE_HEADING_AMBIGUOUS` over
-        `_reversed_section_body_spans(data)`, scoped to that one holder
+        `SETTLE_HEADING_AMBIGUOUS` (more than one heading) over
+        `_reversed_section_body_spans(data)`; none opens one, scoped to that one holder
         (never aggregated across all of them the way the create path's own
         `--under` search is, because by this point the search already
         knows which single holder the located line lives in) -- see "Where
@@ -14864,6 +15839,41 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "line may ever be marked done through this command) and "
             "--paragraph (only --reverse ever writes one) do not apply "
             "and must be omitted.")
+    # `--unwitnessed` and `--reason` modify `--done` (the logged closing act
+    # for a line no test could ever witness, see "Why marking done requires
+    # a witness", above) and the placement of such a line (X18): with no
+    # witness there is no identity to discuss, so `--about` is not asked
+    # for, and `--reason` is the logged statement of why the line exists.
+    # Given in any other mode they would be silently ignored, the surprise
+    # every conflict code here refuses.
+    placing = not attach and not remove and not reverse and not done
+    unwitnessed = bool(getattr(args, "unwitnessed", False))
+    reason = getattr(args, "reason", None)
+    reason = reason.strip() if reason is not None else None
+    if ((unwitnessed and not (done or placing))
+            or (reason is not None and not unwitnessed)):
+        raise Refused(
+            "SETTLE_UNWITNESSED_CONFLICT",
+            "--unwitnessed modifies --done (it closes a line that names no "
+            "witness, recording why) or the placement of such a line, and "
+            "--reason supplies that act's reason; give --unwitnessed only "
+            "with --done or --under, and --reason only with --unwitnessed.")
+    if unwitnessed and placing and (args.about or witness
+                                    or args.supersedes is not None):
+        raise Refused(
+            "SETTLE_UNWITNESSED_CONFLICT",
+            "--unwitnessed places a line that names no witness: it is bound "
+            "to no discussion (--about), carries no test token (--witness) "
+            "and collides with nothing it could supersede (--supersedes). "
+            "Omit those three, or drop --unwitnessed for a discussed, "
+            "witnessed line.")
+    if unwitnessed and not reason:
+        raise Refused(
+            "SETTLE_REASON_REQUIRED",
+            "--unwitnessed records a line no test witnesses, and the "
+            "engine never authors why: --reason is the operator's own "
+            "statement of why this agreement is placed or closed and "
+            "cannot be omitted or blank.")
     if paragraph and not reverse:
         raise Refused(
             "SETTLE_REVERSE_CONFLICT",
@@ -14891,13 +15901,14 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 "the write goes and has no default. Omit it only together "
                 "with --attach, --remove, --reverse or --done, none of "
                 "which places a new item under a heading.")
-        if not args.about:
+        if not args.about and not unwitnessed:
             raise Refused(
                 "SETTLE_ABOUT_REQUIRED",
                 "--about is required to place a new item; it names the "
                 "discussion this placement is bound to. Omit it only "
                 "together with --attach, --remove, --reverse or --done, "
-                "none of which places anything new.")
+                "none of which places anything new, or with --unwitnessed "
+                "--reason for a line no test could ever witness.")
     if witness and not re.fullmatch(r"test_[A-Za-z0-9_]+", witness):
         raise Refused(
             "SETTLE_WITNESS_MALFORMED",
@@ -14907,7 +15918,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "witness `agreements_state` can read back.")
 
     about = None
-    if not attach and not remove and not reverse and not done:
+    if placing and not unwitnessed:
         evidence = _position_write_evidence(target, name)
         position = position_state(target, name, evidence, None, None,
                               _document_extra_sources(None))
@@ -14933,13 +15944,20 @@ def cmd_settle(args: argparse.Namespace) -> dict:
     # into a holder this skill did not declare is the D3 middle row, and
     # narrows `SETTLE_HOLDER_ABSENT` to "no product folder" only (D9).
     resolution = holder_resolution(target, name)
-    if resolution["action"] == "create":
-        # Design D5 (Phase 3): the declared holder does not exist yet, but
-        # its product folder does -- write the scaffold before this
-        # command's own splice ever runs against it. Never `mkdir`; that
-        # gate lives in `holder_resolution` alone.
-        _create_declared_holder(resolution["write"])
-    elif resolution["action"] == "absent":
+    # Design D5 (Phase 3): the declared holder does not exist yet, but its
+    # product folder does. Its scaffold is what this command splices into,
+    # but it is read from `HOLDER_SCAFFOLD` and reaches the disk only with
+    # the splice itself (X17): every refusal below runs first, so a refused
+    # call writes no holder. Never `mkdir`; that gate lives in
+    # `holder_resolution` alone.
+    scaffold_pending = resolution["action"] == "create"
+
+    def read_holder(path: Path) -> bytes:
+        if scaffold_pending and path == resolution["write"] and not path.exists():
+            return HOLDER_SCAFFOLD.encode("utf-8")
+        return path.read_bytes()
+
+    if resolution["action"] == "absent":
         raise Refused(
             "SETTLE_HOLDER_ABSENT",
             f"{name}/ does not exist; settle never invents a product "
@@ -14952,11 +15970,13 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         raise Refused(
             "HOLDER_UNDECLARED",
             f"{candidate!r} holds checklist items under {name}/, but this "
-            f"skill declares its own holder as {resolution['declared']}; "
+            f"skill declares its own holder as {resolution['declared']} and "
+            "no skill sharing this engine declares that name; "
             f"rename it to {resolution['declared']} in the target "
             "repository, or declare its own name in this skill's own "
             "PROFILE[\"holder\"][\"filename\"] if that name should become "
-            "this skill's convention for every target.")
+            "this skill's convention for every target."
+            + _sibling_holders_note(resolution))
     elif resolution["action"] == "ambiguous":
         # A defect found reviewing Phase 2: this used to share the
         # undeclared branch's message verbatim, which names "create the
@@ -14971,12 +15991,14 @@ def cmd_settle(args: argparse.Namespace) -> dict:
             "HOLDER_UNDECLARED",
             f"{len(candidates)} markdown files under {name}/ hold "
             f"checklist items ({listed}) and none is this skill's declared "
-            f"holder {resolution['declared']}; remove or rename all but "
+            f"holder {resolution['declared']} or any sibling skill's; "
+            "remove or rename all but "
             "one of them so a single holder remains under this name -- "
             "creating another declared holder would not decide which "
-            "existing file this skill should write into.")
+            "existing file this skill should write into."
+            + _sibling_holders_note(resolution))
     # action == "declared" or "create": `resolution["write"]` exists on
-    # disk (the "create" branch above just put it there).
+    # disk, or (still "create") is read as its scaffold until the write.
     holders = [str(resolution["write"].relative_to(target))]
 
     heading = None
@@ -14988,7 +16010,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -15037,7 +16059,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -15069,7 +16091,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -15097,35 +16119,34 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 "which plain --remove performs on its own.")
 
         reversed_spans = _reversed_section_body_spans(data)
-        if not reversed_spans:
-            raise Refused(
-                "SETTLE_HEADING_ABSENT",
-                f"'## Reversed' occurs in none of {target_path.name}'s own "
-                "headings; --reverse places its entry under an existing "
-                "'## Reversed' section and never invents one, the "
-                "identical restraint the create path's own --under "
-                "already keeps for a heading it is given.")
         if len(reversed_spans) > 1:
             raise Refused(
                 "SETTLE_HEADING_AMBIGUOUS",
                 f"'## Reversed' occurs {len(reversed_spans)} times in "
                 f"{target_path.name}; which one receives this entry is "
                 "not decidable without a human choosing.")
-        body_start, body_end = reversed_spans[0]["start"], reversed_spans[0]["end"]
-
-        try:
-            position_block = impl_position.locate_block(data)
-        except Refused:
-            position_block = None
-        if position_block is not None and body_start <= position_block["start"] < body_end:
-            boundary = position_block["start"]
-        else:
-            boundary = body_end
-
         raw_line = data[span["start"]:span["end"]]
         entry = _render_reversed_entry(raw_line, paragraph)
-        prefixed = impl_position.splice(data[:boundary], entry, None)
-        insertion = prefixed[boundary:]
+        if reversed_spans:
+            body_start, body_end = reversed_spans[0]["start"], reversed_spans[0]["end"]
+            try:
+                position_block = impl_position.locate_block(data)
+            except Refused:
+                position_block = None
+            if position_block is not None and body_start <= position_block["start"] < body_end:
+                boundary = position_block["start"]
+            else:
+                boundary = body_end
+            prefixed = impl_position.splice(data[:boundary], entry, None)
+            insertion = prefixed[boundary:]
+        else:
+            # The holder has no `## Reversed` section yet: the first
+            # reversal opens it at the end of the file, one blank line past
+            # whatever precedes it, and nothing above moves.
+            boundary = len(data)
+            separator = (b"" if not data or data.endswith(b"\n\n")
+                         else b"\n" if data.endswith(b"\n") else b"\n\n")
+            insertion = separator + b"## Reversed\n\n" + entry
 
         edits = sorted(
             [(span, b""), ({"start": boundary, "end": boundary}, insertion)],
@@ -15137,7 +16158,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates: list[tuple[Path, bytes, dict]] = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in _locate_settled_text(holder_data, text):
                 candidates.append((holder_path, holder_data, span))
 
@@ -15162,13 +16183,23 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 f"{text!r} is already marked done "
                 f"(`[{located.group('mark')}]`); --done never re-ticks an "
                 "already-ticked line.")
-        if not located.group("witness"):
+        if unwitnessed and located.group("witness"):
+            raise Refused(
+                "SETTLE_WITNESS_PRESENT",
+                f"{text!r} names the witness `{located.group('witness')}`; "
+                "--unwitnessed closes only a line no test could witness. "
+                "Mark it done with plain --done, which the bound witness "
+                "speaks for.")
+        if not unwitnessed and not located.group("witness"):
             raise Refused(
                 "SETTLE_NOT_WITNESSED",
                 f"{text!r} carries no witness token; --done refuses to "
                 "mark an agreement done that names nothing a test could "
                 "contradict -- bind one first with `settle --attach "
-                "--witness test_<id>`.")
+                "--witness test_<id>`. If no test could ever witness it "
+                "(a scoping decision, a premise, a deferral), close it "
+                "with `settle --done --unwitnessed --reason <why>`, which "
+                "records the act and never counts it as witnessed.")
 
         new_line = _render_done_line(raw_line)
         spliced = impl_position.splice(data, new_line, span)
@@ -15177,7 +16208,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         candidates = []
         for holder in holders:
             holder_path = target / holder
-            holder_data = holder_path.read_bytes()
+            holder_data = read_holder(holder_path)
             for span in impl_position.locate_headings(holder_data, heading):
                 candidates.append((holder_path, holder_data, span))
 
@@ -15194,7 +16225,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 "is not decidable without a human choosing.")
         target_path, data, span = candidates[0]
 
-        collides = _agreement_collides(target, name, about["operand"])
+        collides = (_agreement_collides(target, name, about["operand"])
+                    if about is not None else [])
         if args.supersedes is not None:
             supersedes = sys.stdin.read() if args.supersedes == "-" else args.supersedes
             supersedes = supersedes.strip()
@@ -15220,12 +16252,22 @@ def cmd_settle(args: argparse.Namespace) -> dict:
                 f"the {len(collides)} computed colliding agreement(s).")
 
         new_line = _render_settled_line(text, witness)
+        if span["start"] == len(data) and data and not data.endswith(b"\n"):
+            # Appended past a last line that has no newline of its own.
+            new_line = b"\n" + new_line
         spliced = impl_position.splice(data, new_line, span)
 
-    pre_digest = impl_position.digest_bytes(data)
+    # A pending scaffold's pre-image is the absent file (`write_spliced`'s
+    # own absent-path rule); the spliced bytes already carry the scaffold.
+    pre_digest = impl_position.digest_bytes(
+        b"" if scaffold_pending and not target_path.exists() else data)
     impl_position.write_spliced(target_path, spliced, expect_digest=pre_digest)
 
     recorded_at = _now_iso8601()
+    # Present only on the logged unwitnessed closing act, so every other
+    # settle event and response keeps its exact shape.
+    unwitnessed_keys = ({"unwitnessed": True, "reason": reason}
+                        if unwitnessed else {})
     impl_position.append_event(
         target / name / ".implementation" / "position.jsonl",
         {"kind": "settle", "session": args.session, "about": about,
@@ -15234,7 +16276,8 @@ def cmd_settle(args: argparse.Namespace) -> dict:
          "replace": replace, "replacedWitness": replaced_witness,
          "paragraph": paragraph,
          "holder": str(target_path.relative_to(target)),
-         "supersedes": supersedes, "collides": collides, "at": recorded_at})
+         "supersedes": supersedes, "collides": collides, "at": recorded_at,
+         **unwitnessed_keys})
 
     return {
         "command": "settle", "target": str(target), "name": name,
@@ -15244,6 +16287,7 @@ def cmd_settle(args: argparse.Namespace) -> dict:
         "replace": replace, "replacedWitness": replaced_witness,
         "paragraph": paragraph, "supersedes": supersedes,
         "collides": collides, "recordedAt": recorded_at,
+        **unwitnessed_keys,
     }
 
 
@@ -16476,6 +17520,35 @@ def cmd_offer(args: argparse.Namespace) -> dict:
     }
 
 
+def _declared_flow(target: Path, name: str, evidence: dict) -> list[str]:
+    """What this target declares of a flow, named, or `[]` when nothing.
+
+    A position sequence is built only from execution witnesses
+    (`impl_position.WITNESS_KINDS`): a step, a notebook, a record, a
+    rehearsed job, a shard. Each part named here is read by one of
+    those witnesses -- `__levels__`, `__steps__`, `__records__`, a
+    resolvable shard root, or any job folder on disk -- so a target
+    carrying any of them owes `close` a position. One carrying none has
+    nothing a sequence could honestly name, and the only way to install a
+    position there would be an item pointing at a witness that does not
+    exist. Read from the same `evidence` `close` already built; a job
+    folder of any product counts (fail-closed: owing a position is the
+    stricter reading).
+    """
+    flow = []
+    if evidence.get("levels"):
+        flow.append("__levels__")
+    if resolve_steps_declaration(target, name):
+        flow.append("__steps__")
+    if resolve_records_declaration(target, name):
+        flow.append("__records__")
+    if evidence.get("shardsArrived") is not None:
+        flow.append("a shard root")
+    if evidence.get("jobs"):
+        flow.append("a job folder")
+    return flow
+
+
 def cmd_close(args: argparse.Namespace) -> dict:
     """The finishing precondition (design §3.3): writing the position
     becomes a precondition of finishing, not a courtesy. `close` refuses
@@ -16487,6 +17560,15 @@ def cmd_close(args: argparse.Namespace) -> dict:
     rule `gate` calls first (through `launch_available`) -- one order, one
     set of codes, never a second refusal ladder this command writes for
     itself.
+
+    **A position is owed only where a flow is declared
+    (`_declared_flow`).** A target declaring no `__levels__`, `__steps__`,
+    `__records__`, shard root or job folder has nothing a position
+    sequence could name, so `POSITION_ABSENT` does not apply to it: it
+    closes on the agreement and discussion axes alone, its response says
+    `positionOwed: false`, and the logged close binds a sequence of no
+    items. Every other honesty code still fires, and an existing
+    position block is always held to the full ladder.
 
     **`AGREEMENT_DISAGREES` is a second, independent axis (spec Group 3).**
     A ticked `AGREEMENTS.md`-style checklist item whose declared
@@ -16544,14 +17626,24 @@ def cmd_close(args: argparse.Namespace) -> dict:
         status=before["status"], unbacked=before["unbacked"],
         disagreements=before["disagreements"],
         shards_declared=evidence["shardsArrived"] is not None)
-    if not honesty["honest"]:
+    # A position is owed only by a target that declares some part of a
+    # flow (`_declared_flow`). One that declares none has nothing a
+    # sequence could honestly name, so an ABSENT position is not a
+    # transition left unrecorded there; every other honesty code, and
+    # every axis below, still applies unchanged.
+    flow = _declared_flow(target, name, evidence)
+    position_owed = bool(flow) or honesty["code"] != "POSITION_ABSENT"
+    if not honesty["honest"] and position_owed:
         code, facts = honesty["code"], honesty["facts"]
         if code == "POSITION_ABSENT":
             raise Refused(
                 "POSITION_ABSENT",
-                "no position section has ever been generated for this target; "
-                "run `position` (--sequence or --reconcile) before close can "
-                "require it true.")
+                "no position section has ever been generated for this target, "
+                f"and it declares a flow ({', '.join(flow)}), so close owes "
+                "one; run `position` (--sequence or --reconcile, with "
+                "--target-level naming the rung this pass aims at); then "
+                "close can require it true. A target that declares no flow "
+                "at all closes without a position.")
         if code == "POSITION_STALE":
             raise Refused(
                 "POSITION_STALE",
@@ -16633,15 +17725,20 @@ def cmd_close(args: argparse.Namespace) -> dict:
 
     # Only unmeasured witnesses can still move here (see docstring): pick up
     # anything that became measurable since the position was last written.
-    refresh_args = argparse.Namespace(
-        target=args.target, name=args.name, revision=args.revision,
-        session=args.session, sequence=None, reconcile=False, replace=False,
-        shards=None, target_level=None)
-    cmd_position(refresh_args)
+    # Nothing to refresh when no position is owed: the block is absent.
+    if position_owed:
+        refresh_args = argparse.Namespace(
+            target=args.target, name=args.name, revision=args.revision,
+            session=args.session, sequence=None, reconcile=False, replace=False,
+            shards=None, target_level=None)
+        cmd_position(refresh_args)
 
     evidence = _position_write_evidence(target, name)
     after = position_state(target, name, evidence, args.revision, source,
                            _document_extra_sources(args.revision))
+    # Present only when no position was owed, so every close that owed one
+    # reads exactly as it always has.
+    owed_key = {} if position_owed else {"positionOwed": False}
 
     position_digest = hashlib.sha256(
         json.dumps(after["sequence"], sort_keys=True).encode("utf-8")).hexdigest()
@@ -16673,6 +17770,7 @@ def cmd_close(args: argparse.Namespace) -> dict:
             "revision": args.revision, "revisionSha256": revision_sha256,
             "position": after, "recordedAt": prior_close["at"],
             **({"documentRevisions": extra_documents} if len(DOCUMENTS) > 1 else {}),
+            **owed_key,
         }
 
     recorded_at = _now_iso8601()
@@ -16688,6 +17786,7 @@ def cmd_close(args: argparse.Namespace) -> dict:
         "revision": args.revision, "revisionSha256": revision_sha256,
         "position": after, "recordedAt": recorded_at,
         **({"documentRevisions": extra_documents} if len(DOCUMENTS) > 1 else {}),
+        **owed_key,
     }
 
 
@@ -17201,6 +18300,11 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             continue
         prov = read_provenance(file)
         if prov is None or "__error__" in prov:
+            # The kit's own seal proves nothing and says so; it owes no
+            # provenance while it is still the kit's bytes, and reports like
+            # any other file the moment it is not.
+            if prov is None and is_unmodified_kit_file(target, name, rel):
+                continue
             missing_provenance.append(rel)
             continue
         declared_invariants.update(prov.get("invariants", []))
@@ -17266,15 +18370,22 @@ def cmd_verify(args: argparse.Namespace) -> dict:
                     and not harness_recorded["drift"]
                     and not harness_recorded["unrecorded"])
 
-    for module in modules:
-        module["stale"] = bool(revision) and module["revision"] != revision
+    # X16: under a per-label binding (A8), a file bound to another label's
+    # lineage is that skill's to judge. Counting it stale here drifted both
+    # skills' headlines on every target they share.
+    other_lineage = other_lineage_modules(
+        modules, (implementation_declared["contract"] or {}).get("revisionByDocument"))
+    foreign = {entry["module"] for entry in other_lineage}
+    for bound in modules:
+        bound["stale"] = (bool(revision) and bound["revision"] != revision
+                          and bound["module"] not in foreign)
 
     tests = test_function_names(target / "tests")
     untested = sorted(i for i in declared_invariants if f"test_{i}" not in tests)
     stale = [m["module"] for m in modules if m["stale"]]
 
     # What actually changed, rather than "the revision string is different".
-    # Marking every module stale because one locus moved tells the reader there is
+    # Marking every file stale because one locus moved tells the reader there is
     # work to do and nothing about where, which is the part they have to find anyway.
     target_source = revision_source(revision) if revision else None
     drift_detail = []
@@ -17365,7 +18476,9 @@ def cmd_verify(args: argparse.Namespace) -> dict:
     findings = read_findings(target)
     without_evidence = sorted(f["id"] for f in findings if f"test_finding_{f['id']}" not in tests)
     without_remedy = sorted(f["id"] for f in findings if not f.get("remedy"))
-    unvalidated = sorted(f["id"] for f in findings if f"test_remedy_{f['id']}" not in tests)
+    # `unvalidated` is computed below, once the revision's text is read: an
+    # adopted finding's `test_remedy_<id>` is retired by design (`migration`),
+    # so it cannot also be owed here.
     # The resolved revision, not the argument: these three ask what the proposal
     # says as it stands now, and answering them against a revision nobody named
     # left them permanently unknown on every ordinary invocation.
@@ -17431,13 +18544,37 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             })
 
     compatibility = remedy_compatibility(findings, revision, verify_sources_by_document)
-    ruling = admissibility_record(target, revision)
+    ruling = admissibility_ruling(target, revision)
     uncontrolled = remedies_without_control(target / "tests", package_name(name))
     source = revision_source(revision)
-    migration = migration_state(target, findings, source, package_name(name))
+    # One terminal state, read once and shared: an adopted finding keeps its
+    # evidence, owes no `test_remedy_<id>`, and owes only the move `migration`
+    # checks. An unreadable revision adopts nothing, so every such test stays owed.
+    adopted = {}
+    if source is not None:
+        for f in findings:
+            record = adopted_record(
+                finding_adoption(f, source, verify_sources_by_document), revision)
+            if record:
+                adopted[f["id"]] = record
+    unvalidated = sorted(f["id"] for f in findings
+                         if f"test_remedy_{f['id']}" not in tests and f["id"] not in adopted)
+    migration = migration_state(target, findings, source, package_name(name),
+                                verify_sources_by_document)
     unruled = sorted(f["id"] for f in findings
                      if f["id"] not in ruling.get("findings", {})) if findings else []
-    if not findings:
+    # No findings read `ok` only on a ruling somebody wrote with
+    # `admit --no-findings` that still applies to this revision's bytes;
+    # anything else about no findings stays `none`, as it always was.
+    nothing_found = (not findings and ruling["status"] == "present"
+                     and ruling.get("noFindings") is True)
+    if nothing_found:
+        audit_status = "ok"
+    elif not findings and ruling.get("noFindings") is True:
+        # The bytes that ruling named have since moved: it is owed again,
+        # which is not the same as never having been looked at.
+        audit_status = "incomplete"
+    elif not findings:
         audit_status = "none"
     elif without_evidence or without_remedy or unvalidated:
         audit_status = "incomplete"
@@ -17594,7 +18731,8 @@ def cmd_verify(args: argparse.Namespace) -> dict:
         f["id"] for f in findings
         if local_reach(finding_impact(f, source or "", verify_sources_by_document))
         and not f.get("remedy_block")
-        and adoption_state(f, source or "")["state"] != "adopted"
+        and not remedy_in_prose(f)
+        and f["id"] not in adopted
     ]
     to_discuss = [_local_remedy_discuss_entry(target, name, finding_id)
                   for finding_id in local_remedies_not_written]
@@ -17671,6 +18809,9 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             "nonManagedCandidates": discovery["nonManaged"],
             "revisionTie": discovery["tied"],
             "staleModules": stale,
+            # Files bound to another document label's lineage under a
+            # per-label `revision` mapping, kept out of `staleModules`.
+            "otherLineageModules": other_lineage,
             "drift": drift_detail,
             "benchmark": benchmark,
             "missingProvenance": missing_provenance,
@@ -17726,12 +18867,19 @@ def cmd_verify(args: argparse.Namespace) -> dict:
             # that costs a session. Reported so it is a decision, not a silence.
             "localRemediesNotWritten": local_remedies_not_written,
             "remediesWithoutValidation": unvalidated,
+            # Findings the bound revision has taken in: terminal, kept as
+            # evidence, owing only `migration`. Present only when some exist,
+            # so a target with no adopted finding reads byte-identically.
+            **({"adopted": adopted} if adopted else {}),
             "remediesWithoutControl": uncontrolled,
             "migration": migration,
             "admissibility": {"status": ruling["status"],
                               "detail": ruling.get("detail"),
                               "unruled": unruled},
             "compatibility": compatibility,
+            # Additive: present only when no findings were declared and
+            # `admit --no-findings` said so, so every other verify reads unchanged.
+            **({"noFindings": True} if nothing_found else {}),
         },
         "validation": {
             # Every notebook of the product, not one with a reserved name, and each
@@ -17907,7 +19055,7 @@ def _record_engine_defect(args: argparse.Namespace, exc: BaseException) -> None:
     ledger_path = (Path(target_raw).expanduser().resolve() / name_raw
                    / ".implementation" / "position.jsonl")
     impl_position.append_event(ledger_path, event)
-def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> None:
+def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> dict:
     """The exact pattern `cmd_apply` runs: `PLAN_MISMATCH` when the approved
     plan was produced for a different target/name, `PLAN_STALE` when the
     repository's structure has moved since approval. `materialize --stage`
@@ -17926,8 +19074,12 @@ def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> None:
            for key in ("renames", "moves", "createDirs", "referenceUpdates")):
         raise Refused(
             "PLAN_STALE",
-            "The repository changed since the plan was approved. Re-run `plan` and get approval again.",
+            "The repository changed since the plan was approved. Re-run `plan` and get approval again. "
+            "Expected once `apply` has run: `apply` carries out the plan it was given "
+            "(its renames, moves and createDirs), so that plan has stopped describing the tree; "
+            "pass `materialize` a plan taken once `apply` has run.",
         )
+    return approved
 
 
 def _materialize_scaffold_destinations(target: Path, name: str) -> list[str]:
@@ -17940,17 +19092,19 @@ def _materialize_scaffold_destinations(target: Path, name: str) -> list[str]:
     return [d for d in scaffold_destinations(name) if not (target / d).exists()]
 
 
-def _stage_scaffold(target: Path, name: str, seed: str) -> dict:
+def _stage_scaffold(target: Path, name: str, seed: str,
+                    revision: str | None = None) -> dict:
     package_init = f"src/{package_name(name)}/__init__.py"
     destinations = _materialize_scaffold_destinations(target, name)
+    substitutions = {"PKG": package_name(name), "SEED": seed, "NAME": name,
+                     **({"REVISION": revision} if revision else {})}
 
     bodies: dict[str, str] = {}
     for destination in destinations:
         if destination == package_init:
             continue
         source = scaffold_kit_source(destination, name)
-        body = scaffold_substitute_body(
-            source.read_text(encoding="utf-8"), name, seed)
+        body = kit_substitute_body(source.read_text(encoding="utf-8"), substitutions)
         if destination.endswith(".py") and not writable_at_scaffold_time(body):
             raise Refused(
                 "STAGE_CANNOT_ANSWER",
@@ -18001,13 +19155,14 @@ def _stage_scaffold(target: Path, name: str, seed: str) -> dict:
         source = scaffold_kit_source(destination, name)
         set_receipt_entry(receipt, {
             "path": destination,
-            "kind": "materialized",
+            "kind": RECEIPT_KIND_ENGINE,
             "stage": "scaffold",
             "kitSource": (str(source.relative_to(SKILL_ROOT)) if source else None),
             "sourceSha256": (hashlib.sha256(source.read_bytes()).hexdigest()
                              if source else None),
             "writtenSha256": hashlib.sha256(full.read_bytes()).hexdigest(),
-            "substitutions": {"PKG": package_name(name), "SEED": seed},
+            **notebook_source_fields(destination, full.read_bytes()),
+            "substitutions": dict(substitutions),
             "recordedAt": recorded_at,
         })
     for anchor in anchors:
@@ -18037,7 +19192,7 @@ _DEFAULT_PYPROJECT = (
     'name = "{distribution}"\n'
     'version = "0.1.0"\n'
     'requires-python = ">=3.9"\n'
-    'dependencies = ["numpy>=1.24"]\n\n'
+    'dependencies = []\n\n'
     "[tool.setuptools.packages.find]\n"
     'where = ["src"]\n'
 )
@@ -18057,12 +19212,13 @@ def _materialize_scaffold_anchors(target: Path, name: str) -> list[dict]:
         ignore_file = target / ".gitignore"
         existing = ignore_file.read_text(encoding="utf-8") if ignore_file.exists() else ""
         prefix = "" if not existing or existing.endswith("\n") else "\n"
+        lines = authored_ignore_lines(target, missing_ignores)
         ignore_file.write_text(
-            existing + prefix + "".join(f"{entry}\n" for entry in missing_ignores),
+            existing + prefix + "".join(f"{entry}\n" for entry in lines),
             encoding="utf-8",
         )
         entries.append({"path": ".gitignore", "kind": "anchor", "stage": "scaffold",
-                        "added": missing_ignores, "recordedAt": recorded_at})
+                        "added": lines, "recordedAt": recorded_at})
 
     if pytest_anchor_missing(target):
         pyproject = target / "pyproject.toml"
@@ -18082,14 +19238,24 @@ def _materialize_scaffold_anchors(target: Path, name: str) -> list[dict]:
     return entries
 
 
-def _materialize_object_destinations(target: Path, name: str) -> list[str]:
+def _materialize_object_destinations(target: Path, name: str,
+                                     stem: str | None = None) -> list[str]:
     """The `objects` stage's own destination set: `object_destinations` minus
     whatever already exists on disk — the identical seam
     `_materialize_scaffold_destinations` gives the scaffold stage, kept as a
     separate function per stage so a test can monkeypatch one without
     touching the others.
+
+    `stem` (the flag's answer) names the first destination instead of the
+    kit's default file. Without it that destination follows `object_gaps`:
+    a package that already holds files of its own is owed none.
     """
-    return [d for d in object_destinations(name) if not (target / d).exists()]
+    paths = list(object_destinations(name))
+    if stem is not None:
+        paths[0] = f"src/{package_name(name)}/{stem}.py"
+    elif package_own_modules(target, name):
+        paths = paths[1:]
+    return [d for d in paths if not (target / d).exists()]
 
 
 def _materialize_harness_destinations(target: Path, name: str) -> list[str]:
@@ -18111,7 +19277,8 @@ def harness_substitute_body(text: str, name: str) -> str:
 
 
 def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str],
-                     bodies: dict[str, str], kit_source_fn) -> dict:
+                     bodies: dict[str, str], kit_source_fn,
+                     substitutions: dict | None = None) -> dict:
     """The write-conflict-preflight / write-loop / abort / receipt sequence
     shared by the `objects` and `harness` stages — the same shape
     `_stage_scaffold` established for `scaffold`, factored out once a second
@@ -18158,12 +19325,16 @@ def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str
         source = kit_source_fn(destination, name)
         set_receipt_entry(receipt, {
             "path": destination,
-            "kind": "materialized",
+            "kind": RECEIPT_KIND_ENGINE,
             "stage": stage,
             "kitSource": (str(source.relative_to(SKILL_ROOT)) if source else None),
             "sourceSha256": (hashlib.sha256(source.read_bytes()).hexdigest()
                              if source else None),
             "writtenSha256": hashlib.sha256(full.read_bytes()).hexdigest(),
+            **notebook_source_fields(destination, full.read_bytes()),
+            # The tokens this stage filled, when it says: additive, so a
+            # harness entry reads exactly as it always did.
+            **({"substitutions": dict(substitutions)} if substitutions else {}),
             "recordedAt": recorded_at,
         })
     write_materialization_receipt(target, receipt)
@@ -18214,7 +19385,8 @@ def _implementation_predates_relocation(target: Path, name: str) -> dict | None:
     return None
 
 
-def _stage_objects(target: Path, name: str, seed: str) -> dict:
+def _stage_objects(target: Path, name: str, seed: str,
+                   stem: str | None = None) -> dict:
     """Writes the three step-9 kit destinations as raw, `{{PKG}}`/`{{SEED}}`-
     substituted templates — deliberately NOT gated by
     `writable_at_scaffold_time`.
@@ -18288,15 +19460,82 @@ def _stage_objects(target: Path, name: str, seed: str) -> dict:
             "9's authoring, not before that approval is recorded.",
         )
 
-    destinations = _materialize_object_destinations(target, name)
+    owed = _materialize_object_destinations(target, name, stem)
+    named = (f"src/{package_name(name)}/{stem}.py" if stem is not None else None)
+
+    def kit_source(destination: str, kit_name: str) -> Path | None:
+        # A file the flag named is still written from the kit's own default
+        # template; every other destination maps as it always did.
+        if destination == named:
+            destination = object_destinations(kit_name)[0]
+        return object_kit_source(destination, kit_name)
+
+    # Everything this stage can fill: the declared revision (the gate above
+    # guarantees one), the product name, and the stem of the file this call
+    # writes into the package -- the flag's, or the kit's default one.
+    default = object_destinations(name)[0]
+    written_stem = (stem if stem is not None
+                    else Path(default).stem if default in owed else None)
+    known = {"NAME": name, "REVISION": contract["revision"],
+             **({"MODULE": written_stem} if written_stem else {})}
+    substitutions = {"PKG": package_name(name), "SEED": seed, **known}
     bodies = {
-        destination: scaffold_substitute_body(
-            object_kit_source(destination, name).read_text(encoding="utf-8"),
-            name, seed)
-        for destination in destinations
+        destination: kit_substitute_body(
+            kit_source(destination, name).read_text(encoding="utf-8"), substitutions)
+        for destination in owed
     }
-    return _write_kit_stage(target, name, "objects", destinations, bodies,
-                            object_kit_source)
+    result = _write_kit_stage(target, name, "objects", owed, bodies,
+                              kit_source, substitutions)
+    filled = _fill_scaffold_tokens(target, name, known)
+    return {**result, **({"filled": filled} if filled else {})}
+
+
+def _fill_scaffold_tokens(target: Path, name: str, known: dict) -> list[str]:
+    """Fill `known` into the scaffold files that still carry their tokens
+    and are still exactly what the scaffold stage wrote, re-sealing each.
+
+    The scaffold runs ahead of step 8, so it usually could not know the
+    revision, and never the file step 9 names; leaving `test_smoke.py`,
+    `admissibility.py` and the verification notebook to be filled by hand
+    is how they came to be filled wrongly, or not at all. Only an engine
+    entry of the scaffold stage with its full bytes still hashing to the
+    sealed `writtenSha256` is touched: a file somebody edited, adopted or
+    declared authored is theirs, and stays byte-identical. The entry keeps
+    its kind, and takes the new bytes and the tokens it now carries.
+    """
+    receipt = read_materialization_receipt(target)
+    filled_paths: list[str] = []
+    for destination in scaffold_destinations(name):
+        entry = receipt_entry(receipt, destination)
+        full = target / destination
+        if (not isinstance(entry, dict) or entry.get("kind") != RECEIPT_KIND_ENGINE
+                or entry.get("stage") != "scaffold" or not full.is_file()):
+            continue
+        current = full.read_bytes()
+        if hashlib.sha256(current).hexdigest() != entry.get("writtenSha256"):
+            continue
+        try:
+            text = current.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        filled = kit_substitute_body(text, known)
+        if filled == text:
+            continue
+        full.write_text(filled, encoding="utf-8")
+        data = full.read_bytes()
+        entry = dict(entry)
+        entry.pop("writtenSourceSha256", None)
+        entry["writtenSha256"] = hashlib.sha256(data).hexdigest()
+        entry.update(notebook_source_fields(destination, data))
+        entry["substitutions"] = {**(entry.get("substitutions") or {}),
+                                  **{key: given for key, given in known.items()
+                                     if "{{" + key + "}}" in text}}
+        entry["recordedAt"] = _now_iso8601()
+        set_receipt_entry(receipt, entry)
+        filled_paths.append(destination)
+    if filled_paths:
+        write_materialization_receipt(target, receipt)
+    return filled_paths
 
 
 def _stage_harness(target: Path, name: str) -> dict:
@@ -18332,9 +19571,11 @@ def _kit_destination_stage(path: str, name: str) -> str | None:
 
 
 def _materialize_authored(target: Path, name: str, path: str) -> dict:
-    if path not in all_kit_destinations(name):
+    allowed = [*all_kit_destinations(name), *recorded_object_modules(target, name)]
+    if path not in allowed:
         raise Refused("NOT_A_KIT_DESTINATION",
-                      f"{path} is not one of this stage's kit destinations.")
+                      f"{path} is not one of this stage's kit destinations: "
+                      f"{allowed}.")
     full = target / path
     if not full.exists():
         raise Refused("MATERIALIZE_PATH_ABSENT",
@@ -18346,10 +19587,15 @@ def _materialize_authored(target: Path, name: str, path: str) -> dict:
                       f"{path} carries no receipt entry; the engine never wrote "
                       "it, so there is no seal to release. Use --adopt instead.")
 
-    new_sha256 = hashlib.sha256(full.read_bytes()).hexdigest()
+    current = full.read_bytes()
+    new_sha256 = hashlib.sha256(current).hexdigest()
     entry = dict(entry)
     entry["kind"] = "authored"
     entry["writtenSha256"] = new_sha256
+    # Replaced, never kept: a source digest left over from the bytes this
+    # releases would accept their source content again.
+    entry.pop("writtenSourceSha256", None)
+    entry.update(notebook_source_fields(path, current))
     entry["recordedAt"] = _now_iso8601()
     set_receipt_entry(receipt, entry)
     write_materialization_receipt(target, receipt)
@@ -18362,7 +19608,8 @@ def _materialize_authored(target: Path, name: str, path: str) -> dict:
 def _materialize_adopt(target: Path, name: str, path: str) -> dict:
     if path not in all_kit_destinations(name):
         raise Refused("NOT_A_KIT_DESTINATION",
-                      f"{path} is not one of this stage's kit destinations.")
+                      f"{path} is not one of this stage's kit destinations: "
+                      f"{all_kit_destinations(name)}.")
     full = target / path
     if not full.exists():
         raise Refused("MATERIALIZE_PATH_ABSENT",
@@ -18373,10 +19620,12 @@ def _materialize_adopt(target: Path, name: str, path: str) -> dict:
                       f"{path} already carries a receipt entry; adoption is not "
                       "a re-seal. Use --authored to release a drifted seal.")
 
-    new_sha256 = hashlib.sha256(full.read_bytes()).hexdigest()
+    current = full.read_bytes()
+    new_sha256 = hashlib.sha256(current).hexdigest()
     set_receipt_entry(receipt, {
         "path": path, "kind": "adopted", "stage": _kit_destination_stage(path, name),
-        "writtenSha256": new_sha256, "recordedAt": _now_iso8601(),
+        "writtenSha256": new_sha256, **notebook_source_fields(path, current),
+        "recordedAt": _now_iso8601(),
         # Stated where the operator reads it: adoption records who is
         # responsible for the bytes, not that the bytes came from the kit.
         # For an adopted destination the guarantee is "the record names who
@@ -18408,13 +19657,23 @@ def cmd_materialize(args: argparse.Namespace) -> dict:
                       f"--{'/--'.join(modes_given)} were given together; the "
                       "three modes are mutually exclusive.")
 
+    stem = getattr(args, "module", None)
+    if stem is not None and args.stage != "objects":
+        raise Refused("MODULE_STAGE_MISMATCH",
+                      "--module names the file `--stage objects` writes into the "
+                      "package; no other mode writes one.")
+    if stem is not None:
+        problem = object_module_name_problem(stem, name)
+        if problem:
+            raise Refused("MODULE_NAME_INVALID", f"The name given: {problem}.")
+
     if args.stage:
         # The writer: plan-gated, clean worktree required -- files land on
         # disk and the receipt is written last, atomically.
         require_clean_worktree(target)
         if not args.plan:
             raise Refused("PLAN_REQUIRED", "--stage requires --plan <approved plan JSON>.")
-        _materialize_plan_gate(target, name, args.plan)
+        plan_record = _materialize_plan_gate(target, name, args.plan)
         # A domain may ship no kit at all, and one of them says exactly that in
         # its own doctrine. The bytes below were read unguarded, so a property
         # this forge had already written down reached a person as a raw
@@ -18437,9 +19696,15 @@ def cmd_materialize(args: argparse.Namespace) -> dict:
         if args.stage in ("scaffold", "objects") and not args.seed:
             raise Refused("SEED_REQUIRED", f"--stage {args.stage} requires --seed.")
         if args.stage == "scaffold":
-            return _stage_scaffold(target, name, args.seed)
+            # The bound revision, when it is already known: the target's own
+            # `__implementation__` first, the revision the plan was bound to
+            # otherwise. Neither is guessed; unknown stays a token.
+            revision = (declared_revision(target, name)
+                        or (plan_record.get("boundTo") or {}).get("revision"))
+            return _stage_scaffold(target, name, args.seed,
+                                   revision if isinstance(revision, str) else None)
         if args.stage == "objects":
-            return _stage_objects(target, name, args.seed)
+            return _stage_objects(target, name, args.seed, stem)
         return _stage_harness(target, name)
 
     # `--authored`/`--adopt`: ledger-only, no file write, no plan gate and
@@ -19062,6 +20327,7 @@ GATING_REFUSALS: dict[str, str] = {
     # --- admit -------------------------------------------------------------
     "REVISION_UNREADABLE": INVOCATION_DEFECT,  # name a revision that reads
     "NO_FINDINGS": WORK_STATE,               # the findings have to be written
+    "FINDINGS_DECLARED": INVOCATION_DEFECT,  # drop --no-findings
     # --- gate --------------------------------------------------------------
     "GATE_WORKER_UNIT_CONFLICT": INVOCATION_DEFECT,
     "GATE_WORKER_REQUIRED": INVOCATION_DEFECT,
@@ -19113,6 +20379,8 @@ GATING_REFUSALS: dict[str, str] = {
     "SETTLE_NOTHING_TO_REPLACE": INVOCATION_DEFECT,
     "SETTLE_WITNESS_UNCHANGED": INVOCATION_DEFECT,
     "SETTLE_ALREADY_DONE": INVOCATION_DEFECT,
+    "SETTLE_UNWITNESSED_CONFLICT": INVOCATION_DEFECT,
+    "SETTLE_WITNESS_PRESENT": INVOCATION_DEFECT,
     "SETTLE_ALREADY_REVERSED": INVOCATION_DEFECT,
     "SETTLE_NOT_DISCUSSED": WORK_STATE,
     "SETTLE_DISCUSSION_UNANSWERED": WORK_STATE,
@@ -19123,11 +20391,15 @@ GATING_REFUSALS: dict[str, str] = {
     "SETTLE_HEADING_AMBIGUOUS": WORK_STATE,
     "SETTLE_COLLIDES_UNNAMED": WORK_STATE,
     "SETTLE_NOT_WITNESSED": WORK_STATE,
+    # The reason is the operator's to give, never the agent's: a question.
+    "SETTLE_REASON_REQUIRED": WORK_STATE,
     # --- materialize -------------------------------------------------------
     "MATERIALIZE_MODE_REQUIRED": INVOCATION_DEFECT,
     "MATERIALIZE_MODE_CONFLICT": INVOCATION_DEFECT,
     "PLAN_REQUIRED": INVOCATION_DEFECT,
     "SEED_REQUIRED": INVOCATION_DEFECT,
+    "MODULE_STAGE_MISMATCH": INVOCATION_DEFECT,  # the flag is the objects stage's
+    "MODULE_NAME_INVALID": INVOCATION_DEFECT,    # name an importable file
     # --- position ----------------------------------------------------------
     "POSITION_SEQUENCE_AND_RECONCILE": INVOCATION_DEFECT,  # drop one of the two
     "POSITION_SEQUENCE_UNREADABLE": INVOCATION_DEFECT,     # fix the JSON typed
@@ -19468,7 +20740,8 @@ def _position_attained_level(target: Path, name: str) -> str | None:
                 continue
             return impl_position.attained_level(
                 impl_position.parse_items(block["body"]),
-                _position_write_evidence(target, name))
+                {**_position_write_evidence(target, name),
+                 "targetLevel": block.get("target")})
     except Exception:
         # Deliberately every one of them: a block that will not parse, a
         # benchmark package that will not import, a declaration that refuses.
@@ -19855,8 +21128,9 @@ _WORK_STATE_RESOLUTIONS = {
               "why?"),
     "NO_FINDINGS": lambda args: _refusal_question(
         args, "tests/findings.py declares no finding to rule on; write the "
-              "findings now, or record why admissibility is deferred, and "
-              "why?"),
+              "findings now, record that nothing was found with "
+              "`admit --no-findings`, or record why admissibility is "
+              "deferred, and why?"),
     "GATE_AUTHORIZATION_REQUIRED": lambda args: _refusal_question(
         args, "this launch carries no authorization, and one is minted only "
               "by a prior `offer` publish over exactly this binding; does "
@@ -20003,7 +21277,14 @@ _WORK_STATE_RESOLUTIONS = {
         args, "this agreement names nothing a test could contradict, and a "
               "line is not marked done until it does; which `test_<id>` "
               "witnesses it? Bind it with `settle --attach --witness "
-              "test_<id>` before marking it done."),
+              "test_<id>` before marking it done. If no test ever could (a "
+              "scoping decision, a premise, a deferral), is it closed, and "
+              "why? Record that answer with `settle --done --unwitnessed "
+              "--reason <why>`."),
+    "SETTLE_REASON_REQUIRED": lambda args: _refusal_question(
+        args, "closing an agreement no test witnesses is the operator's "
+              "decision, logged with its reason; why is this agreement "
+              "closed? Pass that answer as `--reason <why>`."),
 
     # --- the guards, one file over -----------------------------------------
     "PRODUCT_DIR_MISNAMED": _resolve_product_dir_misnamed,
@@ -20013,13 +21294,16 @@ _WORK_STATE_RESOLUTIONS = {
     # them.
     "HOLDER_UNDECLARED": lambda args: _refusal_question(
         args, "an existing checklist under this product holds items but is "
-              "not named what this skill declares as its own holder (the "
-              "refusal detail names both the found file and the declared "
-              "name); rename the found file to the declared name in the "
+              "not named what this skill declares as its own holder, and no "
+              "sibling skill sharing this engine declares its name either "
+              "(the refusal detail names the found file, the declared name, "
+              "and any sibling skill's holder it recognized and left "
+              "alone); rename the found file to the declared name in the "
               "target repository, or declare the found file's own name in "
               "this skill's PROFILE[\"holder\"][\"filename\"] if that name "
               "should become this skill's convention for every target, and "
-              "why?"),
+              "why? A sibling skill's own holder is never the file to "
+              "rename."),
     "DIRTY_WORKTREE": _resolve_dirty_worktree,
     "GIT_FAILED": lambda args: _refusal_question(
         args, "git itself refused the command this skill ran, and the refusal "
@@ -20245,11 +21529,13 @@ def cmd_walk(args: argparse.Namespace) -> dict:
 
     Between two steps it refreshes the position, because an ordered next step
     refuses while an earlier item's mark is the one written before this run,
-    and `position` is the only writer into that section. It does not commit:
-    what belongs in the history and what the message says are the operator's,
-    and a walker authoring commit messages would be writing the record of
-    somebody else's work.
+    and `position` is the only writer into that section. It commits what
+    each step it ran here produced under a mechanical subject (`_commit_walked_step`
+    says why it has to); the subject's shape is the operator's, through
+    `--commit-template`.
     """
+    template = getattr(args, "commit_template", None) or WALK_COMMIT_TEMPLATE
+    walk_commit_subject(template, "")  # refuses a malformed one up front
     target = resolve_target(args.target)
     name = validate_name(args.name)
     _require_no_open_defect(target, name)
@@ -20300,7 +21586,7 @@ def cmd_walk(args: argparse.Namespace) -> dict:
                  "--target", str(target), "--name", args.name,
                  "--session", args.session, "--revision", args.revision],
                 capture_output=True, text=True)
-            _commit_walked_step(target, act["step"])
+            _commit_walked_step(target, act["step"], template)
     return {"command": "walk", "target": str(target), "name": name,
             "performed": performed, "stoppedAt": plan["stopsAt"],
             "reason": None if plan["stopsAt"] is None else
@@ -20308,7 +21594,29 @@ def cmd_walk(args: argparse.Namespace) -> dict:
                       or "a launch is the operator's to authorize"}
 
 
-def _commit_walked_step(target: Path, step: str) -> None:
+#: The subject `walk` commits a step's product under, unless the operator
+#: passes `--commit-template`. `{step}` is the one placeholder.
+WALK_COMMIT_TEMPLATE = "walk: {step}"
+
+
+def walk_commit_subject(template: str, step: str) -> str:
+    """Fill `{step}` into a walk commit template, or refuse the template.
+
+    Refused when it names no `{step}` (a commit nobody can trace to its
+    step), carries any other brace, spans more than one line, or is blank.
+    """
+    rest = template.replace("{step}", "")
+    if ("{step}" not in template or "{" in rest or "}" in rest
+            or "\n" in template or "\r" in template):
+        raise Refused("WALK_COMMIT_TEMPLATE_MALFORMED",
+                      f"--commit-template {template!r} must be one line holding "
+                      "the placeholder {step} and no other brace, e.g. "
+                      "'chore(walk): {step}'")
+    return template.replace("{step}", step)
+
+
+def _commit_walked_step(target: Path, step: str,
+                        template: str = WALK_COMMIT_TEMPLATE) -> None:
     """Record what one walked step produced, so the next one can run.
 
     A tension worth stating rather than hiding. `step` publishes its own next
@@ -20336,7 +21644,7 @@ def _commit_walked_step(target: Path, step: str) -> None:
                    capture_output=True, text=True)
     subprocess.run(
         ["git", "-C", str(target), "commit", "-q", "-m",
-         f"walk: {step}",
+         walk_commit_subject(template, step),
          "-m", "What this step declared it produces, recorded so the next "
                "step in the flow can run: `step` refuses on a dirty tree. "
                "The message is mechanical on purpose -- it records that an "
@@ -20398,6 +21706,12 @@ def main(argv: list[str] | None = None) -> int:
                            help="interpreter to build the venv from (default: this one). "
                                 "Refused below 3.10, or the target's own declared "
                                 "python_requires floor, whichever is higher.")
+            p.add_argument("--torch", choices=TORCH_VARIANTS, default=None,
+                           help="also install torch: cpu (CPU index, exact +cpu pin) "
+                                "or gpu (the default index's build)")
+            p.add_argument("--torch-version", default=None,
+                           help="exact torch release for --torch (default: the one "
+                                "torch==X pin in the target's manifests)")
         elif name == "compose":
             # Composition reads the findings and the entry, nothing layout-shaped.
             p.add_argument("--finding", required=True, help="id of the finding to compose")
@@ -20632,6 +21946,15 @@ def main(argv: list[str] | None = None) -> int:
                                 "in the plan's own boundTo key and re-read "
                                 "from there by apply and materialize -- "
                                 "never re-typed on either command")
+        if name == "admit":
+            p.add_argument("--no-findings", dest="no_findings",
+                           action="store_true",
+                           help="record that nothing was found in "
+                                "--revision: writes a ruling with no findings, "
+                                "bound to the revision's bytes. Only when "
+                                "tests/findings.py declares no finding "
+                                "(FINDINGS_DECLARED otherwise); without it "
+                                "`FINDINGS = []` still refuses NO_FINDINGS")
         if name == "agree":
             # `the-agreement-nothing-computes` (Slice D, design.md D9):
             # agree's own site, mirroring plan's -- the shared eight-name
@@ -20667,6 +21990,9 @@ def main(argv: list[str] | None = None) -> int:
                            help="the managed revision the position binds to; "
                                 "omitted, no position refresh runs between "
                                 "steps and an ordered next step will refuse")
+            p.add_argument("--commit-template", default=None,
+                           help="subject for each walked commit, with {step} "
+                                "as the placeholder (default: 'walk: {step}')")
         if name == "step":
             p.add_argument("--step", required=True,
                            help="the declared __steps__ entry to run; no "
@@ -20681,8 +22007,8 @@ def main(argv: list[str] | None = None) -> int:
                                 "operand') -- the identical shape discuss's "
                                 "own --about takes, matched against an "
                                 "answered discuss event by witness identity "
-                                "(kind, operand). Required unless --attach "
-                                "or --remove is given (refused "
+                                "(kind, operand). Required unless --attach, "
+                                "--remove or --unwitnessed is given (refused "
                                 "SETTLE_ABOUT_REQUIRED); neither mode ever "
                                 "resolves or requires it -- there is no "
                                 "discussion gate left to check it against")
@@ -20903,6 +22229,28 @@ def main(argv: list[str] | None = None) -> int:
                                 "are refused SETTLE_DONE_CONFLICT if given, "
                                 "and so are --attach, --remove and "
                                 "--reverse themselves")
+            p.add_argument("--unwitnessed", action="store_true",
+                           help="with --done: close a line that names "
+                                "no witness and that no test could ever "
+                                "witness (a scoping decision, a premise, a "
+                                "deferral). With --under and no --about: "
+                                "put such a line in, unticked and bound to "
+                                "no discussion; --about, --witness and "
+                                "--supersedes are refused SETTLE_UNWITNESSED_"
+                                "CONFLICT there. Requires --reason (refused "
+                                "SETTLE_REASON_REQUIRED); the act is "
+                                "logged in the ledger with --session and "
+                                "--reason and is never counted as "
+                                "witnessed -- `agreements.witness.decided` "
+                                "names it. Refused SETTLE_WITNESS_PRESENT on "
+                                "a line that names a witness (plain --done "
+                                "closes that one) and SETTLE_UNWITNESSED_"
+                                "CONFLICT in any other mode)")
+            p.add_argument("--reason", default=None,
+                           help="the operator's own statement of why a "
+                                "witness-less agreement is closed or put in; required "
+                                "with --unwitnessed and refused SETTLE_"
+                                "UNWITNESSED_CONFLICT without it")
         if name == "defect":
             p.add_argument("--file", required=True,
                            help="path to the forge file this declares "
@@ -20951,6 +22299,12 @@ def main(argv: list[str] | None = None) -> int:
                 "--seed", default=None,
                 help="the suite's fixed seed, substituted into {{SEED}}; "
                      "required with --stage scaffold")
+            p.add_argument(
+                "--module", default=None,
+                help="--stage objects only: the name the step-8 map gives "
+                     "the first file, written as src/<Package>/<name>.py "
+                     "instead of the kit's default. Omitted, the default is "
+                     "written only while the package holds no file of its own")
         if name == "adopt":
             p.add_argument(
                 "--source", default=None,

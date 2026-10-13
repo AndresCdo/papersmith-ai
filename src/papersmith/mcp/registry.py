@@ -203,6 +203,8 @@ def _build_init(arguments: dict[str, Any], workspace: Path) -> ChildPlan:
         tokens.append("--no-npm")
     if not arguments.get("allow_env"):
         tokens.append("--no-env")
+    if arguments.get("allow_dirty_kit"):
+        tokens.append("--allow-dirty-kit")
     return ChildPlan("cli", tuple(tokens), timeout=600.0)
 
 
@@ -213,6 +215,8 @@ def _build_upgrade(arguments: dict[str, Any], workspace: Path) -> ChildPlan:
         tokens.extend(["--tools", str(tools)])
     if arguments.get("force"):
         tokens.append("--force")
+    if arguments.get("allow_dirty_kit"):
+        tokens.append("--allow-dirty-kit")
     return ChildPlan("cli", tuple(tokens), timeout=600.0)
 
 
@@ -668,6 +672,11 @@ _WORKSPACE_TOOLS = (
                     "allow_env", "allow_env", kind="bool",
                     description="provision the workspace's micromamba environment (a multi-gigabyte download)",
                 ),
+                Flag(
+                    "allow_dirty_kit", "allow_dirty_kit", kind="bool",
+                    description=("proceed even when the kit source has uncommitted changes or an "
+                                 "unreadable git state; never a default"),
+                ),
             )
         ),
         build=_build_init,
@@ -688,6 +697,11 @@ _WORKSPACE_TOOLS = (
             (
                 Flag("tools", "--tools", description="replace active runtime generators"),
                 Flag("force", "--force", kind="bool", description="force framework-file writes"),
+                Flag(
+                    "allow_dirty_kit", "allow_dirty_kit", kind="bool",
+                    description=("proceed even when the kit source has uncommitted changes or an "
+                                 "unreadable git state; never a default"),
+                ),
             )
         ),
         build=_build_upgrade,

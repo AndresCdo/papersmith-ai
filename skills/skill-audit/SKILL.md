@@ -33,6 +33,18 @@ first instruction is to load this file. And what the agent may do is narrower
 than what this skill describes — it has no `Edit` at all, so **reports; never
 repairs** stops being a sentence and becomes a fact about what it can reach.
 
+## When a delegated agent cannot be spawned
+
+The stretch this skill delegates is defined in full by its agent file:
+`.claude/agents/audit-report.md`. When that agent cannot be spawned — the
+harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read the
+definition file and follow it as written, from the beginning it states to the
+end it states, holding any gate this skill sets before the stretch, and returning the
+report shape it specifies. Its `tools:` line still bounds the stretch: an act
+that would need a tool outside that list is a stop, not a workaround. Say in
+the reply that the stretch ran inline and why the agent could not be spawned.
+
 ## Activation
 
 The audit needs to run things. Without a shell it must **refuse**.

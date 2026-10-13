@@ -2,6 +2,7 @@ import type { DeliberationDomainProfile } from "../_core/deliberation/engine/dom
 import { sha256 } from "../_core/deliberation/engine/types.js";
 import { extractAtoms, violations } from "./preservation-experimental.js";
 import { declares, cites } from "./reference-experimental.js";
+import { PROSE_REFERENCE_PATTERN } from "./experiment-convention.js";
 
 /**
  * What the shared deliberation engine needs to know about THIS domain.
@@ -51,7 +52,9 @@ export const profile: DeliberationDomainProfile = {
 	// `(Exp. E1)`. Unlike the mathematical sibling's `(Ec. N)`, the identifier is not
 	// an ordinal: experiments are added, split and retired, and a positional number
 	// would silently re-point every citation the first time one is removed.
-	proseReferencePattern: "\\((?:Exp|Experiment)\\.\\s*([A-Za-z0-9][A-Za-z0-9._-]*)\\)",
+	// Read from the shared convention file (`_core/conventions/experiments.json`), the
+	// same one `experimental-implementation` reads (`experiment-convention.ts`).
+	proseReferencePattern: PROSE_REFERENCE_PATTERN,
 	// Finding L5: no file this domain owns ever reads a rendered display string for a
 	// citation -- `reference-experimental.ts`'s `cites` captures the raw identifier value
 	// via `proseReferencePattern` and needs nothing more; `preservation-experimental.ts`

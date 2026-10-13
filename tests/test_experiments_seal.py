@@ -778,17 +778,20 @@ class AgreeSuggestionKeyZ11MutationTests(unittest.TestCase):
     def test_adding_a_suggestion_key_reddens_the_keyset_lock(self):
         real_source = ENGINE_DIR.joinpath("implementation_engine.py").read_text(
             encoding="utf-8")
+        # Re-anchored (`cross-skill-consistency`, C14): the agreed payload
+        # gained a conditional `outOfScope` spread after `declared`, so the
+        # anchor ends at `declared,` and the mutation inserts its key there.
         anchor = (
             'return {"command": "agree", "target": str(target), '
             '"revision": args.revision,\n'
             '            "status": "agreed", "crossed": crossed, '
-            '"declared": declared}')
+            '"declared": declared,\n')
         self.assertEqual(real_source.count(anchor), 1)
         mutated_anchor = (
             'return {"command": "agree", "target": str(target), '
             '"revision": args.revision,\n'
             '            "status": "agreed", "crossed": crossed, '
-            '"declared": declared, "suggestion": "follow the target"}')
+            '"declared": declared, "suggestion": "follow the target",\n')
         self.assertEqual(real_source.count(mutated_anchor), 0)
         mutated_source = real_source.replace(anchor, mutated_anchor, 1)
         self.assertEqual(mutated_source.count(anchor), 0)

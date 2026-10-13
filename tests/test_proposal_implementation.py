@@ -41,6 +41,7 @@ CLI = FORGE / "skills/proposal-implementation/scripts/implementation_cli.py"
 ENGINE = FORGE / "skills/_core/implementation/engine/implementation_engine.py"
 sys.path.insert(0, str(ENGINE.parent))
 from domain_profile import seeded_profile  # noqa: E402  (path set above)
+import scratch_forge  # noqa: E402  (path set above)
 with seeded_profile(FORGE / "skills/proposal-implementation/impl_profile.py"):
     import implementation_engine as impl  # noqa: E402  (path set above)
 # `implementation_engine`'s own import of `impl_layout` etc. already put
@@ -2918,6 +2919,106 @@ class HolderResolutionTests(unittest.TestCase):
             self.assertIsNone(resolution["read"])
             self.assertIsNone(resolution["write"])
 
+    def test_a_sibling_skills_declared_holder_is_not_a_candidate(self):
+        """The inverse of `HolderCollisionTests` in the experimental suite:
+        a target whose only checklist is the experimental sibling's own
+        declared holder resolves `"create"` here, never `"undeclared"` --
+        renaming or adopting another skill's holder is never an exit."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            sibling = root / "Method" / "Experimental_AGREED.md"
+            sibling.write_text("# Agreed\n\n## Ladder\n\n- [ ] ajeno\n",
+                               encoding="utf-8")
+            resolution = impl.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "create")
+            self.assertEqual(resolution["byShape"], [])
+            self.assertEqual(resolution["siblings"], ["Method/Experimental_AGREED.md"])
+            self.assertEqual(resolution["write"], root / "Method" / "AGREED.md")
+
+            chosen = impl._chosen_holder(root, "Method", root / "Method")
+
+            self.assertEqual(chosen, root / "Method" / "AGREED.md")
+            self.assertEqual(sibling.read_text(encoding="utf-8"),
+                             "# Agreed\n\n## Ladder\n\n- [ ] ajeno\n")
+
+    def test_a_sibling_holder_beside_one_unknown_candidate_is_undeclared(self):
+        """Two by-shape files, one of them the sibling's: only the unknown
+        one is a candidate, so the resolution is `"undeclared"` (one
+        candidate), not `"ambiguous"` -- and it still refuses."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                "- [ ] ajeno\n", encoding="utf-8")
+            (root / "Method" / "TASKS.md").write_text(
+                "- [ ] otro\n", encoding="utf-8")
+            resolution = impl.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "undeclared")
+            self.assertEqual(resolution["read"], root / "Method" / "TASKS.md")
+            self.assertIsNone(resolution["write"])
+
+
+class SiblingHolderReadTests(unittest.TestCase):
+    """The READ face of the sibling-holder collision, in this direction:
+    before this skill has a holder of its own, the experimental sibling's
+    declared `Experimental_AGREED.md` is never read as this skill's
+    agreements or as this skill's position."""
+
+    SIBLING_BLOCK = (
+        "# Agreed\n\n## Ladder\n\n"
+        "<!-- position revision=r1.md sha256=" + "a" * 64 +
+        " derivedAt=2026-08-27T00:00:00Z session=s0 target=final -->\n"
+        "- [x] 1. Rehearse the job. `@rehearsal job1`\n"
+        "<!-- /position -->\n"
+        "- [ ] an agreement the sibling settled\n")
+
+    def test_agreements_never_count_the_siblings_holder(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            state = impl.agreements_state(root, "Method")
+            self.assertEqual(state["status"], "absent")
+            self.assertEqual(state["holders"], [])
+            self.assertEqual(state["open"], [])
+            self.assertEqual(state["siblingHolders"],
+                             ["Method/Experimental_AGREED.md"])
+
+            (root / "Method" / "AGREED.md").write_text(
+                "# Agreed\n\n## Ladder\n\n- [x] own agreement\n",
+                encoding="utf-8")
+            state = impl.agreements_state(root, "Method")
+            self.assertEqual(state["holders"], ["Method/AGREED.md"])
+            self.assertEqual(state["status"], "settled")
+            self.assertEqual(state["open"], [])
+
+    def test_position_never_reads_the_siblings_block(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            state = impl.position_state(root, "Method", {}, None, None)
+            self.assertEqual(state["status"], "absent")
+            self.assertIsNone(state["holder"])
+
+    def test_an_undeclared_holder_beside_the_siblings_is_still_read(self):
+        """Only sibling-declared names are set aside; an arbitrarily named
+        checklist keeps being found by shape, exactly as before."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True)
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            (root / "Method" / "TASKS.md").write_text(
+                self.SIBLING_BLOCK, encoding="utf-8")
+            agreements = impl.agreements_state(root, "Method")
+            self.assertEqual(agreements["holders"], ["Method/TASKS.md"])
+            position = impl.position_state(root, "Method", {}, None, None)
+            self.assertEqual(Path(position["holder"]).name, "TASKS.md")
+
 
 class CreateOnAbsentTests(unittest.TestCase):
     """`the-holder-each-skill-declares` (design.md D5, tasks.md 3.1/3.2):
@@ -3148,9 +3249,11 @@ class HolderUndeclaredMutationTests(unittest.TestCase):
         `git diff --stat`.
         """
         def mutate(source: str) -> str:
+            # X17: `cmd_settle` no longer writes the scaffold at this site;
+            # the anchor is its resolution line, still the one repointed site.
             anchor = (
                 '    resolution = holder_resolution(target, name)\n'
-                '    if resolution["action"] == "create":\n')
+                '    # Design D5 (Phase 3): the declared holder does not exist yet, but its\n')
             self.assertIn(anchor, source)
             replacement = (
                 '    holders = agreements_state(target, name)["holders"]\n'
@@ -3158,7 +3261,7 @@ class HolderUndeclaredMutationTests(unittest.TestCase):
                 '        "action": "declared" if holders else "absent",\n'
                 '        "write": Path(target) / holders[0] if holders else None,\n'
                 "    }\n"
-                '    if resolution["action"] == "create":\n')
+                '    # Design D5 (Phase 3): the declared holder does not exist yet, but its\n')
             return source.replace(anchor, replacement, 1)
 
         engine_dir = self._scratch_engine(mutate)
@@ -4396,6 +4499,44 @@ class DistributionTests(unittest.TestCase):
         self.assertIsNone(cost["projectedSeconds"])
         self.assertIn("no duration", cost["reason"])
 
+    def test_a_forecast_from_a_record_naming_no_parallelism_says_single_process(self):
+        """B12: the duration a record carries is read as one run alone, and
+        runs sharing a machine compete for it. A pilot on 8 workers measured
+        2.42x such a projection. The forecast now says what it is: projected
+        from single-process timing, with contention unmeasured, and no factor
+        for it invented."""
+        cost = impl._projected_cost(
+            {"seconds": 600, "epochs": 3}, {"epochs": 30})
+        self.assertEqual(cost["projectedSeconds"], 6000)
+        self.assertIsNone(cost["parallelism"])
+        self.assertEqual(cost["contention"], "unmeasured")
+        self.assertIn("single-process", cost["basis"])
+        self.assertNotIn("contentionFactor", cost)
+
+    def test_a_forecast_from_a_record_naming_its_parallelism_is_measured_there(self):
+        cost = impl._projected_cost(
+            {"seconds": 600, "epochs": 3, "parallelism": 8}, {"epochs": 30})
+        self.assertEqual(cost["projectedSeconds"], 6000)
+        self.assertEqual(cost["parallelism"], 8)
+        self.assertEqual(cost["contention"], "included")
+        self.assertIn("8 concurrent", cost["basis"])
+
+    def test_a_malformed_parallelism_is_never_read_as_measured(self):
+        for value in (True, 0, -2, "8", 2.5, None):
+            with self.subTest(value=value):
+                cost = impl._projected_cost(
+                    {"seconds": 600, "epochs": 3, "parallelism": value},
+                    {"epochs": 30})
+                self.assertIsNone(cost["parallelism"])
+                self.assertEqual(cost["contention"], "unmeasured")
+                self.assertEqual(cost["parallelismMalformed"], value)
+
+    def test_the_search_forecast_carries_the_same_label(self):
+        forecast = impl.search_cost_forecast(
+            {"seconds": 600, "epochs": 3}, {"epochs": 30})
+        self.assertEqual(forecast["contention"], "unmeasured")
+        self.assertIn("single-process", forecast["basis"])
+
     def test_a_complete_declaration_with_agreeing_shards_passes(self):
         merged = {"shardsArrived": ["a", "b"], "disagreements": []}
         state = impl.distribution_state(
@@ -4820,6 +4961,74 @@ class ResolveImplementationDeclarationTests(unittest.TestCase):
         self.assertEqual(resolved["status"], "undeclared")
         self.assertIn("empty", resolved["detail"])
         self.assertEqual(resolved["contract"], {})
+
+    # A8 (`cross-skill-consistency`): two implementation skills share one
+    # package and therefore one `__implementation__`. `revision` may name
+    # one revision per document label; each skill reads its own document 0's
+    # label, and a bare string keeps meaning exactly what it meant before.
+
+    def test_a_revision_keyed_by_document_label_reads_this_skills_own(self):
+        label = impl.DOCUMENTS[0]["label"]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {"
+                f"{label!r}: 'r01.md', 'other-lineage': 'other-v07.md'}}, "
+                "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "declared")
+        self.assertEqual(resolved["contract"]["revision"], "r01.md")
+        self.assertEqual(resolved["contract"]["revisionByDocument"],
+                         {label: "r01.md", "other-lineage": "other-v07.md"})
+
+    def test_a_keyed_revision_without_this_skills_label_is_unanswered(self):
+        """Fail-closed: another lineage's binding is never read as this
+        skill's. With premises blank the whole declaration is undeclared,
+        and the detail names the label that is missing."""
+        label = impl.DOCUMENTS[0]["label"]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {'other-lineage': 'other-v07.md'}, "
+                "'premises': {}}\n", encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "undeclared")
+        self.assertIn(repr(label), resolved["detail"])
+        self.assertEqual(resolved["contract"], {})
+
+    def test_a_keyed_revision_without_this_label_but_with_premises_owes_the_revision(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {'other-lineage': 'other-v07.md'}, "
+                "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "declared")
+        self.assertEqual(resolved["contract"]["revision"], "")
+
+    def test_a_keyed_revision_whose_value_is_not_a_name_is_undeclared(self):
+        label = impl.DOCUMENTS[0]["label"]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {"
+                f"{label!r}: 3}}, 'premises': {{'metric': 'm'}}}}\n",
+                encoding="utf-8")
+            resolved = impl.resolve_implementation_declaration(root, "Method")
+        self.assertEqual(resolved["status"], "undeclared")
+        self.assertIn(repr(label), resolved["detail"])
+        self.assertEqual(resolved["contract"], {})
+
+    def test_the_object_map_gate_names_the_revision_this_lineage_still_owes(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (self.root_of(root) / "__init__.py").write_text(
+                "__implementation__ = {'revision': {'other-lineage': 'other-v07.md'}, "
+                "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+            with self.assertRaises(impl.Refused) as caught:
+                impl._stage_objects(root, "Method", "1")
+        self.assertEqual(caught.exception.code, "OBJECT_MAP_NOT_APPROVED")
+        self.assertIn("declares no revision.", str(caught.exception))
 
     def test_premises_answered_alone_is_declared(self):
         """`revision` need not be the one that is answered first -- either
@@ -9614,9 +9823,25 @@ class MaterializeBenchmarkDeclarationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # `materialize.py` `setdefault`s IMPLEMENTATION_DOMAIN_PROFILE at
+        # import, as a launcher does. In-process, that would outlive this
+        # class and steer every later child given `os.environ` to this
+        # skill's profile (X8b), so the environment is put back as found.
+        saved = cls._profile_before_class = os.environ.get(
+            "IMPLEMENTATION_DOMAIN_PROFILE")
         sys.path.insert(0, str(CLI.parent))
-        import materialize  # local import: path to scripts/ set above
+        try:
+            import materialize  # local import: path to scripts/ set above
+        finally:
+            if saved is None:
+                os.environ.pop("IMPLEMENTATION_DOMAIN_PROFILE", None)
+            else:
+                os.environ["IMPLEMENTATION_DOMAIN_PROFILE"] = saved
         cls.materialize = materialize
+
+    def test_importing_the_script_leaves_the_environment_as_it_found_it(self):
+        self.assertEqual(os.environ.get("IMPLEMENTATION_DOMAIN_PROFILE"),
+                         self._profile_before_class)
 
     def _box(self):
         box = FORGE / "implementations" / f"_materialize_{os.getpid()}_{id(self)}"
@@ -9765,7 +9990,7 @@ class NonRevisionSha256ScalarsAreDocumentCountInvariantTests(unittest.TestCase):
             n for n in ast.walk(tree)
             if isinstance(n, ast.FunctionDef) and n.name == "cmd_verify")
         body = ast.get_source_segment(source, cmd_verify)
-        for anchor in ('module["stale"] = bool(revision) and module["revision"] != revision',
+        for anchor in ('bound["stale"] = (bool(revision) and bound["revision"] != revision',
                       'built_against = declared_revision',
                       'stale_revision = bool(revision) and built_against != revision',
                       '"latestRevision": revision,',
@@ -9876,6 +10101,111 @@ class VerifyDiscoversTheNewestRevisionTests(unittest.TestCase):
         self.assertIsNone(fidelity["latestRevision"])
         self.assertEqual(fidelity["revisionSource"], "none")
         self.assertEqual(fidelity["status"], "unknown")
+
+
+class SectionHeadingConventionTests(unittest.TestCase):
+    """B1 (`cross-skill-consistency`): `verify` speaks in the section labels a
+    managed revision actually carries.
+
+    Before 0.14.0 a section was only a heading whose first token was a bare
+    number followed by whitespace (`## 3. Title`). A revision whose headings
+    carry an identifier label (`### O1. Title`), a dotted label (`### 3.1`),
+    or a label alone on its line (`## 3`) yielded no sections at all, so
+    `changedSections` stayed empty and a module's `__provenance__["sections"]`
+    was never crossed with what moved: only the file-level revision drift
+    worked. The grammar now lives once, in
+    `skills/_core/conventions/sections.json`, read by the engine.
+    """
+
+    IDENTIFIERS = (
+        "# Title\n\n## Framing\n\nIntro.\n\n"
+        "### O1. First objective\n\nalpha\n\n"
+        "### O2. Second objective\n\nbeta\n"
+    )
+    NUMBERED = (
+        "# Title\n\n## 3. Formulation\n\nbody three\n\n"
+        "### 3.1 Detail\n\ninner\n\n## Discussion\n\nloose\n\n"
+        "## 4) Next\n\nbody four\n"
+    )
+
+    def test_identifier_headings_are_sections(self):
+        sections = impl.revision_sections(self.IDENTIFIERS)
+        self.assertEqual(sorted(sections), ["O1", "O2"])
+        moved = impl.changed_sections(
+            self.IDENTIFIERS, self.IDENTIFIERS.replace("beta", "gamma"))
+        self.assertEqual(moved, ["O2"])
+
+    def test_numbered_headings_read_as_before(self):
+        moved = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("body four", "changed"))
+        self.assertEqual(moved, ["4"])
+
+    def test_a_dotted_label_is_its_own_section_inside_its_parent(self):
+        inner = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("inner", "changed"))
+        self.assertEqual(inner, ["3", "3.1"])
+        outer = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("body three", "changed"))
+        self.assertEqual(outer, ["3"])
+
+    def test_an_unlabelled_heading_stays_in_the_enclosing_section(self):
+        moved = impl.changed_sections(
+            self.NUMBERED, self.NUMBERED.replace("loose", "changed"))
+        self.assertEqual(moved, ["3"])
+
+    def test_a_label_alone_on_its_heading_line_is_a_section(self):
+        source = "## 3\n\nbody\n\n## 4\n\nmore\n"
+        moved = impl.changed_sections(source, source.replace("more", "less"))
+        self.assertEqual(moved, ["4"])
+
+    def test_the_parent_hash_matches_the_pre_change_reading(self):
+        """A labelled sub-heading's lines still belong to its parent: the
+        parent's digest is the one the old single-section reader computed,
+        so a parent reference keeps meaning the same bytes."""
+        old = {}
+        current = None
+        for line in self.NUMBERED.splitlines():
+            heading = re.match(r"^#{1,6}\s+(\d+)[.)]?\s", line)
+            if heading:
+                current = heading.group(1)
+                old.setdefault(current, [])
+                continue
+            if current is not None:
+                old[current].append(line)
+        expected = {n: hashlib.sha256("\n".join(b).encode("utf-8")).hexdigest()
+                    for n, b in old.items()}
+        sections = impl.revision_sections(self.NUMBERED)
+        self.assertEqual(sections["3"], expected["3"])
+        self.assertEqual(sections["4"], expected["4"])
+
+    def test_verify_crosses_an_identifier_reference_with_what_moved(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "draft-1.md").write_text(self.IDENTIFIERS, encoding="utf-8")
+        (root / "draft-2.md").write_text(
+            self.IDENTIFIERS.replace("beta", "gamma"), encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_sections_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src/Method").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__implementation__ = {'revision': 'draft-1.md'}\n", encoding="utf-8")
+        for module, section in (("first", "O1"), ("second", "O2")):
+            (box / f"src/Method/{module}.py").write_text(
+                "__provenance__ = {'revision': 'draft-1.md', "
+                f"'sections': ['{section}'], 'equations': [], 'invariants': []}}\n",
+                encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box), "--name", "Method"],
+            capture_output=True, text=True, cwd=FORGE,
+            env=dict(os.environ, IMPLEMENTATION_PROPOSALS=str(root)))
+        fidelity = json.loads(proc.stdout or "{}")["fidelity"]
+        drift = {Path(d["module"]).stem: d for d in fidelity["drift"]}
+        self.assertEqual(drift["second"]["changedSections"], ["O2"])
+        self.assertEqual(drift["second"]["touchedSections"], ["O2"])
+        self.assertEqual(drift["first"]["touchedSections"], [])
+        self.assertEqual(fidelity["benchmark"]["changedSections"], ["O2"])
 
 
 class VerifyAgreementWitnessTests(unittest.TestCase):
@@ -10154,6 +10484,182 @@ class EquationTagRecognitionTests(unittest.TestCase):
             any("absent from the revision" in reason
                 for reason in result["inadmissible"]["cites-nothing-real"]),
             result["inadmissible"])
+
+
+class AdoptedFindingTerminalStateTests(unittest.TestCase):
+    """An adopted finding is a terminal state every reader agrees on.
+
+    The lifecycle: a finding is admitted against a revision, its remedy is
+    validated, the deliberation publishes the remedy into a successor, and the
+    target is re-bound to that successor with the remedy now a declared
+    invariant. Four readers used to disagree about that end state:
+    `remediesWithoutValidation` still demanded the remedy test that `migration`
+    demands be retired, `admit` on the successor ruled the finding inadmissible
+    because its replaced text is gone (which is what adoption means), and the
+    compatibility audit still counted the notation the remedy introduced. The
+    audit could therefore never reach `ok` without deleting the evidence.
+
+    Neutral fixture: one numbered equation rewritten by the remedy.
+    """
+
+    BEFORE = (
+        "## 1\n\n$$\nc = d \\tag{1}\n$$\n\n"
+        "Throughout, the estimator is written E[x].\n"
+    )
+    AFTER = (
+        "## 1\n\n$$\nc = e + \\kappa \\tag{1}\n$$\n\n"
+        "Throughout, the estimator is written E[x].\n"
+    )
+    UNRECOGNIZED = (
+        "## 1\n\n$$\nc = something else \\tag{1}\n$$\n\n"
+        "Throughout, the estimator is written E[x].\n"
+    )
+
+    FINDINGS = (
+        "FINDINGS = [\n"
+        "    {\n"
+        "        'id': 'loose_term',\n"
+        "        'kind': 'loose-constant',\n"
+        "        'equations': ['1'],\n"
+        "        'remedy_equations': ['1'],\n"
+        "        'uses': ['E[x]'],\n"
+        "        'introduces': ['\\\\kappa'],\n"
+        "        'adoption': {'absent': 'c = d', 'expect': ['c = e + \\\\kappa']},\n"
+        "        'becomes_invariant': 'term_is_bounded',\n"
+        "        'status': 'theorem',\n"
+        "        'remedy': 'replace d with e + kappa',\n"
+        "    },\n"
+        "]\n"
+    )
+
+    MODULE = (
+        "__provenance__ = {\n"
+        "    'revision': 'draft-2.md',\n"
+        "    'sections': ['1'],\n"
+        "    'equations': ['1'],\n"
+        "    'invariants': ['term_is_bounded'],\n"
+        "}\n"
+    )
+
+    # The evidence stays; the remedy test is retired; the claim lives on as
+    # an invariant test.
+    TESTS = (
+        "def test_finding_loose_term():\n    pass\n\n"
+        "def test_term_is_bounded():\n    pass\n"
+    )
+
+    def _proposals(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "draft-1.md").write_text(self.BEFORE, encoding="utf-8")
+        (root / "draft-2.md").write_text(self.AFTER, encoding="utf-8")
+        (root / "draft-3.md").write_text(self.UNRECOGNIZED, encoding="utf-8")
+        previous = os.environ.get("IMPLEMENTATION_PROPOSALS")
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(root)
+
+        def restore():
+            if previous is None:
+                os.environ.pop("IMPLEMENTATION_PROPOSALS", None)
+            else:
+                os.environ["IMPLEMENTATION_PROPOSALS"] = previous
+
+        self.addCleanup(restore)
+        return root
+
+    def _box(self, tag: str) -> Path:
+        box = FORGE / "implementations" / f"_adopted_{tag}_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text("", encoding="utf-8")
+        (box / "src" / "Method" / "term.py").write_text(self.MODULE, encoding="utf-8")
+        (box / "tests" / "findings.py").write_text(self.FINDINGS, encoding="utf-8")
+        (box / "tests" / "test_invariants.py").write_text(self.TESTS, encoding="utf-8")
+        return box
+
+    def _admit(self, box, revision):
+        return impl.cmd_admit(
+            argparse.Namespace(target=str(box), name="Method", revision=revision))
+
+    def _verify(self, box, revision):
+        return impl.cmd_verify(
+            argparse.Namespace(target=str(box), name="Method", revision=revision))
+
+    def test_admit_on_the_successor_rules_the_finding_adopted(self):
+        """The marker's absence is adoption, not a finding that stopped
+        describing the document. The verdict is terminal and names where."""
+        self._proposals()
+        box = self._box("admit")
+        result = self._admit(box, "draft-2.md")
+
+        self.assertEqual(result["status"], "admitted", result)
+        self.assertEqual(result["inadmissible"], {})
+        self.assertEqual(result["introducesNotation"], {})
+        self.assertEqual(result["adopted"],
+                         {"loose_term": {"revision": "draft-2.md",
+                                         "matched": ["c = e + \\kappa"]}})
+        verdict = json.loads(
+            (box / "tests" / "admissibility.json").read_text(encoding="utf-8")
+        )["findings"]["loose_term"]
+        self.assertTrue(verdict["admissible"])
+        self.assertEqual(verdict["adopted"],
+                         {"revision": "draft-2.md", "matched": ["c = e + \\kappa"]})
+
+    def test_an_adopted_finding_reaches_audit_ok_and_keeps_its_evidence(self):
+        """The acceptance case: nothing deleted from findings.py, the remedy
+        test retired as `migration` demands, and the audit reads `ok`."""
+        self._proposals()
+        box = self._box("verify")
+        self._admit(box, "draft-2.md")
+        audit = self._verify(box, "draft-2.md")["audit"]
+
+        self.assertEqual(audit["remediesWithoutValidation"], [])
+        self.assertEqual(audit["findingsWithoutEvidence"], [])
+        self.assertEqual(audit["migration"]["status"], "clear", audit["migration"])
+        self.assertEqual(audit["compatibility"]["status"], "ok", audit["compatibility"])
+        self.assertEqual(audit["compatibility"]["introducesNotation"], [])
+        self.assertEqual(audit["adopted"],
+                         {"loose_term": {"revision": "draft-2.md",
+                                         "matched": ["c = e + \\kappa"]}})
+        self.assertEqual([f["id"] for f in audit["findings"]], ["loose_term"])
+        self.assertEqual(audit["status"], "ok", audit)
+
+    def test_an_open_finding_still_demands_its_remedy_test(self):
+        """The guard stays: on the revision that still carries the defect, a
+        missing remedy test is still reported and the audit is not `ok`."""
+        self._proposals()
+        box = self._box("open")
+        self._admit(box, "draft-1.md")
+        audit = self._verify(box, "draft-1.md")["audit"]
+
+        self.assertEqual(audit["remediesWithoutValidation"], ["loose_term"])
+        self.assertNotIn("adopted", audit)
+        self.assertEqual(audit["status"], "incomplete")
+
+    def test_an_open_finding_still_counts_the_notation_it_introduces(self):
+        self._proposals()
+        box = self._box("open-compat")
+        result = self._admit(box, "draft-1.md")
+
+        self.assertEqual(result["introducesNotation"], {"loose_term": ["\\kappa"]})
+        self.assertNotIn("adopted", result)
+        compatibility = self._verify(box, "draft-1.md")["audit"]["compatibility"]
+        self.assertEqual(compatibility["status"], "needs-deliberation")
+
+    def test_a_changed_but_unrecognized_locus_stays_inadmissible(self):
+        """Fail-closed: the replaced text is gone but no expected form took its
+        place. That is not adoption, and `admit` still refuses it."""
+        self._proposals()
+        box = self._box("unrecognized")
+        result = self._admit(box, "draft-3.md")
+
+        self.assertEqual(result["status"], "inadmissible")
+        self.assertIn("loose_term", result["inadmissible"])
+        self.assertNotIn("adopted", result)
+        audit = self._verify(box, "draft-3.md")["audit"]
+        self.assertEqual(audit["remediesWithoutValidation"], ["loose_term"])
+        self.assertNotEqual(audit["status"], "ok")
 
 
 class AdmissibilityDualShapeReadTests(unittest.TestCase):
@@ -10683,8 +11189,10 @@ class RngFixtureRequestedByTemplateTests(unittest.TestCase):
         generator the fixture seeds -- the ordinary, expected case."""
         box = self._box(
             "receives_the_shared_generator",
-            "    expected = np.random.default_rng(SEED)\n"
-            "    assert rng.integers(0, 10**9) == expected.integers(0, 10**9)\n")
+            # B6: the kit's `conftest.py` is backend-neutral, so `rng` is a
+            # seeded standard-library generator rather than numpy's.
+            "    assert type(rng).__module__ == 'random'\n"
+            "    assert rng.random() == type(rng)(SEED).random()\n")
         proc = self._run(box)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
@@ -14166,6 +14674,214 @@ class MaterializeAnchorTests(MaterializeCommandFixture, unittest.TestCase):
                          text_after_first)
 
 
+def _execute_notebook_in_place(path):
+    """What running a notebook in place does to its bytes, without a kernel:
+    every code cell gains an `execution_count` and outputs, the notebook's
+    metadata gains the kernel's own `language_info`, and the file is
+    re-serialized with a different indent. Cell sources and cell types are
+    untouched -- the property B7 rests on."""
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    count = 0
+    for cell in notebook["cells"]:
+        if cell.get("cell_type") == "code":
+            count += 1
+            cell["execution_count"] = count
+            cell["outputs"] = [{"output_type": "stream", "name": "stdout",
+                                "text": [f"ran cell {count}\n"]}]
+            cell.setdefault("metadata", {})["execution"] = {"iopub.status.idle": "x"}
+    notebook.setdefault("metadata", {})["language_info"] = {
+        "name": "python", "version": "3.12.3", "mimetype": "text/x-python"}
+    notebook["metadata"]["kernelspec"] = {
+        "display_name": "target venv", "language": "python", "name": "target"}
+    path.write_text(json.dumps(notebook, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8")
+
+
+class ExecutedKitNotebookIsNotDriftTests(MaterializeCommandFixture, unittest.TestCase):
+    """B7: executing a kit-placed notebook in place rewrites its bytes, and
+    `verify` read that as structure drift until `materialize --authored`
+    re-sealed it. A notebook's seal compares its source content -- each
+    cell's type and source, in order -- so outputs, execution counts and
+    kernel metadata never drift it. A changed cell source still drifts.
+    Receipts written before this change carry only the full-byte digest and
+    keep reading."""
+
+    def _notebook(self, box):
+        return box / self.NAME / "Notebooks" / "verification.ipynb"
+
+    def _strip_source_digest(self, box):
+        """The receipt a 0.13.0 materialize wrote: no source-content digest."""
+        receipt = impl.read_materialization_receipt(box)
+        for entry in receipt["entries"]:
+            entry.pop("writtenSourceSha256", None)
+        impl.write_materialization_receipt(box, receipt)
+
+    def test_a_fresh_stage_records_the_notebook_source_digest(self):
+        box = self._fully_materialized("_nb_records")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        entry = impl.receipt_entry(impl.read_materialization_receipt(box), rel)
+        self.assertEqual(entry["writtenSourceSha256"],
+                         impl.notebook_source_sha256(self._notebook(box).read_bytes()))
+        # Only notebooks carry it: every other destination is compared on
+        # its full bytes, exactly as before.
+        other = impl.receipt_entry(impl.read_materialization_receipt(box),
+                                   "tests/findings.py")
+        self.assertNotIn("writtenSourceSha256", other)
+
+    def test_an_executed_notebook_is_not_drift(self):
+        box = self._fully_materialized("_nb_executed")
+        before = self._notebook(box).read_bytes()
+        _execute_notebook_in_place(self._notebook(box))
+        self.assertNotEqual(before, self._notebook(box).read_bytes())
+
+        structure = self._verify(box)
+        self.assertNotIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                         structure["scaffoldDrift"])
+
+    def test_a_changed_cell_source_is_still_drift(self):
+        box = self._fully_materialized("_nb_source")
+        path = self._notebook(box)
+        _execute_notebook_in_place(path)
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        code = next(c for c in notebook["cells"] if c["cell_type"] == "code")
+        code["source"] = list(code["source"]) + ["print('edited')\n"]
+        path.write_text(json.dumps(notebook, indent=1) + "\n", encoding="utf-8")
+
+        structure = self._verify(box)
+        self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                      structure["scaffoldDrift"])
+
+    def test_a_changed_cell_type_is_still_drift(self):
+        box = self._fully_materialized("_nb_type")
+        path = self._notebook(box)
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        markdown = next(c for c in notebook["cells"] if c["cell_type"] == "markdown")
+        markdown["cell_type"] = "raw"
+        path.write_text(json.dumps(notebook, indent=1) + "\n", encoding="utf-8")
+
+        structure = self._verify(box)
+        self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                      structure["scaffoldDrift"])
+
+    def test_verify_reports_an_unreadable_notebook_instead_of_crashing(self):
+        """X9: a file under `<Name>/Notebooks/` that is not a JSON notebook
+        crashed `verify` with a traceback. It is a finding, not a crash, and
+        it stays fail-closed: the notebook reads `unreadable`, never sealed,
+        never current, and both the structure and validation verdicts drift."""
+        box = self._fully_materialized("_nb_verify_unreadable")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        for broken in ("{ not json", "[]", '"a string"', "\xff\xfe"):
+            with self.subTest(broken=broken):
+                self._notebook(box).write_bytes(broken.encode("latin-1"))
+                payload, code, proc = self._run_cli(
+                    "verify", "--target", str(box), "--name", self.NAME)
+                self.assertEqual(code, 0, proc.stderr[-2000:])
+                self.assertIsNotNone(payload, proc.stderr[-2000:])
+                self.assertIn(rel, payload["structure"]["scaffoldDrift"])
+                notebooks = payload["validation"]["notebooks"]
+                report = next(r for r in notebooks["reports"] if r["notebook"] == rel)
+                self.assertEqual(report["status"], "unreadable")
+                self.assertIs(report["sealed"], False)
+                self.assertIsNone(report["sourcesMatch"])
+                self.assertIn(rel, notebooks["unsealed"])
+                self.assertEqual(notebooks["status"], "drift")
+                self.assertEqual(payload["validation"]["status"], "incomplete")
+
+    def test_an_unreadable_notebook_is_drift(self):
+        """Fail-closed: no source content can be read, so only the full
+        bytes count. Read through the drift reader directly; the whole
+        `verify` payload is pinned by the test above."""
+        box = self._fully_materialized("_nb_unreadable")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        for broken in ("{ not json", "[]", '{"cells": "x"}',
+                       '{"cells": [{"source": "s"}]}'):
+            with self.subTest(broken=broken):
+                self.assertIsNone(impl.notebook_source_sha256(broken.encode()))
+                self._notebook(box).write_text(broken, encoding="utf-8")
+                self.assertIn(rel, impl._kit_structure_gaps(box, [rel])["drift"])
+
+    def test_a_legacy_receipt_keeps_its_full_byte_reading(self):
+        box = self._fully_materialized("_nb_legacy_bytes")
+        self._strip_source_digest(box)
+        structure = self._verify(box)
+        self.assertEqual(structure["scaffoldDrift"], [])
+
+    def test_a_legacy_engine_receipt_reads_an_executed_notebook_as_sealed(self):
+        """A 0.13.0 `materialized` entry names the kit body it wrote, and the
+        engine can rebuild that body and check it against `writtenSha256`
+        before trusting its source content."""
+        box = self._fully_materialized("_nb_legacy_exec")
+        self._strip_source_digest(box)
+        _execute_notebook_in_place(self._notebook(box))
+        structure = self._verify(box)
+        self.assertNotIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                         structure["scaffoldDrift"])
+
+    def test_a_legacy_engine_receipt_still_drifts_on_a_source_edit(self):
+        box = self._fully_materialized("_nb_legacy_edit")
+        self._strip_source_digest(box)
+        path = self._notebook(box)
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        code = next(c for c in notebook["cells"] if c["cell_type"] == "code")
+        code["source"] = ["print('edited')\n"]
+        path.write_text(json.dumps(notebook, indent=1) + "\n", encoding="utf-8")
+        structure = self._verify(box)
+        self.assertIn(f"{self.NAME}/Notebooks/verification.ipynb",
+                      structure["scaffoldDrift"])
+
+    def test_a_legacy_entry_whose_kit_body_cannot_be_rebuilt_reads_bytes_only(self):
+        """Fail-closed: when the rebuilt body does not hash to `writtenSha256`,
+        nothing about the written source is known, and only the full bytes
+        count. The case it guards: the entry sealed bytes from an older kit,
+        and the file on disk was later edited, unsealed, to today's kit
+        source. Today's rebuilt body matches that edit; only its hash check
+        tells the two apart."""
+        box = self._fully_materialized("_nb_legacy_unknown")
+        self._strip_source_digest(box)
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        receipt = impl.read_materialization_receipt(box)
+        entry = impl.receipt_entry(receipt, rel)
+        older = json.loads(self._notebook(box).read_text(encoding="utf-8"))
+        older["cells"].append({"cell_type": "code", "execution_count": None,
+                               "metadata": {}, "outputs": [],
+                               "source": ["print('an older kit cell')\n"]})
+        entry["writtenSha256"] = hashlib.sha256(
+            (json.dumps(older, indent=1) + "\n").encode("utf-8")).hexdigest()
+        impl.write_materialization_receipt(box, receipt)
+        _execute_notebook_in_place(self._notebook(box))
+        structure = self._verify(box)
+        self.assertIn(rel, structure["scaffoldDrift"])
+
+    def test_authored_records_the_source_digest_so_a_later_run_is_not_drift(self):
+        box = self._fully_materialized("_nb_authored")
+        rel = f"{self.NAME}/Notebooks/verification.ipynb"
+        self._strip_source_digest(box)
+        receipt = impl.read_materialization_receipt(box)
+        impl.receipt_entry(receipt, rel)["kind"] = "authored"
+        impl.write_materialization_receipt(box, receipt)
+        _execute_notebook_in_place(self._notebook(box))
+        self.assertIn(rel, self._verify(box)["scaffoldDrift"])
+
+        payload, code, proc = self._run_cli(
+            "materialize", "--target", str(box), "--name", self.NAME,
+            "--authored", rel)
+        self.assertEqual(code, 0, proc.stderr)
+        entry = impl.receipt_entry(impl.read_materialization_receipt(box), rel)
+        self.assertEqual(entry["writtenSourceSha256"],
+                         impl.notebook_source_sha256(self._notebook(box).read_bytes()))
+        _execute_notebook_in_place(self._notebook(box))
+        self.assertNotIn(rel, self._verify(box)["scaffoldDrift"])
+
+    def test_an_executed_probe_notebook_is_not_harness_drift(self):
+        box = self._fully_materialized_all_stages("_nb_probe")
+        rel = f"{self.NAME}/Notebooks/probe.ipynb"
+        self.assertEqual(self._verify(box)["harnessDrift"], [])
+        _execute_notebook_in_place(box / rel)
+        self.assertNotIn(rel, self._verify(box)["harnessDrift"])
+        self._strip_source_digest(box)
+        self.assertNotIn(rel, self._verify(box)["harnessDrift"])
+
+
 class MaterializeVerifyScaffoldDriftTests(MaterializeCommandFixture, unittest.TestCase):
     """`SCAFFOLD_DRIFT` / `UNRECORDED_SCAFFOLD`, scoped to the eleven scaffold
     destinations, reported through `structure` and never raised -- the same
@@ -14327,6 +15043,106 @@ class MaterializeVerifyScaffoldDriftTests(MaterializeCommandFixture, unittest.Te
         self.assertEqual(structure["scaffoldGaps"], [])
         self.assertEqual(structure["scaffoldDrift"], [])
         self.assertEqual(structure["unrecordedScaffold"], [])
+
+
+class ScaffoldSealProvenanceTests(MaterializeCommandFixture, unittest.TestCase):
+    """A freshly scaffolded target passes its own `verify`'s provenance read.
+
+    `materialize --stage scaffold` writes the seal (`report_digest.py`) into
+    `src/<Package>/`, and the kit source says why it declares no
+    `__provenance__`: it implements no claim. `verify` scanned every module of
+    the package and reported the engine's own seal under `missingProvenance`,
+    so `fidelity` read `drift` on a target nobody had touched. Fabricating a
+    provenance for it would be the wrong fix.
+
+    Exempt only while the file is still the kit's: its path is a scaffold
+    destination with a kit source, and its bytes are either the kit's own
+    (after the scaffold's substitutions) or the bytes a `materialized` receipt
+    entry recorded writing there. A modified copy reports, and so does an
+    adopted one -- adoption records who wrote the bytes, not that the kit did.
+    """
+
+    def _fidelity(self, box):
+        proposals = Path(tempfile.mkdtemp(prefix="pp-seal-provenance-"))
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box),
+             "--name", self.NAME, "--revision", "r01.md"],
+            capture_output=True, text=True, cwd=FORGE,
+            env={**os.environ, "IMPLEMENTATION_PROPOSALS": str(proposals)})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)["fidelity"]
+
+    def _seal(self, box):
+        return box / "src" / self.PACKAGE / "report_digest.py"
+
+    def _rewrite_receipt(self, box, **fields):
+        path = box / impl.MATERIALIZATION_RECEIPT
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        entry = impl.receipt_entry(
+            receipt, f"src/{self.PACKAGE}/report_digest.py")
+        entry.update(fields)
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    def test_a_fresh_scaffold_reports_no_missing_provenance(self):
+        box = self._fully_materialized("_seal_fresh")
+        self.assertTrue(self._seal(box).is_file())
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["missingProvenance"], [])
+        self.assertNotEqual(fidelity["status"], "drift")
+
+    def test_a_modified_seal_still_reports(self):
+        box = self._fully_materialized("_seal_edited")
+        seal = self._seal(box)
+        seal.write_text(seal.read_text(encoding="utf-8") + "\nEXTRA = 1\n",
+                        encoding="utf-8")
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["missingProvenance"],
+                         [f"src/{self.PACKAGE}/report_digest.py"])
+        self.assertEqual(fidelity["status"], "drift")
+
+    def test_bytes_an_earlier_kit_wrote_are_still_the_kits(self):
+        """A target scaffolded by an earlier release carries that release's
+        seal, which need not hash-equal today's kit source. The receipt's own
+        `writtenSha256` for a `materialized` entry is what the engine wrote
+        there, so those bytes stay exempt."""
+        box = self._fully_materialized("_seal_older")
+        seal = self._seal(box)
+        older = seal.read_text(encoding="utf-8") + "\n# an earlier kit\n"
+        seal.write_text(older, encoding="utf-8")
+        self._rewrite_receipt(
+            box, writtenSha256=hashlib.sha256(seal.read_bytes()).hexdigest())
+        self.assertEqual(self._fidelity(box)["missingProvenance"], [])
+
+    def test_the_kits_bytes_need_no_receipt(self):
+        """A seal byte-identical to today's kit source is the kit's even with
+        no receipt entry at all -- a hand copy of the kit, or a receipt lost
+        to a clean checkout (`.implementation/` is not committed)."""
+        box = self._fully_materialized("_seal_noreceipt")
+        (box / impl.MATERIALIZATION_RECEIPT).unlink()
+        self.assertEqual(self._fidelity(box)["missingProvenance"], [])
+
+    def test_an_adopted_seal_is_not_the_kits(self):
+        box = self._fully_materialized("_seal_adopted")
+        seal = self._seal(box)
+        seal.write_text(seal.read_text(encoding="utf-8") + "\n# mine\n",
+                        encoding="utf-8")
+        self._rewrite_receipt(
+            box, kind="adopted",
+            writtenSha256=hashlib.sha256(seal.read_bytes()).hexdigest())
+        self.assertEqual(self._fidelity(box)["missingProvenance"],
+                         [f"src/{self.PACKAGE}/report_digest.py"])
+
+    def test_the_exemption_is_derived_from_the_scaffold_table(self):
+        """No hand list: every scaffold destination with a kit source under
+        the package is the set, and nothing else in the package is in it."""
+        owned = impl.kit_owned_package_files(self.NAME)
+        self.assertEqual(owned, {
+            d for d in impl.scaffold_destinations(self.NAME)
+            if d.startswith(f"src/{self.PACKAGE}/")
+            and impl.scaffold_kit_source(d, self.NAME) is not None})
+        self.assertIn(f"src/{self.PACKAGE}/report_digest.py", owned)
+        self.assertNotIn(f"src/{self.PACKAGE}/__init__.py", owned)
 
 
 class MaterializeAuthoredTests(MaterializeCommandFixture, unittest.TestCase):
@@ -24110,14 +24926,18 @@ class SettleCommandTests(unittest.TestCase):
         a holder this call itself just created. Design D5: creation is a
         SEPARATE write from the item placement -- the scaffold lands on
         disk (with zero items) even though this call's own placement then
-        refuses; nothing this refusal leaves behind is a checklist item."""
+        refuses; nothing this refusal leaves behind is a checklist item.
+
+        Re-anchored by X17 (`cross-skill-consistency`): the heading is now
+        searched in the scaffold's bytes before the scaffold is written, so
+        this refusal leaves no holder at all -- a refused command writes
+        nothing."""
         box = self._box()
         self._discuss(box, "record", answer="Yes.")
         proc = self._settle(box, text="first agreement", under="## Nope")
         self.assertEqual(proc.returncode, 2, proc.stdout)
         self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_HEADING_ABSENT")
-        data = (box / "Method" / "AGREED.md").read_bytes()
-        self.assertEqual(data, impl.HOLDER_SCAFFOLD.encode("utf-8"))
+        self.assertFalse((box / "Method" / "AGREED.md").exists())
 
     def test_settle_refuses_heading_ambiguous(self):
         box = self._box()
@@ -24319,9 +25139,12 @@ class SettleCommandTests(unittest.TestCase):
         self.assertEqual(result["status"], "written")
 
         after = (box / "Method" / "AGREED.md").read_text(encoding="utf-8")
+        # B4 (`cross-skill-consistency`): appended after the section's
+        # last item, so the section reads oldest first.
         expected = before.replace(
-            "## Ladder\n\n",
-            "## Ladder\n\n- [ ] the free scalar stays at its neutral\n")
+            "- [x] an unrelated settled item\n",
+            "- [x] an unrelated settled item\n"
+            "- [ ] the free scalar stays at its neutral\n")
         self.assertEqual(after, expected)
 
     def test_settle_never_writes_a_ticked_mark(self):
@@ -25468,13 +26291,20 @@ class CreateOnAbsentMutationTests(unittest.TestCase):
             self.assertFalse((root / "Method").exists())
 
 
+#: The shipped engine's bytes at import, before any test ran (X10).
+_REAL_ENGINE_SHA256 = hashlib.sha256(ENGINE.read_bytes()).hexdigest()
+
+
 class SettleHeadingAbsentMutationTests(unittest.TestCase):
     """`implementation-declared-holder` spec, "`SETTLE_HEADING_ABSENT` Still
     Fires For A Heading The Declaration Does Not Carry" -- reachability
-    proof (tasks.md 3.8b). The shipped engine file is mutated in place and
-    restored via `addCleanup` (the accepted "single-file git stash" shape),
-    because `cmd_settle` calls `resolve_target`, which requires the real
-    `WORKSPACE`/`FORGE_ROOT` -- a scratch-copied tree computes a bogus one.
+    proof (tasks.md 3.8b). The mutation runs in a scratch forge
+    (`scratch_forge.build`): `cmd_settle` calls `resolve_target`, which
+    derives `WORKSPACE`/`FORGE_ROOT` from the engine's own path, so the copy
+    keeps the real nesting and the target lives under its
+    `implementations/`. It used to be written into the shipped engine and
+    restored by a cleanup, which every other test file in a parallel run
+    then read mid-mutation (X10).
     """
 
     ENGINE = (FORGE / "skills" / "_core" / "implementation" / "engine"
@@ -25482,17 +26312,19 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
     CLI = (FORGE / "skills" / "proposal-implementation" / "scripts"
            / "implementation_cli.py")
 
-    def _mutate_shipped_engine(self, mutate) -> None:
+    PROFILE = FORGE / "skills" / "proposal-implementation" / "impl_profile.py"
+
+    def _mutate_engine_in_scratch_forge(self, mutate) -> None:
         original = self.ENGINE.read_text(encoding="utf-8")
         mutated = mutate(original)
         self.assertNotEqual(mutated, original,
                             "the mutation string was not found -- the anchor "
                             "drifted from the shipped source")
-        self.ENGINE.write_text(mutated, encoding="utf-8")
-        self.addCleanup(self.ENGINE.write_text, original, encoding="utf-8")
+        self.forge, self.cli = scratch_forge.build(
+            self, mutated, self.CLI, prefix="settle-heading-forge-")
 
     def _box(self):
-        box = FORGE / "implementations" / f"_e2e_heading_mutation_{os.getpid()}_{id(self)}"
+        box = self.forge / "implementations" / f"_e2e_heading_mutation_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
         (box / "src" / "Method_Benchmark").mkdir(parents=True)
@@ -25504,8 +26336,13 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
         return box
 
     def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(self.CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE)
+        # The scratch launcher has no profile beside it; this skill's own
+        # profile is named explicitly, as the launcher would default to it.
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.PROFILE)
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge,
+                              env=env)
 
     def test_inverting_the_settle_heading_absent_guard_lets_the_write_proceed(self):
         def mutate(source: str) -> str:
@@ -25519,13 +26356,18 @@ class SettleHeadingAbsentMutationTests(unittest.TestCase):
             replacement = (
                 '        if not candidates:\n'
                 "            holder_path = target / holders[0]\n"
-                "            holder_data = holder_path.read_bytes()\n"
+                "            holder_data = read_holder(holder_path)\n"
                 "            candidates = [(holder_path, holder_data,\n"
                 '                          {"start": len(holder_data), '
                 '"end": len(holder_data)})]\n')
             return source.replace(anchor, replacement, 1)
 
-        self._mutate_shipped_engine(mutate)
+        self._mutate_engine_in_scratch_forge(mutate)
+        # X10: every other test file in a parallel run reads the shipped
+        # engine, so the mutation must never be written there.
+        self.assertEqual(hashlib.sha256(self.ENGINE.read_bytes()).hexdigest(),
+                         _REAL_ENGINE_SHA256,
+                         "the shipped engine was rewritten during a mutation test")
         box = self._box()
         discuss_proc = self.run_cli(
             "discuss", "--target", str(box), "--name", "Method",
@@ -25702,16 +26544,21 @@ class SettleReverseCommandTests(unittest.TestCase):
 
     # --- where the entry would even go ---
 
-    def test_reverse_refuses_heading_absent(self):
+    def test_reverse_opens_the_heading_when_absent(self):
+        """B4 (`cross-skill-consistency`): with no `## Reversed` heading the
+        first reversal opens one at the end of the file, in the same write
+        as the deletion, where it used to refuse `SETTLE_HEADING_ABSENT`."""
         box = self._box()
         (box / "Method" / "AGREED.md").write_text(
             "# Agreed\n\n## Ladder\n\n- [ ] a retired agreement\n",
             encoding="utf-8")
         proc = self._settle(box)
-        self.assertEqual(proc.returncode, 2, proc.stdout)
-        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_HEADING_ABSENT")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
         after = (box / "Method" / "AGREED.md").read_text(encoding="utf-8")
-        self.assertIn("- [ ] a retired agreement", after)
+        self.assertNotIn("- [ ] a retired agreement", after)
+        self.assertTrue(after.startswith("# Agreed\n\n## Ladder\n\n\n## Reversed\n\n"
+                                         '**"a retired agreement"** '), after)
+        self.assertEqual(after.count("## Reversed"), 1)
 
     def test_reverse_refuses_heading_ambiguous(self):
         box = self._box()
@@ -29264,7 +30111,10 @@ class CloseCommandTests(unittest.TestCase):
         proposals = self._proposals()
 
         with self.subTest("absent"):
-            box, _ = self._box()
+            # A job folder declares a flow, so a position is owed; a target
+            # declaring none closes without one (CloseWithoutDeclaredFlowTests).
+            box, commit = self._box()
+            self._write_job_folder(box, commit)
             proc = self.run_cli("close", "--target", str(box), "--name", "Method",
                                 "--revision", self.PROPOSAL_REVISION, "--session", "s1",
                                 proposals=proposals)
@@ -30675,6 +31525,73 @@ class StepVerdictsTests(unittest.TestCase):
         self.assertIsNone(impl._step_verdicts(root, "Method")["run_suite"])
 
 
+class UnmeasuredStepNamesItsScopeTests(unittest.TestCase):
+    """B11: an `@step` witness is measured against `suite_digest`, which covers
+    every `.py` under `src/` and `tests/` plus the environment manifests. The
+    engine cannot know what a step's callable executes (it may run the suite,
+    read test files or spawn anything), so the scope is not narrowed; it is
+    stated where the reader meets an unmeasured step: on the item itself,
+    with what clears it."""
+
+    def _state(self, verdicts):
+        box = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "Method").mkdir()
+        (box / "Method" / "AGREED.md").write_text(
+            "<!-- position revision=r01.md sha256=" + "a" * 64
+            + " derivedAt=2026-08-27T00:00:00Z session=s0 target=pilot -->\n"
+            "- [x] 1. Ran once. `@step first`\n"
+            "- [ ] 2. Never ran. `@step second`\n"
+            "- [ ] 3. A notebook. `@notebook Notebooks/one.ipynb`\n"
+            "<!-- /position -->\n", encoding="utf-8")
+        return impl.position_state(box, "Method", {"stepVerdicts": verdicts},
+                                   None, None, impl._document_extra_sources(None))
+
+    def test_an_unmeasured_step_names_the_digest_scope_and_the_rerun(self):
+        state = self._state({"first": None})
+        by_ordinal = {e["ordinal"]: e for e in state["unmeasured"]}
+        first = by_ordinal[1]["reason"]
+        self.assertIn("src/", first)
+        self.assertIn("tests/", first)
+        self.assertIn("--step first --session", first)
+        self.assertEqual(by_ordinal[1]["digestScope"], impl.STEP_DIGEST_SCOPE)
+        second = by_ordinal[2]["reason"]
+        self.assertIn("--step second --session", second)
+        self.assertNotEqual(first, second,
+                            "a step that ran and one that never did are "
+                            "different facts and must read differently")
+
+    def test_only_step_witnesses_carry_it(self):
+        state = self._state({"first": None})
+        notebook = next(e for e in state["unmeasured"] if e["ordinal"] == 3)
+        self.assertNotIn("reason", notebook)
+        self.assertNotIn("digestScope", notebook)
+        sequence = {e["ordinal"]: e for e in state["sequence"]}
+        self.assertNotIn("reason", sequence[1])
+
+    def test_a_measured_step_carries_no_reason(self):
+        state = self._state({"first": True, "second": False})
+        self.assertEqual([e["ordinal"] for e in state["unmeasured"]], [3])
+
+    def test_the_scope_is_what_suite_digest_actually_walks(self):
+        """The stated scope is checked against the digest, not restated: a
+        test-only edit moves it (so the statement that it does is true), and
+        a file outside `src/` and `tests/` does not."""
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "src").mkdir()
+        (root / "tests").mkdir()
+        (root / "src" / "m.py").write_text("X = 1\n", encoding="utf-8")
+        (root / "tests" / "test_m.py").write_text("def test(): pass\n", encoding="utf-8")
+        before = impl.suite_digest(root)
+        (root / "notes.py").write_text("Y = 2\n", encoding="utf-8")
+        self.assertEqual(impl.suite_digest(root), before)
+        (root / "tests" / "test_m.py").write_text("def test(): assert 1\n", encoding="utf-8")
+        self.assertNotEqual(impl.suite_digest(root), before)
+        for fragment in ("src/", "tests/"):
+            self.assertIn(fragment, impl.STEP_DIGEST_SCOPE)
+
+
 class StepVerdictsParityTests(unittest.TestCase):
     """Spec "Step Verdicts Are Assembled By The Caller", design "All three
     evidence builders share one fold": `_position_write_evidence`'s,
@@ -31816,10 +32733,13 @@ class ShardlessRungDiagnosisTests(unittest.TestCase):
                  {"ordinal": 2, "mark": " ", "text": "t", "derived": None,
                   "witness": {"kind": "shard", "operand": "s1",
                               "twostate": True}}]
+        # B8 (`cross-skill-consistency`): with no leveled item, attainment is
+        # the position's own aim, so the aim is part of the evidence a gate
+        # reads (`position_state` sets it from the header).
         verdict = self._verdict(
             items, shards_declared=False,
             evidence={"smokeReady": {"job": True}, "shardsArrived": None,
-                      "shardsCurrent": None})
+                      "shardsCurrent": None, "targetLevel": "top"})
         self.assertTrue(verdict["available"], verdict)
 
     def test_the_refusal_gate_raises_no_longer_claims_the_item_is_ticked(self):
@@ -32024,16 +32944,33 @@ class UnreachableLadderTests(unittest.TestCase):
     def test_dropping_the_level_marker_is_the_other_exit(self):
         """The second exit, proven the same way: the identical four-rung
         ladder with the rehearsal recorded two-state -- the grammar's own
-        default -- launches."""
+        default -- launches once the position aims at the launch rung (B8,
+        `cross-skill-consistency`: with no leveled item attainment is the
+        aim, never the ladder's top)."""
         items = [{"ordinal": 1, "mark": "x", "text": "t",
                   "witness": {"kind": "rehearsal", "operand": "job",
                               "twostate": True}}]
-        evidence = {"levels": self.LADDER, "smokeReady": {"job": True}}
+        evidence = {"levels": self.LADDER, "smokeReady": {"job": True},
+                    "targetLevel": self.LADDER[-2]}
         verdict = impl_availability.launch_available(
             status="ok", unbacked=[], disagreements=[], sequence=items,
             ready=True, job="job", shards_declared=True, levels=self.LADDER,
             attained_level=impl_position.attained_level(items, evidence))
         self.assertTrue(verdict["available"], verdict)
+
+    def test_an_all_two_state_aim_below_the_launch_rung_does_not_launch(self):
+        """B8: aimed at the floor, a sequence with no leveled item attains
+        the floor, not the top, so the launch threshold refuses."""
+        items = [{"ordinal": 1, "mark": "x", "text": "t",
+                  "witness": {"kind": "rehearsal", "operand": "job",
+                              "twostate": True}}]
+        evidence = {"levels": self.LADDER, "smokeReady": {"job": True},
+                    "targetLevel": self.LADDER[0]}
+        verdict = impl_availability.launch_available(
+            status="ok", unbacked=[], disagreements=[], sequence=items,
+            ready=True, job="job", shards_declared=True, levels=self.LADDER,
+            attained_level=impl_position.attained_level(items, evidence))
+        self.assertEqual(verdict["code"], "RUNG_NOT_ATTAINED", verdict)
 
     # --- what a reader is handed -------------------------------------------
 
@@ -33636,6 +34573,19 @@ _ENGLISH_COUNTS = {
     # work-state count (71) is untouched, and the total moves 121 -> 124.
     53: "Fifty-three",
     124: "One hundred and twenty-four",
+    # The unwitnessed closing act (`settle --done --unwitnessed --reason`):
+    # two new reachable invocation-defect codes, `SETTLE_UNWITNESSED_CONFLICT`
+    # and `SETTLE_WITNESS_PRESENT`, and one work-state code,
+    # `SETTLE_REASON_REQUIRED` -- 53 -> 55, 71 -> 72, 124 -> 127, measured by
+    # running the derivation, never predicted.
+    72: "Seventy-two",
+    127: "One hundred and twenty-seven",
+    # `cross-skill-consistency` (C9): `FINDINGS_DECLARED` (admit --no-findings with findings declared), one invocation-defect code -- 55 -> 56, 127 -> 128, measured by running the derivation.
+    56: "Fifty-six",
+    128: "One hundred and twenty-eight",
+    # `cross-skill-consistency` (C11): `MODULE_STAGE_MISMATCH` and `MODULE_NAME_INVALID` (materialize --module), two invocation-defect codes -- 56 -> 58, 128 -> 130, measured by running the derivation.
+    58: "Fifty-eight",
+    130: "One hundred and thirty",
 }
 
 
@@ -34049,9 +34999,12 @@ class GatingRefusalRosterTests(unittest.TestCase):
         plus `SETTLE_REPLACE_CONFLICT`, `SETTLE_NOTHING_TO_REPLACE` and
         `SETTLE_WITNESS_UNCHANGED`, all three raised inside `cmd_settle`'s
         own `--attach` branch -- measured here at exactly +3, never
-        predicted.
+        predicted. One hundred and twenty-seven (the unwitnessed closing
+        act) is that reading plus `SETTLE_UNWITNESSED_CONFLICT`,
+        `SETTLE_REASON_REQUIRED` and `SETTLE_WITNESS_PRESENT`, all three
+        raised inside `cmd_settle` -- measured here at exactly +3.
         """
-        self.assertEqual(len(reachable_refusal_codes()), 124)
+        self.assertEqual(len(reachable_refusal_codes()), 130)
 
     def test_agree_joins_gating_commands_unconditionally_never_this_profiles_own_commands(self):
         """`the-agreement-nothing-computes` (Slice D, design.md D9, tasks.md
@@ -34365,7 +35318,9 @@ class RefusalPayloadPublishesItsExitTests(unittest.TestCase):
         return CloseCommandTests.run_cli(self, *args, proposals=proposals)
 
     def test_a_work_state_refusal_carries_its_resolution(self):
-        box, _ = self._box()
+        # A job folder declares a flow, so close owes a position here.
+        box, commit = self._box()
+        self._write_job_folder(box, commit)
         proc = self.run_cli("close", "--target", str(box), "--name", "Method",
                             "--revision", CloseCommandTests.PROPOSAL_REVISION,
                             "--session", "s1", proposals=self._proposals())
@@ -35653,11 +36608,17 @@ class PilotGatesTheDeclaredScaleTests(unittest.TestCase):
                 "}\n" + (self.STEPS if steps is None else steps))
 
     def build(self, suffix, *, ran=(), notebook_executed=False,
-              notebook_current=True, steps=None, notebooks=("one.ipynb",)):
+              notebook_current=True, steps=None, notebooks=("one.ipynb",),
+              comparable=True):
+        # `comparable=False` writes neither the prior package nor the
+        # benchmark package, so nothing under `src/` is a baseline
+        # (`PilotLadderWithoutBaselinesTests`).
         box = FORGE / "implementations" / f"_pilotgate_{suffix}_{os.getpid()}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
-        for directory in ("src/Method", "src/Method_Benchmark", "src/Prior",
-                          "Method/Notebooks"):
+        directories = (("src/Method", "src/Method_Benchmark", "src/Prior",
+                        "Method/Notebooks") if comparable
+                       else ("src/Method", "Method/Notebooks"))
+        for directory in directories:
             (box / directory).mkdir(parents=True)
         subprocess.run(["git", "init", "-q", str(box)], check=True,
                        capture_output=True)
@@ -35669,11 +36630,13 @@ class PilotGatesTheDeclaredScaleTests(unittest.TestCase):
         (box / "src/Method/never_called.py").write_text(
             _module("r01.md", ["3"], ["12"], imports="import torch\n"),
             encoding="utf-8")
-        (box / "src/Prior/model.py").write_text("import torch\n", encoding="utf-8")
-        (box / "src/Method_Benchmark/__init__.py").write_text(
-            self._declaration(), encoding="utf-8")
-        (box / "src/Method_Benchmark/wiring.py").write_text(
-            self.WIRING, encoding="utf-8")
+        if comparable:
+            (box / "src/Prior/model.py").write_text("import torch\n",
+                                                    encoding="utf-8")
+            (box / "src/Method_Benchmark/__init__.py").write_text(
+                self._declaration(), encoding="utf-8")
+            (box / "src/Method_Benchmark/wiring.py").write_text(
+                self.WIRING, encoding="utf-8")
 
         # Written after every file under `src/` and before the notebook, so
         # the stamp is the digest of the sources as they finally stand.
@@ -35946,6 +36909,94 @@ class PilotGatesTheDeclaredScaleTests(unittest.TestCase):
         shutil.rmtree(box, ignore_errors=True)
         self.assertEqual(
             list((FORGE / "implementations").glob("_pilotgate_cleanup_*")), [])
+
+
+class PilotLadderWithoutBaselinesTests(unittest.TestCase):
+    """Comparability does not gate the declared flow.
+
+    A target whose comparison arms live inside its own package has no separate
+    prior-work package under `src/`, so `previous_implementations` finds
+    nothing and the ladder starts at `nothing-to-compare`. That answer is about
+    the comparison only. The declared flow still owes its pilot and, once the
+    pilot has finished, one placement decision per step -- and before this
+    class existed neither rung was ever reached on such a target, so neither
+    question was ever published.
+
+    Built from `PilotGatesTheDeclaredScaleTests`' own fixture with neither
+    the prior package nor the benchmark package written, and the steps declared inside
+    the method's own package: the only difference from the fixture that
+    already reaches both rungs is that nothing else is comparable.
+    """
+
+    STEPS = PilotGatesTheDeclaredScaleTests.STEPS.replace(
+        "Method_Benchmark.steps", "Method.steps")
+
+    def build(self, suffix, **kwargs):
+        return PilotGatesTheDeclaredScaleTests.build(
+            self, f"nobase_{suffix}", steps=self.STEPS, comparable=False,
+            **kwargs)
+
+    def probe(self, box):
+        return PilotGatesTheDeclaredScaleTests.probe(self, box)
+
+    def answer(self, box, entry):
+        return PilotGatesTheDeclaredScaleTests.answer(self, box, entry)
+
+    # `PilotGatesTheDeclaredScaleTests.build` reads these off `self`.
+    SEARCH = PilotGatesTheDeclaredScaleTests.SEARCH
+    WIRING = PilotGatesTheDeclaredScaleTests.WIRING
+    SEQUENCE = PilotGatesTheDeclaredScaleTests.SEQUENCE
+    _declaration = PilotGatesTheDeclaredScaleTests._declaration
+    _implementation = PilotGatesTheDeclaredScaleTests._implementation
+
+    def test_an_unfinished_pilot_is_asked_for_with_nothing_to_compare(self):
+        box = self.build("short", ran=("first",), notebook_executed=True)
+        probe = self.probe(box)
+        self.assertEqual(probe["baselines"], [])
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "incomplete")
+        self.assertEqual(probe["nextStep"], "pilot-first")
+        question = probe["resolve"]["question"]
+        self.assertIn("'second'", question)
+        self.assertIn("deliberately deferred", question)
+        self.assertEqual([entry["question"] for entry in probe["toDiscuss"]],
+                         [question])
+
+    def test_a_finished_pilot_publishes_every_placement_question(self):
+        box = self.build("complete", ran=("first", "second", "aside"),
+                         notebook_executed=True)
+        probe = self.probe(box)
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "complete")
+        self.assertEqual(probe["nextStep"], "pilot-decisions")
+        asked = [entry["question"] for entry in probe["toDiscuss"]]
+        self.assertEqual(len(asked), 4, asked)
+        for index, step in enumerate(("first", "second", "aside"), start=1):
+            self.assertIn(f"'{step}'", asked[index])
+            self.assertIn("on a remote worker, or locally", asked[index])
+
+    def test_the_placement_questions_are_answerable_and_then_retire(self):
+        """End to end through the published commands: each question opens a
+        `discuss` bucket the operator answers, and once every step is decided
+        the ladder returns to the comparison's own terminal answer -- the
+        pilot rungs gate nothing beyond the flow they describe."""
+        box = self.build("decided", ran=("first", "second", "aside"),
+                         notebook_executed=True)
+        probe = self.probe(box)
+        for entry in probe["toDiscuss"][1:]:
+            self.answer(box, entry)
+        final = self.probe(box)
+        self.assertEqual(final["nextStep"], "nothing-to-compare")
+        self.assertEqual(final["toDiscuss"], [])
+
+    def test_a_target_that_declares_no_flow_still_has_nothing_to_compare(self):
+        box = self.build("noflow")
+        (box / "src/Method/__init__.py").write_text(
+            self._implementation(steps=""), encoding="utf-8")
+        probe = self.probe(box)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "undeclared")
+        self.assertEqual(probe["nextStep"], "nothing-to-compare")
+        self.assertIsNone(probe["resolve"])
 
 
 class ReportDriftHoldsTheDecisionPassTests(unittest.TestCase):
@@ -37954,3 +39005,806 @@ class SkillRootValueTests(unittest.TestCase):
                 source = impl.scaffold_kit_source(destination, name)
                 if source is not None:
                     self.assertFalse(source.exists(), destination)
+
+
+
+class CloseWithoutDeclaredFlowTests(unittest.TestCase):
+    """`close` for a target that declares no flow at all.
+
+    A position sequence is built from execution witnesses only (`step`,
+    `notebook`, `record`, `rehearsal`, `shard`). A target that declares no
+    `__levels__`, no `__steps__`, no `__records__`, no shard root and has no
+    job folder has nothing such a sequence could honestly name, so `close`
+    used to refuse `POSITION_ABSENT` forever: the only way past it was to
+    install an item naming a witness that does not exist. Such a target now
+    closes without a position; every other axis `close` checks still
+    applies, and a target declaring any part of a flow still owes one.
+    """
+
+    PROPOSAL_REVISION = "r1.md"
+    PROPOSAL_TEXT = "## 1\nbody\n"
+
+    def _proposals(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / self.PROPOSAL_REVISION).write_text(self.PROPOSAL_TEXT,
+                                                   encoding="utf-8")
+        return root
+
+    def _box(self, init_source=""):
+        self._count = getattr(self, "_count", 0) + 1
+        box = (FORGE / "implementations"
+               / f"_e2e_close_noflow_{os.getpid()}_{id(self)}_{self._count}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text(init_source, encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_PROPOSALS"] = str(self._proposals())
+        return subprocess.run([sys.executable, str(CLI), *args],
+                              capture_output=True, text=True, cwd=FORGE, env=env)
+
+    def _close(self, box, session="s1"):
+        return self.run_cli("close", "--target", str(box), "--name", "Method",
+                            "--revision", self.PROPOSAL_REVISION,
+                            "--session", session)
+
+    def _ledger(self, box):
+        return impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+
+    def test_a_target_declaring_no_flow_closes_without_a_position(self):
+        box = self._box()
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["status"], "closed")
+        self.assertIs(payload["positionOwed"], False)
+        self.assertEqual(payload["position"]["status"], "absent")
+        closes = [e for e in self._ledger(box) if e.get("kind") == "close"]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["session"], "s1")
+        # No position block is invented on the way: close writes no holder.
+        self.assertFalse(any((box / "Method").glob("*.md")))
+
+    def test_a_second_close_over_the_same_state_is_not_open(self):
+        box = self._box()
+        self.assertEqual(self._close(box).returncode, 0)
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["status"], "not_open")
+
+    def test_each_declared_part_of_a_flow_still_owes_a_position(self):
+        declarations = {
+            "__levels__": "__levels__ = ['floor', 'top']\n",
+            "__steps__": "__steps__ = {'one': {'module': 'Method.s', 'function': 'f'}}\n",
+            "__records__": "__records__ = {'main': {'path': 'out.csv'}}\n",
+        }
+        for label, source in declarations.items():
+            with self.subTest(label):
+                proc = self._close(self._box(init_source=source))
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                payload = json.loads(proc.stdout)
+                self.assertEqual(payload["code"], "POSITION_ABSENT")
+                self.assertIn(label, payload["detail"])
+
+    def test_a_job_folder_still_owes_a_position(self):
+        box = self._box()
+        job = box / "tools" / "svc" / "job1"
+        job.mkdir(parents=True)
+        (job / "run-config.json").write_text(json.dumps({
+            "schemaVersion": 1, "product": "Method", "service": "svc",
+            "jobName": "job1", "commit": "0" * 40,
+            "repo": {"url": "https://example.invalid/repo.git", "ref": "main"},
+            "clonePaths": ["src/Method"],
+            "run": {"module": "Method.module", "function": "run", "kwargs": {}},
+            "runnerTemplate": []}), encoding="utf-8")
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["code"], "POSITION_ABSENT")
+        self.assertIn("job folder", payload["detail"])
+
+    def test_agreement_disagreement_still_refuses_without_a_position(self):
+        box = self._box()
+        (box / "tests" / "test_present.py").write_text(
+            "def test_present():\n    pass\n", encoding="utf-8")
+        (box / "Method" / "AGREED.md").write_text(
+            "# Agreed\n\n## Ladder\n\n- [x] a claimed item `test_missing`\n",
+            encoding="utf-8")
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "AGREEMENT_DISAGREES")
+
+    def test_an_unanswered_discussion_still_refuses_without_a_position(self):
+        box = self._box()
+        asked = self.run_cli("discuss", "--target", str(box), "--name", "Method",
+                             "--about", "record", "--question", "Which one?")
+        self.assertEqual(asked.returncode, 0, asked.stdout)
+        proc = self._close(box)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "DISCUSSION_UNANSWERED")
+
+
+class SettleDoneUnwitnessedTests(unittest.TestCase):
+    """`settle --done --unwitnessed --reason <text>`: the recorded closing
+    act for an agreement no test could ever witness (a scoping decision, a
+    premise, a deferral). Before it, such a line could only be ticked by
+    hand, an act no record distinguished from any other edit.
+
+    The act ticks the line, records who closed it (`--session`) and why
+    (`--reason`) in the ledger, and is never counted as witnessed:
+    `agreements.witness` keeps listing the line under `unwitnessed`, and
+    names it under `decided` with its reason. A hand tick keeps reading
+    exactly as before and is named under `handTicked`. A line that carries
+    a witness is still closed only by plain `--done`.
+    """
+
+    def _box(self):
+        box = (FORGE / "implementations"
+               / f"_e2e_settle_unwitnessed_{os.getpid()}_{id(self)}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(CLI), *args],
+                              capture_output=True, text=True, cwd=FORGE)
+
+    def _settle(self, box, *extra, text="a scoping decision"):
+        return self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s7", "--text", text, *extra)
+
+    def _holder(self, box, body):
+        path = box / "Method" / "AGREED.md"
+        path.write_text("# Agreed\n\n## Ladder\n\n" + body, encoding="utf-8")
+        return path
+
+    def test_closes_a_witness_less_line_with_a_recorded_reason(self):
+        box = self._box()
+        path = self._holder(box, "- [ ] a scoping decision\n"
+                                 "- [ ] a witnessed item `test_w`\n")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason",
+                            "Out of scope for this revision.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertIs(payload["unwitnessed"], True)
+        self.assertEqual(payload["reason"], "Out of scope for this revision.")
+        self.assertEqual(path.read_text(encoding="utf-8"),
+                         "# Agreed\n\n## Ladder\n\n- [x] a scoping decision\n"
+                         "- [ ] a witnessed item `test_w`\n")
+        events = [e for e in impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+            if e.get("kind") == "settle"]
+        self.assertEqual(len(events), 1)
+        self.assertIs(events[0]["done"], True)
+        self.assertIs(events[0]["unwitnessed"], True)
+        self.assertEqual(events[0]["reason"], "Out of scope for this revision.")
+        self.assertEqual(events[0]["session"], "s7")
+
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["open"], ["a witnessed item"])
+        witness = state["witness"]
+        self.assertIn("a scoping decision", witness["unwitnessed"])
+        self.assertEqual(witness["summary"], "1 of 2 witnessed")
+        self.assertEqual(
+            [(d["text"], d["reason"], d["session"]) for d in witness["decided"]],
+            [("a scoping decision", "Out of scope for this revision.", "s7")])
+        self.assertNotIn("handTicked", witness)
+
+    def test_closing_every_witness_less_line_settles_the_holder(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "Agreed.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(impl.agreements_state(box, "Method")["status"], "settled")
+
+    def test_a_hand_tick_reads_as_before_and_is_named(self):
+        box = self._box()
+        self._holder(box, "- [x] a scoping decision\n- [ ] still open\n")
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["settled"], 1)
+        self.assertEqual(state["open"], ["still open"])
+        self.assertIn("a scoping decision", state["witness"]["unwitnessed"])
+        self.assertEqual(state["witness"]["handTicked"], ["a scoping decision"])
+        self.assertNotIn("decided", state["witness"])
+
+    def test_a_holder_without_unwitnessed_ticks_keeps_its_old_shape(self):
+        box = self._box()
+        self._holder(box, "- [ ] open item\n- [x] done item `test_d`\n")
+        witness = impl.agreements_state(box, "Method")["witness"]
+        self.assertEqual(set(witness),
+                         {"unwitnessed", "unmeasured", "disagrees", "summary"})
+
+    def test_plain_done_on_a_witness_less_line_names_the_recorded_act(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        proc = self._settle(box, "--done")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["code"], "SETTLE_NOT_WITNESSED")
+        self.assertIn("--unwitnessed", payload["detail"])
+
+    def test_refuses_a_line_that_carries_a_witness(self):
+        box = self._box()
+        path = self._holder(box, "- [ ] a scoping decision `test_w`\n")
+        before = path.read_bytes()
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "Because.")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_WITNESS_PRESENT")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_refuses_without_a_reason(self):
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        for extra in ((), ("--reason", "   ")):
+            with self.subTest(extra=extra):
+                proc = self._settle(box, "--done", "--unwitnessed", *extra)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["code"],
+                                 "SETTLE_REASON_REQUIRED")
+
+    def test_unwitnessed_and_reason_only_modify_done(self):
+        """Re-anchored by X18: `--unwitnessed --reason` without `--done` is
+        now the witness-less placement, so with no `--under` it is refused
+        `SETTLE_UNDER_REQUIRED` (`SettleUnwitnessedPlacementTests`)."""
+        box = self._box()
+        self._holder(box, "- [ ] a scoping decision\n")
+        proc = self._settle(box, "--unwitnessed", "--reason", "x")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_UNDER_REQUIRED")
+        for extra in (("--done", "--reason", "x"),
+                      ("--attach", "--witness", "test_w", "--unwitnessed")):
+            with self.subTest(extra=extra):
+                proc = self._settle(box, *extra)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["code"],
+                                 "SETTLE_UNWITNESSED_CONFLICT")
+
+    def test_an_already_done_line_is_refused_first(self):
+        box = self._box()
+        self._holder(box, "- [x] a scoping decision\n")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "x")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_ALREADY_DONE")
+
+
+class SettleOrderingAndCorrectionTests(unittest.TestCase):
+    """B4 + X6 (`cross-skill-consistency`): where `settle` places a new item,
+    how `--reverse` finds its section, and how a ticked item is corrected.
+
+    Before 0.14.0: (a) each new item landed directly under its heading, so a
+    section read newest first; (X6) on a holder `position` had just created,
+    `--under "## Ladder"` landed inside the position block (the section's
+    first checklist line is the block's own item), and `verify` then refused
+    `POSITION_ITEM_MALFORMED`; (b) `--reverse` refused `SETTLE_HEADING_ABSENT`
+    until somebody wrote `## Reversed` by hand. A ticked item stays ticked:
+    nothing un-ticks it; the correction is `--reverse` (ledger-recorded, with
+    its explanation) followed by a new item.
+    """
+
+    PROPOSAL_TEXT = "## 1\ntext\n"
+
+    def _proposals(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "r1.md").write_text(self.PROPOSAL_TEXT, encoding="utf-8")
+        return root
+
+    def _box(self):
+        box = FORGE / "implementations" / f"_e2e_settle_order_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def run_cli(self, *args, stdin=None, proposals=None):
+        env = dict(os.environ)
+        if proposals is not None:
+            env["IMPLEMENTATION_PROPOSALS"] = str(proposals)
+        return subprocess.run([sys.executable, str(CLI), *args], input=stdin,
+                              capture_output=True, text=True, cwd=FORGE, env=env)
+
+    def _discuss_and_settle(self, box, proposals, about, text, under="## Ladder"):
+        question = f"What do we agree about item {about}?"
+        for extra in ((), ("--answer", "Agreed.")):
+            proc = self.run_cli("discuss", "--target", str(box), "--name", "Method",
+                                "--about", about, "--question", question, *extra,
+                                proposals=proposals)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--about", about, "--text", text,
+                            "--under", under, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return proc
+
+    def _install_position(self, box, proposals):
+        sequence = json.dumps([
+            {"text": "Rehearse the first job.",
+             "witness": {"kind": "rehearsal", "operand": "job1"}},
+            {"text": "Rehearse the second job.",
+             "witness": {"kind": "rehearsal", "operand": "job2"}}])
+        proc = self.run_cli("position", "--target", str(box), "--name", "Method",
+                            "--revision", "r1.md", "--session", "s1",
+                            "--sequence", "-", "--target-level", "local",
+                            stdin=sequence, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_the_documented_example_works_on_a_fresh_holder(self):
+        """X6: `position` creates the holder with its block directly under
+        `## Ladder`; the documented `settle --under "## Ladder"` must land
+        outside the block, and `verify` must still read the position."""
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        holder = box / "Method" / "AGREED.md"
+        before = holder.read_text(encoding="utf-8")
+        self._discuss_and_settle(box, proposals, "1", "the first job runs locally")
+        after = holder.read_text(encoding="utf-8")
+        block = impl_position.locate_block(after.encode("utf-8"))
+        self.assertNotIn("the first job runs locally", block["body"])
+        self.assertEqual(after.replace("- [ ] the first job runs locally\n", ""), before)
+        proc = self.run_cli("verify", "--target", str(box), "--name", "Method",
+                            proposals=proposals)
+        self.assertNotIn("POSITION_ITEM_MALFORMED", proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertNotEqual(payload["position"]["status"], "malformed")
+        self.assertIn("the first job runs locally", payload["agreements"]["open"])
+
+    def test_items_read_in_the_order_they_were_settled(self):
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        self._discuss_and_settle(box, proposals, "1", "first agreement")
+        self._discuss_and_settle(box, proposals, "2", "second agreement")
+        text = (box / "Method" / "AGREED.md").read_text(encoding="utf-8")
+        self.assertLess(text.index("first agreement"), text.index("second agreement"))
+        self.assertLess(text.index("<!-- /position -->"), text.index("first agreement"))
+
+    def test_a_0_13_0_holder_keeps_every_existing_line(self):
+        """Holders written newest first keep their lines byte for byte; the
+        new item is appended after the section's last item."""
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        holder = box / "Method" / "AGREED.md"
+        legacy = holder.read_text(encoding="utf-8").replace(
+            "<!-- /position -->\n",
+            "<!-- /position -->\n\nIntro prose for the section.\n\n"
+            "- [x] newer item\n- [ ] older item\n") + "\n## Other\n\n- [ ] elsewhere\n"
+        holder.write_text(legacy, encoding="utf-8")
+        self._discuss_and_settle(box, proposals, "1", "the newest item")
+        self.assertEqual(
+            holder.read_text(encoding="utf-8"),
+            legacy.replace("- [ ] older item\n",
+                           "- [ ] older item\n- [ ] the newest item\n"))
+
+    def test_reverse_creates_its_own_heading(self):
+        box, proposals = self._box(), self._proposals()
+        holder = box / "Method" / "AGREED.md"
+        holder.write_text("# Agreed\n\n## Ladder\n\n- [ ] keep me\n- [ ] drop me\n",
+                          encoding="utf-8")
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--text", "drop me", "--reverse",
+                            "--paragraph", "Turned over after the pilot.",
+                            proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(
+            holder.read_text(encoding="utf-8"),
+            "# Agreed\n\n## Ladder\n\n- [ ] keep me\n\n## Reversed\n\n"
+            '**"drop me"** Turned over after the pilot.\n\n')
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["open"], ["keep me"])
+
+    def test_a_ticked_item_is_corrected_by_reverse_and_a_new_item(self):
+        """Irreversibility: `--done` has no inverse. A ticked item is
+        corrected by `--reverse` (its explanation and the ledger event stay)
+        and a new item; the tick itself is never silently undone."""
+        box, proposals = self._box(), self._proposals()
+        self._install_position(box, proposals)
+        holder = box / "Method" / "AGREED.md"
+        holder.write_text(holder.read_text(encoding="utf-8")
+                          + "- [x] a wrong closure `test_w`\n", encoding="utf-8")
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--text", "a wrong closure", "--reverse",
+                            "--paragraph", "Closed by mistake; reopened below.",
+                            proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self._discuss_and_settle(box, proposals, "1", "a wrong closure, reopened")
+        text = holder.read_text(encoding="utf-8")
+        self.assertIn("- [ ] a wrong closure, reopened\n", text)
+        self.assertIn('**"a wrong closure"** Closed by mistake; reopened below.', text)
+        self.assertNotIn("- [x] a wrong closure", text)
+        events = [e for e in impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+            if e.get("kind") == "settle"]
+        self.assertEqual([e["reverse"] for e in events], [True, False])
+
+
+class AttainedLevelNeverOverstatesTests(unittest.TestCase):
+    """B8 (`cross-skill-consistency`): `verify`'s `position.attainedLevel`
+    never exceeds what ran. An all-two-state sequence aimed at the middle
+    rung reported the ladder's top (`full`) although no full-scale run had
+    happened; it now reports the aim."""
+
+    def test_an_all_two_state_position_reports_its_aim(self):
+        proposals = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        (proposals / "r1.md").write_text("## 1\ntext\n", encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_attained_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__levels__ = ['local', 'pilot', 'full']\n", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        env = dict(os.environ, IMPLEMENTATION_PROPOSALS=str(proposals))
+        sequence = json.dumps([{"text": "Rehearse the job.",
+                                "witness": {"kind": "rehearsal", "operand": "job1"}}])
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "position", "--target", str(box), "--name",
+             "Method", "--revision", "r1.md", "--session", "s1", "--sequence", "-",
+             "--target-level", "pilot"],
+            input=sequence, capture_output=True, text=True, cwd=FORGE, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box), "--name", "Method"],
+            capture_output=True, text=True, cwd=FORGE, env=env)
+        position = json.loads(proc.stdout)["position"]
+        self.assertEqual(position["targetLevel"], "pilot")
+        self.assertEqual(position["attainedLevel"], "pilot")
+
+
+class ProseSkipsEngineWritesTests(unittest.TestCase):
+    """B10 (`cross-skill-consistency`): `verify`'s `prose` check no longer
+    reports what the engine itself wrote into a checklist holder: the
+    position block's marker lines (its header names the revision it was
+    derived against), the `` `test_<id>` `` witness token `settle` writes on
+    an agreement line, and the append-only `## Reversed` history. The
+    exclusion is structural, never a whole-file skip: user prose in the same
+    holder -- an agreement's own text, a paragraph outside those sections --
+    is still checked."""
+
+    HOLDER = (
+        "# Agreed\n\n"
+        "Notes: the plan in draft-1.md still names `stale_helper_name`.\n\n"
+        "## Ladder\n\n"
+        "<!-- position revision=draft-1.md sha256=" + "a" * 64
+        + " derivedAt=2026-01-01T00:00:00Z session=s1 target=local -->\n"
+        "- [ ] 1. Rehearse the job. `@rehearsal job1`\n"
+        "<!-- /position -->\n\n"
+        "- [x] the seed is seven `test_seed_is_seven`\n"
+        "- [ ] the helper `another_missing_name` is kept\n\n"
+        "## Reversed\n\n"
+        '**"bound to draft-1.md with `old_reversed_name`"** Turned over at draft-2.md.\n'
+    )
+
+    def _prose(self, holder_name="AGREED.md"):
+        proposals = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        (proposals / "draft-1.md").write_text("## 1\ntext\n", encoding="utf-8")
+        (proposals / "draft-2.md").write_text("## 1\ntext changed\n", encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_prose_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__implementation__ = {'revision': 'draft-2.md'}\n", encoding="utf-8")
+        (box / "Method" / holder_name).write_text(self.HOLDER, encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(CLI), "verify", "--target", str(box), "--name", "Method"],
+            capture_output=True, text=True, cwd=FORGE,
+            env=dict(os.environ, IMPLEMENTATION_PROPOSALS=str(proposals)))
+        return json.loads(proc.stdout)["prose"]
+
+    def test_engine_writes_are_not_reported_and_user_prose_still_is(self):
+        prose = self._prose()
+        stale = [(e["line"], e["named"]) for e in prose["staleRevisions"]]
+        symbols = sorted(e["symbol"] for e in prose["unresolvedSymbols"])
+        # Line 3 is user prose outside every engine-written structure.
+        self.assertEqual(stale, [(3, "draft-1.md")])
+        self.assertEqual(symbols, ["another_missing_name", "stale_helper_name"])
+
+    def test_a_sibling_skills_holder_is_read_the_same_way(self):
+        prose = self._prose("Experimental_AGREED.md")
+        self.assertEqual([(e["line"], e["named"]) for e in prose["staleRevisions"]],
+                         [(3, "draft-1.md")])
+        self.assertEqual(sorted(e["symbol"] for e in prose["unresolvedSymbols"]),
+                         ["another_missing_name", "stale_helper_name"])
+
+    def test_the_same_lines_outside_a_holder_are_still_reported(self):
+        """Not a filename rule alone: the identical bytes in an ordinary
+        document of the target are user prose and are all reported."""
+        proposals = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, proposals, ignore_errors=True)
+        (proposals / "draft-2.md").write_text("## 1\ntext\n", encoding="utf-8")
+        box = FORGE / "implementations" / f"_e2e_prose_doc_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "tests", "docs"):
+            (box / directory).mkdir(parents=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "docs/notes.md").write_text(self.HOLDER, encoding="utf-8")
+        prose = impl.prose_state(box, "draft-2.md")
+        self.assertIn("test_seed_is_seven",
+                      [e["symbol"] for e in prose["unresolvedSymbols"]])
+        self.assertGreater(len(prose["staleRevisions"]), 1)
+
+
+class OtherLineageModuleTests(unittest.TestCase):
+    """X16 (`cross-skill-consistency`): on a target both implementation skills
+    share, `__implementation__.revision` maps one revision per document label
+    (A8), and each skill's modules carry their own lineage's revision. The
+    whole-tree `fidelity.staleModules` compared every module against this
+    skill's own revision, so the sibling's module read "bound to an older
+    revision" and the headline drifted on every shared target. Measured the
+    same on main's engine with a single-string binding (the only form it
+    reads). A module whose revision belongs to another label's lineage is now
+    reported in `otherLineageModules` and judged by that skill, not here; a
+    module of this skill's own lineage still goes stale, and a bare-string
+    binding is unchanged."""
+
+    OWN = "## 1\n\n$$\nc = d \\tag{1}\n$$\n"
+
+    def _proposals(self) -> Path:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "draft-1.md").write_text(self.OWN, encoding="utf-8")
+        (root / "draft-2.md").write_text(self.OWN, encoding="utf-8")
+        previous = os.environ.get("IMPLEMENTATION_PROPOSALS")
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(root)
+
+        def restore():
+            if previous is None:
+                os.environ.pop("IMPLEMENTATION_PROPOSALS", None)
+            else:
+                os.environ["IMPLEMENTATION_PROPOSALS"] = previous
+
+        self.addCleanup(restore)
+        return root
+
+    def _box(self, revision, modules: dict[str, str]) -> Path:
+        box = FORGE / "implementations" / f"_lineage_{os.getpid()}_{id(self)}_{len(modules)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text(
+            f"__implementation__ = {{'revision': {revision!r}, 'premises': {{'metric': 'm'}}}}\n",
+            encoding="utf-8")
+        for module, bound in modules.items():
+            (box / "src" / "Method" / f"{module}.py").write_text(
+                f"__provenance__ = {{'revision': {bound!r}, 'sections': ['1'], 'invariants': []}}\n",
+                encoding="utf-8")
+        return box
+
+    def _fidelity(self, box) -> dict:
+        return impl.cmd_verify(argparse.Namespace(
+            target=str(box), name="Method", revision=None))["fidelity"]
+
+    def test_the_siblings_module_does_not_drift_this_skills_headline(self):
+        self._proposals()
+        label = impl.DOCUMENTS[0]["label"]
+        box = self._box({label: "draft-2.md", "other-lineage": "other-plan-v03.md"},
+                        {"own": "draft-2.md", "sibling": "other-plan-v03.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["latestRevision"], "draft-2.md")
+        self.assertEqual(fidelity["staleModules"], [])
+        self.assertEqual(fidelity["drift"], [])
+        self.assertEqual(fidelity["otherLineageModules"],
+                         [{"module": "src/Method/sibling.py", "label": "other-lineage",
+                           "revision": "other-plan-v03.md"}])
+        self.assertEqual(fidelity["status"], "ok", fidelity)
+
+    def test_an_older_revision_of_the_siblings_lineage_is_still_the_siblings(self):
+        self._proposals()
+        label = impl.DOCUMENTS[0]["label"]
+        box = self._box({label: "draft-2.md", "other-lineage": "other-plan-v03.md"},
+                        {"own": "draft-2.md", "sibling": "other-plan-v01.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["staleModules"], [])
+        self.assertEqual([m["module"] for m in fidelity["otherLineageModules"]],
+                         ["src/Method/sibling.py"])
+
+    def test_this_skills_own_older_module_still_goes_stale(self):
+        self._proposals()
+        label = impl.DOCUMENTS[0]["label"]
+        box = self._box({label: "draft-2.md", "other-lineage": "other-plan-v03.md"},
+                        {"own": "draft-1.md", "sibling": "other-plan-v03.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["staleModules"], ["src/Method/own.py"])
+        self.assertEqual(fidelity["status"], "drift")
+
+    def test_a_bare_string_binding_judges_every_module_as_before(self):
+        self._proposals()
+        box = self._box("draft-2.md", {"own": "draft-2.md", "sibling": "other-plan-v03.md"})
+        fidelity = self._fidelity(box)
+        self.assertEqual(fidelity["staleModules"], ["src/Method/sibling.py"])
+        self.assertEqual(fidelity["otherLineageModules"], [])
+        self.assertEqual(fidelity["status"], "drift")
+
+
+class PositionRefusalWritesNothingTests(unittest.TestCase):
+    """X17 (`cross-skill-consistency`, pre-existing on main): `position` on a
+    product folder with no holder yet created the declared holder's scaffold
+    while choosing where the fresh block goes, and only then checked the rung.
+    A call refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2) therefore left an
+    empty holder behind, and so did every later refusal of the same command
+    (`POSITION_TARGET_LEVEL_UNKNOWN`, `POSITION_LEVELS_UNDECLARED`, ...). The
+    scaffold is now written only once the block itself is about to be."""
+
+    _proposals = PositionCommandTests._proposals
+    run_cli = PositionCommandTests.run_cli
+    PROPOSAL_TEXT = PositionCommandTests.PROPOSAL_TEXT
+    STEP = json.dumps([{"text": "Rehearse the job.",
+                        "witness": {"kind": "rehearsal", "operand": "job1"}}])
+    LEVELED = json.dumps([{"text": "Reach the record.",
+                           "witness": {"kind": "record", "operand": "main", "twostate": False}}])
+
+    def _box(self, init: str = "") -> Path:
+        box = PositionCommandTests._box(self)
+        (box / "src" / "Method" / "__init__.py").write_text(init, encoding="utf-8")
+        return box
+
+    def _tree(self, box: Path) -> dict[str, bytes]:
+        return {str(p.relative_to(box)): p.read_bytes() for p in sorted(box.rglob("*"))
+                if p.is_file() and ".git" not in p.relative_to(box).parts}
+
+    def _refused(self, box: Path, code: str, *extra: str, stdin: str | None = None) -> None:
+        before = self._tree(box)
+        proc = self.run_cli("position", "--target", str(box), "--name", "Method",
+                            "--revision", "r1.md", "--session", "s1", *extra,
+                            stdin=stdin, proposals=self._proposals())
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["code"], code, proc.stdout)
+        self.assertEqual(self._tree(box), before, "a refused position wrote something")
+
+    def test_a_missing_target_level_writes_no_holder(self):
+        self._refused(self._box(), "POSITION_TARGET_LEVEL_REQUIRED", "--sequence", "-", stdin=self.STEP)
+
+    def test_a_missing_target_level_on_reconcile_writes_no_holder(self):
+        self._refused(self._box(), "POSITION_TARGET_LEVEL_REQUIRED", "--reconcile")
+
+    def test_an_unknown_target_level_writes_no_holder(self):
+        self._refused(self._box("__levels__ = ['floor', 'top']\n"), "POSITION_TARGET_LEVEL_UNKNOWN",
+                      "--sequence", "-", "--target-level", "middle", stdin=self.STEP)
+
+    def test_a_leveled_witness_without_a_ladder_writes_no_holder(self):
+        self._refused(self._box(), "POSITION_LEVELS_UNDECLARED",
+                      "--sequence", "-", "--target-level", "floor", stdin=self.LEVELED)
+
+    def test_a_refused_settle_writes_no_holder_either(self):
+        """The same shape one command over: `settle` created the declared
+        holder before matching `--text`, so a refused `--done` left it behind."""
+        box = self._box()
+        before = self._tree(box)
+        proc = self.run_cli("settle", "--target", str(box), "--name", "Method",
+                            "--session", "s1", "--text", "Scope is one dataset.",
+                            "--done", "--unwitnessed", "--reason", "a scoping decision",
+                            proposals=self._proposals())
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["code"], "SETTLE_TEXT_ABSENT", proc.stdout)
+        self.assertEqual(self._tree(box), before, "a refused settle wrote something")
+
+    def test_an_accepted_install_still_creates_the_declared_holder(self):
+        box = self._box()
+        proc = self.run_cli("position", "--target", str(box), "--name", "Method",
+                            "--revision", "r1.md", "--session", "s1", "--sequence", "-",
+                            "--target-level", "final", stdin=self.STEP, proposals=self._proposals())
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        holder = box / json.loads(proc.stdout)["holder"]
+        text = holder.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith(impl.HOLDER_SCAFFOLD.rstrip("\n").splitlines()[0]), text)
+        self.assertIn("<!-- position ", text)
+        self.assertIn("Rehearse the job.", text)
+
+
+class SettleUnwitnessedPlacementTests(unittest.TestCase):
+    """X18 (`cross-skill-consistency`): a witness-less agreement (a scoping
+    decision, a premise, a deferral) had no command route to its own line
+    when there was no position sequence. Placing a line needs `--about`, a
+    witness identity with an answered discussion, and `settle --done
+    --unwitnessed` only closes a line that already exists, so the line was
+    written by hand. `settle --under <heading> --unwitnessed --reason <why>`
+    now places it: unticked, logged with its reason, never discussed (it
+    names no witness to discuss) and never counted as witnessed. Closing it
+    is still the separate `--done --unwitnessed` act."""
+
+    def setUp(self) -> None:
+        self._boxes: list[Path] = []
+
+    def _box(self) -> Path:
+        box = (FORGE / "implementations"
+               / f"_e2e_settle_unwitnessed_place_{os.getpid()}_{id(self)}_{len(self._boxes)}")
+        self._boxes.append(box)
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "src/Method_Benchmark", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        (box / "src/Method_Benchmark/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    run_cli = SettleDoneUnwitnessedTests.run_cli
+    _settle = SettleDoneUnwitnessedTests._settle
+
+    def _tree(self, box: Path) -> dict[str, bytes]:
+        return {str(p.relative_to(box)): p.read_bytes() for p in sorted(box.rglob("*"))
+                if p.is_file() and ".git" not in p.relative_to(box).parts}
+
+    def _events(self, box: Path) -> list[dict]:
+        return [e for e in impl_position.read_events(
+            box / "Method" / ".implementation" / "position.jsonl")
+            if e.get("kind") == "settle"]
+
+    def test_places_a_witness_less_line_on_a_fresh_holder_and_closes_it(self):
+        box = self._box()
+        proc = self._settle(box, "--under", "## Ladder", "--unwitnessed",
+                            "--reason", "Scoped out of this revision.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["status"], "written")
+        self.assertIsNone(payload["about"])
+        self.assertIs(payload["unwitnessed"], True)
+        self.assertIs(payload["done"], False)
+        holder = box / "Method" / "AGREED.md"
+        self.assertEqual(holder.read_text(encoding="utf-8"),
+                         impl.HOLDER_SCAFFOLD + "- [ ] a scoping decision\n")
+        (placed,) = self._events(box)
+        self.assertIs(placed["done"], False)
+        self.assertEqual(placed["reason"], "Scoped out of this revision.")
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["open"], ["a scoping decision"])
+        self.assertNotIn("decided", state["witness"],
+                         "placing a line is not the act that closes it")
+
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason", "Agreed at the gate.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        state = impl.agreements_state(box, "Method")
+        self.assertEqual(state["status"], "settled")
+        self.assertEqual([(d["text"], d["reason"]) for d in state["witness"]["decided"]],
+                         [("a scoping decision", "Agreed at the gate.")])
+
+    def test_a_hand_tick_after_the_placement_still_reads_as_a_hand_tick(self):
+        box = self._box()
+        proc = self._settle(box, "--under", "## Ladder", "--unwitnessed", "--reason", "Scoped out.")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        holder = box / "Method" / "AGREED.md"
+        holder.write_text(holder.read_text(encoding="utf-8").replace("- [ ]", "- [x]"),
+                          encoding="utf-8")
+        witness = impl.agreements_state(box, "Method")["witness"]
+        self.assertEqual(witness["handTicked"], ["a scoping decision"])
+        self.assertNotIn("decided", witness)
+
+    def test_refusals_write_nothing(self):
+        for extra, code in (
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "x", "--about", "record"),
+                 "SETTLE_UNWITNESSED_CONFLICT"),
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "x", "--witness", "test_w"),
+                 "SETTLE_UNWITNESSED_CONFLICT"),
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "x", "--supersedes", "y"),
+                 "SETTLE_UNWITNESSED_CONFLICT"),
+                (("--under", "## Ladder", "--unwitnessed"), "SETTLE_REASON_REQUIRED"),
+                (("--under", "## Ladder", "--unwitnessed", "--reason", "  "), "SETTLE_REASON_REQUIRED"),
+                (("--unwitnessed", "--reason", "x"), "SETTLE_UNDER_REQUIRED"),
+                (("--under", "## Nowhere", "--unwitnessed", "--reason", "x"), "SETTLE_HEADING_ABSENT"),
+                (("--under", "## Ladder"), "SETTLE_ABOUT_REQUIRED")):
+            with self.subTest(extra=extra):
+                box = self._box()
+                before = self._tree(box)
+                proc = self._settle(box, *extra)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["code"], code, proc.stdout)
+                self.assertEqual(self._tree(box), before)
