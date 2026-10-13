@@ -339,3 +339,37 @@ remove.
   file by design, because the delivery sidecar lives in the run's `--out-dir` and
   is not versioned -- the check without that flag is the one that means something
   here.
+- **L16** — The two follow-ups the operator asked for, and the merge that brought
+  them in. Item 1: the manual's agent table carried 18 rows beside a sentence that
+  says nineteen, so `section-grounding-auditor` was shipped and undocumented; the
+  table now matches `.claude/agents/` name for name (`3d7353d6`). Item 2 is L11's
+  finding, fixed test-first: `AGENT_STAGES` held 16 of the 19 shipped definitions
+  and the three it lacked were exactly the plausibility ones, so the board's first
+  tramo listed no agents while the drawing filled it with three (`ccf9b617`). The
+  test that failed first asserts the tramo through `get_workspace_state`, and the
+  guard that keeps it from happening again makes the mapped set equal the shipped
+  set, so an agent nobody maps fails the build instead of vanishing.
+- **L16b** — L14's second half is answered rather than parked. The plausibility
+  gate does **not** enter `GATE_SOURCES`: those are the verdict gates a checker
+  computes and that land in the audit lane, while a human stop leaves no artifact
+  to read -- the skill says it in its own words, the gate approves the reading and
+  "publishes nothing" and "files nothing". A `gate_links` entry there could only
+  report a verdict the board cannot compute, so the absence is now a stated
+  decision, in the code where the confusion started and in `docs/diagrams/README.md`.
+- **L16c** — The merge, and what it cost. `origin/main` moved 79 commits while this
+  cycle ran -- another session's cross-skill consistency pass -- and of the 163
+  files it brought only `README.md` and `CHANGELOG.md` collided with this work.
+  Both were resolved by keeping their content and this cycle's register, in one
+  section each: their `upgrade` support paragraph keeps its text and ends with this
+  pass's "The two `upgrade`s are separate", and their `force_ocr` addition keeps
+  "Re-ingesting means deleting the paper's folder". Nothing of theirs was dropped
+  to keep ours. They had already fixed the doctrine-count line this pass would have
+  fixed, and their pass turned the two suite failures that were standing green.
+- **L16d** — Incident, recorded because the symptom points nowhere near the cause:
+  `git fetch` in this clone began failing with `fatal: bad object refs/heads/main
+  (1)`, and the cause was two stray files a background duplicator left in
+  `.git/refs` (`main (1)` and `origin/main (1)`, both holding an old commit that is
+  reachable from other branches). Git scans loose refs as files, the name is
+  invalid, and the whole fetch aborts. They were moved aside rather than deleted,
+  their shas kept, and the fetch worked at once -- which is how this session
+  learned that `origin/main` was 79 commits ahead instead of level.
