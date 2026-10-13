@@ -18,6 +18,17 @@
  * Every label is English. The rendered page used to be Spanish through a
  * vendored translation table (`locales/es.json`, Archify 3.0.1, MIT); the
  * artifact is English now, so the table is gone and the labels are literal.
+ *
+ * The plausibility gate is drawn as a `security` edge from `screener` to `pool`
+ * and not as a node of its own, and that is a measured constraint rather than a
+ * preference. The readability cap is 1240px wide: rendered edge labels are 8px
+ * and the desktop budget is 930px, so the projected text is 8 * 930 / width and
+ * it has to reach 6px. Six columns need the gate's own column, and at the 24px
+ * minimum connection length and the 186px node width the longest command label
+ * needs, six columns floor at 30 + 6*186 + 5*24 + 70 = 1312. Five columns fit in
+ * 1106. The gate keeps its citation -- moved onto the `pool` node, which is what
+ * the acceptance section governs -- and the legend still reads the edge as a
+ * human gate.
  */
 import fs from 'fs';
 import path from 'node:path';
@@ -47,8 +58,7 @@ const nodes=[
  n('scout','plaus',1,'backend','sota-scout',agentMeta('sota-scout').sub,{...(agentMeta('sota-scout').tag?{tag:agentMeta('sota-scout').tag}:{}),sources:A('sota-scout')}),
  n('grapher','plaus',2,'backend','sota-grapher',agentMeta('sota-grapher').sub,{...(agentMeta('sota-grapher').tag?{tag:agentMeta('sota-grapher').tag}:{}),sources:A('sota-grapher')}),
  n('screener','plaus',3,'backend','novelty-screener',agentMeta('novelty-screener').sub,{...(agentMeta('novelty-screener').tag?{tag:agentMeta('novelty-screener').tag}:{}),sources:A('novelty-screener')}),
- n('plausGate','plaus',4,'security','Human acceptance','report → accepted',{sources:S('skills/plausibility/SKILL.md',139,162)}),
- n('pool','plaus',5,'database','sota-pool/','candidates · atlas.html',{sources:S('README.md',73)}),
+ n('pool','plaus',4,'database','sota-pool/','candidates · atlas.html',{sources:[{path:'README.md',line:73},{path:'skills/plausibility/SKILL.md',line:139,end_line:162}]}),
 
  n('ingest','ingest',0,'frontend','/paper-ingestion','PDF in guidance/',{tag:'.pi/prompts',sources:K('paper-ingestion',27,29)}),
  n('ingestAgent','ingest',1,'backend','paper-ingestion',agentMeta('paper-ingestion').sub,{...(agentMeta('paper-ingestion').tag?{tag:agentMeta('paper-ingestion').tag}:{}),sources:A('paper-ingestion')}),
@@ -118,7 +128,7 @@ const edges=[
 
  e('piMd','plaus','/<skill>',main),
  e('canon','sync'), e('sync','piDir'), e('subagents','piDir',null,{variant:'dashed'}),
- e('plaus','scout'), e('scout','grapher'), e('grapher','screener'), e('screener','plausGate'), e('plausGate','pool',null,{variant:'security'}),
+ e('plaus','scout'), e('scout','grapher'), e('grapher','screener'), e('screener','pool',null,{variant:'security'}),
  e('ingest','ingestAgent'), e('ingestAgent','guidance'),
  e('delib','delibCli'), e('delibCli','delibGate'), e('delibGate','delibPub',null,{variant:'security'}), e('delibPub','proposals'),
  e('grapher','delibPub','atlas.json',{variant:'dashed'}),
@@ -151,7 +161,7 @@ const doc={schema_version:1,diagram_type:'architecture',meta:{
   repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'1cf76a0dc810e162fa70c6726990f87d63fc56db'},
   legend:{mode:'auto',entries:{frontend:{label:'Pi command /skill'},backend:{label:'Pi subagent'},messagebus:{label:'CLI'},security:{label:'Gate (human)'},database:{label:'Artifact on disk'},external:{label:'Pi harness'}}}
  },
- layout:{mode:'grid',origin:[40,48],cols:6,cellW:182,cellH:58,gapX:21,gapY:62},
+ layout:{mode:'grid',origin:[30,48],cols:5,cellW:182,cellH:58,gapX:24,gapY:62},
  components, boundaries, connections,
  cards:[
   {dot:'cyan',title:'How Pi sees it',items:['.pi/APPEND_SYSTEM.md is the system prompt: Pi appends it to the project one','/<skill> = .pi/prompts/<skill>.md: it loads the SKILL.md and passes $ARGUMENTS','The 19 .pi/agents/ are projected from .claude/agents/; Pi core has no subagents, so they need pi-subagents','Each agent declares tools (read, find, grep, write, edit, bash, mcp) and its stretch','refuse-offpath-push.js intercepts bash tool_call; it is a warning that fails open, not a gate']},

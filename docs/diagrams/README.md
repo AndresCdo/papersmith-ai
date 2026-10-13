@@ -48,8 +48,14 @@ about evidence ownership rather than about the drawing. Two gates have measured
 teeth worth knowing before editing the layout: `layout/constraint` refuses a node
 label wider than its cell or a connection shorter than 24px, and
 `composition/desktop-readability` refuses a figure whose projected node text
-falls under 6px at a 1440px viewport — which is what caps the viewBox at roughly
-1240px.
+falls under 6px at a 1440px viewport. That second cap is arithmetic rather than
+"roughly": the rendered edge labels are 8px and the desktop budget is 930px, so
+the projected text is `8 * 930 / width`, and reaching 6px puts the ceiling at
+exactly 1240px. Six columns cannot get under it -- at the 24px connection
+minimum and the 186px node width the longest command label needs, six columns
+floor at `30 + 6*186 + 5*24 + 70 = 1312` -- which is why the flow is drawn in
+five and why the plausibility gate is a `security` edge from `novelty-screener`
+to `sota-pool/` rather than a node of its own.
 
 ## The PNG
 
