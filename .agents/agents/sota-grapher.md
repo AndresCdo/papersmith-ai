@@ -45,12 +45,13 @@ Write the atlas, then run the two scripts — the only shell commands this
 stretch may run, in this order:
 
 ```
-python3 skills/plausibility/scripts/check_atlas.py sota-pool/atlas.json
+python3 skills/plausibility/scripts/check_atlas.py sota-pool/atlas.json --pool sota-pool/candidates.json
 python3 skills/plausibility/scripts/render_atlas.py sota-pool/atlas.json --out sota-pool/atlas.html
 ```
 
-No installers, no network, no runners. A refusal names every violation at
-once; fix the atlas and re-run, up to 3 repair passes. Past that, stop: the
+`--pool` holds every planet's quote to the abstract of the candidate its
+`evidence.origin` names, verbatim up to whitespace. No installers, no
+network, no runners. A refusal names every violation at once; fix the atlas and re-run, up to 3 repair passes. Past that, stop: the
 violations go quoted into `owed`, and an atlas that never ran green never
 renders. The HTML is never hand-touched — it is regenerated from the atlas
 on every pass, so a hand fix would be drawn over anyway.

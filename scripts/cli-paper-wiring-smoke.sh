@@ -32,7 +32,9 @@ fail() {
 
 # `--no-env` is what keeps this hermetic: `init` provisions a multi-gigabyte
 # micromamba environment by default, and no offline smoke may do that.
-"$PY" -m papersmith.cli init "$WS" --tools claude,opencode,pi,antigravity --no-npm --no-env --remote local
+# `--allow-dirty-kit`: the kit is this checkout, which may carry uncommitted
+# edits; the smoke exercises the working tree, not a release.
+"$PY" -m papersmith.cli init "$WS" --tools claude,opencode,pi,antigravity --no-npm --no-env --remote local --allow-dirty-kit
 
 CANONICAL="$WS/skills"
 CANONICAL_RESOLVED="$(readlink -f "$CANONICAL")"
@@ -93,14 +95,14 @@ done | sort)"
 DECOY="$WS/.papersmith-wiring-smoke-decoy"
 mkdir -p "$DECOY"
 ln -sfn "$DECOY" "$WS/.claude/skills"
-"$PY" -m papersmith.cli upgrade "$WS"
+"$PY" -m papersmith.cli upgrade "$WS" --allow-dirty-kit
 [[ "$(readlink -f "$WS/.claude/skills")" == "$CANONICAL_RESOLVED" ]] \
   || fail 5 "upgrade did not repair .claude/skills back to skills/"
 
 rm "$WS/.opencode/skills"
 mkdir -p "$WS/.opencode/skills"
 echo "real content" > "$WS/.opencode/skills/sentinel.txt"
-"$PY" -m papersmith.cli upgrade "$WS"
+"$PY" -m papersmith.cli upgrade "$WS" --allow-dirty-kit
 if test -L "$WS/.opencode/skills"; then
   fail 5 "upgrade replaced real .opencode/skills content with a symlink"
 fi

@@ -45,16 +45,16 @@ compute_targets:
 execution_profiles:
   smoke_and_invariants:
     target: "local-workstation"
-    entrypoint: "pytest implementations/{paper_slug}/tests/test_invariants.py"
+    entrypoint: "{target_python} -m pytest {target}/tests/test_invariants.py"
     env_vars:
-      PYTHONPATH: "implementations/{paper_slug}/src"
+      PYTHONPATH: "{target}/src"
       CUDA_VISIBLE_DEVICES: "0"
     timeout_seconds: 300
 
   sweep_training:
     target: "kaggle-gpu-pool"
     bootstrap: "skills/remote-execution/assets/runner_bootstrap.py"
-    entrypoint: "python implementations/{paper_slug}/src/train.py"
+    entrypoint: "python {target}/src/train.py"
     sharding:
       enabled: true
       strategy: "grid"
@@ -73,7 +73,7 @@ execution_profiles:
 
   benchmark_evaluation:
     target: "kaggle-gpu-pool"
-    entrypoint: "papermill implementations/{paper_slug}/nb/benchmark.ipynb kaggle-inbox/{job_id}/benchmark_out.ipynb"
+    entrypoint: "papermill {target}/nb/benchmark.ipynb kaggle-inbox/{job_id}/benchmark_out.ipynb"
     resources:
       accelerator: "GPU_P100"
     artifacts:

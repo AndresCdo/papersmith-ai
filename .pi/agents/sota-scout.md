@@ -45,10 +45,12 @@ In this order, and inside these budgets:
    through the borrowed front door — one of the shell commands this stretch
    may invoke:
    `python skills/paper-writing/scripts/paper_cli.py resolve
-   --identifier <id> --resolver {openalex,crossref,arxiv} --role resolution`.
+   --identifier <id> --resolver {openalex,crossref,arxiv} --role resolution
+   --cache-dir sota-pool/metadata`.
    It fetches metadata over stdlib `urllib`, keyless, and caches it under
-   `paper/`; it never fetches a PDF and never judges whether a span holds a
-   claim. Quote its refusals (`RESOLVER_ROLE_EMPTY` means the operator
+   `sota-pool/metadata/`, beside the pool it confirms — never under `paper/`,
+   which no paper has started yet; it never fetches a PDF and never judges
+   whether a span holds a claim. Quote its refusals (`RESOLVER_ROLE_EMPTY` means the operator
    emptied the role in `papersmith.yaml` — the power is off by config, not
    broken; `RESOLVER_UNREACHABLE`, `IDENTIFIER_UNRESOLVED`) rather than
    working around them.

@@ -1976,13 +1976,16 @@ class HolderCollisionTests(unittest.TestCase):
         engine = self._load_engine()
         self.assertEqual(engine.HOLDER_FILENAME, "Experimental_AGREED.md")
 
-    def test_a_target_holding_the_proposals_declared_holder_is_undeclared_here(self):
-        """The measured collision, closed: a target already holding an
-        item-holding `AGREED.md` (the proposal's own declared name, not
-        this skill's) resolves `"undeclared"` under the experimental
-        profile -- `_chosen_holder` refuses `HOLDER_UNDECLARED` rather
-        than writing a fresh block (and, eventually, a `documents=`
-        group) straight into it."""
+    def test_a_target_holding_the_proposals_declared_holder_creates_this_skills_own(self):
+        """The sibling's declared holder is not an undeclared checklist.
+
+        Before 0.14.0 a target already holding an item-holding `AGREED.md`
+        (the proposal skill's own declared name) resolved `"undeclared"`
+        here, and `HOLDER_UNDECLARED` proposed renaming the sibling's file
+        or adopting its name -- both destructive to the sibling. Every
+        filename a profile sharing this engine declares is excluded from
+        the by-shape candidates, so the resolution is `"create"` and this
+        skill writes its own holder beside the sibling's, untouched."""
         engine = self._load_engine()
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -1991,16 +1994,100 @@ class HolderCollisionTests(unittest.TestCase):
                 "- [ ] an agreement the proposal skill settled here\n",
                 encoding="utf-8")
             resolution = engine.holder_resolution(root, "Method")
-            self.assertEqual(resolution["action"], "undeclared")
-            self.assertEqual(resolution["byShape"], ["Method/AGREED.md"])
-            with self.assertRaises(engine.Refused) as caught:
-                engine._chosen_holder(root, "Method", root / "Method")
-            self.assertEqual(caught.exception.code, "HOLDER_UNDECLARED")
-            # No `documents=` group -- no write at all -- lands in the
-            # proposal's own file.
+            self.assertEqual(resolution["action"], "create")
+            # `agreements_state` sets the sibling's holder aside; the
+            # exclusion is reported, never hidden.
+            self.assertEqual(resolution["byShape"], [])
+            self.assertEqual(resolution["siblings"], ["Method/AGREED.md"])
+            chosen = engine._chosen_holder(root, "Method", root / "Method")
+            self.assertEqual(chosen, root / "Method" / "Experimental_AGREED.md")
+            self.assertEqual(chosen.read_text(encoding="utf-8"),
+                             engine.HOLDER_SCAFFOLD)
             self.assertEqual(
                 (root / "Method" / "AGREED.md").read_text(encoding="utf-8"),
                 "- [ ] an agreement the proposal skill settled here\n")
+
+    def test_a_hand_created_holder_beside_the_siblings_stays_declared(self):
+        """A workspace that already worked around the collision by hand --
+        `Experimental_AGREED.md` carrying exactly the scaffold, beside the
+        sibling's item-holding `AGREED.md` -- keeps resolving `"declared"`."""
+        engine = self._load_engine()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "AGREED.md").write_text(
+                "- [x] an agreement the proposal skill settled here\n",
+                encoding="utf-8")
+            own = root / "Method" / "Experimental_AGREED.md"
+            own.write_text(engine.HOLDER_SCAFFOLD, encoding="utf-8")
+            resolution = engine.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "declared")
+            self.assertEqual(resolution["write"], own)
+            self.assertEqual(engine._chosen_holder(root, "Method", root / "Method"), own)
+
+    def test_an_unknown_candidate_beside_the_siblings_holder_still_refuses(self):
+        """Fail-closed stays: a checklist no skill declares is still the
+        D3 middle row, and the refusal names only that file -- never the
+        sibling's, which it recognizes and leaves alone."""
+        engine = self._load_engine()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "AGREED.md").write_text(
+                "- [ ] the sibling's agreement\n", encoding="utf-8")
+            (root / "Method" / "TASKS.md").write_text(
+                "- [ ] a checklist nobody declares\n", encoding="utf-8")
+            resolution = engine.holder_resolution(root, "Method")
+            self.assertEqual(resolution["action"], "undeclared")
+            self.assertEqual(resolution["read"], root / "Method" / "TASKS.md")
+            with self.assertRaises(engine.Refused) as caught:
+                engine._chosen_holder(root, "Method", root / "Method")
+            self.assertEqual(caught.exception.code, "HOLDER_UNDECLARED")
+            detail = str(caught.exception)
+            self.assertIn("rename Method/TASKS.md", detail)
+            self.assertNotIn("rename Method/AGREED.md", detail)
+            self.assertIn("left alone: Method/AGREED.md", detail)
+            self.assertFalse((root / "Method" / "Experimental_AGREED.md").exists())
+
+    def test_agreements_never_count_the_siblings_holder_as_this_skills(self):
+        """The READ face, agreements: before this skill has a holder of its
+        own, the sibling's open items are not this skill's open agreements
+        (`verify` and `close` read them through here)."""
+        engine = self._load_engine()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "Method").mkdir(parents=True, exist_ok=True)
+            (root / "Method" / "AGREED.md").write_text(
+                "- [ ] an agreement the proposal skill settled here\n",
+                encoding="utf-8")
+            state = engine.agreements_state(root, "Method")
+            self.assertEqual(state["status"], "absent")
+            self.assertEqual(state["open"], [])
+            self.assertEqual(state["siblingHolders"], ["Method/AGREED.md"])
+
+            (root / "Method" / "Experimental_AGREED.md").write_text(
+                engine.HOLDER_SCAFFOLD + "\n- [x] this skill's own\n",
+                encoding="utf-8")
+            state = engine.agreements_state(root, "Method")
+            self.assertEqual(state["holders"], ["Method/Experimental_AGREED.md"])
+            self.assertEqual(state["status"], "settled")
+            self.assertEqual(state["open"], [])
+
+    def test_position_never_reads_the_siblings_block_as_this_skills(self):
+        """The READ face, position: the sibling's real block (written by its
+        own launcher) is not this skill's position for `verify`, `probe`,
+        `close`, `discuss` and the other position readers -- not only for
+        `gate`."""
+        box = self._box()
+        proposals_root = self._tmp_dir("collision-read-proposals-")
+        (proposals_root / "r1.md").write_text("## 1\ntexto\n", encoding="utf-8")
+        self._install_siblings_holder(box, proposals_root)
+        engine = self._load_engine()
+        state = engine.position_state(box, "Method", {}, None, None)
+        self.assertEqual(state["status"], "absent")
+        self.assertIsNone(state["holder"])
+        agreements = engine.agreements_state(box, "Method")
+        self.assertEqual(agreements["status"], "absent")
 
     def _box(self, suffix: str = "") -> Path:
         box = FORGE / "implementations" / f"_holder_collision_{os.getpid()}_{id(self)}{suffix}"
@@ -2165,24 +2252,28 @@ class HolderCollisionTests(unittest.TestCase):
         reconcile = subprocess.run(
             [sys.executable, str(LAUNCHER), "position",
              "--target", str(box), "--name", "Method", "--revision", "r1.md",
-             "--session", "s1", "--reconcile"],
+             "--session", "s1", "--target-level", "final", "--reconcile"],
             capture_output=True, text=True, cwd=FORGE, env=env)
 
-        self.assertEqual(reconcile.returncode, 2,
+        # 0.14.0: the sibling's declared holder is no longer a candidate,
+        # so this skill creates its own holder -- the sibling's bytes stay
+        # exactly as written (no merge, no `documents=` group).
+        self.assertEqual(reconcile.returncode, 0,
                          reconcile.stdout + reconcile.stderr)
         payload = json.loads(reconcile.stdout)
-        self.assertEqual(payload["code"], "HOLDER_UNDECLARED")
-        self.assertIn("AGREED.md", payload["detail"])
+        self.assertEqual(payload["holder"], "Method/Experimental_AGREED.md")
         self.assertEqual((box / "Method" / "AGREED.md").read_bytes(), before)
-        self.assertFalse((box / "Method" / "Experimental_AGREED.md").exists())
+        self.assertTrue((box / "Method" / "Experimental_AGREED.md").exists())
 
     def test_sequence_replace_never_overwrites_the_siblings_declared_holder(self):
         """The same collision through `--sequence --replace`: the exit
         `POSITION_BLOCK_EXISTS` itself names ("pass --replace to
         overwrite it") is precisely the remedy that would destroy the
         sibling's own position history if a caller followed it here --
-        `HOLDER_UNDECLARED` must refuse before `--replace` is ever
-        consulted, and nothing may be written."""
+        before 0.14.0 `HOLDER_UNDECLARED` refused here; now the sibling's
+        declared holder is excluded from the candidates, `--replace` finds
+        no block of this skill's own to overwrite, and the install lands in
+        this skill's own holder -- the sibling's bytes never change."""
         box = self._box()
         proposals_root = self._tmp_dir("collision-seq-proposals-")
         (proposals_root / "r1.md").write_text("## 1\ntexto\n", encoding="utf-8")
@@ -2204,12 +2295,12 @@ class HolderCollisionTests(unittest.TestCase):
              "--sequence", "-", "--replace"],
             input=fresh_sequence, capture_output=True, text=True, cwd=FORGE, env=env)
 
-        self.assertEqual(install_experimental.returncode, 2,
+        self.assertEqual(install_experimental.returncode, 0,
                          install_experimental.stdout + install_experimental.stderr)
-        payload = json.loads(install_experimental.stdout)
-        self.assertEqual(payload["code"], "HOLDER_UNDECLARED")
         self.assertEqual((box / "Method" / "AGREED.md").read_bytes(), before)
-        self.assertFalse((box / "Method" / "Experimental_AGREED.md").exists())
+        own = (box / "Method" / "Experimental_AGREED.md").read_bytes()
+        self.assertIn(b"an experimental agreement", own)
+        self.assertNotIn(b"an agreement the sibling settled", own)
 
     def test_gate_never_authorizes_a_launch_against_the_siblings_position(self):
         """The READ face of the same CRITICAL defect (`sdd/the-holder-
@@ -2262,6 +2353,181 @@ class HolderCollisionTests(unittest.TestCase):
         self.assertFalse(any(e.get("kind") == "gate" for e in ledger_events))
         self.assertEqual((box / "Method" / "AGREED.md").read_bytes(), before)
         self.assertFalse((box / "Method" / "Experimental_AGREED.md").exists())
+
+
+class PilotLadderWithoutBaselinesTests(unittest.TestCase):
+    """Comparability does not gate the declared flow, under this profile too.
+
+    The ladder lives in the shared engine, so the proposal skill's own
+    `PilotLadderWithoutBaselinesTests` covers its logic; this class proves the
+    same answer through this skill's own launcher and its own holder
+    (`Experimental_AGREED.md`): a target with no prior-work package under
+    `src/` whose declared steps all finished at pilot reaches
+    `pilot-decisions` and publishes one placement question per step.
+    """
+
+    STEPS = ("__steps__ = {\n"
+             "    'first': {'module': 'Method.steps', 'function': 'a',"
+             " 'advances': 1},\n"
+             "    'second': {'module': 'Method.steps', 'function': 'b',"
+             " 'advances': 2},\n"
+             "}\n")
+    SEQUENCE = ("- [ ] 1. The first step's evidence. "
+                "`@notebook Notebooks/one.ipynb`\n"
+                "- [ ] 2. The second step's evidence. `@record`\n")
+
+    def build(self, ran):
+        engine = HolderCollisionTests._load_engine(self)
+        box = (FORGE / "implementations"
+               / f"_exp_pilot_nobase_{len(ran)}_{os.getpid()}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "Method/Notebooks"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text(
+            "__implementation__ = {'revision': 'r01.md'}\n" + self.STEPS,
+            encoding="utf-8")
+        (box / "src/Method/steps.py").write_text(
+            "def a():\n    return 1\n\n\ndef b():\n    return 2\n",
+            encoding="utf-8")
+        digest = engine.source_digest(box, engine.package_name("Method"))
+        (box / "Method/Notebooks/one.ipynb").write_text(json.dumps({
+            "cells": [{"cell_type": "code", "execution_count": 1,
+                       "metadata": {},
+                       "outputs": [{"output_type": "stream", "name": "stdout",
+                                    "text": [f"{engine.DIGEST_MARKER} "
+                                             f"{digest}\n"]}],
+                       "source": ["print('measured')\n"]}],
+            "metadata": {}, "nbformat": 4, "nbformat_minor": 5,
+        }), encoding="utf-8")
+        self.assertEqual(engine.HOLDER_FILENAME, "Experimental_AGREED.md")
+        (box / "Method" / engine.HOLDER_FILENAME).write_text(
+            "<!-- position revision=r01.md sha256=" + "a" * 64
+            + " derivedAt=2026-08-27T00:00:00Z session=s0 target=pilot -->\n"
+            + self.SEQUENCE + "<!-- /position -->\n", encoding="utf-8")
+        ledger = box / "Method" / ".implementation" / "position.jsonl"
+        ledger.parent.mkdir(parents=True)
+        live = engine.suite_digest(box)
+        with ledger.open("w", encoding="utf-8") as handle:
+            for step in ran:
+                handle.write(json.dumps({
+                    "kind": "step", "step": step, "outcome": "returned",
+                    "suiteDigest": live, "at": "2026-08-27T00:00:00Z"}) + "\n")
+        return box
+
+    def probe(self, box):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(PROFILE_FILE)
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "probe", "--target", str(box),
+             "--name", "Method", "--revision", "r01.md"],
+            capture_output=True, text=True, cwd=FORGE, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_an_unfinished_pilot_is_asked_for_with_nothing_to_compare(self):
+        probe = self.probe(self.build(ran=("first",)))
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "incomplete")
+        self.assertEqual(probe["nextStep"], "pilot-first")
+        self.assertIn("deliberately deferred", probe["resolve"]["question"])
+
+    def test_a_finished_pilot_publishes_every_placement_question(self):
+        probe = self.probe(self.build(ran=("first", "second")))
+        self.assertIs(probe["comparable"], False)
+        self.assertEqual(probe["pilotCompleteness"]["status"], "complete")
+        self.assertEqual(probe["nextStep"], "pilot-decisions")
+        asked = [entry["question"] for entry in probe["toDiscuss"]]
+        self.assertEqual(len(asked), 3, asked)
+        for index, step in enumerate(("first", "second"), start=1):
+            self.assertIn(f"'{step}'", asked[index])
+            self.assertIn("on a remote worker, or locally", asked[index])
+
+
+class SiblingScaffoldSealProvenanceTests(unittest.TestCase):
+    """The kit's seal owes no provenance under this profile either.
+
+    This domain ships no kit, so a target it reads was scaffolded by the
+    sibling: `src/<Package>/report_digest.py` is the sibling's seal, written
+    by `materialize --stage scaffold` and recorded in the receipt as such.
+    `verify` here used to list it under `missingProvenance`; it is exempt
+    while its bytes are the ones that receipt entry names, and reports the
+    moment they are not.
+    """
+
+    NAME = "Seal-Target"
+    PACKAGE = "Seal_Target"
+
+    def _git(self, box, *args):
+        env = dict(os.environ)
+        env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "seal-tests"
+        env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = (
+            "seal-tests@example.invalid")
+        subprocess.run(["git", *args], cwd=box, env=env, check=True,
+                       capture_output=True)
+
+    def _cli(self, launcher, profile, *args):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(profile)
+        # `apply` commits in the target; never depend on the operator's
+        # global git identity (CI runs the gate under an empty home).
+        env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "seal-tests"
+        env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = (
+            "seal-tests@example.invalid")
+        proc = subprocess.run([sys.executable, str(launcher), *args],
+                              capture_output=True, text=True, cwd=FORGE,
+                              env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def _sibling(self, *args):
+        return self._cli(SIBLING_LAUNCHER,
+                         FORGE / "skills/proposal-implementation/impl_profile.py",
+                         *args)
+
+    def _plan_file(self, box):
+        plan = self._sibling("plan", "--target", str(box), "--name", self.NAME)
+        path = Path(tempfile.mkdtemp(prefix="seal-plan-")) / "plan.json"
+        self.addCleanup(shutil.rmtree, path.parent, ignore_errors=True)
+        path.write_text(json.dumps(plan), encoding="utf-8")
+        return str(path)
+
+    def _scaffolded_by_the_sibling(self, tag):
+        box = FORGE / "implementations" / f"_exp_seal_{tag}_{os.getpid()}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        box.mkdir(parents=True)
+        self._git(box, "init", "-q")
+        self._sibling("apply", "--target", str(box), "--name", self.NAME,
+                      "--plan", self._plan_file(box))
+        for directory in box.rglob("*"):
+            if directory.is_dir() and ".git" not in directory.parts:
+                (directory / ".gitkeep").touch()
+        self._git(box, "add", "-A")
+        self._git(box, "commit", "-q", "-m", "initial")
+        self._sibling("materialize", "--target", str(box), "--name",
+                      self.NAME, "--stage", "scaffold", "--plan",
+                      self._plan_file(box), "--seed", "7")
+        return box
+
+    def _missing(self, box):
+        payload = self._cli(LAUNCHER, PROFILE_FILE, "verify", "--target",
+                            str(box), "--name", self.NAME)
+        return payload["fidelity"]["missingProvenance"]
+
+    def test_the_siblings_unmodified_seal_owes_no_provenance_here(self):
+        box = self._scaffolded_by_the_sibling("fresh")
+        self.assertTrue((box / "src" / self.PACKAGE / "report_digest.py")
+                        .is_file())
+        self.assertEqual(self._missing(box), [])
+
+    def test_a_modified_seal_still_reports_here(self):
+        box = self._scaffolded_by_the_sibling("edited")
+        seal = box / "src" / self.PACKAGE / "report_digest.py"
+        seal.write_text(seal.read_text(encoding="utf-8") + "\nEXTRA = 1\n",
+                        encoding="utf-8")
+        self.assertEqual(self._missing(box),
+                         [f"src/{self.PACKAGE}/report_digest.py"])
 
 
 class ShippedHolderObligationsTests(unittest.TestCase):
@@ -2332,5 +2598,505 @@ class ShippedHolderObligationsTests(unittest.TestCase):
             )
 
 
+
+class SettleDoneUnwitnessedSiblingTests(unittest.TestCase):
+    """The recorded closing act for a witness-less agreement, under this
+    profile's own launcher and holder (`Experimental_AGREED.md`).
+
+    The shared engine's logic is covered by the proposal skill's
+    `SettleDoneUnwitnessedTests`; this class proves the act lands in this
+    skill's holder, reads back under `witness.decided`, and that a decision
+    logged against one skill's holder never names a same-text line in the
+    sibling's holder (the ledger match is keyed by holder path).
+    """
+
+    def _box(self):
+        box = (FORGE / "implementations"
+               / f"_exp_settle_unwitnessed_{os.getpid()}")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        for directory in ("src/Method", "tests", "Method"):
+            (box / directory).mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True,
+                       capture_output=True)
+        (box / "src/Method/__init__.py").write_text("", encoding="utf-8")
+        return box
+
+    def _settle(self, box, *extra):
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(PROFILE_FILE)
+        return subprocess.run(
+            [sys.executable, str(LAUNCHER), "settle", "--target", str(box),
+             "--name", "Method", "--session", "s9",
+             "--text", "a deferred item", *extra],
+            capture_output=True, text=True, cwd=FORGE, env=env)
+
+    def test_the_act_lands_in_this_skills_holder_and_reads_back(self):
+        engine = HolderCollisionTests._load_engine(self)
+        box = self._box()
+        holder = box / "Method" / engine.HOLDER_FILENAME
+        holder.write_text("# Agreed\n\n## Ladder\n\n- [ ] a deferred item\n",
+                          encoding="utf-8")
+        proc = self._settle(box, "--done", "--unwitnessed", "--reason",
+                            "Deferred to the next revision.")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["holder"],
+                         f"Method/{engine.HOLDER_FILENAME}")
+        self.assertIn("- [x] a deferred item\n",
+                      holder.read_text(encoding="utf-8"))
+        state = engine.agreements_state(box, "Method")
+        self.assertEqual(state["status"], "settled")
+        self.assertEqual([d["reason"] for d in state["witness"]["decided"]],
+                         ["Deferred to the next revision."])
+
+    def test_a_decision_on_one_holder_never_names_the_siblings_line(self):
+        engine = HolderCollisionTests._load_engine(self)
+        box = self._box()
+        (box / "Method" / engine.HOLDER_FILENAME).write_text(
+            "# Agreed\n\n## Ladder\n\n- [x] a deferred item\n", encoding="utf-8")
+        ledger = box / "Method" / ".implementation" / "position.jsonl"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text(json.dumps({
+            "kind": "settle", "session": "s1", "text": "a deferred item",
+            "done": True, "unwitnessed": True, "reason": "elsewhere",
+            "holder": "Method/AGREED.md", "at": "2026-10-11T00:00:00Z"}) + "\n",
+            encoding="utf-8")
+        witness = engine.agreements_state(box, "Method")["witness"]
+        self.assertNotIn("decided", witness)
+        self.assertEqual(witness["handTicked"], ["a deferred item"])
+
+
+CONVENTION_FILE = FORGE / "skills" / "_core" / "conventions" / "experiments.json"
+
+
+class SharedExperimentConventionTests(unittest.TestCase):
+    """A7 (`cross-skill-consistency`): ONE experiment convention, read by
+    both experimental skills from `skills/_core/conventions/experiments.json`.
+
+    The canonical form is the one `experimental-deliberation` produces and
+    validates: an experiment declares `[exp:<id>]` in its own heading, and
+    its block runs to the next heading of the same or a higher level.
+    Before 0.14.0 this skill located experiments only by a bare `## N`
+    heading, so a document written the deliberation's way read as declaring
+    no experiment at all; documents had to carry both forms. The legacy
+    `## N` form (with or without a nested `[exp:<id>]` heading) still reads
+    -- managed revisions are immutable -- and inside one legacy block both
+    ids name the same experiment.
+    """
+
+    CANONICAL = (
+        "# Experiments\n\n"
+        "## Experiment [exp:E1] — first sweep\n\n"
+        "Sustains claim C1 [tests:E1], citing [claims:9].\n\n"
+        "### Protocol\n\nFive seeds.\n\n"
+        "## Experiment [exp:E2] — second sweep\n\n"
+        "Sustains claim C2 [tests:E2].\n\n"
+        "## Reporting\n\nTables.\n"
+    )
+
+    LEGACY_DUAL = (
+        "# Experiments\n\n"
+        "## 1\n\n### Experiment [exp:E1] — first sweep\n\nOld text one.\n\n"
+        "## 2\n\n### Experiment [exp:E2] — second sweep\n\nOld text two.\n"
+    )
+
+    LEGACY_BARE = "## 1\n\nOld text one.\n\n## 2\n\nOld text two.\n"
+
+    def _tmp_dir(self, prefix: str) -> Path:
+        tmp_dir = Path(tempfile.mkdtemp(prefix=prefix))
+        self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+        return tmp_dir
+
+    def _engine(self, doc0_text: str | None = None, doc1_text: str | None = None):
+        module, _ = _engine_with_documents(_real_profile()["documents"])
+        doc0_dir = self._tmp_dir("convention-doc0-")
+        doc1_dir = self._tmp_dir("convention-doc1-")
+        if doc0_text is not None:
+            (doc0_dir / "e1.md").write_text(doc0_text, encoding="utf-8")
+        if doc1_text is not None:
+            (doc1_dir / "p1.md").write_text(doc1_text, encoding="utf-8")
+        saved = {key: os.environ.get(key)
+                 for key in ("IMPLEMENTATION_PROPOSALS", "IMPLEMENTATION_PROPOSALS_1")}
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(doc0_dir)
+        os.environ["IMPLEMENTATION_PROPOSALS_1"] = str(doc1_dir)
+
+        def _restore():
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore)
+        return module
+
+    def _compose(self, module, remedy_block: str, locus: str, entry: str) -> dict:
+        box = FORGE / "implementations" / f"_convention_{os.getpid()}_{id(self)}_{next(_counter)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "tests").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        finding = {"id": "f1", "document": "experiments", "experiments": [locus],
+                   "remedy_experiments": [locus], "remedy": "rewrite it",
+                   "remedy_block": remedy_block}
+        (box / "tests" / "findings.py").write_text(
+            f"FINDINGS = [{finding!r}]\n", encoding="utf-8")
+        return module.cmd_compose(argparse.Namespace(
+            target=str(box), finding="f1", entry_text=entry))
+
+    # -- the canonical form, with no `## N` heading anywhere -------------
+
+    def test_a_canonical_document_declares_its_experiments(self):
+        module = self._engine()
+        locator = module.document_block_locator(0)
+        self.assertEqual(locator["pattern"].findall(self.CANONICAL), ["E1", "E2"])
+
+    def test_a_canonical_locus_is_not_unknown_to_the_compatibility_audit(self):
+        module = self._engine(self.CANONICAL, "$$a = b \\tag{9}$$\n")
+        finding = {"id": "f1", "document": "experiments", "experiments": ["E2"],
+                   "remedy_experiments": ["E2"], "uses": [], "introduces": []}
+        result = module.remedy_compatibility(
+            [finding], "e1.md", {"experiments": self.CANONICAL,
+                                 "proposal": "$$a = b \\tag{9}$$\n"})
+        self.assertEqual(result["unknownExperiments"], [], result)
+
+    def test_a_canonical_document_still_crosses_into_the_proposal(self):
+        module = self._engine(self.CANONICAL, "$$a = b \\tag{9}$$ $$c \\tag{4}$$\n")
+        self.assertEqual(module.crossing_state(0, "e1.md"),
+                         {"crossed": ["9"], "declared": ["4", "9"],
+                          "absent": [], "untested": ["4"]})
+
+    def test_compose_replaces_one_canonical_block_and_keeps_its_neighbours(self):
+        module = self._engine()
+        remedy = "## Experiment [exp:E1] — first sweep\n\nNew text one.\n"
+        composed = self._compose(module, remedy, "E1", self.CANONICAL)
+        self.assertEqual(composed["experiment"], "E1")
+        text = composed["replacementText"]
+        self.assertIn("New text one.", text)
+        # The nested `### Protocol` belonged to E1's block and went with it;
+        # E2 and the same-level `## Reporting` are untouched.
+        self.assertNotIn("Five seeds.", text)
+        self.assertIn("## Experiment [exp:E2] — second sweep\n\nSustains claim C2", text)
+        self.assertTrue(text.endswith("## Reporting\n\nTables.\n"), text)
+
+    def test_canonical_prose_citations_are_counted(self):
+        pattern = re.compile(_real_profile()["findings"]["citation_pattern"])
+        found = [next(g for g in m.groups() if g)
+                 for m in pattern.finditer("As (Exp. E1) and (Experiment. run-2.b) show.")]
+        self.assertEqual(found, ["E1", "run-2.b"])
+
+    # -- the legacy forms keep reading -----------------------------------
+
+    def test_legacy_prose_citations_still_count(self):
+        pattern = re.compile(_real_profile()["findings"]["citation_pattern"])
+        found = [next(g for g in m.groups() if g)
+                 for m in pattern.finditer("Exp. 3, Exps. (4), Experiment 5, Experimentos (6)")]
+        self.assertEqual(found, ["3", "4", "5", "6"])
+
+    def test_the_legacy_bare_heading_still_declares(self):
+        module = self._engine()
+        self.assertEqual(
+            module.document_block_locator(0)["pattern"].findall(self.LEGACY_BARE),
+            ["1", "2"])
+
+    def test_the_legacy_dual_form_declares_both_ids(self):
+        module = self._engine()
+        self.assertEqual(
+            module.document_block_locator(0)["pattern"].findall(self.LEGACY_DUAL),
+            ["1", "E1", "2", "E2"])
+
+    def test_a_legacy_remedy_carrying_both_ids_composes_as_one_experiment(self):
+        module = self._engine()
+        remedy = "## 1\n\n### Experiment [exp:E1] — first sweep\n\nNew text one."
+        composed = self._compose(module, remedy, "1", self.LEGACY_DUAL)
+        self.assertEqual(
+            composed["replacementText"],
+            "# Experiments\n\n" + remedy + "\n## 2\n\n"
+            "### Experiment [exp:E2] — second sweep\n\nOld text two.\n")
+
+    def test_a_canonical_id_reaches_its_legacy_block(self):
+        module = self._engine()
+        remedy = "### Experiment [exp:E2] — second sweep\n\nNew text two.\n"
+        composed = self._compose(module, remedy, "E2", self.LEGACY_DUAL)
+        self.assertEqual(
+            composed["replacementText"],
+            "# Experiments\n\n## 1\n\n### Experiment [exp:E1] — first sweep\n\n"
+            "Old text one.\n\n" + remedy)
+
+    def test_a_legacy_bare_remedy_composes_exactly_as_before(self):
+        module = self._engine()
+        composed = self._compose(module, "## 2\n\nNew text two.\n", "2",
+                                 self.LEGACY_BARE)
+        self.assertEqual(composed["replacementText"],
+                         "## 1\n\nOld text one.\n\n## 2\n\nNew text two.\n")
+
+    def test_two_separate_experiments_in_one_remedy_stay_ambiguous(self):
+        module = self._engine()
+        remedy = ("## Experiment [exp:E1] — a\n\none\n\n"
+                  "## Experiment [exp:E2] — b\n\ntwo\n")
+        with self.assertRaises(module.Refused) as caught:
+            self._compose(module, remedy, "E1", self.CANONICAL)
+        self.assertEqual(caught.exception.code, "AMBIGUOUS_REMEDY_TAG")
+
+    def test_one_id_declared_by_two_blocks_of_a_remedy_stays_ambiguous(self):
+        module = self._engine()
+        remedy = ("## 1\n\n### Experiment [exp:E1] — a\n\none\n\n"
+                  "## Experiment [exp:E1] — again\n\ntwo\n")
+        with self.assertRaises(module.Refused) as caught:
+            self._compose(module, remedy, "1", self.LEGACY_DUAL)
+        self.assertEqual(caught.exception.code, "AMBIGUOUS_REMEDY_TAG")
+
+    def test_without_block_aliases_several_ids_stay_ambiguous(self):
+        """Aliasing is the document's own declaration, off by default: the
+        same legacy remedy refuses under a locator that does not opt in."""
+        documents = copy.deepcopy(_real_profile()["documents"])
+        del documents[0]["block_locator"]["block_aliases"]
+        module, tmp_dir = _engine_with_documents(documents)
+        self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+        remedy = "## 1\n\n### Experiment [exp:E1] — first sweep\n\nNew text one."
+        with self.assertRaises(module.Refused) as caught:
+            self._compose(module, remedy, "1", self.LEGACY_DUAL)
+        self.assertEqual(caught.exception.code, "AMBIGUOUS_REMEDY_TAG")
+
+    def test_a_non_boolean_block_aliases_is_refused_by_the_resolver(self):
+        profile = copy.deepcopy(dict(_real_profile()))
+        profile["documents"][0]["block_locator"]["block_aliases"] = "yes"
+        tmp_dir = self._tmp_dir("convention-aliases-")
+        profile_file = tmp_dir / "impl_profile.py"
+        profile_file.write_text(
+            "from pathlib import Path\n" f"PROFILE = {_to_source(profile)}\n",
+            encoding="utf-8")
+        with self.assertRaises(RuntimeError) as ctx:
+            _resolve_with(profile_file)
+        self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_INVALID_BLOCK_LOCATOR",
+                      str(ctx.exception))
+        self.assertIn("block_aliases", str(ctx.exception))
+
+    # -- one shared file drives both readers -----------------------------
+
+    def _relocated_profile(self, convention: dict):
+        """This skill's real profile file, placed in a scratch tree whose
+        `_core/conventions/experiments.json` says something else."""
+        root = self._tmp_dir("convention-tree-")
+        skill = root / "skills" / "experimental-implementation"
+        skill.mkdir(parents=True)
+        shutil.copy(PROFILE_FILE, skill / "impl_profile.py")
+        conventions = root / "skills" / "_core" / "conventions"
+        conventions.mkdir(parents=True)
+        (conventions / "experiments.json").write_text(
+            json.dumps(convention), encoding="utf-8")
+        # B1: the profile also reads the shared section-label convention.
+        shutil.copy(CONVENTION_FILE.parent / "sections.json",
+                    conventions / "sections.json")
+        return _load_module(skill / "impl_profile.py", "relocated_profile").PROFILE
+
+    def test_the_profile_reads_the_shared_file(self):
+        convention = json.loads(CONVENTION_FILE.read_text(encoding="utf-8"))
+        convention["declares"] = "trial"
+        convention["proseReference"] = "\\(Trial\\s+({identifier})\\)"
+        profile = self._relocated_profile(convention)
+        locator = re.compile(profile["documents"][0]["block_locator"]["pattern"])
+        self.assertEqual(locator.findall("## Trial [trial:T7]\n## X [exp:E1]\n"), ["T7"])
+        prose = re.compile(profile["findings"]["citation_pattern"])
+        self.assertEqual([next(g for g in m.groups() if g)
+                          for m in prose.finditer("see (Trial T7)")], ["T7"])
+
+    def test_both_languages_load_the_same_convention(self):
+        """The deliberation's TypeScript reader and this profile read the
+        identical values: declaration, citation and prose patterns."""
+        harness = (
+            "import path from 'node:path';\n"
+            "import { pathToFileURL } from 'node:url';\n"
+            f"const piRoot = {json.dumps(str(FORGE))};\n"
+            "const { createJiti } = await import(pathToFileURL(path.join(piRoot, "
+            "'node_modules/jiti/lib/jiti.mjs')).href);\n"
+            "const jiti = createJiti(import.meta.url);\n"
+            "const m = await jiti.import(path.join(piRoot, "
+            "'skills/experimental-deliberation/reference-experimental.ts'));\n"
+            "console.log(JSON.stringify(m.EXPERIMENT_CONVENTION));\n")
+        scratch = self._tmp_dir("convention-node-")
+        (scratch / "harness.mjs").write_text(harness, encoding="utf-8")
+        env = dict(os.environ)
+        env["DELIBERATION_DOMAIN_PROFILE"] = str(
+            FORGE / "skills" / "experimental-deliberation" / "profile.ts")
+        proc = subprocess.run(["node", str(scratch / "harness.mjs")], env=env,
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        from_ts = json.loads(proc.stdout.strip().splitlines()[-1])
+        profile_module = _load_module(PROFILE_FILE, "convention_probe")
+        self.assertEqual(from_ts, profile_module.EXPERIMENT_CONVENTION)
+        self.assertEqual(from_ts, json.loads(CONVENTION_FILE.read_text(encoding="utf-8")))
+
+
+class PerLineageImplementationBindingTests(unittest.TestCase):
+    """A8 (`cross-skill-consistency`): `proposal-implementation` and this
+    skill share one engine and, on one target, one `src/<Package>/__init__.py`
+    -- so one `__implementation__`. Its `revision` held a single name, which
+    each skill read as a revision of its OWN document 0: bound to the
+    proposal, this skill's `verify` discovered nothing (`fidelity: unknown`);
+    bound to the experiments document, the sibling's did the same. Keyed by
+    document label, each skill reads its own lineage; a bare string keeps
+    meaning this skill's document 0, exactly as before."""
+
+    PROPOSAL = "$$a = b \\tag{1}$$\n"
+    EXPERIMENTS = "## Experiment [exp:E1] — sweep\n\nBody.\n"
+
+    def _engine(self):
+        engine = HolderCollisionTests._load_engine(self)
+        doc0 = Path(tempfile.mkdtemp(prefix="lineage-doc0-"))
+        doc1 = Path(tempfile.mkdtemp(prefix="lineage-doc1-"))
+        for directory in (doc0, doc1):
+            self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        (doc0 / "experiments-x-v01.md").write_text(self.EXPERIMENTS, encoding="utf-8")
+        (doc1 / "r01.md").write_text(self.PROPOSAL, encoding="utf-8")
+        saved = {key: os.environ.get(key)
+                 for key in ("IMPLEMENTATION_PROPOSALS", "IMPLEMENTATION_PROPOSALS_1")}
+        os.environ["IMPLEMENTATION_PROPOSALS"] = str(doc0)
+        os.environ["IMPLEMENTATION_PROPOSALS_1"] = str(doc1)
+
+        def _restore():
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore)
+        return engine
+
+    def _box(self, revision) -> Path:
+        box = FORGE / "implementations" / f"_lineage_{os.getpid()}_{id(self)}_{next(_counter)}"
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        (box / "src" / "Method").mkdir(parents=True)
+        (box / "tests").mkdir()
+        subprocess.run(["git", "init", "-q", str(box)], check=True, capture_output=True)
+        (box / "src" / "Method" / "__init__.py").write_text(
+            f"__implementation__ = {{'revision': {revision!r}, "
+            "'premises': {'metric': 'm'}}\n", encoding="utf-8")
+        return box
+
+    def _fidelity(self, engine, box) -> dict:
+        return engine.cmd_verify(argparse.Namespace(
+            target=str(box), name="Method", revision=None))["fidelity"]
+
+    def test_a_keyed_binding_reads_this_skills_own_lineage(self):
+        engine = self._engine()
+        box = self._box({"proposal": "r01.md", "experiments": "experiments-x-v01.md"})
+        fidelity = self._fidelity(engine, box)
+        self.assertEqual(fidelity["latestRevision"], "experiments-x-v01.md")
+        self.assertEqual(fidelity["benchmark"]["revision"], "experiments-x-v01.md")
+        self.assertFalse(fidelity["benchmark"]["staleRevision"])
+        self.assertNotEqual(fidelity["status"], "unknown")
+
+    def test_the_siblings_lineage_alone_is_never_read_as_this_one(self):
+        """Measured before 0.14.0 with the bare string `r01.md`: this skill
+        searched `experiments/` for a family named by a proposal file."""
+        engine = self._engine()
+        box = self._box({"proposal": "r01.md"})
+        resolved = engine.resolve_implementation_declaration(box, "Method")
+        self.assertEqual(resolved["contract"]["revision"], "")
+        self.assertIsNone(self._fidelity(engine, box)["benchmark"]["revision"] or None)
+
+    def test_a_bare_string_still_means_this_skills_document_zero(self):
+        engine = self._engine()
+        box = self._box("experiments-x-v01.md")
+        fidelity = self._fidelity(engine, box)
+        self.assertEqual(fidelity["latestRevision"], "experiments-x-v01.md")
+        self.assertEqual(fidelity["benchmark"]["revision"], "experiments-x-v01.md")
+
+    def test_the_siblings_module_does_not_drift_this_skills_headline(self):
+        """X16: the proposal-bound module read stale in this skill's whole-tree
+        `staleModules` while `fidelityByDocument` judged it `ok` under its own
+        label. It is reported in `otherLineageModules` instead."""
+        engine = self._engine()
+        box = self._box({"proposal": "r01.md", "experiments": "experiments-x-v01.md"})
+        (box / "src" / "Method" / "sweep.py").write_text(
+            "__provenance__ = {'revision': 'experiments-x-v01.md', 'sections': ['E1'], "
+            "'experiments': ['E1'], 'invariants': []}\n", encoding="utf-8")
+        (box / "src" / "Method" / "estimator.py").write_text(
+            "__provenance__ = {'revision': 'r01.md', 'sections': ['1'], 'invariants': []}\n",
+            encoding="utf-8")
+        fidelity = self._fidelity(engine, box)
+        self.assertEqual(fidelity["staleModules"], [])
+        self.assertEqual(fidelity["otherLineageModules"],
+                         [{"module": "src/Method/estimator.py", "label": "proposal",
+                           "revision": "r01.md"}])
+        self.assertEqual({entry["label"]: entry["conditions"]["staleModules"]
+                          for entry in fidelity["fidelityByDocument"]},
+                         {"experiments": [], "proposal": []})
+        self.assertEqual(fidelity["status"], "ok", fidelity)
+
+    def test_the_scaffold_template_names_this_skills_own_document(self):
+        """The template's comment used to name `proposals/` under both
+        skills; it now names this skill's own document directory and label."""
+        engine = HolderCollisionTests._load_engine(self)
+        template = engine._DEFAULT_PACKAGE_DECLARATIONS
+        self.assertIn("# experiments/, asked for by the flow", template)
+        self.assertIn('"revision": {"experiments": "<filename>"', template)
+        self.assertNotIn("proposals/", template)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExperimentSectionsTests(unittest.TestCase):
+    """B1 (`cross-skill-consistency`), the experimental side: per-section
+    drift in `verify` speaks in the experiment ids the shared convention
+    declares (`[exp:<id>]` in a heading), and still reads the legacy `## N`
+    form. Before 0.14.0 neither form produced a section: the canonical
+    heading carries no leading number, and the legacy `## N` stands alone on
+    its line, which the old reader never matched."""
+
+    CANONICAL = SharedExperimentConventionTests.CANONICAL
+    LEGACY_DUAL = SharedExperimentConventionTests.LEGACY_DUAL
+
+    def _engine(self):
+        module, _ = _engine_with_documents(_real_profile()["documents"])
+        return module
+
+    def test_canonical_experiment_headings_are_sections(self):
+        engine = self._engine()
+        self.assertEqual(sorted(engine.revision_sections(self.CANONICAL)), ["E1", "E2"])
+        moved = engine.changed_sections(
+            self.CANONICAL, self.CANONICAL.replace("Five seeds", "Ten seeds"))
+        self.assertEqual(moved, ["E1"])
+
+    def test_legacy_blocks_read_both_ids(self):
+        engine = self._engine()
+        self.assertEqual(sorted(engine.revision_sections(self.LEGACY_DUAL)),
+                         ["1", "2", "E1", "E2"])
+        moved = engine.changed_sections(
+            self.LEGACY_DUAL, self.LEGACY_DUAL.replace("Old text two", "New"))
+        self.assertEqual(moved, ["2", "E2"])
+
+    def test_a_malformed_section_heading_is_refused_by_the_resolver(self):
+        real = dict(_real_profile()["documents"][0]["section_heading"])
+        for grammar in ({**real, "marker": r"\[exp:[A-Z0-9]+\]"},
+                        {**real, "marker": r"(a)(b)"},
+                        {**real, "label": r"(unclosed"},
+                        {"closer": real["closer"]},
+                        "not a mapping"):
+            with self.subTest(grammar=grammar):
+                profile = copy.deepcopy(dict(_real_profile()))
+                profile["documents"][0]["section_heading"] = grammar
+                tmp_dir = Path(tempfile.mkdtemp(prefix="section-heading-"))
+                self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+                profile_file = tmp_dir / "impl_profile.py"
+                profile_file.write_text(
+                    "from pathlib import Path\n" f"PROFILE = {_to_source(profile)}\n",
+                    encoding="utf-8")
+                with self.assertRaises(RuntimeError) as ctx:
+                    _resolve_with(profile_file)
+                self.assertIn("IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING",
+                              str(ctx.exception))
+
+    def test_both_implementation_profiles_hand_over_the_one_convention(self):
+        convention = {key: value for key, value in json.loads(
+            (FORGE / "skills/_core/conventions/sections.json").read_text(
+                encoding="utf-8")).items() if not key.startswith("$")}
+        sibling = _load_module(
+            FORGE / "skills/proposal-implementation/impl_profile.py",
+            "proposal_impl_profile_sections").PROFILE
+        self.assertEqual(sibling["documents"][0]["section_heading"], convention)
+        mine = dict(_real_profile()["documents"][0]["section_heading"])
+        mine.pop("marker")
+        self.assertEqual(mine, convention)

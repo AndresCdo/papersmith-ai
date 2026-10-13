@@ -25,6 +25,12 @@ RULING_PATH = Path(__file__).with_name("admissibility.json")
 #: instead of only surfacing later, at `verify`'s sha256 staleness check.
 CURRENT_REVISION = "{{REVISION}}"
 
+#: Still carrying its placeholder: this file was scaffolded before the bound
+#: revision was known. The engine's `--stage objects` (SKILL.md step 9) fills
+#: it in -- and re-seals the file -- once step 8 has declared `__implementation__`'s
+#: `revision`; until then no ruling can be matched against it.
+REVISION_UNANSWERED = CURRENT_REVISION.startswith("{" + "{")
+
 
 def _ruling() -> dict:
     if not RULING_PATH.exists():
@@ -40,6 +46,13 @@ def require_admissible(finding_id: str) -> None:
     for. Without this, a stale ruling on disk is silently trusted at measure
     time and the mismatch surfaces only later, at `verify`.
     """
+    if REVISION_UNANSWERED:
+        raise AssertionError(
+            "tests/admissibility.py does not know the revision it is written "
+            "against yet: it was scaffolded before step 8 declared one. Declare "
+            "`__implementation__['revision']`, then run the engine's `--stage "
+            "objects` (SKILL.md step 9), which fills it in, before measuring "
+            "any remedy")
     revision = ruled_revision()
     if revision != CURRENT_REVISION:
         raise AssertionError(

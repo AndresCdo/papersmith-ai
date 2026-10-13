@@ -82,7 +82,14 @@ def sweep(roots: tuple[Path, ...] = SWEEP_ROOTS,
                 continue
             if not _is_untracked(child):
                 continue
-            if _age_seconds(child, now) < min_age_seconds:
+            # A sibling's own cleanup may remove its fixture between the
+            # listing above and this check; gone is not an orphan, and
+            # raising here would error every test of the calling file.
+            try:
+                age = _age_seconds(child, now)
+            except FileNotFoundError:
+                continue
+            if age < min_age_seconds:
                 continue
             if child.is_dir():
                 shutil.rmtree(child, ignore_errors=True)

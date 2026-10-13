@@ -9,7 +9,7 @@ Every value here is computed from THIS file's own location, mirroring
 from `Path(__file__).resolve().parent`), never from the engine's location.
 The launcher (`scripts/implementation_cli.py`) is a byte-identical copy of
 the sibling's own launcher (design.md D4/M4): every path in it is
-self-anchored off `Path(__file__).resolve()`, so the same 24 bytes placed
+self-anchored off `Path(__file__).resolve()`, so the same launcher bytes placed
 here resolve to THIS skill's own profile, never the sibling's.
 
 **Scope, Slice A (design.md, proposal.md): change A only.** A single
@@ -68,6 +68,8 @@ spells for reasons that have nothing to do with this domain.
 """
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 # The canonical tree is `skills/<skill>/impl_profile.py`, one level
@@ -75,6 +77,33 @@ from pathlib import Path
 # root is `parents[1]`, not `parents[2]`.
 _SKILL = Path(__file__).resolve().parent
 _FORGE_ROOT = _SKILL.parents[1]
+
+#: The ONE experiment convention, shared with `experimental-deliberation`
+#: (`reference-experimental.ts`, `profile.ts`): the identifier class, the
+#: declaration marker `[<declares>:<id>]` an experiment carries in its own
+#: heading, the citation marker, and the prose citation form. Read, never
+#: respelled here -- a second spelling is how the two skills came to disagree
+#: on what an experiment heading is (`cross-skill-consistency`, A7).
+EXPERIMENT_CONVENTION = json.loads(
+    (_SKILL.parent / "_core" / "conventions" / "experiments.json")
+    .read_text(encoding="utf-8"))
+#: The ONE section-label convention, shared with `proposal-implementation`:
+#: what a section heading's leading label looks like (`cross-skill-consistency`,
+#: B1). Read, never respelled here.
+SECTION_CONVENTION = {
+    key: value for key, value in json.loads(
+        (_SKILL.parent / "_core" / "conventions" / "sections.json")
+        .read_text(encoding="utf-8")).items()
+    if not key.startswith("$")}
+_IDENTIFIER = EXPERIMENT_CONVENTION["identifier"]
+_DECLARES = re.escape("[" + EXPERIMENT_CONVENTION["declares"] + ":")
+_PROSE_REFERENCE = EXPERIMENT_CONVENTION["proseReference"].replace(
+    "{identifier}", _IDENTIFIER)
+#: `[<outOfScope>:<id>]`: the convention's marker an experiments document uses
+#: to say a proposal claim is deliberately not tested here. `agree` subtracts
+#: what it marks from `untested` (`cross-skill-consistency`, C14).
+_OUT_OF_SCOPE = (re.escape("[" + EXPERIMENT_CONVENTION["outOfScope"] + ":")
+                 + f"({_IDENTIFIER})" + re.escape("]"))
 
 #: WHY THIS SKILL WAS INVOKED, AND WHERE IT HAS TO ARRIVE.
 #:
@@ -169,8 +198,14 @@ PROFILE = {
         # or match.group(3)`, so a fourth or a second group is a live
         # defect, not a style choice. Asserted directly in
         # `tests/test_experimental_implementation.py`.
+        #
+        # Group 1 is the shared convention's own prose form (`(Exp. E1)`);
+        # groups 2 and 3 are the digits-only forms this skill read before
+        # 0.14.0 (`Exp. 3`, `Experiment (3)`, `Experimentos (3)`), kept so
+        # an existing revision's citations keep counting.
         "citation_pattern": (
-            r"Exps?\.?\s*\(?(\d+)\)?|Experiment\.?\s*\(?(\d+)\)?|"
+            _PROSE_REFERENCE
+            + r"|(?:Exps?|Experiment)\.?\s*\(?(\d+)\)?|"
             r"Experimentos?\s*\((\d+)\)"),
     },
     "vocabulary": {
@@ -220,17 +255,40 @@ PROFILE = {
             # exact line-leading marker or it does not, and `verify` can
             # now say which.
             "dataset_marker": "**Dataset:**",
-            # `the-agreement-nothing-computes` (Slice D, design.md D1/D3):
-            # this domain's OWN numbered-entry form -- a line-leading
-            # `## N` heading, never the mathematical proposal's LaTeX. The
-            # inline `(?m)` carries `re.MULTILINE` so a mid-document
-            # heading matches; the block form runs to (not including) the
-            # next heading or the end of the text, mirroring the LaTeX
-            # sibling's own non-greedy `$$…$$` shape.
+            # The experiment heading, from the shared convention (A7,
+            # `cross-skill-consistency`): an experiment is a heading of any
+            # level carrying its `[exp:<id>]` declaration -- exactly what
+            # `experimental-deliberation` writes and validates -- and its
+            # block runs to (not including) the next heading of the same or
+            # a higher level, or the end of the text.
+            #
+            # Legacy read, never a rewrite: before 0.14.0 this skill knew
+            # only a bare `## N` heading, so published revisions carry
+            # either that alone or `## N` with a nested `[exp:<id>]`
+            # heading. Both still read. A legacy `## N` block declares
+            # `N` and every `[exp:<id>]` nested in it, and
+            # `block_aliases` makes the engine treat ids one block
+            # declares together as one locus, so a finding citing the old
+            # `N` and one citing `<id>` name the same experiment.
             "block_locator": {
-                "pattern": r"(?m)^## (\d+)$",
-                "block_pattern": r"(?s)## \d+.*?(?=\n## |\Z)",
+                "pattern": (
+                    r"(?m)(?:^## (?=\d+$)|^#{1,6}[ \t][^\n]*?" + _DECLARES
+                    + r"(?=" + _IDENTIFIER + r"\]))(" + _IDENTIFIER + r")"),
+                "block_pattern": (
+                    r"(?ms)^(#{1,6})[ \t](?:(?<=^## )\d+|[^\n]*?" + _DECLARES
+                    + _IDENTIFIER + r"\][^\n]*)$.*?(?=\n(?!\1#)#{1,6}[ \t]|\Z)"),
                 "identity": "## {value}",
+                "block_aliases": True,
+            },
+            # The section unit `verify`'s per-section drift speaks in
+            # (`cross-skill-consistency`, B1): the shared section-label
+            # convention (`_core/conventions/sections.json`), which still
+            # reads a legacy `## N` heading, plus an experiment heading's own
+            # `[exp:<id>]` declaration as its marker.
+            "section_heading": {
+                **SECTION_CONVENTION,
+                "marker": (r"^#{1,6}[ \t][^\n]*?" + _DECLARES + r"("
+                           + _IDENTIFIER + r")\]"),
             },
             # `the-agreement-nothing-computes` (Slice D, design.md D5,
             # task 2.7): THIS document -- the experiments document -- is
@@ -245,6 +303,7 @@ PROFILE = {
             "cross_citation": {
                 "pattern": r"\[claims:([A-Za-z0-9][A-Za-z0-9._-]*)\]",
                 "resolves_against": "proposal",
+                "out_of_scope": _OUT_OF_SCOPE,
             },
         },
         {

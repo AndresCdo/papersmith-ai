@@ -181,9 +181,13 @@ class EvidenceSpanTests(unittest.TestCase):
         # in the same pass that fixed it, would still be verbatim and would
         # no longer be independent of authorship, which is the whole of
         # what this fixture proves.
+        #
+        # It moved a second time when the README was translated to English:
+        # the same table row, translated in that pass, not written for this
+        # test.
         readme = FORGE_ROOT / "README.md"
         self.assertTrue(readme.is_file(), "README.md must exist for this fixture to mean anything")
-        quote = "**Papers guía** — las referencias metodológicas / de estilo."
+        quote = "**Guide papers** — the methodological / style references."
         span = paper_evidence.EvidenceSpan.locate(readme, quote)
         self.assertEqual(span.quote, quote)
 

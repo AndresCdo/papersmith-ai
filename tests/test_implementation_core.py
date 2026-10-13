@@ -929,16 +929,25 @@ class AttainedLevelTests(unittest.TestCase):
             impl_position.attained_level(items, self._evidence(shardsArrived=[])),
             "one")
 
-    def test_a_sequence_with_no_leveled_item_attains_the_whole_ladder(self):
-        """Vacuous truth, and deliberately so: with nothing that could fail to
-        reach a rung, every rung grades attained and the answer is the top.
-        This is what keeps a two-state-only target exactly as unconstrained by
-        the rung rule as it was before the rule existed."""
+    def test_a_sequence_with_no_leveled_item_attains_the_aim_never_more(self):
+        """B8 (`cross-skill-consistency`): with no leveled item nothing
+        measured a scale, so attainment is the rung the pass aims at, never
+        a rung above it. Before 0.14.0 this answered the ladder's top
+        vacuously, so a pilot-aimed, all-two-state position reported the
+        full-scale rung although no full-scale run had happened. The aim
+        still leaves a two-state-only target free to seal the rung it
+        names (the rung-skip rule compares an aim with itself)."""
         items = [{"ordinal": 1, "mark": " ", "text": "rehearse",
                   "witness": {"kind": "rehearsal", "operand": "job-a",
                               "twostate": True}}]
-        self.assertEqual(
-            impl_position.attained_level(items, self._evidence()), "three")
+        for aim in ("one", "two", "three"):
+            with self.subTest(targetLevel=aim):
+                self.assertEqual(
+                    impl_position.attained_level(
+                        items, self._evidence(targetLevel=aim)), aim)
+        self.assertIsNone(impl_position.attained_level(items, self._evidence()))
+        self.assertIsNone(impl_position.attained_level(
+            items, self._evidence(targetLevel="retired-rung")))
 
     def test_a_target_with_no_declared_ladder_attains_nothing(self):
         """`levels == []` is not a ladder with one rung on it; it is the
@@ -1166,12 +1175,11 @@ class LaunchAvailableTests(unittest.TestCase):
         self.assertEqual(verdict["code"], "RUNG_NOT_ATTAINED")
 
     def test_vacuous_attainment_at_the_top_rung_is_sufficient(self):
-        """A sequence with zero leveled items attains the ladder's top rung
-        vacuously (`impl_position.attained_level`'s own doctrine, unchanged
-        by this rule) -- passed through here as an ordinary `attained_level`
-        value, this check adds nothing new for that state and a launch
-        proceeds exactly as it would for any other rung at or above the
-        floor."""
+        """An attained top rung (a sequence with zero leveled items attains
+        the rung its position aims at, `impl_position.attained_level`) --
+        passed through here as an ordinary `attained_level` value, this
+        check adds nothing new for that state and a launch proceeds exactly
+        as it would for any other rung at or above the floor."""
         verdict = self._call(levels=["floor", "pilot", "full"], attained_level="full")
         self.assertTrue(verdict["available"])
 
@@ -1567,31 +1575,42 @@ class LocateHeadingsTests(unittest.TestCase):
     # `settle` landed its bullet between the heading and the paragraph
     # that introduces the section) ---
 
-    def test_a_section_that_opens_with_prose_inserts_before_the_first_bullet(self):
+    def test_a_section_that_opens_with_prose_inserts_after_the_last_bullet(self):
         """`heading / blank / prose / blank / bullets` is a real shape, not
-        only `heading / blank / bullets`. The insertion point must be
-        immediately before the first `- [` line, not the first non-blank
-        line -- landing ahead of the prose that explains the section is
-        the exact defect a real `settle` call produced.
+        only `heading / blank / bullets`. The insertion point is never
+        ahead of the prose that explains the section (the defect a real
+        `settle` call once produced); since B4 (`cross-skill-consistency`)
+        it is directly after the section's last item, so items read in the
+        order they were settled.
         """
         data = (b"## The trials search\n\n"
                 b"Agreed 2026-08-26/27, while replacing the grid engine.\n\n"
                 b"- [x] first item\n"
-                b"- [x] second item\n")
+                b"- [x] second item\n\n## Next\n")
         spans = impl_position.locate_headings(data, "## The trials search")
         self.assertEqual(len(spans), 1)
-        self.assertEqual(data[spans[0]["start"]:],
-                         b"- [x] first item\n- [x] second item\n")
+        self.assertEqual(data[spans[0]["start"]:], b"\n## Next\n")
 
-    def test_a_bullets_first_section_is_unchanged_by_the_prose_skip(self):
-        """Must not regress: a section that already opens with a bullet
-        keeps landing at that first bullet, exactly as before.
-        """
+    def test_a_bullets_first_section_appends_after_its_last_bullet(self):
+        """B4: a section that opens with bullets receives the new item after
+        the last of them, never at the first (which read newest first)."""
         data = b"## Heading\n\n- [ ] first item\n- [ ] second item\n"
         spans = impl_position.locate_headings(data, "## Heading")
-        self.assertEqual(len(spans), 1)
-        self.assertEqual(data[spans[0]["start"]:],
-                         b"- [ ] first item\n- [ ] second item\n")
+        self.assertEqual(spans, [{"start": len(data), "end": len(data)}])
+
+    def test_the_position_block_is_never_the_sections_items(self):
+        """X6: on the holder `position` creates, the block's own item is the
+        section's first checklist line. The insertion lands past the block's
+        closing line, then past each item settled since."""
+        block = (b"<!-- position revision=r1.md sha256=" + b"a" * 64
+                 + b" derivedAt=2026-01-01T00:00:00Z session=s target=local -->\n"
+                 b"- [ ] 1. Rehearse. `@rehearsal job1`\n<!-- /position -->\n")
+        data = b"# Agreed\n\n## Ladder\n\n" + block
+        span = impl_position.locate_headings(data, "## Ladder")[0]
+        self.assertEqual(span["start"], len(data))
+        grown = data + b"- [ ] first\n\n## Reversed\n\nprose\n"
+        span = impl_position.locate_headings(grown, "## Ladder")[0]
+        self.assertEqual(grown[span["start"]:], b"\n## Reversed\n\nprose\n")
 
     def test_a_bullet_less_section_falls_back_to_the_first_non_blank_line(self):
         """Must not regress: a section with prose and NO bullet at all --

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..bridges.python import mapped_returncode
+from ..bridges.python import mapped_returncode, script_environment
 from ..core.exit_codes import EXECUTION_ERROR, SUCCESS, USER_ERROR
 from ..errors import ExecutionError, UserError
 from . import config, ledger
@@ -22,15 +22,108 @@ def _job_id() -> str:
     return f"job-{stamp}-{os.getpid()}"
 
 
-def _substitute(value: str, *, paper_slug: str, job_id: str, shard_value: Any = None) -> str:
+#: Placeholders naming the implementation target a profile runs against.
+#: `{target}` is the target's workspace-relative directory and
+#: `{target_python}` its own virtualenv's interpreter. A profile naming
+#: neither never resolves a target, so explicit profiles keep working as
+#: written. `{paper_slug}` (the workspace folder name) is unchanged.
+TARGET_PLACEHOLDERS = ("{target}", "{target_python}")
+IMPLEMENTATIONS = "implementations"
+
+
+def _substitute(value: str, *, paper_slug: str, job_id: str, shard_value: Any = None,
+                target: dict[str, str] | None = None) -> str:
     result = value.replace("{paper_slug}", paper_slug).replace("{job_id}", job_id)
+    if target is not None:
+        result = (result.replace("{target_python}", target["python"])
+                  .replace("{target}", target["path"]))
     if shard_value is not None:
         result = result.replace("{shard_value}", str(shard_value))
     return result
 
 
+def _target_markers(profile: dict) -> set[str]:
+    """Which of `TARGET_PLACEHOLDERS` the profile's entrypoint and env name."""
+    texts = [str(profile.get("entrypoint", ""))]
+    texts += [str(item) for item in (profile.get("env_vars") or {}).values()]
+    return {marker for marker in TARGET_PLACEHOLDERS if any(marker in text for text in texts)}
+
+
+#: How profiles written by `papersmith init` before 0.14.0 named the target.
+#: `{paper_slug}` is the workspace folder name, which names no implementation
+#: unless the target happens to share it.
+LEGACY_TARGET = IMPLEMENTATIONS + "/{paper_slug}"
+
+
+def _legacy_target_problem(root: Path, profile: dict) -> str | None:
+    """Why a pre-0.14.0 profile's `implementations/{paper_slug}` is wrong here.
+
+    `None` when the profile does not name it, or when that directory exists,
+    so a profile that works keeps working exactly as written.
+    """
+    texts = [str(profile.get("entrypoint", ""))]
+    texts += [str(item) for item in (profile.get("env_vars") or {}).values()]
+    if not any(LEGACY_TARGET in text for text in texts):
+        return None
+    if (root / IMPLEMENTATIONS / root.name).is_dir():
+        return None
+    return (f"this profile names {LEGACY_TARGET}, which resolves to "
+            f"{IMPLEMENTATIONS}/{root.name}/ and does not exist: {{paper_slug}} is the "
+            "workspace folder name, not an implementation target. Edit papersmith.yaml "
+            "to name {target} instead (and {target_python} -m pytest rather than a bare "
+            "pytest), as `papersmith init` writes from 0.14.0 on")
+
+
+def _venv_python(directory: Path) -> Path:
+    if os.name == "nt":
+        return directory / ".venv" / "Scripts" / "python.exe"
+    return directory / ".venv" / "bin" / "python"
+
+
+def resolve_target(root: Path, name: str | None, *, need_python: bool = True) -> dict[str, str]:
+    """The implementation a profile's `{target}` placeholders name.
+
+    `name` (from `--implementation`) picks one directory of
+    `implementations/`; without it the directory must be the only one there.
+    When the profile names `{target_python}` (`need_python`), the target's own
+    `.venv` interpreter must exist: running `pytest` from PATH would test with
+    whatever environment the caller happens to have. A remote profile naming
+    only `{target}` runs a remote interpreter and needs no local venv.
+    Raises :class:`UserError` naming the fix, and nothing is dispatched.
+    """
+    directory = root / IMPLEMENTATIONS
+    try:
+        candidates = sorted(p.name for p in directory.iterdir()
+                            if p.is_dir() and not p.name.startswith("."))
+    except OSError:
+        candidates = []
+    if name is not None:
+        if name not in candidates:
+            raise UserError(
+                f"--implementation {name!r} is not a directory of {IMPLEMENTATIONS}/ "
+                f"(found: {', '.join(candidates) or 'none'})")
+        chosen = name
+    elif len(candidates) == 1:
+        chosen = candidates[0]
+    elif not candidates:
+        raise UserError(
+            f"this profile runs against an implementation target, and {IMPLEMENTATIONS}/ "
+            "holds none; land one there first (proposal-implementation, step 1)")
+    else:
+        raise UserError(
+            f"this profile runs against an implementation target, and {IMPLEMENTATIONS}/ "
+            f"holds several ({', '.join(candidates)}); pass --implementation <name>")
+    python = _venv_python(directory / chosen)
+    if need_python and not python.is_file():
+        raise UserError(
+            f"{IMPLEMENTATIONS}/{chosen} has no .venv interpreter ({python.relative_to(root).as_posix()}); "
+            "build it with the implementation skill's `env` command first")
+    return {"name": chosen, "path": f"{IMPLEMENTATIONS}/{chosen}", "python": str(python)}
+
+
 def _profile_jobs(root: Path, profile_name: str, target_name: str, profile: dict,
-                  *, shard: int | None, job_id: str) -> list[dict[str, Any]]:
+                  *, shard: int | None, job_id: str,
+                  implementation: dict[str, str] | None = None) -> list[dict[str, Any]]:
     entrypoint = profile.get("entrypoint")
     if not isinstance(entrypoint, str):
         raise UserError(f"execution_profiles.{profile_name}.entrypoint must be a string")
@@ -45,12 +138,14 @@ def _profile_jobs(root: Path, profile_name: str, target_name: str, profile: dict
         values = [values[shard]]
     jobs: list[dict[str, Any]] = []
     for value in values:
-        rendered = _substitute(entrypoint, paper_slug=root.name, job_id=job_id, shard_value=value)
+        rendered = _substitute(entrypoint, paper_slug=root.name, job_id=job_id, shard_value=value,
+                               target=implementation)
         command = shlex.split(rendered)
         if value is not None and sharding.get("parameter"):
             command.extend([str(sharding["parameter"]), str(value)])
         env = {
-            str(key): _substitute(str(item), paper_slug=root.name, job_id=job_id, shard_value=value)
+            str(key): _substitute(str(item), paper_slug=root.name, job_id=job_id,
+                                  shard_value=value, target=implementation)
             for key, item in (profile.get("env_vars") or {}).items()
         }
         jobs.append({
@@ -65,8 +160,7 @@ def _profile_jobs(root: Path, profile_name: str, target_name: str, profile: dict
 
 
 def _local_job(root: Path, profile_name: str, job_id: str, job: dict[str, Any], profile: dict) -> int:
-    environment = os.environ.copy()
-    environment.update(job["env"])
+    environment = script_environment(job["env"])
     environment.update({
         "PAPERSMITH_PROFILE": profile_name,
         "PAPERSMITH_JOB_ID": job_id,
@@ -124,7 +218,8 @@ def _slurm_command(job: dict[str, Any], target: dict) -> list[str]:
 
 def run_profile(workspace: str | Path, profile_name: str, *, target_override: str | None = None,
                 dry_run: bool = False, shard: int | None = None,
-                consent: str | None = None) -> dict[str, Any]:
+                consent: str | None = None,
+                implementation: str | None = None) -> dict[str, Any]:
     root = Path(workspace).expanduser().resolve()
     yaml = config.load_papersmith_yaml(root)
     profiles = yaml["execution_profiles"]
@@ -137,7 +232,28 @@ def run_profile(workspace: str | Path, profile_name: str, *, target_override: st
         raise UserError(f"unknown compute target: {target_name}")
     target = targets[target_name]
     job_id = _job_id()
-    jobs = _profile_jobs(root, profile_name, target_name, profile, shard=shard, job_id=job_id)
+    resolution: dict[str, Any] | None = None
+    resolved: dict[str, str] | None = None
+    markers = _target_markers(profile)
+    legacy = _legacy_target_problem(root, profile)
+    if legacy is not None:
+        if not dry_run:
+            raise UserError(legacy)
+        resolution = {"status": "unresolved", "reason": legacy}
+    elif markers:
+        try:
+            resolved = resolve_target(root, implementation,
+                                      need_python="{target_python}" in markers)
+            resolution = {"status": "resolved", **resolved}
+        except UserError as error:
+            # A dry run plans and dispatches nothing, so it states what would
+            # refuse instead of refusing; a real run refuses before any job
+            # starts or any ledger row is written.
+            if not dry_run:
+                raise
+            resolution = {"status": "unresolved", "reason": str(error)}
+    jobs = _profile_jobs(root, profile_name, target_name, profile, shard=shard, job_id=job_id,
+                         implementation=resolved)
     provider = target["provider"]
     results: list[dict[str, Any]] = []
     for job in jobs:
@@ -154,7 +270,11 @@ def run_profile(workspace: str | Path, profile_name: str, *, target_override: st
                 code = SUCCESS
             else:
                 try:
-                    child = subprocess.run(command, cwd=root, check=False)
+                    # remote_cli.py is a kit script under the workspace's skills/.
+                    # The ssh branch below needs no such environment: ssh does
+                    # not forward it, and nothing runs locally but ssh itself.
+                    child = subprocess.run(command, cwd=root, env=script_environment(),
+                                           check=False)
                     code = mapped_returncode(child)
                 except OSError:
                     code = EXECUTION_ERROR
@@ -180,6 +300,8 @@ def run_profile(workspace: str | Path, profile_name: str, *, target_override: st
             "exit": code,
             "command": command or job["command"],
         }
+        if resolution is not None:
+            event["target_resolution"] = resolution
         ledger.append(root, event)
         results.append(event)
     status = "ok" if all(item["exit"] == 0 for item in results) else "failed"
@@ -200,6 +322,9 @@ def register(subparsers) -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--shard", type=int, default=None)
     parser.add_argument("--consent", default=None, help="remote submission consent token")
+    parser.add_argument("--implementation", default=None, metavar="<name>",
+                        help="the implementations/ directory {target} and {target_python} "
+                             "name (default: the only one there)")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
     parser.set_defaults(handler=run_cli)
 
@@ -208,6 +333,7 @@ def run_cli(args) -> int:
     result = run_profile(
         args.directory, args.profile_name, target_override=args.target,
         dry_run=args.dry_run, shard=args.shard, consent=args.consent,
+        implementation=args.implementation,
     )
     print_result(result, dry_run=args.dry_run)
     return SUCCESS if result["status"] == "ok" else EXECUTION_ERROR

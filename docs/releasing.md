@@ -98,6 +98,17 @@ with a kitless install on the user's first command. `test_pypi_publishing.py`
 asks the built archive whether the kit is inside it, because a manifest that
 promises the kit and a tree where it is absent read identically.
 
+### The kit records which commit it was built from
+
+`scripts/build-kit.py` writes the commit and the dirty flag of the tree it
+copied into `kit-manifest.json` (`commit`, `dirty`). A workspace initialized or
+upgraded from that bundled kit records them in `.papersmith/kit-source.json`,
+and a kit whose `dirty` is `true` makes `init` and `upgrade` refuse for every
+user until they pass `--allow-dirty-kit`. So build release artifacts from a
+clean checkout of the tagged commit. `publish.yml` does: it builds the kit in a
+fresh checkout, and its final step initializes a workspace from the built
+wheel, which would refuse if the kit had been built dirty.
+
 ### Rehearse first
 
 The whole path can be run without touching the index, and it costs nothing to
@@ -207,6 +218,55 @@ A migration that regenerates a derived artifact should decide staleness from
 content hashes, the way `atlas-render-refresh` does, rather than from
 modification times. `upgrade` rewrites file mtimes for reasons that have
 nothing to do with any artifact.
+
+## Workspace support policy
+
+A workspace is a paper in progress: ledgers, receipts, seals, managed
+revisions, locks and agreement holders that took weeks to accumulate. "Re-run
+`papersmith init` in a fresh workspace" throws all of that away, so it is never
+the answer for a live workspace. The 0.8.0 changelog entry that said so is
+superseded by this policy (and left as written, because a changelog records
+what a release said, not what it should have said).
+
+**From 0.14.0 on, every release that changes the shape of something a
+workspace already holds ships the way to reach it in the same release.** That
+is one of two things:
+
+- a migration in `src/papersmith/core/migrations.py`'s `REGISTRY` (version-gated
+  at the version being shipped, or convergence; see above), with a test that
+  upgrades a workspace in the old shape; or
+- a compatibility read that keeps the old shape reading unchanged, with a test
+  that reads the old shape.
+
+A workspace in the 0.13.0 shape already exists for those tests:
+`tests/fixtures/workspace_v0_13_0/`, produced by the 0.13.0 release itself and
+upgraded by `tests/test_upgrade_v0_13_0_workspace.py`. A migration that is
+meant to change one of its files lists that file in the test's
+`INTENDED_CHANGES`; anything else it holds must survive the upgrade
+byte-identical. `tests/fixtures/README.md` says how it is built.
+
+Either way the `## X.Y.Z` section's `### Behaviour changes` says which one, and
+when it is the second, why no migration is needed. A shape change that ships
+neither is a release defect, not a pre-1.0 privilege.
+
+**Which workspaces `upgrade` supports.** Workspaces recorded at 0.12.0 or
+later — the first release with artifact migrations — are supported: that is
+the floor from which a shape change has had a mechanism to ship with. What
+`upgrade` itself accepts is wider, and it is worth knowing exactly:
+
+- any recorded version that orders at or below the installed kit: files are
+  synchronized and convergence migrations evaluated;
+- no recorded version at all: not a downgrade, so it proceeds, but every
+  version-gated migration is reported `undetermined` and never applied;
+- a recorded version with no orderable number (`nightly`): refused unless
+  `--allow-downgrade`;
+- a recorded version above the kit: refused unless `--allow-downgrade`.
+
+A workspace recorded before 0.12.0 therefore upgrades, but the shape changes
+released before 0.12.0 shipped no migration, so it may keep leftovers no
+release cleans up. The known one: 0.8.0 moved Antigravity off
+`.antigravity/rules.md` and `.antigravity/skills`, and `upgrade` does not
+retire those paths.
 
 ## What has no automation, and the history behind it
 

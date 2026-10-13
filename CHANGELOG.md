@@ -13,8 +13,860 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ## 0.14.0
 
+### Fixed
+
+- **An adopted finding reaches a terminal state instead of blocking the
+  audit forever.** Once `proposal-deliberation` published a remedy and the
+  target was re-bound to the successor revision, four readers disagreed about
+  the finding: `verify`'s `remediesWithoutValidation` still demanded the
+  `test_remedy_<id>` that `audit.migration` demands be retired, `admit
+  --revision <successor>` ruled the finding inadmissible because the text the
+  remedy replaces is gone (which is what adoption means), and the
+  compatibility audit kept reporting `needs-deliberation` for the notation the
+  remedy had introduced. The audit could only reach `ok` by deleting the
+  finding. All of them now read one shared adoption state
+  (`finding_adoption`): an adopted finding keeps its evidence
+  (`test_finding_<id>` and its entry in `tests/findings.py`), owes no remedy
+  validation, introduces no notation, and owes only the move `migration`
+  checks. `admit` rules it admissible with an `adopted` verdict naming the
+  revision and the expected form that confirmed it. `changed-unrecognized`
+  (the replaced text gone, nothing expected in its place) is not adoption and
+  stays inadmissible. Shared by `experimental-implementation`, which runs the
+  same engine. The sealed CLI corpora already carried an adopted finding and
+  had characterized the defect (ruled inadmissible, listed as unvalidated);
+  their `verify` and `admit` goldens move accordingly.
+- **Sibling implementation skills no longer collide on each other's
+  checklist holder.** Once `proposal-implementation` had settled items into
+  its declared `<Name>/AGREED.md`, `experimental-implementation` (declared
+  holder `Experimental_AGREED.md`) refused every `position`/`settle` write on
+  the same target with `HOLDER_UNDECLARED`, and both exits it offered —
+  rename the sibling's file, or adopt its name — were destructive to the
+  sibling. The same held in the other direction. `holder_resolution` now sets
+  aside every holder filename a profile sharing the engine declares, derived
+  from each `impl_profile.py` next to the loaded one (reading only
+  `PROFILE["holder"]["filename"]`; a profile that cannot be read contributes
+  nothing, so its file still refuses). A target holding only the sibling's
+  holder resolves create-on-absent and the skill writes its own holder beside
+  it. A checklist no skill declares still refuses, and the refusal and its
+  question never name a sibling's holder as a file to rename. The read side
+  follows the same rule: the agreements reader (`verify`, `close`)
+  and the position reader (`verify`, `probe`, `gate`, `close`, `discuss`, `settle`, `offer`, `step`) no
+  longer read the sibling's holder as this skill's, so its open items stop
+  appearing as this skill's open agreements and its position block stops
+  standing in for this skill's position.
+- **`probe` no longer hides the pilot ladder when nothing is comparable.** A
+  target whose comparison arms live inside its own package has no prior-work
+  package under `src/`, so `probe` answered `nothing-to-compare` before any
+  other rung, even with declared steps still short at pilot and, later, with
+  every step finished at pilot and none placed. `pilot-first` and
+  `pilot-decisions` never fired, so neither the rung question nor one
+  per-step placement question was ever published. Comparability now answers
+  the comparison only: with no baseline, `probe` returns `pilot-first` while a
+  declared step is short and `pilot-decisions` (with its per-step questions)
+  once the pilot is complete and a step is undecided, and
+  `nothing-to-compare` only after both are settled. Shared by
+  `experimental-implementation`.
+- **A freshly scaffolded target no longer fails its own `verify`.**
+  `materialize --stage scaffold` writes the kit's seal,
+  `src/<Package>/report_digest.py`, which implements no claim and so declares
+  no `__provenance__`; `verify` listed it under `missingProvenance` and read
+  `fidelity: drift` on a target nobody had touched, under both implementation
+  skills. The seal is now exempt only while it is still the kit's file: its
+  path is a scaffold destination with a kit source (derived from the scaffold
+  table, not a hand list), and its bytes equal today's kit source or the
+  `writtenSha256` the scaffold receipt's `materialized` entry recorded (so a
+  seal written by an earlier release still counts). An `adopted` or
+  `authored` entry does not count, and a modified copy is reported as before.
+- **`close` is reachable for a proposal-only target, and witness-less
+  agreements have a recorded closing act.** `close` refused
+  `POSITION_ABSENT` on every target without a position, and a position can
+  only name execution witnesses (a step, notebook, record, rehearsed job or
+  shard), so a target with no flow could pass only by installing an item
+  pointing at a witness that does not exist. A position is now owed only
+  when the target declares part of a flow (`__levels__`, `__steps__`,
+  `__records__`, a shard root or a job folder); otherwise `close` checks the
+  agreement and discussion axes, skips the refresh, and records the close
+  over an empty sequence. Separately, an agreement no test could ever
+  witness (a scoping decision, a premise, a deferral) could be ticked only
+  by hand, so `agreements` stayed `open` unless someone edited the holder
+  outside every command. `settle --done --unwitnessed --reason <text>` now
+  ticks such a line and writes the operator's reason and the session to the
+  ledger. It is never counted as witnessed: `agreements.witness` names it
+  under `decided`. `--done` on a line that names a witness is unchanged, and
+  `--unwitnessed` on such a line refuses `SETTLE_WITNESS_PRESENT`. Shared by
+  `experimental-implementation`.
+- **Deliberation gives one candidate the same verdict at v1 creation,
+  preview and accept, and a code span is no longer a heading.** The three
+  points ran three validation sets: `CREATE_INITIAL_REVISION` ran only the
+  canonical-form rules, the `CREATE_SUCCESSOR` preview ran only the
+  orchestrator's candidate validator, and only the accept turn ran the
+  workspace's pre-publish set. The shared standalone-ATX check also read a
+  backtick span such as `` `## Results` `` as a heading fused with prose. So
+  a v1 carrying an inline-code `## ` published, every successor preview
+  answered `awaiting_acceptance`, and every accept refused
+  `atx-heading-standalone`: no successor could be published until unrelated
+  text was reworded. The check now masks CommonMark code spans (a backtick
+  run closed by a run of exactly the same length, on one line) before it
+  looks for a fused marker; a marker outside code still refuses, and a span
+  that crosses a line ending stays unmasked. The preview now runs the accept
+  turn's own pre-publish validation (`successorCandidateRefusal`, the same
+  function `derive_successor` runs before writing) and v1 runs the guarded
+  first write's (`initialCandidateRefusal`). Both deliberation skills share
+  the engine.
+- **The two experimental skills agree on what an experiment heading is.**
+  `experimental-deliberation` writes and validates an experiment as a heading
+  carrying its `[exp:<id>]` declaration (cited as `[tests:<id>]` or `(Exp.
+  <id>)`), while `experimental-implementation` located experiments only by a
+  bare `## N` heading and counted only digit prose citations (`Exp. 3`). A
+  document written the deliberation's way declared no experiment to the
+  implementation skill, so every finding locus read as unknown and `compose`
+  refused every replacement; documents had to carry both forms (`## N` wrapping a `###
+  Experiment [exp:EN]` heading). The convention now lives in one file,
+  `skills/_core/conventions/experiments.json` (identifier class, declaration
+  and citation markers, prose form), read by both skills: the deliberation's
+  `reference-experimental.ts`/`profile.ts` through `experiment-convention.ts`,
+  and the implementation's `impl_profile.py`. The implementation skill now
+  locates an experiment by a heading of any level carrying `[exp:<id>]`, its
+  block running to the next heading of the same or a higher level, and counts
+  `(Exp. <id>)` citations. `[claims:N]` crossings into the proposal are
+  unchanged.
+- **Each implementation skill binds its own document lineage.** On a target
+  both `proposal-implementation` and `experimental-implementation` work on, the
+  two read the same `src/<Package>/__init__.py`, and `__implementation__`'s
+  `revision` held one name that each skill read as a revision of its own
+  document. Bound to the proposal, the experimental skill's `verify` searched
+  `experiments/` for a proposal family, discovered nothing and reported
+  `fidelity: unknown` (and the reverse for the proposal skill); keeping one
+  skill current meant re-binding away from the other. `revision` may now name
+  one revision per document label, `{"proposal": "r03.md", "experiments":
+  "experiments-<slug>-v02.md"}`; each skill reads only its own document 0's
+  label. The scaffold template's comment named `proposals/` under both skills;
+  it now names the loading skill's own document directory and label.
+
+- **`init` and `upgrade` no longer copy unreleased framework code silently.**
+  From an editable install the kit is the live checkout, and both commands
+  copied it uncommitted edits included, with nothing recording which commit a
+  workspace came from. Every `init` and every `upgrade` now writes
+  `.papersmith/kit-source.json` (`version`, `commit`, `dirty`, `source`:
+  `checkout`, `bundled` or `override`, `recordedAt`), and `papersmith status`
+  reports it on a `Kit source:` line and under `framework.kit_source` in
+  `--json`. A kit source tree with uncommitted or untracked changes under its
+  shipped paths (`skills/`, `sections/`, `.claude/agents/`, the provisioning
+  scripts, `requirements.txt`, `src/papersmith/`) refuses before anything is
+  written, and so does one whose git state cannot be determined (unknown is
+  treated as dirty). `--allow-dirty-kit` proceeds and records
+  `allowedDirty: true`; the MCP `workspace_init` and `workspace_upgrade` tools
+  forward it as `allow_dirty_kit`. `scripts/build-kit.py` now embeds the
+  commit and dirty flag of the tree it copied into `kit-manifest.json`, so a
+  wheel install records the commit it was built from; a bundled kit built
+  dirty refuses too, and one built without provenance is admitted with the
+  commit unknown. `upgrade --plan-migrations` writes nothing and does not
+  refuse.
+
+- **Scripts the CLI launches no longer write bytecode into the workspace.**
+  `run_script` (every bridged skill script, from `audit` to `target check`)
+  and `papersmith run`'s local job and Kaggle submission children inherited
+  the parent environment unchanged, so a skill script importing a sibling
+  module left `__pycache__/` inside the workspace's `skills/` kit copy. They
+  now run with `PYTHONDONTWRITEBYTECODE=1` (one helper,
+  `bridges.python.script_environment`; an explicit caller value still wins),
+  the rule the MCP bridge and the dashboard child already followed.
+
+- **One `upgrade` across a release now ends with `audit --check-drift`
+  clean.** The routing docs (`CLAUDE.md`, `OPENCODE.md`,
+  `.pi/APPEND_SYSTEM.md`, `.agents/AGENTS.md`) state the version the workspace
+  records, and `upgrade` rendered them before it moved `.papersmith/version`.
+  So every upgrade from an older release left them naming the old version,
+  `audit --check-drift` reported them as generator drift, and only a second
+  `upgrade` cleared it. They are now rendered again once the marker moves.
+  Found by upgrading the populated 0.13.0 fixture below.
+
+- **Deliberation engine state is ignored like the content it describes.**
+  The workspace `.gitignore` keeps research content local (`proposals/*`,
+  `experiments/*` and the rest), but `.proposal-deliberation/` and
+  `.experimental-deliberation/`, where the two deliberation engines keep each
+  revision's state, receipts and permanent locks, were neither tracked nor
+  ignored. That state embeds and hashes the revisions the file already keeps
+  local, so committing it published them, and it grows to megabytes. Both are
+  now ignored, together with `backup/proposals/` and `backup/experiments/`,
+  where the deliberation skills move revisions and their sidecars when
+  reconciling a base. The set is checked against every `skills/*/profile.ts`
+  the kit ships (its `artifact.sidecarRoot`, read through the engine) and by
+  running the engine and asking git what it would track. The other skills'
+  engine state already lives inside ignored folders (`paper/.paper-writing/`,
+  `implementations/<target>/...`, `sota-pool/`).
+- **`upgrade` no longer overwrites lines a workspace added to its
+  `.gitignore`.** The file was re-rendered whole on every upgrade, so a user's
+  own ignore lines were lost, and until then `status` and `audit
+  --check-drift` reported the edit as drift. The framework's lines now sit in
+  a delimited managed block: `upgrade` rewrites the block and keeps every line
+  outside it, and drift is measured on the block alone. A file with no block
+  yet (every workspace made before 0.14.0) is converted on its next upgrade:
+  replaced whole when it is byte-identical to what the framework last wrote
+  (the manifest's digest), and otherwise given the block with every line the
+  block does not already carry kept below it, in order. Malformed markers
+  are never guessed at: the file is left as it is, the run reports it as not
+  written, and it stays drift until repaired.
+- **The plausibility flow no longer starts a `paper/` tree.** `sota-scout`
+  and `novelty-screener` confirm candidates through paper-writing's
+  `resolve`, which cached every answer under `paper/.paper-writing/metadata/`
+  by default, so exploring an idea wrote paper content before any paper
+  existed. `resolve` gains `--cache-dir <dir>` (caches as
+  `<dir>/<metadata_digest>.json`, refused outside the repository with
+  `PAPER_OUTSIDE_REPOSITORY`, mutually exclusive with `--paper`), and both
+  agents now pass `--cache-dir sota-pool/metadata`, keeping their caches in
+  the pool. paper-writing's own calls pass nothing and keep caching under
+  `paper/`, where `bib` and `full_text` read. The test reads the invocation out
+  of each agent's definition and runs it against a workspace's shipped
+  `paper_cli.py`.
+- **`verify` reports per-section drift for the section labels revisions
+  actually carry.** The implementation engine counted a heading as a section
+  only when its first token was a bare number followed by a space
+  (`## 3. Title`). Headings with an identifier label (`### O1. Objective`), a
+  dotted label (`### 3.1`) or a label alone on the line (`## 3`, the legacy
+  experiments form) produced no sections. `changedSections` stayed empty and
+  `__provenance__["sections"]` was never compared with what moved, so only
+  the file-level revision drift worked. The label grammar now lives once, in
+  `skills/_core/conventions/sections.json`, and both implementation profiles
+  pass it to the engine as `documents[0].section_heading`.
+  `experimental-implementation` adds the experiment heading's `[exp:<id>]` as
+  a marker, so its drift is reported per experiment id. A labelled heading
+  nested under another is its own section and still part of its parent, and
+  the parent covers the same lines it did before. `proposal-deliberation`
+  documents the labels to use for sections that should be tracked.
+- **`settle` places items in the order they were settled, never inside the
+  position block, and `--reverse` opens its own heading.** The create path
+  inserted each new item at the section's first checklist line, so a
+  section read newest first. On the holder `position` creates, that first
+  line is the position block's own item, so the documented
+  `settle --under "## Ladder"` wrote into the block and `verify` then refused
+  `POSITION_ITEM_MALFORMED`. A new item is now appended after the section's
+  last checklist item, skipping the block's lines. If the section's only
+  items are the block's, the new item goes right after `<!-- /position -->`.
+  `settle --reverse` refused `SETTLE_HEADING_ABSENT` until someone added
+  `## Reversed` by hand; now the first reversal adds that heading at the end
+  of the file, in the same write as the deletion. A tick still cannot be
+  undone. The correction path, now documented, is `settle --reverse` on the
+  ticked line (the explanation and the ledger event stay) followed by a new
+  `settle --under`.
+- **`position.attainedLevel` no longer claims a rung nothing ran.** A
+  sequence with no leveled (`:level`) witness reported the ladder's top
+  rung, so an all-two-state position aimed at `pilot` read `attainedLevel:
+  full` with no full-scale run behind it. With nothing leveled, attainment is
+  now the rung the position aims at (`targetLevel`), and `null` when the aim
+  is not on the ladder. Sequences with leveled witnesses read as before.
+- **`verify`'s `prose` check no longer reports the engine's own writes.**
+  After re-binding to a successor revision, `prose.staleRevisions` named the
+  position block header in `<Name>/AGREED.md`, which records the revision it
+  was derived from, and `prose.unresolvedSymbols` named the
+  `` `test_<id>` `` witness token that `settle --attach` had written. In a
+  checklist holder (this skill's declared filename or a sibling skill's), the
+  check now skips the position block's opener and closer lines, the witness
+  token at the end of an agreement line, and the append-only `## Reversed`
+  section. The rest of the holder is still checked, including an
+  agreement's own text, and the same lines in any other document are still
+  reported.
+- **An implementation skill no longer runs under the other skill's profile
+  inherited from the environment.** Each launcher `setdefault`s its own
+  `IMPLEMENTATION_DOMAIN_PROFILE`, so an explicit value wins. A shell, or an
+  earlier process that ran the other skill, could leave the other skill's
+  `impl_profile.py` exported, and this skill then read the other skill's
+  documents and holder (for example `AGREED.md` from
+  `experimental-implementation`) without saying so. Both launchers now refuse
+  `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` (exit `2`, before the engine loads)
+  when the inherited value resolves to another skill's own profile, naming
+  both profiles. Any other explicit value, such as a test fixture profile,
+  still wins. The test that leaked this skill's profile into later tests of
+  the same process now restores the environment.
+- **The engine's ambiguous-family mutation test no longer rewrites the
+  shipped engine.** `tests/test_implementation_pair.py` wrote its mutation
+  into `skills/_core/implementation/engine/implementation_engine.py` and
+  restored it on cleanup, so a parallel worker could run the mutated engine
+  and a crash could leave `MUTATED` in the tree. It now mutates a scratch
+  copy of the engine tree and runs a copy of the launcher against it; the
+  shipped file is asserted unchanged. Test-only: nothing a workspace runs
+  changes.
+- **Executing a kit-placed notebook is no longer structure drift.** Running
+  `verification.ipynb` or `probe.ipynb` in place rewrites its outputs,
+  execution counts and kernel metadata, and `verify` reported the notebook in
+  `structure.scaffoldDrift`/`harnessDrift` until `materialize --authored`
+  re-sealed it. A notebook destination's seal now also reads its source
+  content (each cell's type and source, in order): the materialize stages,
+  `--authored` and `--adopt` record it as `writtenSourceSha256`, and a match
+  on either the full bytes or the source content is sealed. A changed cell
+  source or cell type still drifts, and a notebook that is not readable JSON
+  is compared on its full bytes only. Receipts written by 0.13.0 keep
+  reading: an engine-written entry's source content is rebuilt from the kit
+  and trusted only when it hashes to the entry's `writtenSha256`.
+- **An unmeasured `@step` mark now says why, and what the step digest
+  covers.** A step's verdict counts only while `suite_digest` (every `.py`
+  under `src/` and `tests/`, plus the environment manifests) still matches,
+  so a test-only edit turned every earlier step mark unmeasured with nothing
+  saying so. The scope is kept: a step's callable may run the suite, read a
+  file under `tests/` or spawn a subprocess, and the engine cannot see which,
+  so a narrower digest could leave a mark satisfied over code the step runs.
+  Each unmeasured `@step` item in a position state's `unmeasured` list now
+  carries `reason` (no verdict yet, or the last run no longer counts, with
+  the exact `step` command that clears it) and `digestScope`. Documented in
+  `SKILL.md` and `references/usage.md`, with the advice to commit code and
+  tests before the first pilot step.
+- **A cost forecast says what parallelism its duration was taken at.**
+  `probe`'s `search.costForecast` and the benchmark's `projectedCost` scale
+  one recorded duration, and read it as if runs never competed: a pilot on
+  eight workers took 2.42 times the projection, one arm about five times.
+  Both now carry `parallelism`, `contention` and `basis`. A record whose
+  `reduction` names `parallelism` (a positive integer) is projected from
+  that run's own duration, `contention: "included"`, holding at that
+  parallelism only. Otherwise the forecast is labelled single-process with
+  `contention: "unmeasured"`, and no contention factor is supplied. A
+  malformed `parallelism` is echoed as `parallelismMalformed` and never read.
+
+- **A successor locus is matched by its heading's own words, and an outer
+  section can be named.** `RESOLVE_TARGET` (and `CREATE_SUCCESSOR`'s
+  `selectedEntryId`/`selectedEntryIds`, which share its resolver) tested each
+  query word as a substring of the heading line, so `O1` also matched
+  `O10` and blocked; two headings carrying the same words tied even when
+  one of them was exactly the query; and nested matches collapsed to the
+  innermost one, so once `### Synthetic data` existed `## Data` could not be
+  targeted at all and a label line directly under it could not be edited.
+  A query word now matches a whole heading token (a dotted identifier such
+  as `3.1` stays one token; the parts of a hyphenated word still count); a
+  heading whose words are exactly the query's, ignoring its section label
+  (read from `_core/conventions/sections.json`) and stopwords, outranks one
+  that merely contains them; and a query opening with level marks (`## Data`)
+  considers only headings of that level. Nested matches are no longer
+  collapsed: the gate decides on the scores. A blocked result lists every
+  candidate with its level marks and its real heading path
+  (`### Methods › Setup`), and `RESOLVE_TARGET` returns them as
+  `candidates`.
+
+- **A successor that inherits a link to the previous revision's companion
+  artifacts says so.** Nothing in the engine writes the companion-picture
+  line: the deliberation links `proposals/<revision>.graph.html` (rendered
+  from `<revision>.sky.json`) from the revision's own text. A successor copies
+  every byte outside its locus, so r02 kept pointing at r01's picture and
+  nothing flagged it. `CREATE_SUCCESSOR` now reports every reference in the
+  successor to a file named after another managed revision with a suffix
+  other than `.md`, as `staleCompanionReferences` (`reference`, `revision`,
+  `inherited`), on the preview, on the published result and in the receipt.
+  The engine never rewrites the line or renders the picture; a replacement of
+  the line inside the successor, deliberated and validated like any other
+  edit, clears the flag.
+
+- **A successor can delete the document's first section.** A managed
+  revision opens with the artifact marker line and one newline, so removing
+  the first section left the marker and the next heading one line break
+  apart, and `derive_successor`'s removal-join check refused it as
+  `successor-markdown-block-safety` (since A6 already at the preview, as
+  `CANDIDATE_VALIDATION_FAILED`). The marker is an HTML comment line no block
+  can fuse into, so a removal whose left side is exactly the marker is now a
+  clean join; every other single-newline join is still refused.
+
+- **`experimental-deliberation`'s usage guide names the heading v1 really
+  writes.** It said source fragments are pasted under `## Paper Guide
+  Reference`; the renderer writes this profile's `sourceReferenceHeading`,
+  `## Reference Sources`, as `SKILL.md` already said. The usage-doc drift test
+  now holds every heading the guide and `SKILL.md` say the engine writes
+  ("under a `## X` heading", "the `## X` block") against the v1 the worked
+  example actually renders and the profile's change header.
+
+- **`verify` reports a notebook that is not a notebook instead of crashing.**
+  A file under `<Name>/Notebooks/` whose bytes were not UTF-8, were not JSON,
+  or were JSON whose top level is not an object made `verify` (and `probe`)
+  exit with a traceback: the seal check and the prose check read it without
+  the guard the execution check already had, and the execution check itself
+  crashed on a JSON array or string. Every notebook reader now shares one
+  read (`read_notebook_document`). The file is reported as `unreadable`,
+  `sealed: false`, `sourcesMatch: null`, listed under `unsealed`, and the
+  notebooks verdict reads `drift`, so it never passes for a sealed report.
+
+- **`papersmith status` reads a proposal's stage from the engine's own
+  state.** It probed only the legacy `proposals/deliberated/` and
+  `proposals/accepted/` folders, which nothing writes any more, so every
+  current proposal printed as `(draft)`. The latest managed revision's stage
+  now comes from its publication receipt
+  (`.proposal-deliberation/receipts/<file>.json`): `published` when the
+  receipt is committed and its `documentShaAfter` is the document's current
+  digest, `edited-after-publication` when the bytes changed since, `draft`
+  when no committed receipt exists. The legacy folders are still read first,
+  so an old workspace keeps its stage.
+
+- **A fresh target walks `env` -> `plan` -> `apply` -> `materialize` without
+  a hand commit in between.** `env` built `.venv/` before anything ignored
+  it, so the `plan` that follows refused `DIRTY_WORKTREE` on a `git init`
+  target, and the `pip install -e .` that `env` prints left an untracked
+  `src/<dist>.egg-info/` that refused the next clean-requiring step again.
+  `env` now appends `.venv/` and `*.egg-info/` to the clone's own
+  `.git/info/exclude` before it builds anything (reported as `excluded`), so
+  no tracked file changes and anything else untracked still refuses. The
+  `.gitignore` block `apply` and `materialize --stage scaffold` author also
+  carries `*.egg-info/` (not a scaffold gap on its own). The plan approved
+  before `apply` stays `PLAN_STALE` for `materialize` (apply carried out its
+  `createDirs`); the refusal now says so and the lifecycle (re-plan once
+  `apply` has run) is documented in `proposal-implementation`'s usage guide.
+  Shared by `experimental-implementation`.
+
+- **The array backend is declared, not inferred from a helper's imports.**
+  The kit's `tests/conftest.py` and `tests/sweep.py` imported numpy for a
+  seeded generator, so a target whose modules compute in torch read as
+  `mixed` and `probe` routed it to `convert` with no way out. Both kit files
+  are now backend-neutral (`random.Random`, `SEED`, `configuration_seed`),
+  the scaffold `pyproject.toml` (template and default) lists no array
+  backend, and a target may state `__backend__ = "torch"` (or `"numpy"`,
+  `"jax"`, `"tensorflow"`) in `src/<Package>/__init__.py`: `probe`'s
+  `backend` then follows it (`declared-unmet` when no package file imports
+  it; any other value is `unrecognized-backend`, never trainable). With
+  nothing stated, import inference is unchanged. `env --torch cpu|gpu
+  [--torch-version X]` adds the torch build to `nextCommand`: CPU uses the
+  PyTorch CPU index and an exact `torch==X+cpu` pin (refusing
+  `TORCH_VERSION_REQUIRED` without an exact release), GPU the default
+  index's build. Shared by `experimental-implementation`.
+
+- **The default `smoke_and_invariants` profile runs the target's own
+  interpreter against the target.** It substituted the workspace folder name
+  for `{paper_slug}` (`implementations/<workspace>/tests/...`, a directory
+  no target is named after) and ran `pytest` from PATH. `papersmith run`
+  now resolves two new placeholders, `{target}` (`implementations/<name>`,
+  the only directory there or the one `--implementation <name>` picks) and
+  `{target_python}` (that target's `.venv` interpreter), and the
+  `papersmith init` template uses them (`{target_python} -m pytest
+  {target}/tests/test_invariants.py`; the remote profiles name `{target}`).
+  An unresolvable target (none, several without `--implementation`, an
+  unknown name, or no `.venv` when `{target_python}` is named) refuses before
+  anything is dispatched or recorded; `--dry-run` reports it under
+  `target_resolution` instead. Profiles naming neither placeholder run as
+  written.
+
+- **A sibling's profile from another skills tree no longer passes the
+  launcher.** The `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` guard compared
+  skills roots only, so an inherited `impl_profile.py` of the other
+  implementation skill from a second checkout or workspace was accepted and,
+  for example, `experimental-implementation` read `AGREED.md`. Both
+  launchers now read the skill a profile declares (the skill directory of
+  its `PROFILE["cli"]["path"]`) and refuse any other skill's profile
+  wherever it lives; this skill's own profile, and a fixture profile naming
+  this launcher, still run. A sibling in the same tree is still refused by
+  path even when it cannot be loaded.
+- **A first revision's title and section heading no longer end in a full
+  stop.** `CREATE_INITIAL_REVISION` takes the title from the idea's first
+  sentence and the section heading from its second, and kept each sentence's
+  terminal punctuation, so v1 opened with `# My idea.`. Both headings now drop
+  their terminal `.`, `!` or `?` run (punctuation inside the sentence is kept);
+  the slug is unchanged. Taking the heading from the second sentence and
+  repeating the idea verbatim as the section body stay as they were and are now
+  documented as intended: the headings are labels capped at 200 characters, the
+  body is the only place the whole idea survives. Both deliberation skills'
+  `SKILL.md` and `references/usage.md` state the derivation; the proposal
+  usage example, a single sentence that `INITIAL_IDEA_SINGLE_SENTENCE` refused,
+  now has two.
+- **The 65,536-character instruction cap is enforced on the CLI, documented,
+  and reported.** `proposal_deliberation_execute` declared `instruction` as
+  `maxLength: 65536`, but the CLI host calls the tool directly and nothing on
+  that path read the schema, so the cap a Pi session met did not exist for
+  `cli.mjs` and no document stated it. One exported constant
+  (`MAX_INSTRUCTION_CHARACTERS`) now feeds the schema and a check at the top of
+  the tool's `execute`: a longer instruction is refused on every operation and
+  host with `INSTRUCTION_TOO_LONG` (`nextAction: "shorten_instruction"`),
+  nothing written. The `CREATE_SUCCESSOR` preview and the
+  `CREATE_INITIAL_REVISION` result carry
+  `instructionBudget: { limit, used, remaining }`. Both deliberation skills'
+  `SKILL.md` and `references/usage.md` state the cap.
+- **The first revision's source window is reported, warns when it cuts, and
+  can be widened.** `CREATE_INITIAL_REVISION` reads at most 4000 bytes across
+  every declared source, in declaration order (for the experiments domain the
+  data paper first), and cut the crossing document mid-text and skipped every
+  later one in silence: a data paper over 4000 bytes left the managed proposal
+  out of v1 with nothing saying so. Every result that composed a document now
+  carries `sourceWindow` (`limitBytes`, `loadedBytes`, one
+  `{path, bytes, loadedBytes, status}` per document) and a
+  `SOURCE_WINDOW_TRUNCATED` warning naming what was cut or left out;
+  `sourceWindowBytes` (1 to 262144) widens the window for one creation
+  (`SOURCE_WINDOW_INVALID` outside that range, `SOURCE_WINDOW_UNSUPPORTED` on
+  another operation). The experimental `SKILL.md` no longer claims that only
+  `<source>/<folder>/<folder>.md` is loaded and that `proposals/` contributes
+  presence only (flat files have been read since the flat pass); both rules,
+  the order and the window are documented in both skills.
+- **An experiments plan can state its fixed settings in a table.**
+  `report-table-fabricated-value` refused any digit in a body cell past column
+  one of every table but a baselines table, so `| learning rate | 3e-4 |`
+  blocked `CREATE_INITIAL_REVISION` and every successor as a "fabricated
+  result". A table whose first header cell is, whole and case-insensitively,
+  `Parameter`, `Parameters`, `Hyperparameter` or `Hyperparameters` is now a
+  parameters table: a declaration of settings the plan fixes, exempt from the
+  rule and from the baseline rules. Every other table keeps the rule, including
+  one whose first header cell merely contains the word (`Parameter count`) or
+  carries it in another column. Documented in `experimental-deliberation`'s
+  `SKILL.md` and its usage example.
+- **A remedy test's control is recognized however it calls the
+  implementation.** `audit.remediesWithoutControl` accepted a
+  `test_remedy_<id>` only when it called a name imported with `from <Package>
+  import <name>` directly by that bare name, so `kernel.f(...)`,
+  `import <Package>.kernel as k; k.f(...)`, `<Package>.kernel.f(...)` and a
+  same-file helper doing any of those were reported as having no control,
+  holding the audit at `incomplete`. The detection now follows attribute calls
+  to the name they start from and same-file helpers to a fixed point. It still
+  requires a call into the target's own package: importing without calling,
+  passing a function along uncalled, and calling an unrelated import remain no
+  control. Shared by `experimental-implementation`. Documented in
+  `proposal-implementation`'s `references/usage.md`.
+- **The objects stage follows the approved object map instead of a fixed
+  file name.** `materialize --stage objects` always wrote
+  `src/<Package>/module.py`, and `verify`'s `structure.objectGaps` reported it
+  missing on any target without it, even one whose map had been written as
+  modules of their own names, so the structure could not read `ok` without a
+  file nobody asked for. `--module <name>` now names the module the stage
+  writes (`src/<Package>/<name>.py`, from the same template, sealed and
+  releasable with `--authored` like `module.py`), refusing
+  `MODULE_NAME_INVALID` and `MODULE_STAGE_MISMATCH` for a name that cannot be
+  a module file or a mode other than `--stage objects`. Without the flag the
+  module destination is owed, and written, only while the package holds no
+  module of its own. Targets that already carry `module.py` verify unchanged.
+  Documented in `proposal-implementation`'s `SKILL.md` step 9 and
+  `references/usage.md`.
+- **Kit placeholders are filled when their value is known, and fail clearly
+  when not.** `materialize` substituted only `{{PKG}}` and `{{SEED}}`, leaving
+  values the engine already held to be filled by hand: the product name, the
+  bound revision (`tests/test_smoke.py`, `tests/admissibility.py`, the
+  verification notebook) and the module name. Unfilled, they failed as
+  `'r01.md' != '{{REVISION}}'`, a remedy refused "against revision
+  '{{REVISION}}'", or a collection `SyntaxError` for `def {{FUNCTION_NAME}}`.
+  The scaffold stage now fills `{{NAME}}`, and `{{REVISION}}` when the target
+  declares one or the approved plan was taken with `plan --revision`. The
+  objects stage fills `{{REVISION}}`, `{{NAME}}` and `{{MODULE}}` in what it
+  writes, and fills the same tokens into every scaffold file still
+  byte-identical to its receipt, re-sealing each entry (listed under an
+  additive `filled` key); a file somebody edited is never touched. Whatever is
+  still unanswered fails naming the step that answers it: `admissibility.py`
+  and `test_smoke.py` say the revision or the module is not known yet, and the
+  kit's `conftest.py` collects a test file whose placeholders keep it from
+  parsing as one failing item naming them. Receipts record each entry's
+  substitutions. Documented in `proposal-implementation`'s `SKILL.md` steps 5
+  and 9 and `references/usage.md`.
+
+- **`status` and `audit --check-drift` no longer print projection warnings
+  on every call.** Both re-render the runtime projections to compare them,
+  and rendering the Pi agents emitted a multi-line `UserWarning` (`agent
+  '<name>': tool 'WebSearch' has no Pi tool; not granted`) each time, so a
+  healthy workspace read as faulty in a read-only command. The two commands
+  now collect those notes: `status --json` carries them under
+  `framework.generator_notes`, and `status --verbose` / `audit --check-drift
+  --verbose` print them to stderr as `note: ...`. `init` and `upgrade`, which
+  write the projections, still emit them as before. Documented in the
+  manual's `status` and `audit` reference.
+
+- **`proposal-implementation`'s docs name the checklist holder it declares.**
+  `SKILL.md` (the checklist doctrine, the `agreements` status row and the
+  `close` refusal row) and `references/usage.md` still called the holder
+  `AGREEMENTS.md`, a name from one early commit; the profile declares
+  `AGREED.md`, which is the file `settle` writes. A new drift test checks that
+  every `*AGREE*.md` a skill's docs spell is a holder some implementation
+  profile declares.
+
+- **`materialize --authored`/`--adopt` say which paths they accept.** Naming
+  any other path refused `NOT_A_KIT_DESTINATION` with "is not one of this
+  stage's kit destinations" and nothing else, and no doc listed the set. The
+  refusal detail now lists every accepted path (for `--authored`, including a
+  file the objects stage recorded under a `--module` name), and
+  `proposal-implementation`'s `references/usage.md` lists the set under "The
+  sealed set", kept equal to the engine's `all_kit_destinations` by a test.
+
+- **`papersmith implement` says what it bridges and what it does not.** The
+  bridge runs nine of the engine's commands (`env`, `name`, `plan`, `apply`,
+  `admit`, `handoff`, `compose`, `probe`, `verify`), and its `--action
+  materialize` was an undocumented alias of `apply` — the layout migration —
+  while the engine's own `materialize --stage/--authored/--adopt` was
+  unreachable through it. The alias keeps working and now prints a note on
+  stderr saying which command it runs and how to reach the engine's
+  `materialize`; an unsupported action is refused naming the bridged commands
+  and the direct `implementation_cli.py` route; `--action`'s help lists both.
+  The manual's `papersmith implement` section lists the direct-only commands
+  (a test keeps it equal to the engine's `COMMANDS` minus the bridge).
+- **Direct engine use documents its two inputs.** `proposal-implementation`'s
+  `SKILL.md` and `references/usage.md`, `experimental-implementation`'s
+  `SKILL.md` and the manual now state that a hand-set
+  `IMPLEMENTATION_DOMAIN_PROFILE` must be absolute
+  (`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE`), and define the `--session`
+  id the ledger-writing commands require: chosen by the caller, one per
+  working session, one shell-safe token, stamped verbatim as attribution and
+  never validated.
+
+- **The `sota-grapher` agent runs the atlas checker with the pool.** Its
+  repair loop ran `check_atlas.py sota-pool/atlas.json` without `--pool`, so
+  the quote-fidelity guard added to the checker never ran inside the stretch
+  that draws the quotes. The agent now runs
+  `check_atlas.py sota-pool/atlas.json --pool sota-pool/candidates.json`; the
+  OpenCode, Pi and `.agents` projections are regenerated from it, and a test
+  reads every agent definition that runs the checker on the atlas.
+
+- **`resolve` reads the year arXiv and Crossref send.** `paper_resolve.py`
+  hard-coded `year: None` for both, although an arXiv entry carries
+  `<published>` and a Crossref record carries `issued`/`published`
+  date-parts, so every `refs.bib` entry resolved through them lacked a year
+  and the plausibility pool had to derive one by hand. arXiv now reports the
+  year of `<published>`; Crossref reports `issued`'s year, else
+  `published`'s. A missing, `null` or non-integer date still reports `null`.
+  Documented in `plausibility`'s `SKILL.md`.
+
+- **Every skill that delegates to a generated agent says what to do when the
+  agent cannot be spawned.** Only `proposal-implementation` and
+  `paper-writing` covered a harness without sub-agents, and none said to
+  follow the agent's own definition. Each of the eight skills an agent binds
+  to now carries "When a delegated agent cannot be spawned": perform the
+  stretch inline by following `.claude/agents/<name>.md` as written, within
+  its `tools:` line, and say so in the reply (`paper-writing` adds that an
+  inline audit is not independent of the draft). A test derives the
+  agent-to-skill binding from each agent's `Skill:` line.
+
+- **`papersmith ingest` says it takes PDFs only, and where other material
+  goes.** A non-PDF path or URL was refused with "must be a PDF path" and no
+  way forward. Both refusals now name the two `proposal-deliberation` routes
+  for material that is already text: `guidance/paper-guide/` to seed a new
+  proposal (`CREATE_INITIAL_REVISION`), and `proposals/` +
+  `ADOPT_INITIAL_REVISION` for a draft that should become v1 as written.
+  Documented in `paper-ingestion`'s `SKILL.md` and the manual's `ingest`
+  reference.
+
+- **The manual no longer gives line counts for the implementation launcher.**
+  The `experimental-implementation` section said the launcher was 24 lines
+  and the profile 278; they are 65 and 352. The counts are dropped rather
+  than updated, so they cannot go stale again, and the launcher's row now
+  says it also refuses a sibling skill's profile
+  (`IMPLEMENTATION_DOMAIN_PROFILE_SIBLING`, exit 2).
+
+- **`upgrade-project` describes the `.gitignore` managed block.** Its
+  `SKILL.md` said only that hand-edited files outside the protected patterns
+  are replaced, which since the managed block was added is no longer true of
+  `.gitignore`. It now says that `upgrade` re-renders only the block between
+  the two marker lines and keeps every line outside it, how a pre-0.14.0 file
+  is converted, and that malformed markers leave the file untouched and
+  reported as unsynchronized.
+
+- **`INITIAL_IDEA_SINGLE_SENTENCE` says what is missing.** The refusal of a
+  one-sentence idea came with the message for an empty one ("Provide a
+  non-empty idea in instruction."). It now says the idea needs at least two
+  sentences (title and section heading), what ends a sentence, and that
+  nothing was written. Both deliberation skills share it.
+
+- **`papersmith deliberate --action adopt` runs `ADOPT_INITIAL_REVISION`.**
+  The bridge listed every engine operation except adoption, so `--action
+  adopt` and `--action ADOPT_INITIAL_REVISION` were refused as unsupported and
+  the operation was reachable only through a raw `--request`. The alias passes
+  `--revision` as `sourceFilename` and, like every operation but `status` and
+  `resolve`, needs `--instruction`; a missing `--revision` is refused before
+  the engine starts. The bridge still has no `--dry-run` flag; the preview is
+  a raw `--request` carrying `"dryRun": true`, which the bridge passes through
+  unchanged (README). A test now reads the engine's operation list and fails
+  if any operation has no bridge route.
+
+- **An experiments v1 no longer pastes the proposal's reserved marker.**
+  Every published proposal revision opens with the engine's reserved artifact
+  marker line, and the experiments domain reads `proposals/` as a source. v1
+  pasted that line verbatim. Since v1 runs the successor's pre-publish
+  validation, `CREATE_INITIAL_REVISION` was refused
+  (`INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED`, `initial-candidate-limit`)
+  whenever a proposal fitted in the source window, which is the normal flow,
+  and the message asked for a repair of a source that cannot be repaired. In
+  0.13.0 the v1 was written, and no successor could ever be accepted from it.
+  The source window now neutralises every reserved marker it loads, in both
+  deliberation skills and in a chat's first turn: a marker comment line is
+  removed, any other occurrence of a reserved marker name becomes plain text,
+  and NUL bytes are dropped. The `sourceWindow` entry for that document
+  reports `reservedMarkersRemoved`. The validation itself is unchanged and
+  still refuses a v1 or successor carrying a reserved marker.
+  A v1 written by 0.13.0 keeps its bytes. A successor that keeps its copied
+  markers is refused at preview with `successor-copied-artifact-marker`, which
+  names the sections that hold them and the repair. A successor that replaces
+  those sections without the marker lines is accepted: a field that only reads
+  the source (`oldText`, `anchor`) may span a copied marker line, and the
+  accept turn's source read accepts exact copied marker lines, never any other
+  reserved byte. Every preview refused by that pre-publish validation now
+  carries `nextAction: "repair_candidate"` and one blocker with the rule's
+  code, message and repair step, where it used to answer only
+  `CANDIDATE_VALIDATION_FAILED` with `nextAction: "inspect_error"`.
+
+- **A shared target's headline fidelity judges only its own lineage.** On a
+  target both implementation skills share, `__implementation__.revision` maps
+  one revision per document label, and each skill's modules carry their own
+  lineage's revision. The whole-tree `fidelity.staleModules` compared every
+  module against this skill's revision, so the other skill's module read
+  "bound to an older revision, but none of its sections moved" and
+  `fidelity.status` was `drift` for both skills, while `fidelityByDocument`
+  read `ok` for both documents. main's engine shows the same with a
+  single-string binding (the only form it reads; it crashes on the mapping).
+  A module whose revision is in another label's filename family is now
+  listed in `fidelity.otherLineageModules` (`module`, `label`, `revision`)
+  and kept out of `staleModules`, `drift` and the headline. A module of the
+  skill's own lineage goes stale as before, and a bare-string binding is
+  unchanged.
+
+- **A refused `position` or `settle` writes no holder.** On a product folder
+  with no declared holder yet, both commands wrote the holder's scaffold
+  (`# Agreed` / `## Ladder`) first and checked their arguments after, so a
+  call refused `POSITION_TARGET_LEVEL_REQUIRED` (exit 2) left an empty holder
+  behind, and so did `POSITION_TARGET_LEVEL_UNKNOWN`,
+  `POSITION_LEVELS_UNDECLARED`, the record checks, and every `settle` refusal
+  past holder resolution (`SETTLE_HEADING_ABSENT`, `SETTLE_TEXT_ABSENT`, ...).
+  Pre-existing on 0.13.0. The scaffold is now the base the write is spliced
+  into and reaches the disk with it, under the same compare-and-swap; a
+  refused call leaves the tree byte-identical.
+
+- **A witness-less agreement can be placed by `settle`.** Placing a line
+  needed `--about` and an answered discussion, and `settle --done
+  --unwitnessed` closes only a line that exists, so a scoping decision with
+  no position sequence had to be written into the holder by hand.
+  `settle --under <heading> --unwitnessed --reason <why> --text <line>` now
+  places it, unticked and bound to no discussion, and logs the reason
+  (`about: null`, `unwitnessed: true`, `done: false`). `--about`, `--witness`
+  and `--supersedes` are refused with it (`SETTLE_UNWITNESSED_CONFLICT`),
+  `--reason` stays required, and closing the line is still the separate
+  `--done --unwitnessed` act. Only that closing act is named under
+  `agreements.witness.decided`.
+
+- **The board now lists the agents that work in each tramo, and it was missing
+  three.** `AGENT_STAGES` carried 16 of the 19 shipped agent definitions, and the
+  ones it lacked were exactly the plausibility ones — `sota-scout`,
+  `sota-grapher` and `novelty-screener` — so the board's Plausibility tramo
+  showed no agents while the flow drawing beside it showed three. Nothing failed,
+  because an unmapped agent is dropped in silence. A test now holds the mapped
+  set equal to the shipped set, so the next agent that nobody maps fails the
+  build instead of disappearing from the board.
+
 ### Added
 
+- **A populated 0.13.0 workspace fixture, and a test that upgrades it.**
+  `tests/fixtures/workspace_v0_13_0/` holds a workspace produced by the
+  0.13.0 release itself (`scripts/build-v0_13_0-fixture.py` drives that
+  tree's own CLI and engines): two managed proposal revisions and one
+  experiments revision with their receipts, state and locks, and an
+  implementation target with its scaffold receipt and seal file, both
+  implementation skills' holders with settled items, and their position
+  ledger. `tests/test_upgrade_v0_13_0_workspace.py` upgrades it with the
+  current CLI and asserts that nothing it holds changes except the listed
+  `.papersmith/` records, that every registered migration applies or is
+  already satisfied, that `audit --check-drift` is clean, and that the
+  deliberation consistency audit and both implementation `verify` runs still
+  read what 0.13.0 wrote. `tests/fixtures/README.md` documents how it is built
+  and stored.
+- **`CREATE_INITIAL_REVISION --dry-run`: see the first revision before it
+  exists.** A successful creation leaves
+  `<sidecarRoot>/locks/initial-revision.lock` in place for good (the
+  slug-independent single-winner guard), so the only way to see v1's filename,
+  derived headings and canonical-form verdict was to create it, after which
+  every further attempt is refused. `cli.mjs --dry-run` (or `"dryRun": true`
+  in the request) runs every check and the composition and returns
+  `status: "preview"` with the would-be `targetFilename`, `canonicalMetadata`
+  and composed `markdown`, without taking the lock or writing anything. A
+  present lock is reported as the `MANAGED_PROPOSAL_ALREADY_EXISTS` the real
+  call would meet and is never touched. `dryRun` on any other operation is
+  refused `DRY_RUN_UNSUPPORTED` rather than ignored. Existing locks are neither
+  removed nor reinterpreted. Documented in both deliberation skills' `SKILL.md`
+  and `references/usage.md`.
+- **A successor receipt can record why the change was made and who decided
+  it.** Receipts kept only an `instructionHash`, so a published revision could
+  not say why it existed or whether a person or an agent took the call.
+  `CREATE_SUCCESSOR` accepts two optional fields, `rationale` (at most 2000
+  characters) and `decider` (`agent` or `human`), and the successor's receipt
+  records them verbatim beside the hash. Malformed values are refused
+  `DECISION_RECORD_INVALID` at the preview, and either field on another
+  operation `DECISION_RECORD_UNSUPPORTED`. Documented in both deliberation
+  skills' `SKILL.md` and `references/usage.md`.
+- **`ADOPT_INITIAL_REVISION`: adopting an existing document as v1 gets the
+  same state, receipt and validation as creating one.** Both deliberation
+  skills offered "adopt it as v1" and the only way was by hand (prepend the
+  marker, rename the file), which left no committed state and no receipt
+  (`runConsistencyAudit` reported `MISSING_MANIFEST`) and skipped the
+  canonical-form gate and pre-publish validation, so a document breaking the
+  domain's rules entered the lineage unexamined. The new operation, with
+  `sourceFilename` naming an unmanaged `.md` in the managed directory, runs
+  that gate and publishes the file's bytes through the creation path itself
+  (lock, exclusive write, state, receipt with `operation:
+  "CREATE_INITIAL_REVISION"` and an additive `adoptedFrom`), named after its
+  first `# ` title; the source is left in place for the agent to back up. With
+  `sourceFilename` naming an old hand-adopted v1 it is the explicit repair
+  path: after the same gate it writes that revision's state and receipt,
+  bytes untouched, and refuses one that already has a receipt
+  (`ADOPTION_ALREADY_RECORDED`). Accepts `--dry-run`. Documented in both
+  deliberation skills' decision trees, operation tables and usage.
+- **An audit that found nothing can be ruled on.** `admit` refused
+  `NO_FINDINGS` whenever `tests/findings.py` declared an empty list, so a
+  target whose audit found no defect could never record it and `verify` stayed
+  at `audit: none`, the answer a never-audited target gets. `admit
+  --no-findings` now records an empty ruling (`"findings": {}`,
+  `"noFindings": true`) bound to the revision's bytes; `verify` reads it as
+  `audit: ok` with an additive `noFindings` key, and as `incomplete` once the
+  revision moves. Plain `admit` on an empty list still refuses `NO_FINDINGS`
+  (its detail now names the flag), and the flag with findings declared refuses
+  `FINDINGS_DECLARED`. Shared by `experimental-implementation`, which runs the
+  same engine. Documented in `proposal-implementation`'s `SKILL.md` step 11
+  and `references/usage.md`.
+- **A defect that lives in the prose can be declared as a finding.** A
+  finding's correction was only expressible as one numbered equation rewritten
+  in place: the kit's `test_audit.py` required a non-empty `remedy_equations`,
+  `compose` substitutes at the equation's own `\tag{n}`, and `verify` kept
+  asking for a `remedy_block` that nobody can write for a sentence with no tag.
+  A finding may now declare `"remedy_in_prose": True` with its remedy locus
+  list empty and no `remedy_block`: it is admitted on the same notation and
+  adoption checks, never listed under `localRemediesNotWritten` (so no
+  `toDiscuss` entry), and `handoff` defers it as `prose-remedy` to a
+  deliberation session of its own. Declaring it beside remedy loci, or with a
+  value other than `True`, is ruled inadmissible; without the flag an empty
+  locus list reads exactly as before. The kit's `findings.py` documents the
+  field and `test_audit.py` accepts it. Shared by `experimental-implementation`.
+  Documented in both implementation skills' `SKILL.md` and
+  `proposal-implementation`'s `references/usage.md`.
+- **An experiments document can declare a proposal claim out of scope.**
+  `agree` reported every declared claim no experiment cites as
+  `untested:<id>`, and the only way past one was `--acknowledge
+  untested:<id>`, request-scoped by design and so retyped on every call, with
+  nothing in either document recording the decision. The shared experiment
+  convention (`skills/_core/conventions/experiments.json`) now registers an
+  `outOfScope` marker, `[out-of-scope:<id>]`; the experimental profile's
+  crossing reads it (an optional `cross_citation.out_of_scope` pattern, held to
+  the one-group rule), and `agree` subtracts a declared, uncited claim marked
+  that way from `untested` and echoes it under `outOfScope`. The marker clears
+  nothing else: a citation to an undeclared claim stays `absent`, a marker
+  naming an undeclared claim subtracts nothing, and a document without one
+  reads exactly as before. Documented in `experimental-deliberation`'s
+  `SKILL.md` (where the document is written) and `experimental-implementation`'s
+  `SKILL.md` and `references/usage.md`.
+
+- **`paper-ingestion` can OCR every page instead of trusting a poor text
+  layer.** Marker rebuilds digital tables from the PDF's own text layer
+  (`tables_pdftext`) in both `fast` and `balanced` mode, so a text layer that
+  is present but poor produced confidently garbled tables and switching
+  `--mode` could not avoid it. `extract_pdf.py --force-ocr` (or
+  `force_ocr: true` under `paper_ingestion:` in `papersmith.yaml`) hands
+  Marker its `force_ocr` option: no text layer is extracted and every page,
+  tables included, is rebuilt by OCR. Off by default; a non-boolean
+  `force_ocr` is a configuration error reported before any model loads.
+  Documented in the skill's `SKILL.md` ("Tables from a poor text layer") and
+  the manual.
+
+- **`walk` commits under a subject the target's convention accepts.** The
+  walker commits what each step produced (`step` refuses on a dirty tree), and
+  the subject was fixed at `walk: <step>`, so a target enforcing Conventional
+  Commits through a hook or a lint refused the walk's commits or carried
+  history its own policy rejects. `walk --commit-template '<subject>'` now
+  shapes it, with `{step}` as the one placeholder (`chore(walk): {step}`).
+  The default stays `walk: {step}`. A template with no `{step}`, any other
+  brace, or more than one line is refused `WALK_COMMIT_TEMPLATE_MALFORMED`
+  before anything runs. Shared by both implementation skills; documented in
+  `proposal-implementation`'s `SKILL.md` and `references/usage.md`, and in
+  `experimental-implementation`'s `SKILL.md`.
+
+- **The plausibility checker can hold every quote to its abstract.**
+  `check_atlas.py` certified shape only, so a paraphrase or an invented
+  sentence dressed as a quote ran green. `check_atlas.py <atlas> --pool
+  sota-pool/candidates.json` now requires each planet's `evidence.origin` to
+  name a pool candidate (`identifier`, `source_url` or `url`;
+  `EVIDENCE_ORIGIN_NOT_IN_POOL`), that candidate to hold an abstract
+  (`EVIDENCE_ABSTRACT_MISSING`), and the quote to be a verbatim substring of
+  it (`EVIDENCE_QUOTE_NOT_IN_ABSTRACT`); whitespace runs compare collapsed,
+  nothing else is normalized. An unreadable or malformed pool exits 2. The
+  plausibility `SKILL.md` documents the invocation and, measured from
+  `paper_resolve.py`, what each resolver cannot give the pool: Crossref never
+  returns an abstract (and reports no year), arXiv reports `year: null` and
+  `venue: "arXiv"`.
 - **`paper-writing` says which language its blocks are written in, and it is
   English.** Nothing in that skill stated it, so the answer was whatever language
   the session happened to be speaking. `proposal-implementation` has declared the
@@ -47,17 +899,427 @@ number is `0`, breaking changes can still arrive without a major bump.
   one — and presenting the report while proceeding anyway is the failure the
   section exists to prevent.
 
-### Fixed
+### Changed
 
-- **The board now lists the agents that work in each tramo, and it was missing
-  three.** `AGENT_STAGES` carried 16 of the 19 shipped agent definitions, and the
-  ones it lacked were exactly the plausibility ones — `sota-scout`,
-  `sota-grapher` and `novelty-screener` — so the board's Plausibility tramo
-  showed no agents while the flow drawing beside it showed three. Nothing failed,
-  because an unmapped agent is dropped in silence. A test now holds the mapped
-  set equal to the shipped set, so the next agent that nobody maps fails the
-  build instead of disappearing from the board.
+- **Workspace support policy: a live workspace is upgraded, never
+  re-initialized.** This supersedes the 0.8.0 note "existing workspaces are
+  not migrated; re-run `papersmith init` in a fresh workspace", which would
+  discard a paper's ledgers, receipts, seals and managed revisions. From
+  0.14.0 on, every release that changes the shape of something a workspace
+  already holds ships, in the same release, a migration in `upgrade`'s
+  registry or a compatibility read that keeps the old shape reading, and says
+  which under Behaviour changes. Workspaces recorded at 0.12.0 or later (the
+  first release with artifact migrations) are supported; older ones still
+  upgrade, but pre-0.12.0 shape changes have no migration (0.8.0's
+  `.antigravity/` files are not removed). Documented in `docs/releasing.md`
+  ("Workspace support policy"), the `upgrade-project` skill and the manual.
 
+### Behaviour changes
+
+- `admit` returns a new `adopted` map (present only when some finding is
+  adopted), and `tests/admissibility.json` carries
+  an optional `adopted` key on each adopted finding's verdict. Both are
+  additive: rulings written by 0.13.0 carry no such key and keep reading
+  unchanged, so no migration is needed.
+- `verify`'s `audit` gains an `adopted` map, present only when some finding is
+  adopted. A target whose only blocker was
+  an adopted finding now reads `audit: ok` instead of `incomplete` or
+  `needs-deliberation`.
+- Under a profile declaring more than one document, adoption is read from the
+  document(s) a finding names, the same text `admit` already checked the
+  marker against, instead of always from document 0.
+- A target holding the other implementation skill's declared holder (and no
+  holder of this skill's own) no longer refuses `HOLDER_UNDECLARED` on
+  `position --sequence`, `position --reconcile` or `settle`: the write creates
+  this skill's declared holder with its scaffold and leaves the sibling's file
+  byte-identical. Workspaces that already created their own holder by hand
+  keep resolving it as declared; no migration is needed.
+- `verify`'s `agreements` (and the same reader in `close`) no
+  longer counts the other implementation skill's declared holder: a target
+  whose only checklist is the sibling's now reads `agreements: absent` instead
+  of the sibling's items, and a new `siblingHolders` list names the skipped
+  file. The key is present only when such a file exists, so other targets read
+  byte-identically. The position section likewise reads `absent` until this
+  skill installs its own block, instead of the sibling's.
+- `probe` on a target with no prior-work package under `src/` and a declared
+  `__steps__` flow now answers `pilot-first` or `pilot-decisions` where it
+  used to answer `nothing-to-compare`, and publishes those rungs' questions
+  in `resolve` and `toDiscuss`. Targets that declare no flow, or whose pilot
+  is complete and every step decided, still read `nothing-to-compare`. No
+  stored artefact changes shape; no migration is needed.
+- `verify`'s `fidelity.missingProvenance` no longer names
+  `src/<Package>/report_digest.py` while it is unmodified, so a target whose
+  only provenance gap was the seal now reads a non-`drift` fidelity status.
+  Existing 0.13.0 targets benefit without any action: the exemption also
+  accepts the bytes their own scaffold receipt recorded. The receipt shape is
+  unchanged; no migration is needed.
+- `close` on a target declaring no flow now records the close (status
+  `closed`, `positionOwed: false`) where it used to refuse `POSITION_ABSENT`.
+  A target declaring any part of a flow still refuses, and the detail now
+  names what it declares. `positionOwed` is absent whenever a position was
+  owed.
+- `verify`'s `agreements.witness` gains `decided` (lines closed by `settle
+  --done --unwitnessed`, with reason, session and time) and `handTicked`
+  (ticked witness-less lines with no such record), each present only when
+  non-empty. Lines ticked by hand in a 0.13.0 holder keep counting as
+  settled and stay under `unwitnessed`; they are now also named under
+  `handTicked`. The `settle` ledger event and response carry `unwitnessed`
+  and `reason` only on the new act. Additive; no migration is needed.
+- `SETTLE_NOT_WITNESSED`'s detail and question now name `--unwitnessed` for a
+  line no test could witness. Three new refusals: `SETTLE_UNWITNESSED_CONFLICT`,
+  `SETTLE_REASON_REQUIRED` (a work state whose question asks the operator
+  why) and `SETTLE_WITNESS_PRESENT`.
+- `proposal-deliberation` and `experimental-deliberation`: a successor
+  preview whose candidate the accept turn would refuse now answers `blocked`
+  / `CANDIDATE_VALIDATION_FAILED` instead of `awaiting_acceptance`; the
+  validation carries the accept turn's refusal under `candidateValidation`,
+  `results.prePublish` and `prePublishApplicable`. Such a token could never
+  be spent, so no publishable flow changes.
+- `CREATE_INITIAL_REVISION` refuses a composed v1 that fails the structural
+  pre-publish validation (oversized or reserved bytes, malformed display
+  blocks, a heading fused into prose outside code) with
+  `INITIAL_REVISION_CANDIDATE_VALIDATION_FAILED` and `nextAction:
+  repair_candidate_markdown`, where it used to publish a v1 that blocked
+  every successor. A heading marker inside a code span now passes at all
+  three points. Existing managed revisions, receipts and ledgers are not
+  re-validated and keep reading; a 0.13.0 v1 that carries an inline-code
+  `## ` becomes able to publish successors. No migration is needed.
+- `experimental-implementation` reads experiments documents in three forms:
+  the canonical heading carrying `[exp:<id>]`, and both legacy forms (a bare
+  `## N`, and `## N` wrapping an `[exp:<id>]` heading). Managed revisions are
+  never rewritten: a 0.13.0 experiments document keeps every id it declared
+  (`N`), and a legacy dual block also declares its nested `<id>`, so findings,
+  `__provenance__` claims and `admissibility.json` rulings that cite `N` keep
+  reading, and new ones may cite `<id>`. Inside one legacy block both ids name
+  the same experiment: `compose` accepts a replacement carrying both (a new,
+  optional `block_locator.block_aliases` profile leaf, off unless declared;
+  `proposal-implementation` does not declare it and is unchanged). The
+  migration is a compatibility read; no workspace artefact changes shape and
+  no `upgrade` migration is needed.
+- `__implementation__["revision"]` accepts a mapping keyed by document label.
+  A bare string keeps its meaning (the reading skill's own document) and reads
+  exactly as before under both skills; nothing rewrites existing declarations,
+  and the engine still writes `"revision": ""` into new scaffolds (only the
+  comment above it changed). A mapping without the reading skill's label
+  leaves that skill's revision unanswered (never another lineage's name): with
+  empty `premises` the declaration reads `undeclared` with a detail naming the
+  label, otherwise `materialize --stage objects` refuses
+  `OBJECT_MAP_NOT_APPROVED` naming `revision`. A non-string value under the
+  label reads `undeclared`. The reader's contract carries the full mapping as
+  `revisionByDocument`. Declarations live in target repositories under
+  `implementations/`, not in the workspace kit, so no `upgrade` migration
+  applies.
+- `papersmith init` and `papersmith upgrade` refuse (exit 1) when the kit
+  they resolve is a checkout or `PAPERSMITH_KIT_ROOT` tree with uncommitted
+  changes under its shipped paths, or whose git state cannot be read. Users of
+  an editable install with local edits will meet this; commit the edits, or
+  pass `--allow-dirty-kit` (`PAPERSMITH_ALLOW_DIRTY_KIT=1` is the same
+  override, used by the test suite). Wheel installs are unaffected unless the
+  wheel was built from a dirty tree.
+- A workspace created by 0.13.0 or earlier has no kit-source record:
+  `status` reports `Kit source: unknown (recorded before 0.14.0)` until the
+  next `upgrade`, which writes it. Nothing else changes shape and no migration
+  is needed; the record is not a framework-managed file, so `audit
+  --check-drift` and `status`'s drift list do not report it.
+- `papersmith run` on a `local` target now runs the profile's command with
+  `PYTHONDONTWRITEBYTECODE=1`, so the job writes no `.pyc` files (into the
+  workspace or the target it imports); imports are recompiled on each run.
+  No stored artefact changes; no migration is needed.
+- After an `upgrade` that moves the version marker, the routing docs name the
+  new version in the same run. No stored artefact changes; no migration is
+  needed.
+- The workspace `.gitignore` changes shape on the next `upgrade`: the
+  framework's lines move into a block between two marker lines, and lines the
+  workspace added stay below it. It now ignores `.proposal-deliberation/`,
+  `.experimental-deliberation/`, `backup/proposals/` and
+  `backup/experiments/`. No registry migration is needed: `upgrade` re-renders
+  `.gitignore` on every run, and that render now merges into the existing file
+  (converting a 0.13.0 file as described under Fixed) instead of replacing it,
+  which `tests/test_workspace_gitignore.py` checks against the 0.13.0
+  fixture. Ignoring a path does not untrack it: a workspace that already
+  committed engine state keeps it in git until `git rm -r --cached
+  .proposal-deliberation .experimental-deliberation` is run, which is the
+  user's call.
+- The plausibility agents' `resolve` calls cache under `sota-pool/metadata/`
+  instead of `paper/.paper-writing/metadata/`. Caches an earlier run already
+  left under `paper/` are valid paper-writing caches (same record, same key)
+  and keep reading; nothing moves them and no migration is needed. A
+  workspace that wants them gone can delete
+  `paper/.paper-writing/metadata/` while no paper has been started.
+- `verify`'s `fidelity.drift[].changedSections`/`touchedSections` and
+  `fidelity.benchmark.changedSections`/`armsReached` now list identifier,
+  dotted and label-only sections. A change inside `3.1` reports both `3` and
+  `3.1`. A drift entry whose sections now resolve reads
+  `sections it declares have changed` where it used to read `bound to an older
+  revision, but none of its sections moved`. A numbered parent's digest covers
+  the same lines as before, so existing numbered `__provenance__` references
+  keep matching what they matched. Under `experimental-implementation`,
+  sections are experiment ids (`E1`) and legacy `## N` numbers. The
+  implementation profile gains an optional `documents[N].section_heading`
+  leaf (refused as `IMPLEMENTATION_DOMAIN_PROFILE_INVALID_SECTION_HEADING`
+  when malformed; a profile that does not declare it reads no sections). This
+  is reader-side only: no stored artefact changes and no migration is needed.
+- `settle --under` appends after the section's last item instead of placing
+  the item first. In a holder that 0.13.0 wrote newest first, the existing
+  lines stay where they are and new items follow them, so the section reads
+  as the old newest-first run followed by an oldest-first run. Nothing is
+  reordered or rewritten. A section whose only items are the position
+  block's receives the item right after the block. `settle --reverse` with no
+  `## Reversed` heading now adds one at the end of the file instead of
+  refusing `SETTLE_HEADING_ABSENT`, a code that path no longer raises. More
+  than one heading still refuses `SETTLE_HEADING_AMBIGUOUS`. Holders and
+  ledgers keep their shape, so no migration is needed.
+- `verify`'s `position.attainedLevel` for a sequence with no leveled witness
+  is the header's `targetLevel` instead of the ladder's top rung. `gate` and
+  the launch menu read the same value. On a ladder of three or more rungs, a
+  launch from such a position now needs the position to aim at the launch
+  rung (`levels[-2]` or above). One aimed at a lower rung refuses
+  `RUNG_NOT_ATTAINED` where it used to pass, and re-sealing with
+  `position --target-level <rung>` is the exit, which the rung-skip rule
+  allows for such a sequence. Sealing is otherwise unchanged. Nothing stored
+  changes shape and no migration is needed.
+- `verify`'s `prose.staleRevisions` and `prose.unresolvedSymbols` list fewer
+  entries for targets whose holders carry a position block, witness tokens or
+  a `## Reversed` section. Both keys were report-only and never moved a
+  status. This changes the reading only: no migration is needed.
+- Running either implementation launcher with `IMPLEMENTATION_DOMAIN_PROFILE`
+  set to the other implementation skill's `impl_profile.py` now refuses
+  `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` instead of running under that
+  profile. Unset the variable. Nothing stored changes and no migration is
+  needed.
+- `verify` no longer lists an executed kit notebook under
+  `structure.scaffoldDrift` or `structure.harnessDrift`, and new receipt
+  entries for notebook destinations carry an extra `writtenSourceSha256` key.
+  The key is additive: receipts without it keep reading (full bytes, or the
+  source content rebuilt from the kit for an engine-written entry), so no
+  migration is needed. A legacy `authored` or `adopted` notebook entry still
+  drifts on execution until its next `materialize --authored`.
+- Unmeasured `@step` entries in a position state's `unmeasured` list carry
+  two new keys, `reason` and `digestScope`; the `sequence` entries and every
+  verdict are unchanged. Step events keep their digest, so marks recorded by
+  0.13.0 read exactly as before. No migration is needed.
+- `search.costForecast` and `projectedCost` gain `parallelism`,
+  `contention` and `basis` (and `parallelismMalformed` when that key is
+  unreadable) wherever they carry a projection; `projectedSeconds` is
+  unchanged. Search records are read, never rewritten, so no migration is
+  needed.
+
+- Locus queries resolve differently only where they were wrong: a word that
+  matched part of a heading word no longer matches (`O1` vs `O10`); a query
+  naming an outer heading exactly (`Data`) now resolves to it instead of a
+  nested heading sharing the word; a query whose candidates nest within the
+  gate's margin blocks and lists both instead of silently picking the
+  innermost; and a query opening with `#` level marks only considers headings
+  of that level. Entry ids, labels and tags (the non-successor resolver) are
+  untouched. A blocked `RESOLVE_TARGET` result gains a `candidates` array;
+  managed revisions, receipts and locks are not read differently, so no
+  migration is needed.
+
+- A `CREATE_SUCCESSOR` preview, its published result and the successor's
+  receipt gain an optional `staleCompanionReferences` array, present only
+  when the successor names another revision's companion artifact. Receipts
+  written by 0.13.0 carry no such key and keep validating on read; no
+  existing revision is rewritten and no migration is needed.
+
+- A file under `<Name>/Notebooks/` that is not a JSON notebook object now
+  yields a `verify`/`probe` payload (the notebook `unreadable`, listed under
+  `unsealed`, notebooks verdict `drift`) where 0.13.0 exited 1 with a
+  traceback. Nothing on disk is read differently; no migration is needed.
+
+- `papersmith status` prints `published` (or `edited-after-publication`)
+  where it printed `draft` for a revision the engine published, and its JSON
+  `proposal` object gains a `receipt` key (`null`, or `operation` and
+  `document_matches`). Nothing on disk is read differently or rewritten; no
+  migration is needed.
+
+- `env` appends `.venv/` and `*.egg-info/` to the target clone's
+  `.git/info/exclude` (once; its JSON gains `excluded`), and a `.gitignore`
+  block authored by `apply` or `materialize --stage scaffold` gains
+  `*.egg-info/`. Existing `.gitignore` files are not rewritten, the scaffold
+  gap list is unchanged (so `verify` reads an existing target exactly as
+  before), and no receipt or ledger changes; no migration is needed.
+
+- `probe`'s `backend` gains `declared` and `source`, and two states
+  (`declared-unmet`, `unrecognized-backend`) that only a target stating
+  `__backend__` can reach; an existing target states nothing and reads
+  exactly as before. `env` gains `--torch`/`--torch-version` and a `torch`
+  key (`{"variant": null, "args": []}` without the flag). A newly
+  scaffolded target gets the backend-neutral `conftest.py`/`sweep.py` and a
+  `pyproject.toml` with `dependencies = []`; files already in a target are
+  never rewritten and their receipts are untouched, so no migration is
+  needed.
+
+- `papersmith.yaml` is the user's and `upgrade` never rewrites it, so a
+  workspace initialized before 0.14.0 keeps its `smoke_and_invariants`
+  profile. Where that profile's `implementations/{paper_slug}` names a
+  directory that does not exist, `papersmith run` now refuses before
+  dispatch and names the edit (`{target}`, `{target_python} -m pytest`);
+  where it exists, the profile runs exactly as before. A `--dry-run` of such
+  a profile, and every run of a profile naming the new placeholders, records
+  a `target_resolution` key in its ledger row. No migration (user-owned file).
+
+- An `IMPLEMENTATION_DOMAIN_PROFILE` naming the other implementation skill's
+  profile from a different skills tree now exits `2` with
+  `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` where 0.13.0 ran against it.
+  Nothing on disk is read differently; no migration is needed.
+
+- A v1 created by `CREATE_INITIAL_REVISION` from now on carries headings
+  without terminal punctuation (`# Title`, not `# Title.`). Existing managed
+  revisions are never rewritten and keep their headings; an idea whose two
+  sentences differ only in their terminal punctuation is now refused with
+  `INITIAL_IDEA_SINGLE_SENTENCE`. No migration is needed.
+
+- Through `cli.mjs`, an `instruction` longer than 65,536 characters (an idea,
+  for `CREATE_INITIAL_REVISION`) is now refused with `INSTRUCTION_TOO_LONG`
+  where 0.13.0 accepted it. The successor preview and the first revision's
+  result gain an additive `instructionBudget` key. Nothing on disk changes; no
+  migration is needed.
+
+- A deliberation request carrying `dryRun` on an operation other than
+  `CREATE_INITIAL_REVISION` is now refused with `DRY_RUN_UNSUPPORTED` (nothing
+  runs); 0.13.0 ignored the unknown field and executed the operation. Existing
+  creation locks are untouched; no migration is needed.
+
+- `CREATE_INITIAL_REVISION` results gain additive `sourceWindow` and, when a
+  source was cut or left out, `warnings` keys; the default window (4000 bytes)
+  and what v1 contains for a given set of sources are unchanged. A request
+  carrying `sourceWindowBytes` outside 1..262144, or on another operation, is
+  refused. No migration is needed.
+
+- `experimental-deliberation` now accepts digits in the body of a table whose
+  first header cell is `Parameter(s)` or `Hyperparameter(s)`; such a document
+  was refused by 0.13.0. Every other table is judged exactly as before, and
+  published revisions are unaffected. No migration is needed.
+
+- Successor receipts may carry two new optional keys, `rationale` and
+  `decider`, only when the request supplied them. The change is additive:
+  receipts written by 0.13.0 carry neither and keep validating and reading
+  unchanged, so no migration is needed.
+
+- A first revision adopted by hand in 0.13.0 (no state, no receipt) keeps
+  reading unchanged and is never rewritten by `upgrade`; the consistency audit
+  still reports `MISSING_MANIFEST` for it until `ADOPT_INITIAL_REVISION` is run
+  on it explicitly, which writes the state and a receipt carrying
+  `adoptedFrom`. `ADOPT_INITIAL_REVISION` joins the CLI's accepted operations.
+  No migration is needed.
+
+- `admit` accepts `--no-findings`, and `tests/admissibility.json` may carry an
+  additive `noFindings` key; `verify`'s `audit` reports `ok` (with
+  `"noFindings": true`) for an empty audit ruled that way. Without the flag an
+  empty findings list still refuses `NO_FINDINGS` and still reads
+  `audit: none`; existing rulings carry no such key and read unchanged, so no
+  migration is needed.
+
+- `handoff` can return a new `deferredBecause` value, `prose-remedy`, only for
+  a finding that declares `"remedy_in_prose": True`; findings without the key
+  are sized, admitted and reported exactly as before. A target scaffolded
+  before 0.14.0 keeps its own `tests/test_audit.py`, which still requires a
+  non-empty `remedy_equations`; to declare a prose finding there, apply the
+  kit's two-line change to that file and re-seal it with `materialize
+  --authored tests/test_audit.py`. No migration is needed.
+
+- `verify`'s `audit.remediesWithoutControl` may list fewer tests than 0.13.0
+  did: a remedy test that calls the package through a module attribute or a
+  same-file helper is no longer listed, so such a target can move from
+  `audit: incomplete` to its next state. Nothing on disk changes; no migration
+  is needed.
+
+- An experiments document carrying `[out-of-scope:<id>]` markers now gets
+  those claims subtracted from `agree`'s `untested` list, and an agreed `agree`
+  payload gains an `outOfScope` key when any is marked. Published experiments
+  revisions without the marker read and agree exactly as before, and
+  `--acknowledge` is unchanged. The convention file gains one additive key; no
+  migration is needed.
+
+- `verify`'s `structure.objectGaps` no longer names `src/<Package>/module.py`
+  on a target whose package already holds modules of its own, so such a target
+  can now read `structure: ok`; `materialize --stage objects` then writes only
+  the two test files. `materialize` accepts `--module`. Targets carrying
+  `module.py` and every existing receipt read exactly as before; no migration
+  is needed.
+
+- `materialize --stage scaffold` now writes `{{NAME}}` (and `{{REVISION}}`
+  when known) already filled, and `materialize --stage objects` now rewrites
+  scaffold destinations that still carry `{{REVISION}}`/`{{NAME}}`/`{{MODULE}}`
+  and are byte-identical to their receipt, updating those receipt entries'
+  `writtenSha256` and `substitutions`; its result gains an additive `filled`
+  key. Scaffold files of an existing target that were edited, adopted or
+  declared authored are left untouched, and receipts written by 0.13.0 keep
+  verifying unchanged (an executed notebook sealed before 0.14.0 is still read
+  through the same legacy reconstruction). Kit files already on disk are not
+  replaced; the clearer failure messages reach a target scaffolded from this
+  release on. No migration is needed.
+
+- `paper-ingestion`'s `extract_pdf.py` accepts a fifth flag, `--force-ocr`,
+  and `papersmith.yaml` an optional `paper_ingestion.force_ocr` boolean.
+  Existing configurations carry no such key and convert exactly as before;
+  the skill-audit roster for `paper-ingestion` moves from 4 to 5 accepted
+  flags. No migration is needed.
+
+- `walk` accepts `--commit-template`; without it the walked commits keep the
+  exact `walk: <step>` subject and body as before. No receipt or ledger
+  records the message, so nothing on disk changes. No migration is needed.
+
+- `papersmith status` and `papersmith audit --check-drift` are quiet about
+  projection notes by default; pass `--verbose` to see them. `status --json`
+  gains an additive `framework.generator_notes` list. Nothing on disk changes;
+  no migration is needed.
+
+- `check_atlas.py` without `--pool` behaves exactly as before; an existing
+  `atlas.json` checked with `--pool` may now fail where a quote was
+  paraphrased or cites an origin outside the pool. `_failures(atlas)` keeps
+  its one-argument form for the command center. No migration is needed.
+
+- `papersmith implement --action materialize` still runs `apply`, and now
+  prints a one-line note on stderr pointing at `--action apply`. Its stdout
+  and exit code are unchanged.
+
+- `papersmith upgrade` rewrites `.claude/agents/sota-grapher.md` and its
+  OpenCode/Pi/`.agents` projections, so the grapher's checker run now
+  refuses an atlas whose quotes are not verbatim in the pool's abstracts
+  (verified on a scratch workspace initialized from the previous commit).
+
+- Metadata caches written before this release keep their `year: null` and
+  keep reading: the cache key is the digest of the raw response, which
+  reading one more field does not change, and `bib` checks only that key.
+  Re-resolving the same identifier rewrites the same cache file with the
+  year filled, and the next `refs.bib` rebuild gains a `year` field.
+
+- `papersmith ingest` refuses exactly the sources it refused before; only the
+  refusal text is longer (it keeps its old prefix, then names
+  `guidance/paper-guide/` and `ADOPT_INITIAL_REVISION`). Exit code unchanged.
+
+- `CREATE_INITIAL_REVISION` refusing a one-sentence idea keeps its code
+  (`INITIAL_IDEA_SINGLE_SENTENCE`) and `nextAction` (`supply_initial_idea`);
+  only the blocker's `message` text changes. An empty idea keeps its old
+  message.
+
+- `papersmith deliberate --action adopt` (or `--action ADOPT_INITIAL_REVISION`)
+  now runs adoption instead of refusing it as an unsupported action. Every
+  other action builds the same request as before.
+
+- `CREATE_INITIAL_REVISION` reads declared sources with reserved markers
+  neutralised, so an experiments v1 whose window holds a published proposal is
+  created instead of refused, and its `## Reference Sources` no longer carries
+  the proposal's marker line. A source entry in `sourceWindow` gains
+  `reservedMarkersRemoved` when something was neutralised (absent otherwise).
+- A `CREATE_SUCCESSOR` preview refused by the accept turn's pre-publish
+  validation keeps `message: "CANDIDATE_VALIDATION_FAILED"`, but `nextAction`
+  becomes `repair_candidate` (was `inspect_error`) and a `blockers` entry
+  names the rule. Canonical-form refusals are unchanged.
+- An experiments v1 written by 0.13.0 with copied proposal markers (the
+  fixture's `experiments-*-v01.md` has two) now takes a successor that replaces
+  the sections holding them; its own bytes, receipt and state are untouched.
+- `verify` output gains `fidelity.otherLineageModules` (`[]` unless the
+  target binds a per-label `revision` mapping). On a shared target, the
+  other skill's modules leave `staleModules` and `drift`, so the headline
+  `fidelity.status` can turn from `drift` to `ok`.
+- A refused `position` or `settle` on a product folder without its holder
+  no longer creates `<Name>/AGREED.md` (or `Experimental_AGREED.md`); the
+  next accepted write creates it, with the same scaffold.
+- `settle --unwitnessed --reason` without `--done` used to be refused
+  `SETTLE_UNWITNESSED_CONFLICT`; with `--under` it now places a line, and
+  without `--under` it is refused `SETTLE_UNDER_REQUIRED`.
 ## 0.13.0
 
 ### Added

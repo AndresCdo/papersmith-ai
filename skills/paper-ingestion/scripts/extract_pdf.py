@@ -36,6 +36,7 @@ Usage:
     python extract_pdf.py --list          # report the loose PDFs, ingest nothing
     python extract_pdf.py                 # ingest every loose PDF under every source root
     python extract_pdf.py <pdf> [<pdf>…]  # ingest exactly these loose PDFs
+    python extract_pdf.py --force-ocr <pdf>  # OCR every page, ignore the text layer
     python extract_pdf.py --file <pdf> --into <topic>  # file an unfiled PDF, ingest nothing
 
 Exit codes: 0 success (or nothing to do), 1 at least one paper failed,
@@ -133,6 +134,10 @@ def load_config(path: Path | None = None) -> dict:
     strip_refs = cfg.get("strip_references")
     if strip_refs is not None and not isinstance(strip_refs, bool):
         raise ConfigError(f"strip_references must be true or false, got {strip_refs!r}")
+
+    force_ocr = cfg.get("force_ocr")
+    if force_ocr is not None and not isinstance(force_ocr, bool):
+        raise ConfigError(f"force_ocr must be true or false, got {force_ocr!r}")
 
     roots = cfg.get("source_roots")
     if roots is not None:
@@ -432,7 +437,27 @@ def strip_references(text: str) -> str:
         kept.append(text[cursor:])
     return "\n\n".join(part for part in kept if part) + ("\n" if not kept[-1].endswith("\n") else "")
 
-def build_converter(mode: str | None):
+def marker_options(mode: str | None, force_ocr: bool) -> dict:
+    """The options handed to Marker's `ConfigParser` for one run.
+
+    `force_ocr` is the one lever that keeps Marker away from the PDF's own text
+    layer. Without it, Marker rebuilds every digital table from that layer
+    (`tables_pdftext`) in both modes, and falls back to OCR only when its own
+    reconstruction score is low -- so a text layer that is present but poor
+    (ligatures split, columns interleaved, a broken font map) produces a table
+    that is confidently wrong. With it, the provider extracts no text layer and
+    every page, tables included, is rebuilt by OCR: slower, and immune to a bad
+    layer. It is off by default because a good text layer is exact and OCR is not.
+    """
+    options: dict = {"output_format": "markdown"}
+    if mode:
+        options["mode"] = mode
+    if force_ocr:
+        options["force_ocr"] = True
+    return options
+
+
+def build_converter(mode: str | None, force_ocr: bool = False):
     """Construct a keyless Marker PDF->markdown converter (models loaded once)."""
     try:
         from marker.converters.pdf import PdfConverter
@@ -445,10 +470,7 @@ def build_converter(mode: str | None):
             "skills/paper-ingestion/.venv/bin/python"
         ) from None
 
-    cli: dict = {"output_format": "markdown"}
-    if mode:
-        cli["mode"] = mode
-    config_parser = ConfigParser(cli)
+    config_parser = ConfigParser(marker_options(mode, force_ocr))
     return PdfConverter(
         config=config_parser.generate_config_dict(),
         artifact_dict=create_model_dict(),
@@ -591,6 +613,10 @@ def main() -> int:
         "--mode", choices=VALID_MODES, default=None,
         help="override papersmith.yaml's conversion mode for this run",
     )
+    parser.add_argument(
+        "--force-ocr", action="store_true",
+        help="OCR every page instead of reading the PDF's text layer (for a poor text layer that garbles tables)",
+    )
     args = parser.parse_args()
 
     if bool(args.file) != bool(args.into):
@@ -601,6 +627,7 @@ def main() -> int:
         cfg = load_config()
         mode = args.mode if args.mode is not None else cfg.get("mode")  # None -> Marker auto-selects by device
         strip_refs = bool(cfg.get("strip_references", True))
+        force_ocr = bool(args.force_ocr or cfg.get("force_ocr", False))
         # Filing is not ingestion: it moves one PDF into a topic and loads no model,
         # so it answers and exits before anything here can displace anything else.
         if args.file:
@@ -644,7 +671,7 @@ def main() -> int:
         return 0
 
     try:
-        converter = build_converter(mode)
+        converter = build_converter(mode, force_ocr)
     except EngineError as exc:
         print(f"Environment error: {exc}", file=sys.stderr)
         return 2

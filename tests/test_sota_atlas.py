@@ -171,6 +171,131 @@ class CheckAtlasTests(unittest.TestCase):
         self.assertIn("SLOT_COUNT_OUTSIDE_ROW", out)
 
 
+class QuoteFidelityTests(unittest.TestCase):
+    """E6: `--pool` holds every quote to the abstract its origin names.
+
+    Without it the checker certifies shape only, so a paraphrase or an
+    invented sentence dressed as a quote ran green. With `--pool
+    sota-pool/candidates.json` every planet's `evidence.origin` must name a
+    pool candidate (its `identifier`, `source_url` or `url`) and its `quote`
+    must be a verbatim substring of that candidate's `abstract`. Whitespace
+    runs are layout, not authorship, so they compare collapsed; nothing else
+    is normalized.
+    """
+
+    ABSTRACT = ("We study sparse codes.\n  Our method   recovers the dictionary "
+                "under mild assumptions. Results hold on three benchmarks.")
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="sota-fidelity-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, ignore_errors=True))
+
+    def grounded_atlas(self, quote="Our method recovers the dictionary"):
+        systems = [system("a", "F1"), system("b", "F2"), system("c", "F3")]
+        for sys_ in systems:
+            for node in sys_["planets"]:
+                node["evidence"] = {"origin": f"arXiv:{sys_['id']}", "quote": quote,
+                                    "retrieved": "2026-09-30"}
+        return atlas(systems=systems)
+
+    def pool(self, abstracts=None):
+        abstracts = abstracts or {}
+        return [{"identifier": f"arXiv:{sid}", "resolver": "arxiv",
+                 "source_url": f"https://arxiv.example/abs/{sid}",
+                 "abstract": abstracts.get(sid, self.ABSTRACT)}
+                for sid in ("a", "b", "c")]
+
+    def run_checker(self, atlas_doc, pool_doc=None, *extra):
+        target = self.tmp / "atlas.json"
+        target.write_text(json.dumps(atlas_doc), encoding="utf-8")
+        argv = [sys.executable, str(CHECKER), str(target)]
+        if pool_doc is not None:
+            pool_path = self.tmp / "candidates.json"
+            pool_path.write_text(pool_doc if isinstance(pool_doc, str) else json.dumps(pool_doc),
+                                 encoding="utf-8")
+            argv += ["--pool", str(pool_path)]
+        proc = subprocess.run(argv + list(extra), capture_output=True, text=True, cwd=self.tmp)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_a_verbatim_quote_passes(self):
+        code, out = self.run_checker(self.grounded_atlas(), self.pool())
+        self.assertEqual(code, 0, out)
+        self.assertIn("every quote verbatim", out)
+
+    def test_a_paraphrase_fails(self):
+        code, out = self.run_checker(self.grounded_atlas("Our approach recovers the dictionary"),
+                                     self.pool())
+        self.assertEqual(code, 1, out)
+        self.assertIn("EVIDENCE_QUOTE_NOT_IN_ABSTRACT", out)
+
+    def test_whitespace_is_layout_but_case_is_not(self):
+        code, out = self.run_checker(self.grounded_atlas("sparse codes. Our method"), self.pool())
+        self.assertEqual(code, 0, out)
+        code, out = self.run_checker(self.grounded_atlas("our method recovers"), self.pool())
+        self.assertEqual(code, 1, out)
+
+    def test_the_source_url_names_the_candidate_too(self):
+        doc = self.grounded_atlas()
+        for sys_ in doc["systems"]:
+            for node in sys_["planets"]:
+                node["evidence"]["origin"] = f"https://arxiv.example/abs/{sys_['id']}"
+        code, out = self.run_checker(doc, self.pool())
+        self.assertEqual(code, 0, out)
+
+    def test_an_origin_outside_the_pool_fails(self):
+        doc = self.grounded_atlas()
+        doc["systems"][0]["planets"][0]["evidence"]["origin"] = "https://elsewhere.example/x"
+        code, out = self.run_checker(doc, self.pool())
+        self.assertEqual(code, 1, out)
+        self.assertIn("EVIDENCE_ORIGIN_NOT_IN_POOL", out)
+
+    def test_a_candidate_without_an_abstract_cannot_be_quoted(self):
+        pool = self.pool()
+        pool[1]["abstract"] = None
+        code, out = self.run_checker(self.grounded_atlas(), pool)
+        self.assertEqual(code, 1, out)
+        self.assertIn("EVIDENCE_ABSTRACT_MISSING", out)
+
+    def test_a_pool_wrapped_in_an_object_reads_the_same(self):
+        code, out = self.run_checker(self.grounded_atlas(), {"candidates": self.pool()})
+        self.assertEqual(code, 0, out)
+
+    def test_an_unreadable_pool_judges_nothing(self):
+        code, out = self.run_checker(self.grounded_atlas(), "{not json")
+        self.assertEqual(code, 2, out)
+        self.assertIn("POOL_NOT_JSON", out)
+        code, out = self.run_checker(self.grounded_atlas(), {"candidates": "x"})
+        self.assertEqual(code, 2, out)
+        self.assertIn("POOL_MALFORMED", out)
+
+    def test_without_the_pool_the_check_stays_shape_only(self):
+        code, out = self.run_checker(self.grounded_atlas("Our approach recovers the dictionary"))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("quote verbatim", out)
+
+
+class GrapherAgentChecksQuotesTests(unittest.TestCase):
+    """The agent that draws the atlas runs the checker WITH the pool, so the
+    quote-fidelity guard runs inside its own repair loop, not only when an
+    operator remembers the flag. Every agent definition (canonical and every
+    projection) that runs the checker on the pool's atlas is read."""
+
+    ROOT = Path(__file__).resolve().parent.parent
+    PROJECTIONS = (".claude/agents", ".agents/agents", ".opencode/agents", ".pi/agents")
+
+    def test_every_checker_run_on_the_atlas_carries_the_pool(self):
+        runs = []
+        for folder in self.PROJECTIONS:
+            for agent in sorted((self.ROOT / folder).glob("*.md")):
+                for line in agent.read_text(encoding="utf-8").splitlines():
+                    if "check_atlas.py sota-pool/atlas.json" in line:
+                        runs.append((f"{folder}/{agent.name}", line.strip()))
+        self.assertTrue(runs, "no agent runs the atlas checker")
+        for where, line in runs:
+            with self.subTest(agent=where):
+                self.assertIn("--pool sota-pool/candidates.json", line)
+
+
 class RenderAtlasTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="sota-render-"))

@@ -68,6 +68,18 @@ its own proposal.
 What moves is execution, never doctrine: every rule stays here, and the agent's
 first instruction is to load this file.
 
+## When a delegated agent cannot be spawned
+
+The stretch this skill delegates is defined in full by its agent file:
+`.claude/agents/deliberation-publish.md`. When that agent cannot be spawned —
+the harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read the
+definition file and follow it as written, from the beginning it states to the
+end it states, holding any gate this skill sets before the stretch, and returning the
+report shape it specifies. Its `tools:` line still bounds the stretch: an act
+that would need a tool outside that list is a stop, not a workaround. Say in
+the reply that the stretch ran inline and why the agent could not be spawned.
+
 ## The graph: the proposal inside the SOTA sky
 
 This skill's artifact travels with a picture, and the picture is the SOTA
@@ -117,6 +129,17 @@ constellation's shape; the merger refuses only what makes the merge incoherent
 overlay's own contract forbids. Link the HTML from the published revision; the
 engine's publish transaction never sees either file, so the mathematics stays
 byte-exact.
+
+**A successor inherits the previous revision's link.** Every byte outside the
+locus is copied, so a line naming `research-concept-r01.graph.html` still names
+it in r02, a picture built from r01's overlay. The engine never re-renders the
+picture and never rewrites a revision; it flags the line instead: the preview,
+the published result and the receipt carry `staleCompanionReferences`, one
+`{reference, revision, inherited}` per reference to a file named after another
+revision (any suffix but `.md`). To clear it, replace the link line inside the
+successor with the successor's own `<revision>.graph.html`, as a decision
+deliberated and validated like any other edit; otherwise publish with the flag
+and report the link as `owed`.
 
 **Who runs the three steps: the publish stretch.** `deliberation-publish` is
 the only stretch of this flow that is delegated, and the graph is part of its
@@ -192,9 +215,11 @@ Restoring is the same procedure in reverse — move the `.md` and both sidecars 
 
 1. **You have a path in mind, and `sourceClassification` is `LATEST`.** Proceed — it is already the latest managed revision; work on it directly.
 2. **You have a path in mind, and `sourceClassification` is `OLDER_MANAGED`.** `newerRevisionNumbers` lists the revision(s) that exist above it in the same lineage (`r(N+1)…rM`). Ask the user: move those newer revisions to `backup/proposals/<timestamp>/` and resume work from `rN` (the path you had in mind), or keep working on the actual current latest (`rM`) instead? On "move," relocate exactly `r(N+1)…rM` (and their sidecars) and treat `rN` as the latest from now on. On "keep," drop the older path and continue on the real latest.
-3. **You have a path in mind, and it does not match the managed format (`sourceClassification` is `UNMANAGED`).** Ask the user: move the current managed revision(s) to `backup/proposals/<timestamp>/` and START FRESH, using that file's content as the new v1 base — or ADOPT it as v1 directly, by adding the marker and renaming it to `research-concept-r01.md`? Adoption preserves the file's real structure and is the better choice for an already-rich, developed document, versus re-rendering a generic seed from scratch. Either choice is the user's call — never default silently.
+3. **You have a path in mind, and it does not match the managed format (`sourceClassification` is `UNMANAGED`).** Ask the user: move the current managed revision(s) to `backup/proposals/<timestamp>/` and START FRESH, using that file's content as the new v1 base — or ADOPT it as v1 directly with `ADOPT_INITIAL_REVISION` (`sourceFilename` = that file)? Adoption preserves the file's real structure and is the better choice for an already-rich, developed document, versus re-rendering a generic seed from scratch. Either choice is the user's call — never default silently. Adopt through the engine, never by hand: `ADOPT_INITIAL_REVISION` runs the same canonical-form gate and pre-publish validation `CREATE_INITIAL_REVISION` runs, and writes the same committed state and receipt, under `research-concept-<slug of its first # title>-r01.md`. A marker prepended and a file renamed by hand gets none of that — no state, no receipt (the consistency audit reports `MISSING_MANIFEST`) and no validation. The engine leaves the source file in place; moving it to a backup is your confirmed step, as below. See [usage](references/usage.md#adopting-an-existing-document-as-v1).
+
+   **An old hand-adopted v1** (the marker added by hand, no receipt; the audit reports `MISSING_MANIFEST` for it) keeps reading exactly as before; nothing invalidates it. To give it its record, run `ADOPT_INITIAL_REVISION` with `sourceFilename` set to that revision itself: after the same validation it writes the committed state and receipt and leaves the bytes untouched. A revision that already has a receipt is refused `ADOPTION_ALREADY_RECORDED`, never re-recorded.
 4. **No path in mind, and a latest managed revision exists (`latest` is non-null, `multipleActive: false`).** Work on `latest` directly.
-5. **No path in mind, zero managed revisions, and `proposals/` is otherwise empty (`nonManagedFiles: []`).** A pure initial creation — ask the user for their idea and proceed to `CREATE_INITIAL_REVISION`. **Their idea needs at least two sentences.** The engine takes the document's title from the first and its section heading from the second; with no second sentence both come out byte-identical, every later attempt to name a place in that document is ambiguous, and the revision can never be edited. `CREATE_INITIAL_REVISION` refuses that outright — `code: 'INITIAL_IDEA_SINGLE_SENTENCE'`, nothing written. A sentence ends with `.`, `!` or `?`; a line break is not a sentence boundary.
+5. **No path in mind, zero managed revisions, and `proposals/` is otherwise empty (`nonManagedFiles: []`).** A pure initial creation — ask the user for their idea and proceed to `CREATE_INITIAL_REVISION`. **Their idea needs at least two sentences.** The engine takes the document's title from the first and its section heading from the second, each without its terminal `.`, `!` or `?`, and then writes the whole idea verbatim as that section's body (the headings are labels; the body keeps your full text); with no second sentence both come out byte-identical, every later attempt to name a place in that document is ambiguous, and the revision can never be edited. `CREATE_INITIAL_REVISION` refuses that outright — `code: 'INITIAL_IDEA_SINGLE_SENTENCE'`, nothing written. A sentence ends with `.`, `!` or `?`; a line break is not a sentence boundary.
 6. **No path in mind, zero managed revisions, and exactly one non-managed file exists.** Ask the user: "is `<that file>` your initial idea/base for this proposal?" — do not assume it.
 7. **No path in mind, zero managed revisions, and several non-managed files exist.** Ask the user which one (by name or path) to start from — never guess among them.
 
@@ -202,7 +227,7 @@ If `multipleActive` is `true` (a tied latest across lineages), stop and ask the 
 
 ### Context-loading rule
 
-- **Initial case only — creating v1 (decision tree branches 3's "START FRESH" choice, 5, 6, 7):** load `guidance/paper-guide` once, exactly as `CREATE_INITIAL_REVISION` itself already does internally. This ingest exists only to seed a brand-new proposal.
+- **Initial case only — creating v1 (decision tree branches 3's "START FRESH" choice, 5, 6, 7):** load `guidance/paper-guide` once, exactly as `CREATE_INITIAL_REVISION` itself already does internally. This ingest exists only to seed a brand-new proposal. The engine reads `<folder>/<folder>.md` files first, then flat `*.md` files, and stops at 4000 bytes in total by default: a guide document crossing that limit is cut and later ones are not read. The result's `sourceWindow` lists every document with its `status` (`loaded`, `truncated`, `not-loaded`), a `SOURCE_WINDOW_TRUNCATED` warning names what was cut, and `sourceWindowBytes` (1 to 262144) widens the window for that creation. See [usage](references/usage.md#the-source-window).
 - **Any existing version (`r ≥ 1`) — branches 1, 2, 3's "ADOPT" choice, and 4:** load the latest version's document plus a brief general objective/framing for the deliberation. **Never** reload the paper-guide for an existing version — that ingest is spent only once, at true v1 creation.
 
 ## Deliberate, then decide
@@ -237,10 +262,13 @@ Every decision must name the *engine's own* resolved entry ID for its target —
 { "operation": "RESOLVE_TARGET", "sourceFilename": "<managed-filename>.md", "query": "<distinctive words from the target heading>" }
 ```
 
-**Write the query as distinctive heading words, not as a sentence.** The resolver scores a heading by how many query words appear as substrings of its heading line, so a query is only as good as its rarest words. Use the content words of the target's heading and nothing else: no punctuation (the query is truncated at the first `,;:.`, so `"Sección 3. Formulación…"` collapses to `"3"`), no section number, and keep accents exactly as the heading spells them (matching is accent-sensitive: `"normalizacion"` does not match `Normalización`). Stopwords are filtered out for you, but everything else you add is scored.
+**Write the query as distinctive heading words, not as a sentence.** The resolver scores a heading by how many query words are words of its heading line, so a query is only as good as its rarest words. A query word matches a heading only when it equals one of the heading's own words, never part of one: `O1` matches `### O1. Objective` and not `### O10. Scope`, and `entropy` still reaches `Cross-entropy` because each part of a hyphenated word counts. A heading whose words are exactly the query's (ignoring its section label and stopwords) outranks one that merely contains them, so `Alignment loss` names `## Alignment loss`, not `## Alignment loss weighting`. Use the content words of the target's heading and nothing else: no punctuation (the query is truncated at the first `,;:.`, so `"Sección 3. Formulación…"` collapses to `"3"`), no section number, and keep accents exactly as the heading spells them (matching is accent-sensitive: `"normalizacion"` does not match `Normalización`). Stopwords are filtered out for you, but everything else you add is scored.
 
 - ✅ `"Normalización términos adaptación"`
-- ❌ `"## 5. Normalización de los términos de adaptación"` — punctuation truncates it to `"5"`
+- ✅ `"## 5. Normalización de los términos de adaptación"` — level marks first: the heading spelled out, label and punctuation included
+- ❌ `"Sección 5. Normalización de los términos de adaptación"` — after a section noun, punctuation truncates it to `"5"`
+
+**Naming an outer section.** Open the query with the heading's level marks and only headings of that level are considered: `## Data` names the whole `## Data` section, subsections included, even when `### Synthetic data` carries the same word, which is how a line directly under `## Data` (a `**Dataset:**` label, say) becomes editable. A level-marked query is read as the heading spelled out, so its label and punctuation are harmless: `## 4. Baselines: comparison table` is a valid selector. Without level marks every level is considered, and a match nested inside another is no longer collapsed to the innermost section: a tie blocks and lists both.
 
 which returns:
 
@@ -248,7 +276,7 @@ which returns:
 { "status": "resolved", "operation": "RESOLVE_TARGET", "entryId": "...", "blocked": false, "question": null }
 ```
 
-`RESOLVE_TARGET` reuses the exact same resolver (`loadDocumentState` → `resolveSuccessorTarget` → `ambiguityGate`) that `CREATE_SUCCESSOR` itself uses internally, so the `entryId` it returns is guaranteed to match what `CREATE_SUCCESSOR` will resolve for the identical `sourceFilename`/query — there is no separate, divergent resolution path. If `blocked` is true the locus is ambiguous — **remove words, never add them** (and never guess from the menu). Adding words to "narrow" the description is what caused the ambiguity: every extra word matches more headings. The blocked `question` names the terms that matched every candidate; drop exactly those and resolve again. If instead you get `SUCCESSOR_TARGET_NOT_FOUND`, no heading line matched at all — the query described the section's *content* rather than its *title*, so name the heading. A successor locus is never resolved from body text, precisely so a near-miss cannot silently hand you the wrong section. Do this once per independent locus you intend to touch. To resolve more than one locus in a single call, send `queries` (an array of `{ "query": "..." }`) instead of `query`; the response returns one `{ query, entryId, blocked, question }` result per entry in the same order. See [usage examples](references/usage.md) for a worked recipe.
+`RESOLVE_TARGET` reuses the exact same resolver (`loadDocumentState` → `resolveSuccessorTarget` → `ambiguityGate`) that `CREATE_SUCCESSOR` itself uses internally, so the `entryId` it returns is guaranteed to match what `CREATE_SUCCESSOR` will resolve for the identical `sourceFilename`/query — there is no separate, divergent resolution path. If `blocked` is true the locus is ambiguous — **remove words, never add them** (and never guess from the menu). When a query is blocked, `question` and `candidates` list every candidate with its level marks and its real heading path (`### Methods › Setup`); name the one you meant by its own heading words, or by level marks for the outer one. Adding words to "narrow" the description is what caused the ambiguity: every extra word matches more headings. The blocked `question` names the terms that matched every candidate; drop exactly those and resolve again. If instead you get `SUCCESSOR_TARGET_NOT_FOUND`, no heading line matched at all — the query described the section's *content* rather than its *title*, so name the heading. A successor locus is never resolved from body text, precisely so a near-miss cannot silently hand you the wrong section. Do this once per independent locus you intend to touch. To resolve more than one locus in a single call, send `queries` (an array of `{ "query": "..." }`) instead of `query`; the response returns one `{ query, entryId, blocked, question }` result per entry in the same order. See [usage examples](references/usage.md) for a worked recipe.
 
 ### 2. Build one `EditAction` per resolved locus
 
@@ -267,7 +295,9 @@ For `move`/`copy`: the kind, source, destination, and position are whatever the 
 - **Preserve block-boundary blank lines.** End a block-scoped replacement with the same trailing blank-line separation the original block had, so it does not fuse with the following block (e.g. a section body that ends before the next `## ` heading keeps its terminating `\n\n`).
 - **Display math is its own block.** Write a `$$ … $$` display equation on its own lines with blank lines around it — never inline inside a prose sentence — and keep every `$$` balanced and every LaTeX command well-formed. Inline or unbalanced display math is rejected.
 - Patch only complete Markdown blocks; do not cut a replacement off mid-block.
-If the engine returns `successor-markdown-block-safety`, the fix is a well-formed replacement (fix the spacing / make the equation a standalone block), never a workaround.
+- **Every ATX heading stands on its own line.** A `#`–`######` marker followed by a space anywhere else on a line is refused as `atx-heading-standalone`. A marker inside a backtick code span (`` `## Results` ``) is text, not a heading, and passes.
+- **Label a section you want tracked downstream.** `proposal-implementation`'s `verify` reports which sections moved between two revisions, keyed by the label a heading starts with: a number (`## 3. Formulation`), a dotted number (`### 3.1 Kernel`) or an identifier (`### O1. Objective`), as defined once in `skills/_core/conventions/sections.json`. Keep a section's label unchanged across revisions; a heading with no label is reported as part of the labelled section around it.
+If the engine returns `successor-markdown-block-safety` or `atx-heading-standalone`, the fix is a well-formed replacement (fix the spacing / make the equation a standalone block / put the heading on its own line), never a workaround. The preview runs the accept turn's own pre-publish validation, so either refusal arrives at the preview as `CANDIDATE_VALIDATION_FAILED`, before any acceptance token is issued, with `nextAction: "repair_candidate"` and one blocker naming the rule, its message and its repair step.
 
 #### The canonical form: how this document spells mathematics
 
@@ -317,6 +347,8 @@ For more than one independent locus in the same version, use `selectedEntryIds` 
 
 No `ANTHROPIC_API_KEY` and no model configuration are ever required — this call never makes a network or model call. There is no separate `PROPOSAL_DELIBERATION_MODEL` setting anymore, and no per-call cost budget to manage; the environment is only `PROPOSAL_DELIBERATION_PROJECT_ROOT` (defaults to cwd) and `PROPOSAL_DELIBERATION_SESSION_ID`.
 
+**The instruction cap: 65,536 characters.** Every operation's `instruction` — for `CREATE_INITIAL_REVISION`, the whole idea — is at most 65,536 characters (JavaScript string length, UTF-16 code units). A longer one is refused before anything runs, `status: "blocked"`, `code: "INSTRUCTION_TOO_LONG"`, `nextAction: "shorten_instruction"`, nothing written. The successor preview and the first revision's result carry `instructionBudget: { "limit": 65536, "used": <n>, "remaining": <65536 - n> }`, so you can see the room left before you grow an instruction further.
+
 ### 4. Preview, then accept, in the same session
 
 The call above only **previews**: it returns `status: "awaiting_acceptance"`, an `acceptanceToken`, the would-be `targetFilename`, and (once approved decisions are large enough) a non-blocking `growthAdvisory`. Nothing is written yet.
@@ -334,6 +366,8 @@ node skills/proposal-deliberation/cli.mjs --serve
 ```
 
 Never split resolve/preview/accept across separate one-shot invocations of `cli.mjs` — a fresh process has no memory of the previous one's acceptance token (and pays a fresh cold start for nothing). Keep the same `--serve` process open for the rest of the deliberation, too: resolving and applying a later version reuses it exactly the same way.
+
+**Record why, and who decided.** The receipt keeps an `instructionHash`, not the instruction, so on its own it cannot say why the revision exists. Add `"rationale": "<why, at most 2000 characters>"` and `"decider": "agent"` or `"human"` to the request and the successor's receipt (`.proposal-deliberation/receipts/<file>.json`) records both verbatim beside the hash. Both are optional: a receipt without them, including every receipt written before 0.14.0, validates exactly as before. Send them on the accept line (sending them on the preview too is harmless); `decider` states who took the decision — `human` when the user accepted the change, `agent` when you decided it yourself — and never what you would have liked it to be. A blank or over-long `rationale` or any other `decider` is refused `DECISION_RECORD_INVALID` before anything runs, and either field on an operation other than `CREATE_SUCCESSOR` is refused `DECISION_RECORD_UNSUPPORTED`.
 
 A successful accept returns `status: "published"`, the new managed filename and hash, a `receiptId`, `manifestStatus: "COMMITTED"`, and `auditStatus`/`selfAuditStatus: "PASS"`. Treat anything else — a different status, a failed audit, or a `recoveryStatus` other than `not_required` — as incomplete; do not tell the user the edit is done.
 
@@ -365,16 +399,18 @@ None of this is negotiable and none of it is something you should work around �
 | Operation | Use it for |
 | --- | --- |
 | `STATUS` | Read-only, keyless inventory of `proposals/` — managed revisions, the latest, tie/ambiguity detection, non-managed files, and (with `sourceFilename`) a deterministic classification of one candidate path. Never mutates. Use it at the start of every deliberation — see [Resolving the base version](#resolving-the-base-version). |
-| `CREATE_INITIAL_REVISION` | Creates the first managed proposal (v1) from the user's idea plus the paper-guide. Only when no managed proposal exists yet; never automatic, never overwrites or duplicates one. |
+| `ADOPT_INITIAL_REVISION` | Makes an existing document v1 (`sourceFilename` names an unmanaged `.md` in `proposals/`), or records the missing state and receipt of an old hand-adopted v1 (`sourceFilename` names that revision). Same gate, state and receipt as `CREATE_INITIAL_REVISION`; accepts `--dry-run`. See [usage](references/usage.md#adopting-an-existing-document-as-v1). |
+| `CREATE_INITIAL_REVISION` | Creates the first managed proposal (v1) from the user's idea plus the paper-guide. Only when no managed proposal exists yet; never automatic, never overwrites or duplicates one. A success leaves a permanent creation lock (`.proposal-deliberation/locks/initial-revision.lock`), so preview it first with `--dry-run` (or `"dryRun": true`): every check and the composed `markdown`, no lock, no write. See [usage](references/usage.md#dry-run-first-see-v1-before-it-exists). |
 | `WITHDRAW_REVISION` | Safely withdraws one eligible managed revision, preserving an audited recovery copy. Not content deletion. |
 | `RESTORE_WITHDRAWN_REVISION` | Restores a previously withdrawn managed revision from its audited recovery copy. |
 
-`STATUS` is additive and read-only, handled directly by the CLI host (like `RESOLVE_TARGET`); the other three are deterministic and were never model-backed. None of the four are changed by the ambient-model rewrite. See [usage examples](references/usage.md) for request shapes.
+`STATUS` is additive and read-only, handled directly by the CLI host (like `RESOLVE_TARGET`); the others are deterministic and were never model-backed. See [usage examples](references/usage.md) for request shapes.
 
 ## Limits
 
 - The paper-guide reference and lite-evidence ingestion discipline used for sourcing new *papers* is a separate concern from this skill; do not import that discipline here or vice versa.
-- `CREATE_INITIAL_REVISION` is the only way to create a managed proposal, and only when none exists yet.
+- `CREATE_INITIAL_REVISION` and `ADOPT_INITIAL_REVISION` are the only ways to create a managed proposal, and only when none exists yet.
+- An `instruction` longer than 65,536 characters is refused with `INSTRUCTION_TOO_LONG` on every operation; see [the instruction cap](#3-call-the-engine-create_successor--resolveddecisions).
 - If more than one active managed revision resolves, the engine reports `MULTIPLE_ACTIVE_REVISIONS` with the full candidate list — never silently pick one; ask the user for the exact `sourceFilename`.
 - A multi-locus `CREATE_SUCCESSOR` batch may mix `replace`/`insert`/`delete`/`move`/`copy` freely; a conceptual (non-literal, reasoning-bound) revision beyond a single resolved replacement is not supported through this ambient path — treat it as a deliberation to resolve into concrete, resolvable edits first.
 - Use only `node skills/proposal-deliberation/cli.mjs` for execution. Do not modify engine infrastructure, tests, or this skill during normal proposal work.

@@ -114,6 +114,13 @@ Flags worth knowing, with what each actually changes:
   separate from `--force`. Never add it to recover from a refusal without
   saying what it does first; a refusal here is usually a sign that the wrong
   distribution is installed.
+- `--allow-dirty-kit` — upgrade even though the kit source carries uncommitted
+  changes under its shipped paths, or its git state cannot be determined.
+  Without it the CLI refuses before writing anything (exit 1), because a
+  workspace built from uncommitted kit edits carries bytes no commit names.
+  The usual cause is an editable install whose checkout has local edits. Never
+  add the flag to get past the refusal without telling the user what it
+  records: the workspace's kit-source record then says `allowedDirty: true`.
 
 ### `status` — how far behind is this workspace
 
@@ -124,6 +131,37 @@ papersmith status
 Reports the recorded version against the installed one. Prefer this over
 reading `.papersmith/version` directly: the marker is a claim about artifacts,
 and `status` is where that claim is interpreted.
+
+It also reports which framework build the workspace came from, on the
+`Kit source:` line: version, commit, whether the kit was dirty, and whether it
+was a checkout, the bundled kit or a `PAPERSMITH_KIT_ROOT` override. Every
+`init` and `upgrade` writes this to `.papersmith/kit-source.json`. A workspace
+created before 0.14.0 reads `unknown (recorded before 0.14.0)` until its next
+upgrade writes the record; no migration is involved.
+
+## Which workspaces can be upgraded
+
+Say this plainly when a user asks whether their workspace is too old, and
+never suggest re-initializing a live workspace instead: `papersmith init` in a
+fresh directory leaves behind every ledger, receipt, seal, managed revision and
+lock the paper accumulated.
+
+- Workspaces recorded at **0.12.0 or later** are supported. From 0.14.0 on,
+  every release that changes the shape of something a workspace already holds
+  ships a migration (or a compatibility read that keeps the old shape working)
+  in the same release, so `upgrade` is always the path forward.
+- An **older** workspace still upgrades: files are synchronized and the
+  convergence migrations run. Shape changes released before 0.12.0 shipped no
+  migration, so leftovers can remain (0.8.0's `.antigravity/` files are not
+  removed).
+- A workspace with **no recorded version** upgrades too, but version-gated
+  migrations are reported `undetermined` and never applied.
+- A recorded version that is **unorderable** (`nightly`) or **newer than the
+  installed kit** refuses; `--allow-downgrade` is the override, and a refusal
+  here usually means the wrong distribution is installed.
+
+The maintainer side of this policy lives in `docs/releasing.md`, section
+"Workspace support policy".
 
 ## What is never overwritten
 
@@ -144,6 +182,26 @@ that was edited by hand will be replaced by the release's own copy. If a user
 has such edits, the answer is to commit them first — a working tree under
 version control is the backup the CLI does not provide.
 
+### `.gitignore`: the framework owns one block, not the file
+
+`.gitignore` is the one rendered file a workspace is expected to edit, so the
+framework writes its lines between two marker lines (`# >>> papersmith managed
+block: ...` and `# <<< papersmith managed block ends: ...`). `upgrade`
+re-renders that block and keeps every line outside it, above or below, byte
+for byte. `status` and `audit --check-drift` compare only the block, so a line
+the workspace added is not drift. The marker text and the merge rules live in
+`MANAGED_BLOCK_BEGIN`, `MANAGED_BLOCK_END` and `merge_managed` in
+`src/papersmith/generators.py`.
+
+A file with no block yet (every workspace created before 0.14.0) is converted
+on its next upgrade: replaced whole when it is byte-identical to what the
+framework last wrote, and otherwise given the block, with every line the block
+does not already carry kept below it in order. Markers that are malformed (a
+lone marker, a repeated one, or the two in the wrong order) are never guessed
+at: the file is left as it is, the report lists it under **unsynchronized**,
+and it stays drift until the markers are repaired. Edit outside the block, not
+inside it: a line added inside the block is replaced on the next upgrade.
+
 ## Reading the result
 
 The report names the workspace, the version, the count of changed files, and
@@ -158,7 +216,8 @@ then four things that are warnings rather than failures:
   failed.
 
 Exit codes: `0` success; `1` a user error (not a workspace, corrupt manifest or
-ledger, refused downgrade, unknown tool name); `2` a source error (the installed
+ledger, refused downgrade, refused dirty or unknown kit source, unknown tool
+name); `2` a source error (the installed
 distribution carries no kit); `4` a migration failed.
 
 Report a non-zero exit as a failure with its message. An upgrade that printed a

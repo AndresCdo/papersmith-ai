@@ -190,13 +190,17 @@ test('CREATE_SUCCESSOR + resolvedDecisions: the current-turn successor-acceptanc
 	const source = '# 1 Alpha\n\nOld alpha.\n\n# 2 Beta\n\nOld beta.\n';
 	const { root, adapter } = await seed(source);
 	const orchestrator = orchestratorWithoutPlanner(root, adapter);
-	const alphaEntryId = await resolveLocusEntryId(root, 'research-concept-r01.md', 'sección Alpha');
+	// Beta, not Alpha: the preview now runs the accept turn's own pre-publish validation, and
+	// deleting the FIRST section leaves the next heading one line break after the artifact
+	// marker, which `derive_successor` refuses as fused Markdown blocks. This test is about the
+	// consent gate, so it previews a deletion the accept turn could actually publish.
+	const betaEntryId = await resolveLocusEntryId(root, 'research-concept-r01.md', 'sección Beta');
 	const request = {
 		operation: 'CREATE_SUCCESSOR',
 		sourceFilename: 'research-concept-r01.md',
-		instruction: 'Elimina Alpha.',
-		selectedEntryId: 'sección Alpha',
-		resolvedDecisions: [{ kind: 'delete', targetEntryId: alphaEntryId, instructionEvidence: 'Elimina Alpha.', reason: 'obsolete' }],
+		instruction: 'Elimina Beta.',
+		selectedEntryId: 'sección Beta',
+		resolvedDecisions: [{ kind: 'delete', targetEntryId: betaEntryId, instructionEvidence: 'Elimina Beta.', reason: 'obsolete' }],
 	};
 	const preview = await orchestrator.execute(request);
 	assert.equal(preview.status, 'awaiting_acceptance', JSON.stringify(preview));

@@ -102,6 +102,27 @@ the page. That is a separate, unbuilt capability.
 in favor of an incoming body. The only exit from a hand-edited block is
 `--adopt`, which re-baselines the digest and leaves the body untouched.
 
+## When a delegated agent cannot be spawned
+
+Each stretch this skill delegates is defined in full by its own agent file:
+`.claude/agents/contract-auditor.md`, `.claude/agents/diagram-author.md`,
+`.claude/agents/figure-auditor.md`, `.claude/agents/insumos-observer.md`,
+`.claude/agents/redactor.md`, `.claude/agents/section-grounding-auditor.md`,
+`.claude/agents/style-sampler.md`. When an agent cannot be spawned — the
+harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read that
+agent's definition file and follow it as written, from the beginning it states
+to the end it states, holding any gate this skill sets before the stretch, and
+returning the report shape it specifies. Its `tools:` line still bounds the
+stretch: an act that would need a tool outside that list is a stop, not a
+workaround. Say in the reply that the stretch ran inline and why the agent
+could not be spawned.
+
+An auditor run inline (`contract-auditor`, `section-grounding-auditor`,
+`figure-auditor`) is not independent of the session that drafted what it
+judges. The verbs still reconcile its account against the real bytes, but say
+in the reply that the audit was not separated from the draft.
+
 ## Decision Gates
 
 | Situation | Action |
@@ -664,7 +685,15 @@ by its own digest.
 
 | Verb | What it does | Refuses |
 | --- | --- | --- |
-| `resolve --identifier <id> --resolver {openalex,crossref,arxiv} [--role <role>]` | Resolves one identifier's metadata through one named connector and caches it | `PAPERSMITH_CONFIG_UNREADABLE`, `UNKNOWN_ROLE`, `DISCOVERY_UNAVAILABLE`, `RESOLVER_ROLE_EMPTY`, `RESOLVER_UNREACHABLE`, `IDENTIFIER_UNRESOLVED` |
+| `resolve --identifier <id> --resolver {openalex,crossref,arxiv} [--role <role>] [--paper <dir> \| --cache-dir <dir>]` | Resolves one identifier's metadata through one named connector and caches it: under `<paper>/.paper-writing/metadata/` by default, or as `<dir>/<metadata_digest>.json` with `--cache-dir` | `PAPER_OUTSIDE_REPOSITORY`, `PAPERSMITH_CONFIG_UNREADABLE`, `UNKNOWN_ROLE`, `DISCOVERY_UNAVAILABLE`, `RESOLVER_ROLE_EMPTY`, `RESOLVER_UNREACHABLE`, `IDENTIFIER_UNRESOLVED` |
+
+**`--cache-dir` is for callers that are not writing a paper.** `bib` and
+`full_text` look a resolution up only under `paper/.paper-writing/metadata/`,
+so paper-writing's own calls pass nothing. The plausibility agents borrow
+`resolve` before any paper exists and pass `--cache-dir sota-pool/metadata`,
+which keeps their caches beside the pool and leaves `paper/` untouched. The
+two flags are one choice: passing both is a usage error. A directory outside
+the repository refuses `PAPER_OUTSIDE_REPOSITORY` before any request.
 
 **Every role can be emptied in `papersmith.yaml`.** An empty `resolution`
 role refuses `RESOLVER_ROLE_EMPTY` rather than silently resolving nothing;

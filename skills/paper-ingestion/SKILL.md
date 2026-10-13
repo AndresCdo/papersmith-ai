@@ -12,6 +12,14 @@ images`. Figures are separate image files the `.md` references (loaded on demand
 not embedded), and the references/bibliography section is dropped. Runs locally
 with no API keys.
 
+**PDFs only.** Neither this skill nor `papersmith ingest` (its workspace
+bridge) reads Markdown, text or HTML; `papersmith ingest` refuses any other
+source and names the two routes that do. Material that is already text goes
+through `proposal-deliberation` instead: Markdown a new proposal should be
+seeded from goes under `guidance/paper-guide/` (`CREATE_INITIAL_REVISION`
+reads it), and an existing draft that should become v1 as written goes into
+`proposals/` and is adopted with `ADOPT_INITIAL_REVISION`.
+
 ## The objective flow
 
 **Why this skill was invoked, and where it has to arrive.** Declared here and in
@@ -53,6 +61,18 @@ what the report says afterwards.
 
 What moves is execution, never doctrine: every rule stays here, and the agent's
 first instruction is to load this file.
+
+## When a delegated agent cannot be spawned
+
+The stretch this skill delegates is defined in full by its agent file:
+`.claude/agents/paper-ingestion.md`. When that agent cannot be spawned — the
+harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the stretch inline: read the
+definition file and follow it as written, from the beginning it states to the
+end it states, holding any gate this skill sets before the stretch, and returning the
+report shape it specifies. Its `tools:` line still bounds the stretch: an act
+that would need a tool outside that list is a stop, not a workaround. Say in
+the reply that the stretch ran inline and why the agent could not be spawned.
 
 ## Activation Contract
 
@@ -101,7 +121,7 @@ Always invoke through the environment:
 
 ```
 micromamba run -n papersmith python \
-  skills/paper-ingestion/scripts/extract_pdf.py [--list] [<loose-pdf>…]
+  skills/paper-ingestion/scripts/extract_pdf.py [--list] [--mode {fast,balanced}] [--force-ocr] [<loose-pdf>…]
 ```
 
 - `--list`: report the pending loose PDFs and exit. Loads no model, moves no file.
@@ -109,6 +129,9 @@ micromamba run -n papersmith python \
 - `<loose-pdf>…`: ingest exactly those loose PDFs.
 - `--file <pdf> --into <topic>`: file one unfiled PDF into a topic folder under the
   base, creating it when new. Moves one file, converts nothing, loads no model.
+- `--mode {fast,balanced}`: override the configured `mode` for this run.
+- `--force-ocr`: OCR every page instead of reading the PDF's text layer, for this
+  run. See [Tables from a poor text layer](#tables-from-a-poor-text-layer).
 
 ## Confirmation (required)
 
@@ -195,6 +218,7 @@ paper_ingestion:
   engine: marker
   mode: fast              # fast (CPU/MPS) | balanced (highest fidelity, GPU-oriented)
   strip_references: true  # drop the references/bibliography section at the end
+  force_ocr: false        # optional: OCR every page, never read the PDF's text layer
   source_base: guidance   # source roots are discovered under here, every run
   source_roots: []        # optional: extra roots outside source_base
 ```
@@ -232,6 +256,19 @@ wrong (a misread digit, a garbled symbol). The source PDF sits in the same
 folder as the `.md`: verify anything load-bearing against it. Prefer `balanced`
 mode when fidelity matters more than speed.
 
+### Tables from a poor text layer
+
+In **both** modes Marker rebuilds a digital table from the PDF's own text layer
+(`tables_pdftext`) and falls back to OCR only when its reconstruction scores low.
+A text layer that is present but poor — split ligatures, interleaved columns, a
+broken font map — therefore yields a table that is confidently wrong, and
+switching `mode` does not avoid it. `--force-ocr` (or `force_ocr: true` in the
+configuration, for every run) hands Marker its `force_ocr` option: no text layer
+is extracted, and every page, tables included, is rebuilt by OCR. It is slower and
+off by default, because a good text layer is exact and OCR is not. To redo one
+paper this way, delete its folder (leaving the PDF loose) and ingest it again with
+the flag.
+
 ## Decision Gates
 
 | Situation | Action |
@@ -240,7 +277,7 @@ mode when fidelity matters more than speed.
 | `source_base` set to something that is not a folder | Report the error; do nothing |
 | Neither `source_base` nor `source_roots` configured | Report the error; do nothing |
 | A folder under `source_base` with no loose PDF | Not a source root; leave it untouched |
-| Unknown `engine`/`mode`, or a value of the wrong type | Report the error before loading the engine; do nothing |
+| Unknown `engine`/`mode`, or a value of the wrong type (`strip_references`/`force_ocr` not a boolean) | Report the error before loading the engine; do nothing |
 | Loose PDFs present | List them, ask which to ingest, ingest only those |
 | User approves a subset | Ingest exactly the approved paths; leave the rest loose |
 | User approves nothing | Stop; move no file |

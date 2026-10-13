@@ -369,7 +369,13 @@ const EQUATION_RESIDUE = { substringCount: 124, files: ['cleanup-planner.ts', 'd
 // truer, and does not age when a third skill arrives. The remaining residue is the
 // engine's own subject noun -- a proposal IS what it deliberates over -- plus six
 // live identifiers migrating separately.
-const PROPOSAL_RESIDUE = { wordBoundaryCount: 169, files: ['_pi-compat/pi-coding-agent.ts', 'ambient-supplied-planner.ts', 'artifact-naming.ts', 'chat-deliberation.ts', 'cli.mjs', 'conceptual-planner.ts', 'consistency-audit.ts', 'domain-profile.ts', 'draft-materialization.ts', 'edit-planner.ts', 'exports.ts', 'initial-revision-creation.ts', 'orchestrator.ts', 'patch-compiler.ts', 'proposal-workspace-adapter.ts', 'proposal-workspace.ts', 'reference-index.ts', 'revision-lifecycle-store.ts', 'runtime-metrics.ts', 'smoke-runner.ts', 'successor-acceptance-registry.ts', 'types.ts'] };
+// 169 -> 171: two module specifiers, not subject text. `candidate-validator.ts` and
+// `initial-revision-creation.ts` now import the workspace's own pre-publish validation
+// (`from './proposal-workspace.js'`) so the CREATE_SUCCESSOR preview and first-version
+// creation run the exact checks the publishing write runs. The word is the shared module's
+// filename -- the naming residue described above -- and `candidate-validator.ts` joins the
+// file list for that one specifier.
+const PROPOSAL_RESIDUE = { wordBoundaryCount: 171, files: ['_pi-compat/pi-coding-agent.ts', 'ambient-supplied-planner.ts', 'artifact-naming.ts', 'candidate-validator.ts', 'chat-deliberation.ts', 'cli.mjs', 'conceptual-planner.ts', 'consistency-audit.ts', 'domain-profile.ts', 'draft-materialization.ts', 'edit-planner.ts', 'exports.ts', 'initial-revision-creation.ts', 'orchestrator.ts', 'patch-compiler.ts', 'proposal-workspace-adapter.ts', 'proposal-workspace.ts', 'reference-index.ts', 'revision-lifecycle-store.ts', 'runtime-metrics.ts', 'smoke-runner.ts', 'successor-acceptance-registry.ts', 'types.ts'] };
 
 test('C-3 vacuity guard: the denylist is non-empty, or this check would be vacuous', () => {
 	const denylist = buildDenylist(profiles);

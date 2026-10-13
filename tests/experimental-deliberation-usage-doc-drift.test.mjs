@@ -31,6 +31,9 @@ const cliPath = path.join(skillDir, 'cli.mjs');
 const skillMdPath = path.join(skillDir, 'SKILL.md');
 const usageMdPath = path.join(skillDir, 'references/usage.md');
 
+// This skill's own profile: where its managed revisions live and which headings its engine writes.
+const { createJiti } = await import('jiti');
+const { profile } = await createJiti(import.meta.url).import(path.join(skillDir, 'profile.ts'));
 const skillMd = await readFile(skillMdPath, 'utf8');
 const usageMd = await readFile(usageMdPath, 'utf8');
 
@@ -111,6 +114,9 @@ function extractFencedBlock(markdown, fromIndex, lang) {
 	return { text: match[1], endIndex: fenceRe.lastIndex };
 }
 
+/** The v1 the worked example actually rendered, kept for the heading check below. */
+let renderedV1 = null;
+
 test('the worked CREATE_INITIAL_REVISION example in usage.md, run for real, produces the status, targetRevision and targetFilename the doc claims', async () => {
 	const anchor = usageMd.indexOf('## Creating the first managed version');
 	assert.ok(anchor >= 0, 'usage.md dropped its "Creating the first managed version" section -- nothing to extract');
@@ -158,6 +164,7 @@ test('the worked CREATE_INITIAL_REVISION example in usage.md, run for real, prod
 			env: { ...process.env, DELIBERATION_DOMAIN_PROFILE: profilePath, PROPOSAL_DELIBERATION_PROJECT_ROOT: projectRoot },
 		});
 		const actual = JSON.parse(stdout);
+		if (actual.targetFilename) renderedV1 = await readFile(path.join(projectRoot, profile.artifact.directory, actual.targetFilename), 'utf8');
 
 		assert.equal(actual.status, documented.status,
 			`usage.md's worked example claims status ${JSON.stringify(documented.status)}, but running the exact same request against a real fixture returned ${JSON.stringify(actual.status)}: ${stdout}`);
@@ -171,5 +178,35 @@ test('the worked CREATE_INITIAL_REVISION example in usage.md, run for real, prod
 		}
 	} finally {
 		await rm(projectRoot, { recursive: true, force: true });
+	}
+});
+
+// ---------------------------------------------------------------------------
+// 4. Headings the engine writes, named by the docs. X2: usage.md said v1 pastes its
+//    source fragments under `## Paper Guide Reference`; the renderer writes the
+//    profile's `sourceReferenceHeading` (`## Reference Sources`). A doc sentence
+//    that names a heading the engine writes ("under a `## X` heading", "the
+//    `## X` block") is held against the bytes the engine actually wrote: the v1
+//    rendered above, and the change header the profile renders into every
+//    successor.
+// ---------------------------------------------------------------------------
+
+/** Every `## X` the prose (fenced blocks excluded) names as a heading or a block, skipping placeholders such as `### <path>`. */
+function namedEngineHeadings(markdown) {
+	const prose = markdown.replace(/^```[\s\S]*?^```/gm, '');
+	return [...prose.matchAll(/`(#{1,6} [^`<]+?)` (heading|block)\b/g)].map(m => ({ heading: m[1].trim(), kind: m[2] }));
+}
+
+test('every heading usage.md and SKILL.md say the engine writes is one it actually writes', async () => {
+	assert.ok(renderedV1, 'the worked example rendered no v1 to compare against');
+	const v1Headings = new Set([...renderedV1.matchAll(/^(#{1,6} .+?)\s*$/gm)].map(m => m[1]));
+	const changeHeader = profile.artifact.changeHeader ? `## ${profile.artifact.changeHeader.heading}` : null;
+	for (const [name, markdown] of [['usage.md', usageMd], ['SKILL.md', skillMd]]) {
+		const named = namedEngineHeadings(markdown);
+		assert.ok(name !== 'usage.md' || named.some(item => item.kind === 'heading'), 'usage.md names no engine-written heading -- this check compared nothing');
+		for (const { heading, kind } of named) {
+			const written = kind === 'heading' ? v1Headings.has(heading) : heading === changeHeader;
+			assert.ok(written, `${name} names \`${heading}\` as a ${kind} the engine writes, but the engine writes ${kind === 'heading' ? `only ${JSON.stringify([...v1Headings])} into v1` : `${JSON.stringify(changeHeader)} as its change block`}`);
+		}
 	}
 });

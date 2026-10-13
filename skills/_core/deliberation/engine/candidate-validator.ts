@@ -1,4 +1,4 @@
-import { buildStructuralIndex } from './document-index.js'; import { declaredValues,citedValues } from './reference-index.js'; import { buildSymbolIndex } from './symbol-index.js'; import { buildConceptIndex } from './concept-index.js'; import { sha256,type Compilation,type DocumentState,type EditPlan } from './types.js'; import { validationTask } from './runtime-metrics.js'; import { atoms as preservationAtoms,delta as preservationDelta,violations as preservationViolations } from './preservation.js'; import { DOMAIN } from './domain-profile.js';
+import { buildStructuralIndex } from './document-index.js'; import { declaredValues,citedValues } from './reference-index.js'; import { buildSymbolIndex } from './symbol-index.js'; import { buildConceptIndex } from './concept-index.js'; import { sha256,type Compilation,type DocumentState,type EditPlan } from './types.js'; import { validationTask } from './runtime-metrics.js'; import { atoms as preservationAtoms,delta as preservationDelta,violations as preservationViolations } from './preservation.js'; import { DOMAIN } from './domain-profile.js'; import { successorCandidateRefusal } from './proposal-workspace.js';
 export async function validateCandidate(state:DocumentState,plan:EditPlan,compiled:Compilation){
  const source=compiled.candidate;const structural=buildStructuralIndex(source);const [symbols,concepts,markdown,displayDelimiters,declared,cited]=await Promise.all([validationTask(()=>buildSymbolIndex(source,structural)),validationTask(()=>buildConceptIndex(source,structural)),validationTask(()=>!/^#{7,}/m.test(source)),validationTask(()=>(source.match(/^\$\$$/gm)?.length??0)%2===0),validationTask(()=>declaredValues(source)),validationTask(()=>citedValues(source))]);
  // Reference integrity (change 5, domain-neutral). What DECLARES a numbered/named thing and
@@ -26,13 +26,24 @@ export async function validateCandidate(state:DocumentState,plan:EditPlan,compil
  // block is the ORCHESTRATOR's own gate (mirroring where the preservation accept-gate lives),
  // so this validator stays a pure report, never a verdict.
  const sourceAuthorityConflicts=await validationTask(()=>DOMAIN.sourceAuthority?DOMAIN.sourceAuthority.detectConflicts(source):[]);
+ // Publication parity. Every candidate this validator passes is published through
+ // `derive_successor`, whose own pre-publish validation (patch manifest, composition, display
+ // blocks, standalone ATX headings, flat-domain definitions, size and reserved bytes) used to run
+ // only on the accept turn -- so a preview could answer `awaiting_acceptance` for a candidate the
+ // accept turn was certain to refuse. The same function now runs here, over the same source
+ // bytes, digest and patches the accept turn sends, and its refusal blocks the preview with the
+ // accept turn's own code. A document without the artifact marker is not a managed revision and
+ // reports `prePublishApplicable:false`, never a pass.
+ const prePublish=await validationTask(()=>successorCandidateRefusal(state.documentBytes.toString('utf8'),state.documentSha256,compiled.patches));
+ const prePublishOk=prePublish.refusal===null;
  const candidateSha=sha256(source);const scope=compiled.unchangedByteCoverage&&candidateSha===compiled.candidateSha256;
  return {
-  ok:markdown&&displayDelimiters&&declarationsUnique&&referencesOk&&!symbols.conflicts.length&&scope&&operationOk&&canonicalForm,
+  ok:markdown&&displayDelimiters&&declarationsUnique&&referencesOk&&!symbols.conflicts.length&&scope&&operationOk&&canonicalForm&&prePublishOk,
+  prePublishApplicable:prePublish.applicable,candidateValidation:prePublish.refusal,
   mathDelta:deltaResult,preservationDelta:deltaResult,preservationApplicable:applicable,
   mathViolations:violationsList,preservationViolations:violationsList,
   referencesApplicable,
   sourceAuthorityConflicts,
-  results:{markdown,displays:displayDelimiters,declarations:declarationsUnique,references:referencesOk,symbols:!symbols.conflicts.length,concepts:!!concepts,scope,unchangedByteCoverage:compiled.unchangedByteCoverage,candidateSha:candidateSha===compiled.candidateSha256,operation:operationOk,preservationCanonicalForm:canonicalForm,preservationPass:!deltaResult.lost.length},
+  results:{markdown,displays:displayDelimiters,declarations:declarationsUnique,references:referencesOk,symbols:!symbols.conflicts.length,concepts:!!concepts,scope,unchangedByteCoverage:compiled.unchangedByteCoverage,candidateSha:candidateSha===compiled.candidateSha256,operation:operationOk,preservationCanonicalForm:canonicalForm,preservationPass:!deltaResult.lost.length,prePublish:prePublishOk},
  };
 }

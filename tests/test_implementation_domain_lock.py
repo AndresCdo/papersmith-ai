@@ -556,23 +556,55 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: words already exempted here read naturally inside it and grew. `after`
 #: 91->92, `against` 195->196. None left the denylist; `test_2` confirms
 #: no new unpinned leak either.
+#: `cross-skill-consistency` (B4): `cmd_settle`'s docstring drops two
+#: paragraphs that argued for leaving un-ticking out and for refusing a
+#: missing `## Reversed`, both now implemented (a tick is corrected by
+#: `--reverse`; the first reversal opens the heading). Five words SHRANK,
+#: deliberately: `against` 197->196, `command` 278->275, `measured`
+#: 145->143, `rather` 387->384, `something` 77->76.
+#: `cross-skill-consistency` (C9): `admit --no-findings` returns its own
+#: result payload and `verify` reads a stale no-findings ruling as owed
+#: again. Two literals the shapes require, not prose: the payload's
+#: `"command"` key (`command` 275->276) and the `"incomplete"` status
+#: (`incomplete` 28->29). The surrounding comments were worded to move
+#: nothing else.
+#: `cross-skill-consistency` (C8): `handoff`'s new `deferredBecause` code
+#: `"prose-remedy"` is a published machine value, not prose (`remedy`
+#: 56->57); every comment beside it says "correction" instead.
+#: `cross-skill-consistency` (C10): `_called_roots` walks an attribute
+#: call down to the name it starts from through `ast.Attribute.value`,
+#: twice -- code, not prose (`value` 244->246).
+#: `cross-skill-consistency` (C11): `materialize --module` is a CLI flag the
+#: engine must spell -- its parser registration, its `getattr` read and the
+#: one refusal that names it (`module` 195->198). Variables and prose around
+#: it say `stem`/"file" instead.
+#: `cross-skill-consistency` (C12): the objects stage fills the kit's
+#: `{{MODULE}}` token, whose key the engine must spell once (`module`
+#: 198->199), and `_materialize_plan_gate` now returns the plan it read
+#: (`return approved`, `approved` 47->48; its local keeps the name the seed
+#: mutation test anchors on). One SHRANK, deliberately: `_stage_objects`
+#: names its owed paths `owed` (`destinations` 39->36).
+#: `cross-skill-consistency` (X17): `position` and `settle` write the declared
+#: holder's scaffold with the splice instead of first; the two copies of the
+#: comment explaining the early creation write are gone. Three SHRANK,
+#: deliberately: `before` 263->261, `empty` 132->131, `write` 156->154.
 M5_PINNED_RESIDUE: dict[str, int] = {
-    "actually": 83, "admissible": 3, "after": 93, "against": 197,
-    "agreed": 16, "answered": 97, "answers": 107, "approved": 47,
-    "audit": 19, "before": 263, "benchmark": 108, "beside": 111,
-    "check": 168, "checkable": 3, "claim": 41, "command": 278,
+    "actually": 83, "admissible": 3, "after": 93, "against": 196,
+    "agreed": 16, "answered": 97, "answers": 107, "approved": 48,
+    "audit": 19, "before": 261, "benchmark": 108, "beside": 111,
+    "check": 168, "checkable": 3, "claim": 41, "command": 276,
     "commands": 18, "compares": 25, "declaration": 212,
-    "destinations": 39, "empty": 132, "established": 5, "experiment": 25,
-    "experiments": 6, "implementations": 4, "incomplete": 28,
+    "destinations": 36, "empty": 131, "established": 5, "experiment": 25,
+    "experiments": 6, "implementations": 4, "incomplete": 29,
     "invariant": 22, "isolated": 5, "leave": 11, "leaves": 38,
     "local": 37, "longer": 54, "makes": 48, "materialized": 12,
-    "measured": 145, "measurement": 43, "module": 195, "notebooks": 110,
+    "measured": 143, "measurement": 43, "module": 199, "notebooks": 110,
     "object": 33, "pilot": 123, "place": 58, "produces": 51,
-    "rather": 387, "recorded": 81, "remedy": 56, "remote": 65,
+    "rather": 384, "recorded": 81, "remedy": 57, "remote": 65,
     "reported": 149, "resolves": 34, "ruled": 9, "runnable": 15,
-    "scaffolded": 12, "sitting": 9, "small": 8, "something": 77,
-    "steps": 139, "sweep": 11, "validated": 10, "value": 244, "whose": 156,
-    "write": 156, "wrong": 52
+    "scaffolded": 12, "sitting": 9, "small": 8, "something": 76,
+    "steps": 139, "sweep": 11, "validated": 10, "value": 246, "whose": 156,
+    "write": 154, "wrong": 52
 }
 #: Unit 6b (Part B, the transitions): thirteen pins grew from the new
 #: engine prose alone (`_comparison_reuses_acid_test_question`,

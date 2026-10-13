@@ -75,6 +75,16 @@ class IngestTests(unittest.TestCase):
         with self.assertRaisesRegex(UserError, "must point to a PDF"):
             ingest_module.classify_source("https://example.org/landing-page")
 
+    def test_a_non_pdf_refusal_names_the_deliberation_seeding_routes(self) -> None:
+        for source in ("notes.md", "draft.txt", "https://example.org/landing-page"):
+            with self.subTest(source=source):
+                with self.assertRaises(UserError) as caught:
+                    ingest_module.classify_source(source)
+                message = str(caught.exception)
+                self.assertIn("PDFs only", message)
+                self.assertIn("guidance/paper-guide/", message)
+                self.assertIn("ADOPT_INITIAL_REVISION", message)
+
     def test_refresh_index_scans_ingested_markdown(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "paper"

@@ -53,7 +53,7 @@ its own single document, this skill reads its own words for document 0, and
 | `claim_key` / `locus_key` | `experiments` | `equations` |
 | `remedy_locus_key` | `remedy_experiments` | `remedy_equations` |
 | `notation_keys.locus` / `.remedyLocus` / `.unknown` | `experiments` / `remedyExperiments` / `unknownExperiments` | `equations` / `remedyEquations` / `unknownEquations` |
-| `citation_pattern` | `Exps?`/`Experiment`/`Experimentos?` syntax | `Ecs?`/`Eq`/`Ecuaciones?` syntax |
+| `citation_pattern` | `(Exp. <id>)` / `(Experiment. <id>)` from the shared convention, plus the legacy digit forms `Exps?`/`Experiment`/`Experimentos?` | `Ecs?`/`Eq`/`Ecuaciones?` syntax |
 | `documents[N].directory` / `.label` | `experiments/` / `experiments` | `proposals/` / `proposal` |
 
 The top-level `vocabulary.*` leaves below stay document 0's own -- they are
@@ -71,6 +71,61 @@ document's claim key it implements (`"experiments"` for document 0,
 `"equations"` for document 1) -- a module may declare both -- and every
 invariant listed there needs a matching test under `tests/`, exactly as the
 sibling's own doctrine requires for its own claim key.
+
+## How an experiment is located: one convention, shared
+
+`verify`'s per-section drift (`fidelity.drift[].changedSections`) speaks in
+experiment ids too: an experiment heading's `[exp:<id>]` is its section label
+(`documents[0].section_heading.marker` in this skill's profile), and a legacy `## N`
+heading reads through the engine's shared section-label convention
+(`skills/_core/conventions/sections.json`). Inside a legacy block both ids
+move together (`## 1` wrapping `[exp:E1]` reports `1` and `E1`). A module's
+`__provenance__["sections"]` names those ids.
+
+`experimental-deliberation` writes the experiments document, and this skill
+reads it, so both read the same convention from one file:
+`skills/_core/conventions/experiments.json` (the identifier class, the
+declaration marker `exp`, the citation marker `tests`, and the prose form
+`(Exp. <id>)`). Edit it there, never in either skill.
+
+- **Canonical form.** An experiment is a heading of any level carrying its
+  declaration, `## Experiment [exp:E1] — labelled-budget sweep`. Its block runs
+  to the next heading of the same or a higher level, so `### Protocol` under
+  it belongs to it. A finding names it as `"experiments": ["E1"]`; `compose`
+  replaces exactly that block.
+- **Legacy forms, still read.** Before 0.14.0 this skill knew only a bare
+  `## N` heading, so published revisions carry either `## N` alone or `## N`
+  wrapping a `### Experiment [exp:EN]` heading. Both keep reading; no managed
+  revision is rewritten. A legacy `## N` block declares `N` and every
+  `[exp:<id>]` nested in it, and the two ids name the same experiment
+  (`block_locator.block_aliases`): a finding citing `1` and one citing `E1`
+  reach the same block, and `compose` accepts a replacement carrying both. A
+  replacement carrying two separate experiments still refuses
+  `AMBIGUOUS_REMEDY_TAG`.
+- **Crossings into the proposal are a separate form.** `[claims:N]` cites
+  the proposal's `\tag{N}` and is resolved by `agree`'s crossing check
+  against the proposal, never against this document's own experiments.
+
+## Sharing `__implementation__` with `proposal-implementation`
+
+On a target both implementation skills work on, `src/<Package>/__init__.py`
+holds one `__implementation__`, and its `revision` names one revision per
+document label: `{"proposal": "r03.md", "experiments": "experiments-<slug>-v02.md"}`.
+This skill reads only `experiments` (its document 0); the sibling reads only
+`proposal`. A bare string still means this skill's experiments revision,
+exactly as before 0.14.0. Bound to a single proposal filename, this skill's
+`verify` used to look for that family under `experiments/`, find nothing and
+report `fidelity: unknown`. A mapping with no `experiments` entry reads as an
+unanswered revision, never as the proposal's name. The details, and the
+`undeclared` cases, are in `proposal-implementation`'s SKILL.md under "The
+implementation declaration".
+
+Under the keyed form, a module bound to the proposal's lineage is the sibling's
+to judge: `verify` lists it in `fidelity.otherLineageModules` and keeps it out
+of `staleModules` and the headline `fidelity.status`, while
+`fidelityByDocument` still judges it under `proposal`. Before 0.14.0 it read
+"bound to an older revision" here, so the headline drifted while every entry of
+`fidelityByDocument` read `ok`.
 
 ## `Data/` is demandable, per product folder
 
@@ -145,6 +200,18 @@ and each agent's first instruction is to load this file.
 Each agent also refuses from inside when it finds itself before its own start --
 the backstop, not the rule.
 
+## When a delegated agent cannot be spawned
+
+Each stretch this skill delegates is defined in full by its own agent file:
+`.claude/agents/experiments-build.md`, `.claude/agents/experiments-walk.md`.
+When an agent cannot be spawned — the harness has no sub-agent mechanism, the
+agent is not registered in this session, or the spawn itself fails — perform
+the stretch inline: read that agent's definition file and follow it as
+written, from the beginning it states to the end it states, holding any gate this skill sets before the stretch, and returning the report shape it specifies. Its
+`tools:` line still bounds the stretch: an act that would need a tool outside
+that list is a stop, not a workaround. Say in the reply that the stretch ran
+inline and why the agent could not be spawned.
+
 ## Where to start: the repository is the memory
 
 Same routing rule as `proposal-implementation`'s own -- **read `src/`, never
@@ -165,6 +232,14 @@ narrowed to what this domain actually has:
 
 1. Clone the target repository under `implementations/<repo>/`, then `env`
    to build its own venv from its own interpreter -- never the forge's.
+   `env` first adds `.venv/` and `*.egg-info/` to the clone's
+   `.git/info/exclude`, so neither leaves the tree dirty for a later
+   clean-requiring command.
+   `env --torch cpu|gpu [--torch-version X]` adds a torch build to the printed
+   install (CPU: the PyTorch CPU index and an exact `+cpu` pin), and
+   `__backend__` in `src/<Package>/__init__.py` states the backend `probe`
+   reads instead of inferring it from imports (`proposal-implementation`'s
+   SKILL.md, `nextStep: "convert"`).
 2. **Ask for the name.** Run `name --name "<whatever they typed>"`, confirm
    both forms it returns, then **[GATE]** before writing anything with them.
 3. **[GATE] Ask for authorization to implement.** Nothing below writes code
@@ -181,6 +256,12 @@ narrowed to what this domain actually has:
 6. Hand off to the `experiments-walk` agent once every step's placement is
    decided -- the same delegation table above names when each stretch
    begins and ends.
+   `walk` commits each step's product under the subject `walk: <step>`; a
+   target held to a commit convention passes `--commit-template
+   'chore(walk): {step}'` (`{step}` is the one placeholder; anything else is
+   refused `WALK_COMMIT_TEMPLATE_MALFORMED` before the walk starts). The
+   shared engine's `walk` is documented in `proposal-implementation`'s
+   `references/usage.md`.
 
 ## Flow B -- every later pass
 
@@ -207,7 +288,15 @@ narrowed to what this domain actually has:
    the proposal declares that no experiment cites -- refuses once, naming
    both kinds together, never a verdict on which side should change.
    Resolve each named discrepancy in conversation (`--acknowledge <exact
-   id>` clears only the ids echoed back exactly) before continuing.
+   id>` clears only the ids echoed back exactly, for that one call) before
+   continuing. A claim the experiments document deliberately does not test
+   is declared there instead, once, with the shared convention's
+   `[out-of-scope:<id>]` marker: `agree` subtracts it from `untested` on
+   every later call and echoes it under `outOfScope` (see
+   `references/usage.md`). Deciding that a claim is out of scope is the
+   user's call, made in the experiments document through
+   `experimental-deliberation`, never something to write in to make `agree`
+   pass.
 
    - **A third kind `agree` never checks, and never will:** whether an
      experiment's declared metric or protocol actually corresponds to
@@ -223,7 +312,12 @@ narrowed to what this domain actually has:
    --revision <document 0's newest>` to size the open findings and hand
    the local ones to the deliberation (`experimental-deliberation`) as
    agenda items. `settleInline` entries substitute through `compose`;
-   everything else is a prompt for a session of its own.
+   everything else is a prompt for a session of its own. A finding whose
+   defect lives in the protocol's prose rather than in an experiment block
+   declares `"remedy_in_prose": True` with `remedy_experiments` empty and no
+   `remedy_block`: it is never asked for a block and always defers, as
+   `prose-remedy` (the shared engine's rule, stated in full in
+   `proposal-implementation`'s own SKILL.md).
 6. Once the deliberation publishes a successor revision, this skill's own
    part is done -- what remains is reaching a **test submission**, and
    `remote-execution`'s own commands answer it exactly as they do for the
@@ -250,9 +344,30 @@ skills/experimental-implementation/scripts/implementation_cli.py name --name Tri
 
 The launcher is a byte-for-byte copy of `proposal-implementation`'s own launcher
 (design.md D4): every value inside it is derived from its own location, so the
-same 24 bytes, placed under this skill's own `scripts/`, resolve to THIS
+same bytes, placed under this skill's own `scripts/`, resolve to THIS
 skill's own profile without a single domain-specific line. Every argument,
 subcommand and exit code is the shared engine's; nothing here re-documents them.
+
+The launcher sets `IMPLEMENTATION_DOMAIN_PROFILE` only when the environment
+does not already carry it, so an explicit fixture profile wins. One inherited
+value is refused instead: another skill's own `impl_profile.py` (for example
+`proposal-implementation`'s, left exported by a shell or an earlier process),
+under which this skill would read the other skill's documents and holder. The
+launcher exits `2` with `IMPLEMENTATION_DOMAIN_PROFILE_SIBLING` before the
+engine loads, naming both profiles; unset the variable and run again. The
+sibling is recognized by the skill its profile declares (the skill directory of
+`PROFILE["cli"]["path"]`), not by where the file sits, so a sibling's profile
+from another checkout or workspace is refused too; this skill's own profile is
+accepted from any tree.
+
+A profile you set yourself (a fixture, or the engine run without this
+launcher) must be an absolute path: a relative one refuses
+`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any command runs. The
+commands that write the ledger take `--session <id>`, an id you choose per
+working session; `proposal-implementation`'s `references/usage.md`, "Session
+ids", defines it. The workspace bridge `papersmith implement` drives the
+sibling's launcher, never this one: run this skill's commands through its own
+`scripts/implementation_cli.py`.
 
 ## Which commands are not available yet, and why
 
@@ -265,6 +380,12 @@ CLI, one directory over). Consequence, stated rather than discovered:
   destinations reads `assets/kit/`, which this skill does not ship. A target
   scaffolded under this domain needs its object-to-module map approved and
   written by hand, or from a kit a later change adds.
+- **A target the sibling scaffolded carries the sibling's seal**,
+  `src/<Package>/report_digest.py`, which declares no `__provenance__`.
+  `verify` here does not list it under `missingProvenance` while its bytes are
+  exactly the ones the scaffold receipt's `materialized` entry recorded; a
+  modified copy, an adopted one, or one with no receipt entry is reported
+  like any other module.
 
 Every other published command runs exactly as `proposal-implementation`'s own
 doctrine describes it, against this domain's own profile leaves instead of the
@@ -277,9 +398,15 @@ This skill declares its own checklist holder in `impl_profile.py`'s
 distinct from the sibling's own `AGREED.md` -- the two skills share the same
 engine and the same per-product-folder shape, so a fixed shared name would
 let one skill's write land inside the other's checklist. See
-`references/usage.md` for the create-on-absent behavior and for what
-`position`/`settle` refuse (`HOLDER_UNDECLARED`, naming both exits) when a
-checklist already exists under some other name.
+`references/usage.md` for the create-on-absent behavior, for why the
+sibling's own `AGREED.md` beside it is set aside rather than refused, and for
+what `position`/`settle` refuse (`HOLDER_UNDECLARED`, naming both exits) when a
+checklist already exists under a name no skill sharing the engine declares.
+
+An agreement no test could ever witness is closed by the operator's recorded
+decision, `settle --done --unwitnessed --reason "<their reason>"`, never by a
+hand tick; `close` owes a position only once the target declares a flow. Both
+are described in `references/usage.md`.
 
 ## What this skill has not written down
 

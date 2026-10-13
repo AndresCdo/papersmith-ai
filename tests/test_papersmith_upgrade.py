@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from papersmith import kit as kit_module
 from papersmith.cli import main
 from papersmith.core import config, init as init_module, manifest, upgrade as upgrade_module
 from papersmith.errors import UserError
@@ -233,7 +234,7 @@ class UpgradeTests(unittest.TestCase):
         into asserting the guard they were written to exercise.
         """
         return self._one_minor_above(
-            manifest.kit_version(upgrade_module.resolve_and_validate()))
+            manifest.kit_version(kit_module.resolve_and_validate()))
 
     def test_upgrade_refreshes_version_from_a_new_kit(self) -> None:
         tmp_path = self.new_tmp()

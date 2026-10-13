@@ -151,7 +151,11 @@ class SuiteStaysOfflineTests(unittest.TestCase):
                     line_start = text.rfind("\n", 0, match.start()) + 1
                     if text[line_start:match.start()].lstrip().startswith("#"):
                         continue
-                    if "--no-env" in text[match.end():match.end() + 120]:
+                    # Flag order is free on a shell line, so `--no-env` may
+                    # precede `--no-npm` as well as follow it.
+                    line_end = text.find("\n", match.end())
+                    same_line = text[line_start:line_end if line_end != -1 else len(text)]
+                    if "--no-env" in same_line or "--no-env" in text[match.end():match.end() + 120]:
                         continue
                     relpath = path.relative_to(self.REPOSITORY).as_posix()
                     line = text[:match.start()].count("\n") + 1

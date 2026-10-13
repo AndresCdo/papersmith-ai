@@ -265,11 +265,21 @@ function repeatedDetail(labelText: string, lines: readonly number[]): string {
  */
 const BASELINE_COLUMNS = new Set(["baseline", "baselines"]);
 
+/**
+ * The first header cell that makes a table a PARAMETERS table: a declaration of the settings
+ * the plan fixes (a learning rate, a batch size, a seed list), not a promise about a run. Its
+ * values are decided now, by the plan, so a number in one is not a result anybody measured and
+ * the fabricated-value rule does not apply. Same discipline as the baselines header: the WHOLE
+ * first header cell, case-insensitively, and nothing else declares it -- `Parameter count` or a
+ * `Parameter` column further right is an ordinary report table, and keeps the rule.
+ */
+const PARAMETER_COLUMNS = new Set(["parameter", "parameters", "hyperparameter", "hyperparameters"]);
+
 /** A venue year. Narrow on purpose: a four-digit year in the 1900s or 2000s, which is what a conference or journal citation carries. */
 const VENUE_YEAR = /\b(?:19|20)\d{2}\b/u;
 
 type TableRow = { readonly line: number; readonly cells: readonly string[] };
-type ParsedTable = { readonly line: number; readonly header: string; readonly body: readonly TableRow[]; readonly baselines: boolean };
+type ParsedTable = { readonly line: number; readonly header: string; readonly body: readonly TableRow[]; readonly baselines: boolean; readonly parameters: boolean };
 
 /** A pipe-delimited row split into its cells, with the outer pipes dropped and every cell trimmed. */
 function cellsOf(row: string): string[] {
@@ -298,7 +308,7 @@ function tables(source: string): ParsedTable[] {
             if (!raw.trim()) continue;
             body.push({ line: lineAt(source, start) + offset, cells: cellsOf(raw) });
         }
-        out.push({ line: lineAt(source, start), header, body, baselines: isBaselinesTable(headerCells) });
+        out.push({ line: lineAt(source, start), header, body, baselines: isBaselinesTable(headerCells), parameters: PARAMETER_COLUMNS.has((headerCells[0] ?? "").toLowerCase()) });
     }
     return out;
 }
@@ -376,6 +386,8 @@ export function violations(source: string): PreservationViolation[] {
                 baselineViolations(row, out);
                 continue;
             }
+            // A declaration of the plan's own settings, not a slot for a result.
+            if (table.parameters) continue;
             row.cells.forEach((cell, column) => {
                 // Column one is the row LABEL -- what is being reported on, not a reported
                 // value -- so `Adapted (k=3)` is a name and not a result. Everything past it

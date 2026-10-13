@@ -114,6 +114,45 @@ export function scanManagedRevision(text: string): string | undefined {
 	return LOOSE_RE.exec(text)?.[0];
 }
 
+// COMPANION SCAN: a managed revision's own name followed by any suffix other than `.md` -- an
+// artifact named after ONE revision (a picture or an overlay rendered for it), found anywhere in
+// free text. Captures the revision head and the suffix separately.
+const COMPANION_SOURCE = `\\b(${ESCAPED_STEM}-(?:${SEGMENT}-)?${REVISION_PREFIX}\\d{2,})((?:\\.[A-Za-z0-9_-]+)+)`;
+
+/** A reference to an artifact named after one managed revision, and the revision it names. */
+export type CompanionReference = { reference: string; revision: string };
+
+/**
+ * Every distinct companion-artifact reference in `text`, in document order. A reference to a
+ * managed document itself (`.md`) is a citation, not a companion artifact, and is skipped.
+ */
+export function scanCompanionReferences(text: string): CompanionReference[] {
+	const seen = new Set<string>();
+	const found: CompanionReference[] = [];
+	for (const match of text.matchAll(new RegExp(COMPANION_SOURCE, 'g'))) {
+		if (match[2].toLowerCase() === '.md' || seen.has(match[0])) continue;
+		seen.add(match[0]);
+		found.push({ reference: match[0], revision: `${match[1]}.md` });
+	}
+	return found;
+}
+
+/** A companion reference in a successor that names another revision, and whether the successor inherited it from its source. */
+export type StaleCompanionReference = CompanionReference & { inherited: boolean };
+
+/**
+ * The companion-artifact references in a successor's bytes that name a revision OTHER than the
+ * successor itself. A successor inherits every byte outside its locus, so a link to the
+ * source revision's picture keeps pointing there; nothing in the engine renders that picture, so
+ * this only reports. `inherited` is true when the source carried the same reference.
+ */
+export function staleCompanionReferences(successor: string, source: string, successorFilename: string): StaleCompanionReference[] {
+	const inSource = new Set(scanCompanionReferences(source).map(item => item.reference));
+	return scanCompanionReferences(successor)
+		.filter(item => item.revision !== successorFilename)
+		.map(item => ({ ...item, inherited: inSource.has(item.reference) }));
+}
+
 /** INITIAL: `stem-SEGMENT-<first-revision-label>.md` only -- a mandatory lineage, no bare-ROOT form. */
 export function isInitialRevision(name: string): boolean {
 	return INITIAL_RE.test(name);
