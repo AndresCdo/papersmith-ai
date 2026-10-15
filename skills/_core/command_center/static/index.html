@@ -1972,10 +1972,19 @@
       <div class="pdf-workspace-layout">
         <!-- Columna Izquierda: Visor PDF con Controles de Navegación -->
         <div class="pdf-main-column">
+          <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: var(--radius-sm); padding: 0.55rem 0.85rem; margin-bottom: 0.65rem; font-size: 0.8rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+            <div>
+              <span style="color: var(--teal); font-weight: 600;">🔬 Manuscrito Científico Elsevier:</span>
+              <span style="color: var(--text-secondary); margin-left: 0.3rem;">Artículo de revista en construcción activa (10 págs.) a partir de las fases de investigación, síntesis SOTA 3D y validación de hardware. <em>La tesis de maestría (105 págs.) es el insumo base preservado en <code>guidance/</code>.</em></span>
+            </div>
+            <a href="/api/artifact?file=guidance/reference-papers/thesis_parias2023_moneeg/thesis_parias2023_moneeg.pdf" target="_blank" class="btn btn--sm" style="white-space: nowrap; font-size: 0.74rem;">Ver Tesis Base (105 p.) ↗</a>
+          </div>
+
           <div class="pdf-viewer-topbar">
             <div class="pdf-topbar__left">
-              <strong class="pdf-doc-title">📄 main.pdf</strong>
+              <strong class="pdf-doc-title">📄 main.pdf (Elsevier Manuscript)</strong>
               <span id="pdfInfoBadge" class="badge badge--ok" style="font-size: 0.72rem;">— páginas</span>
+              <span class="badge badge--teal" style="font-size: 0.72rem; margin-left: 0.35rem;">Construcción Dinámica</span>
             </div>
             
             <div class="pdf-topbar__center">
