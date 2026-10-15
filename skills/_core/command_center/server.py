@@ -354,6 +354,15 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             media_type = f"image/{ext.lstrip('.')}"
         return Response(target.read_bytes(), media_type=media_type)
 
+    @app.get("/api/flow")
+    def api_flow() -> Response:
+        flow_path = root_path / "docs" / "papersmith-flow.html"
+        if not flow_path.is_file():
+            flow_path = Path("/Users/andresalvarez/Documents/papers_smith/papersmith-ai/docs/diagrams/papersmith-pi-flow.html")
+        if flow_path.is_file():
+            return HTMLResponse(flow_path.read_text(encoding="utf-8"))
+        return JSONResponse({"detail": "flow diagram not found"}, status_code=404)
+
     @app.get("/api/state")
     def api_state() -> JSONResponse:
         return JSONResponse(get_workspace_state(root_path))
