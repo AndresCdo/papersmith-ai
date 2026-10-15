@@ -9,6 +9,7 @@
   <link rel="apple-touch-icon" href="./favicon.png?v=2">
   <link rel="stylesheet" href="./vendor/pdf_viewer.min.css">
   <script src="./vendor/pdf.min.js"></script>
+  <script src="./vendor/marked.min.js"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -1686,6 +1687,272 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+  
+    /* =========================================================
+       VISTA WEB AMIGABLE DE ARTEFACTOS Y REGLAS DE REDACCIÓN
+       ========================================================= */
+    .artifact-viewer-container {
+      display: flex;
+      flex-direction: column;
+      height: 78vh;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .artifact-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      padding: 0.65rem 1rem;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+    }
+    .artifact-top-bar__left {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .artifact-top-bar__right {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .artifact-content-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 1.75rem;
+      scrollbar-width: thin;
+      background: #090d16;
+    }
+    .artifact-web-article {
+      color: #e2e8f0;
+      line-height: 1.65;
+      font-size: 0.88rem;
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    .artifact-web-article h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-top: 0;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent);
+      letter-spacing: -0.01em;
+    }
+    .artifact-web-article h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 1.75rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .artifact-web-article h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-top: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+    .artifact-web-article h4 {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-top: 1.2rem;
+      margin-bottom: 0.4rem;
+    }
+    .artifact-web-article p {
+      margin-bottom: 1rem;
+      color: #cbd5e1;
+    }
+    .artifact-web-article strong {
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .artifact-web-article em {
+      color: #38bdf8;
+      font-style: italic;
+    }
+    .artifact-web-article ul, .artifact-web-article ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .artifact-web-article li {
+      color: #cbd5e1;
+    }
+    .artifact-web-article blockquote {
+      border-left: 4px solid var(--accent);
+      background: rgba(56, 189, 248, 0.06);
+      padding: 0.85rem 1.2rem;
+      margin: 1.25rem 0;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      color: #e2e8f0;
+      font-style: italic;
+    }
+    .artifact-web-article code {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .artifact-web-article pre {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 1.25rem 0;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+    }
+    .artifact-web-article pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: inherit;
+    }
+    .artifact-web-article table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.25rem 0;
+      font-size: 0.82rem;
+      background: var(--surface-2);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .artifact-web-article th {
+      background: #111827;
+      color: var(--text);
+      font-weight: 700;
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .artifact-web-article td {
+      padding: 0.6rem 0.85rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: #cbd5e1;
+    }
+    .artifact-web-article tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Tablero de Contrato Canónico (Bloques de Sección) */
+    .canonical-contract-panel {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(11, 15, 25, 0.98));
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    }
+    .contract-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      padding-bottom: 0.85rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .contract-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .contract-quote {
+      font-style: italic;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      background: rgba(0,0,0,0.3);
+      padding: 0.4rem 0.75rem;
+      border-radius: 4px;
+      border-left: 2px solid var(--accent);
+      width: 100%;
+      margin-top: 0.4rem;
+      line-height: 1.45;
+    }
+    .contract-blocks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.85rem;
+    }
+    .contract-block-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .contract-block-card:hover {
+      border-color: rgba(56, 189, 248, 0.4);
+      transform: translateY(-1px);
+    }
+    .block-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.4rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .block-card-section {
+      font-size: 0.75rem;
+      line-height: 1.4;
+    }
+    .block-card-section strong {
+      display: block;
+      color: #94a3b8;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.2rem;
+    }
+    .block-pill-tag {
+      display: inline-block;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      margin: 2px 2px 2px 0;
+    }
+    .block-pill-tag--green {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+    .block-pill-tag--amber {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+    }
+
   </style>
 </head>
 <body>
@@ -2151,15 +2418,40 @@
     <div id="pane-artifacts" class="tab-pane">
       <div class="panel">
         <div class="panel__header">
-          <div class="panel__title">Explorador de Artefactos de la Propuesta</div>
-          <span class="panel__meta">Documentos Markdown generados durante el ciclo de formulación</span>
+          <div class="panel__title">Explorador de Artefactos y Reglas de Redacción</div>
+          <span class="panel__meta">Visualización web nativa de reglas de sección, contratos canónicos y documentos del ciclo de formulación</span>
         </div>
         <div class="split-layout">
           <div class="sidebar-list" id="artifactsList">
             <!-- Rendered by JS -->
           </div>
-          <div class="artifact-viewer" id="artifactContent">
-            Selecciona un artefacto de la lista para inspeccionar su contenido.
+          <div class="artifact-viewer-container">
+            <div class="artifact-top-bar" id="artifactTopBar" style="display: none;">
+              <div class="artifact-top-bar__left">
+                <span style="font-size: 1.15rem;">📜</span>
+                <div>
+                  <strong id="artifactBarTitle" style="color: var(--text);">Nombre del Artefacto</strong>
+                  <div style="font-size: 0.72rem; color: var(--text-dim);" id="artifactBarMeta">Ruta y tamaño</div>
+                </div>
+              </div>
+              <div class="artifact-top-bar__right">
+                <div class="btn-group">
+                  <button class="btn btn--sm btn--primary" id="btnArtifactViewWeb" onclick="toggleArtifactViewMode('web')" title="Ver formato web enriquecido">✨ Vista Web Amigable</button>
+                  <button class="btn btn--sm" id="btnArtifactViewRaw" onclick="toggleArtifactViewMode('raw')" title="Ver código fuente o markdown sin formato">📝 Código Fuente (Raw)</button>
+                </div>
+                <button class="btn btn--sm" onclick="copyCurrentArtifactContent()" title="Copiar contenido al portapapeles">📋 Copiar</button>
+              </div>
+            </div>
+            <div class="artifact-content-body" id="artifactContentBody">
+              <div id="artifactWebView" class="artifact-web-article">
+                <div style="text-align: center; padding: 4.5rem 1rem; color: var(--text-dim);">
+                  <div style="font-size: 2.8rem; margin-bottom: 0.6rem;">📜</div>
+                  <div style="font-size: 1.15rem; font-weight: 700; color: var(--text);">Explorador Web de Artefactos y Reglas</div>
+                  <p style="font-size: 0.85rem; max-width: 500px; margin: 0.6rem auto; color: var(--text-dim); line-height: 1.5;">Selecciona cualquier artefacto en la lista lateral para visualizar sus especificaciones, reglas de redacción y contratos canónicos con formato web nativo interactivo.</p>
+                </div>
+              </div>
+              <pre id="artifactRawView" style="display: none; margin: 0; font-family: var(--font-mono); font-size: 0.82rem; color: #cbd5e1; white-space: pre-wrap; line-height: 1.5;"></pre>
+            </div>
           </div>
         </div>
       </div>
@@ -2858,12 +3150,23 @@
               <button class="btn btn--sm" style="font-size: 0.7rem; padding: 2px 7px;" onclick="jumpToArtifact('sections/' + '${escapeHtml(s.filename)}')">Pestaña Artefactos ↗</button>
             </div>
           </div>
-          <div style="background: #090d16; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-              <span>Contrato canónico: <code>requires_facts</code>, <code>produces_facts</code>, <code>citations</code></span>
-              <span id="sectionArtifactStatus-${escapeHtml(s.id)}">Cargando...</span>
+          <div style="background: #090d16; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.75rem; background: var(--surface-2); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.72rem;">
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <span class="badge badge--ok" style="font-size: 0.65rem;">CONTRATO ACTIVO</span>
+                <span style="color: var(--text-dim);" id="sectionArtifactStatus-${escapeHtml(s.id)}">Cargando...</span>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn--sm btn--primary" id="btnSecArtWeb-${escapeHtml(s.id)}" style="font-size: 0.68rem; padding: 2px 7px;" onclick="toggleSectionArtifactMode('${escapeHtml(s.id)}', 'web')">✨ Vista Web</button>
+                <button class="btn btn--sm" id="btnSecArtRaw-${escapeHtml(s.id)}" style="font-size: 0.68rem; padding: 2px 7px;" onclick="toggleSectionArtifactMode('${escapeHtml(s.id)}', 'raw')">📝 Raw</button>
+              </div>
             </div>
-            <pre id="sectionArtifactContent-${escapeHtml(s.id)}" style="font-family: var(--font-mono); font-size: 0.73rem; color: #cbd5e1; max-height: 240px; overflow-y: auto; white-space: pre-wrap; line-height: 1.45; margin: 0; scrollbar-width: thin;">Cargando especificación de sección desde sections/${escapeHtml(s.filename)}...</pre>
+            <div id="sectionArtifactContainer-${escapeHtml(s.id)}" style="padding: 0.85rem; max-height: 380px; overflow-y: auto; scrollbar-width: thin;">
+              <div id="sectionArtifactWeb-${escapeHtml(s.id)}" class="artifact-web-article" style="font-size: 0.82rem;">
+                Cargando especificación de sección desde sections/${escapeHtml(s.filename)}...
+              </div>
+              <pre id="sectionArtifactRaw-${escapeHtml(s.id)}" style="display: none; font-family: var(--font-mono); font-size: 0.73rem; color: #cbd5e1; white-space: pre-wrap; line-height: 1.45; margin: 0;"></pre>
+            </div>
           </div>
         </div>
 
@@ -2922,10 +3225,247 @@
       `;
 
       document.getElementById('drawerOverlay').classList.add('active');
+      setTimeout(() => loadSectionArtifactIntoDrawer(s.filename, s.id), 40);
     }
 
     function closeDrawer(e) {
       document.getElementById('drawerOverlay').classList.remove('active');
+    }
+
+
+    /* =========================================================
+       RENDERIZADOR WEB AMIGABLE DE ARTEFACTOS Y REGLAS DE SECCIÓN
+       ========================================================= */
+    let currentLoadedArtifactText = '';
+    let currentLoadedArtifactPath = '';
+    let currentArtifactViewMode = 'web';
+    const sectionDrawerArtifactCache = new Map();
+
+    function renderArtifactDoc(rawText, relPath) {
+      if (!rawText) return '<div style="color: var(--text-dim); padding: 1rem;">Documento vacío.</div>';
+
+      const pathStr = (relPath || '').toLowerCase();
+      const isJson = pathStr.endsWith('.json');
+
+      if (isJson) {
+        return renderJsonArtifact(rawText, relPath);
+      }
+
+      // Detectar frontmatter YAML/JSON delimitado por --- ... ---
+      let frontmatter = null;
+      let markdownBody = rawText;
+
+      const fmMatch = rawText.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+      if (fmMatch) {
+        const rawFm = fmMatch[1].trim();
+        markdownBody = fmMatch[2].trim();
+        try {
+          frontmatter = JSON.parse(rawFm);
+        } catch (_) {
+          frontmatter = parseSimpleYaml(rawFm);
+        }
+      }
+
+      let htmlResult = '';
+
+      // 1. Si contiene contrato canónico (bloques de sección), renderizar tablero visual
+      if (frontmatter && (frontmatter.blocks || frontmatter.section)) {
+        htmlResult += renderCanonicalContractPanel(frontmatter, relPath);
+      }
+
+      // 2. Renderizar cuerpo Markdown con marked
+      if (window.marked && window.marked.parse) {
+        try {
+          htmlResult += marked.parse(markdownBody);
+        } catch (e) {
+          console.warn("Aviso marked.parse:", e);
+          htmlResult += `<pre style="white-space: pre-wrap;">${escapeHtml(markdownBody)}</pre>`;
+        }
+      } else {
+        htmlResult += simpleMarkdownFallback(markdownBody);
+      }
+
+      return htmlResult;
+    }
+
+    function renderCanonicalContractPanel(fm, relPath) {
+      const sec = fm.section || (relPath ? relPath.split('/').pop().replace('.md', '') : 'Sección');
+      const pos = fm.position || '—';
+      const modeVal = typeof fm.mode === 'object' ? (fm.mode.value || 'argumentativo') : (fm.mode || 'estándar');
+      const modeQuote = typeof fm.mode === 'object' && fm.mode.source ? fm.mode.source.quote : '';
+      const blocks = Array.isArray(fm.blocks) ? fm.blocks : [];
+
+      let html = `
+        <div class="canonical-contract-panel">
+          <div class="contract-header">
+            <div class="contract-title">
+              <span style="font-size: 1.15rem;">📐</span>
+              <span class="badge badge--ok" style="font-size: 0.72rem; letter-spacing: 0.04em;">CONTRATO CANÓNICO</span>
+              <span class="badge badge--info" style="font-size: 0.72rem; font-family: var(--font-mono);">${escapeHtml(sec)}</span>
+              <span class="badge badge--warn" style="font-size: 0.72rem;">Posición: ${pos}</span>
+              <span class="badge badge--live" style="font-size: 0.72rem;">Modo: ${escapeHtml(modeVal)}</span>
+            </div>
+            ${modeQuote ? `<div class="contract-quote">“${escapeHtml(modeQuote)}”</div>` : ''}
+          </div>
+      `;
+
+      if (blocks.length > 0) {
+        html += `
+          <div style="font-size: 0.74rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 0.6rem; font-weight: 700;">
+            Bloques Canónicos y Restricciones de Párrafo (${blocks.length} bloques definidos)
+          </div>
+          <div class="contract-blocks-grid">
+        `;
+
+        blocks.forEach((b, idx) => {
+          const bId = b.id || `bloque-${idx + 1}`;
+          const citations = b.citations || 'none';
+          const reqFacts = Array.isArray(b.requires_facts) ? b.requires_facts : [];
+          const prodFacts = Array.isArray(b.produces_facts) ? b.produces_facts : [];
+          const afterList = Array.isArray(b.after) ? b.after : [];
+
+          html += `
+            <div class="contract-block-card">
+              <div class="block-card-head">
+                <span class="badge badge--primary" style="font-family: var(--font-mono); font-size: 0.72rem;">${escapeHtml(bId)}</span>
+                <span class="badge ${citations === 'none' ? 'badge--warn' : 'badge--ok'}" style="font-size: 0.65rem;">
+                  ${citations === 'none' ? 'Sin citas' : 'Citas: ' + escapeHtml(citations)}
+                </span>
+              </div>
+          `;
+
+          if (reqFacts.length > 0) {
+            html += `
+              <div class="block-card-section">
+                <strong>Hechos Requeridos (requires_facts):</strong>
+                <div>
+                  ${reqFacts.map(rf => {
+                    const val = typeof rf === 'object' ? rf.value : rf;
+                    const quote = typeof rf === 'object' && rf.source ? rf.source.quote : '';
+                    return `<span class="block-pill-tag" title="${escapeHtml(quote)}">📥 ${escapeHtml(val)}</span>`;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }
+
+          if (prodFacts.length > 0) {
+            html += `
+              <div class="block-card-section">
+                <strong>Hechos Producidos (produces_facts):</strong>
+                <div>
+                  ${prodFacts.map(pf => {
+                    const val = typeof pf === 'object' ? pf.value : pf;
+                    const quote = typeof pf === 'object' && pf.source ? pf.source.quote : '';
+                    return `<span class="block-pill-tag block-pill-tag--green" title="${escapeHtml(quote)}">📤 ${escapeHtml(val)}</span>`;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }
+
+          if (afterList.length > 0) {
+            html += `
+              <div class="block-card-section">
+                <strong>Precedencia (after):</strong>
+                <div>
+                  ${afterList.map(af => {
+                    const target = typeof af === 'object' ? af.target : af;
+                    return `<span class="block-pill-tag block-pill-tag--amber">⏱ ${escapeHtml(target)}</span>`;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }
+
+          html += `</div>`;
+        });
+
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    function renderJsonArtifact(rawText, relPath) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch (err) {
+        return `<pre style="white-space: pre-wrap;">${escapeHtml(rawText)}</pre>`;
+      }
+
+      const keys = Object.keys(parsed);
+      let html = `
+        <div class="canonical-contract-panel">
+          <div class="contract-header">
+            <div class="contract-title">
+              <span style="font-size: 1.15rem;">📦</span>
+              <span class="badge badge--ok">DOCUMENTO ESTRUCTURADO JSON</span>
+              <span class="badge badge--info">${keys.length} claves raíz</span>
+              <span class="badge badge--warn">${(rawText.length / 1024).toFixed(1)} KB</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.6rem; margin-top: 0.5rem;">
+      `;
+
+      keys.forEach(k => {
+        const val = parsed[k];
+        let valDesc = typeof val;
+        if (Array.isArray(val)) {
+          valDesc = `Lista (${val.length} elementos)`;
+        } else if (val && typeof val === 'object') {
+          valDesc = `Objeto (${Object.keys(val).length} propiedades)`;
+        }
+        html += `
+          <div style="background: rgba(30,41,59,0.7); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.8rem;">
+            <code style="color: var(--accent); font-weight: 700;">${escapeHtml(k)}</code>
+            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.2rem;">${escapeHtml(valDesc)}</div>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+        <div style="margin-top: 1.25rem;">
+          <h4 style="font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.5rem;">Contenido JSON Formateado</h4>
+          <pre style="background: #0f172a; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; max-height: 520px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.45; color: #cbd5e1;"><code>${escapeHtml(JSON.stringify(parsed, null, 2))}</code></pre>
+        </div>
+      `;
+
+      return html;
+    }
+
+    function parseSimpleYaml(yamlStr) {
+      const result = {};
+      const lines = yamlStr.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const colonIdx = trimmed.indexOf(':');
+        if (colonIdx !== -1) {
+          const key = trimmed.slice(0, colonIdx).trim();
+          let val = trimmed.slice(colonIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          result[key] = val;
+        }
+      }
+      return result;
+    }
+
+    function simpleMarkdownFallback(md) {
+      return md
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        .replace(/\n/gim, '<br>');
     }
 
     async function loadArtifact(relPath) {
@@ -2933,17 +3473,131 @@
       const activeItem = Array.from(document.querySelectorAll('.sidebar-item')).find(i => i.dataset.path === relPath);
       if (activeItem) activeItem.classList.add('active');
 
-      const viewer = document.getElementById('artifactContent');
-      viewer.textContent = "Cargando artefacto...";
+      const topBar = document.getElementById('artifactTopBar');
+      const barTitle = document.getElementById('artifactBarTitle');
+      const barMeta = document.getElementById('artifactBarMeta');
+      const webView = document.getElementById('artifactWebView');
+      const rawView = document.getElementById('artifactRawView');
+
+      if (topBar) topBar.style.display = 'flex';
+      if (barTitle) barTitle.textContent = relPath.split('/').pop();
+      if (barMeta) barMeta.textContent = `Ruta: ${relPath}`;
+      if (webView) webView.innerHTML = '<div style="padding: 2.5rem; color: var(--text-dim); text-align: center;">Cargando y procesando artefacto con formato web enriquecido...</div>';
+      if (rawView) rawView.textContent = 'Cargando...';
+
       try {
         const res = await fetch(`/api/artifact?file=${encodeURIComponent(relPath)}`);
         if (!res.ok) throw new Error("No se pudo leer el archivo");
         const text = await res.text();
-        viewer.textContent = text;
+
+        currentLoadedArtifactText = text;
+        currentLoadedArtifactPath = relPath;
+
+        if (barMeta) {
+          const kb = (text.length / 1024).toFixed(1);
+          const lines = text.split('\n').length;
+          barMeta.textContent = `Ruta: ${relPath} · ${kb} KB · ${lines} líneas`;
+        }
+
+        // Renderizar vista web amigable
+        const renderedHtml = renderArtifactDoc(text, relPath);
+        if (webView) webView.innerHTML = renderedHtml;
+
+        // Renderizar vista raw
+        if (rawView) rawView.textContent = text;
+
+        toggleArtifactViewMode(currentArtifactViewMode);
       } catch (err) {
-        viewer.textContent = `Error: ${err.message}`;
+        if (webView) webView.innerHTML = `<div style="color: var(--bad); padding: 2rem;">Error cargando artefacto: ${escapeHtml(err.message)}</div>`;
+        if (rawView) rawView.textContent = `Error: ${err.message}`;
       }
     }
+
+    function toggleArtifactViewMode(mode) {
+      currentArtifactViewMode = mode;
+      const webView = document.getElementById('artifactWebView');
+      const rawView = document.getElementById('artifactRawView');
+      const btnWeb = document.getElementById('btnArtifactViewWeb');
+      const btnRaw = document.getElementById('btnArtifactViewRaw');
+
+      if (mode === 'raw') {
+        if (webView) webView.style.display = 'none';
+        if (rawView) rawView.style.display = 'block';
+        if (btnWeb) btnWeb.classList.remove('btn--primary');
+        if (btnRaw) btnRaw.classList.add('btn--primary');
+      } else {
+        if (webView) webView.style.display = 'block';
+        if (rawView) rawView.style.display = 'none';
+        if (btnWeb) btnWeb.classList.add('btn--primary');
+        if (btnRaw) btnRaw.classList.remove('btn--primary');
+      }
+    }
+
+    function copyCurrentArtifactContent() {
+      if (!currentLoadedArtifactText) return;
+      navigator.clipboard.writeText(currentLoadedArtifactText).then(() => {
+        showToast('Contenido del artefacto copiado al portapapeles');
+      }).catch(() => {
+        alert("No se pudo copiar automáticamente. Puedes seleccionar el texto en la vista Raw.");
+      });
+    }
+
+    async function loadSectionArtifactIntoDrawer(filename, secId) {
+      const webContainer = document.getElementById(`sectionArtifactWeb-${secId}`);
+      const rawContainer = document.getElementById(`sectionArtifactRaw-${secId}`);
+      const statusEl = document.getElementById(`sectionArtifactStatus-${secId}`);
+      if (!webContainer) return;
+
+      if (statusEl) statusEl.textContent = 'Cargando reglas...';
+
+      try {
+        const res = await fetch(`/api/artifact?file=sections/${encodeURIComponent(filename)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+
+        sectionDrawerArtifactCache.set(secId, text);
+
+        // Renderizar formato amigable tipo web
+        const formattedHtml = renderArtifactDoc(text, `sections/${filename}`);
+        webContainer.innerHTML = formattedHtml;
+
+        if (rawContainer) {
+          rawContainer.textContent = text;
+        }
+
+        if (statusEl) statusEl.textContent = '✓ Reglas y contrato cargados';
+      } catch (err) {
+        webContainer.innerHTML = `
+          <div style="padding: 1rem; color: var(--warn); line-height: 1.4;">
+            <strong>Aviso:</strong> No se pudo precargar automáticamente <code>sections/${escapeHtml(filename)}</code> (${escapeHtml(err.message)}).
+            <div style="margin-top: 0.5rem;">
+              <button class="btn btn--sm" onclick="jumpToArtifact('sections/' + '${escapeHtml(filename)}')">Abrir en Pestaña Artefactos ↗</button>
+            </div>
+          </div>
+        `;
+        if (statusEl) statusEl.textContent = 'Aviso';
+      }
+    }
+
+    function toggleSectionArtifactMode(secId, mode) {
+      const web = document.getElementById(`sectionArtifactWeb-${secId}`);
+      const raw = document.getElementById(`sectionArtifactRaw-${secId}`);
+      const btnWeb = document.getElementById(`btnSecArtWeb-${secId}`);
+      const btnRaw = document.getElementById(`btnSecArtRaw-${secId}`);
+
+      if (mode === 'raw') {
+        if (web) web.style.display = 'none';
+        if (raw) raw.style.display = 'block';
+        if (btnWeb) btnWeb.classList.remove('btn--primary');
+        if (btnRaw) btnRaw.classList.add('btn--primary');
+      } else {
+        if (web) web.style.display = 'block';
+        if (raw) raw.style.display = 'none';
+        if (btnWeb) btnWeb.classList.add('btn--primary');
+        if (btnRaw) btnRaw.classList.remove('btn--primary');
+      }
+    }
+
 
     let lastStatusSignature = '';
     let initialArtifactLoaded = false;
