@@ -763,6 +763,51 @@
       letter-spacing: 0.03em;
     }
 
+    /* ETAPAS EN CURSO / ACTIVAS (ILUMINADAS EN AZUL CIAN PULSANTE) */
+    .flujo-step--active .flujo-beacon {
+      background: radial-gradient(circle at 35% 35%, #38bdf8 0%, #0284c7 100%);
+      color: #ffffff;
+      border: 2px solid #38bdf8;
+      box-shadow:
+        0 0 16px rgba(56, 189, 248, 0.9),
+        0 0 35px rgba(14, 165, 233, 0.7),
+        inset 0 0 10px rgba(255, 255, 255, 0.8);
+      animation: cyan-pulse 1.8s infinite alternate;
+    }
+    @keyframes cyan-pulse {
+      0% {
+        box-shadow: 0 0 12px rgba(56, 189, 248, 0.7), 0 0 25px rgba(2, 132, 199, 0.5), inset 0 0 8px rgba(255, 255, 255, 0.6);
+      }
+      100% {
+        box-shadow: 0 0 24px rgba(56, 189, 248, 1), 0 0 45px rgba(56, 189, 248, 0.9), inset 0 0 16px rgba(255, 255, 255, 0.95);
+      }
+    }
+    .flujo-step--active .flujo-beacon::after {
+      content: '';
+      position: absolute;
+      top: -5px; left: -5px; right: -5px; bottom: -5px;
+      border-radius: 50%;
+      border: 1px solid rgba(56, 189, 248, 0.7);
+      animation: halo-pulse 1.8s infinite;
+    }
+    .flujo-step--active .flujo-title {
+      color: #38bdf8;
+      font-weight: 700;
+      font-size: 0.82rem;
+      text-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+      margin-bottom: 0.2rem;
+    }
+    .flujo-step--active .flujo-badge {
+      background: rgba(56, 189, 248, 0.25);
+      color: #38bdf8;
+      border: 1px solid #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+      font-size: 0.68rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
     /* ETAPAS SIN LUZ (FALTAN POR EJECUTAR O APROBAR) */
     .flujo-step--unlit {
       opacity: 0.38;
@@ -804,6 +849,10 @@
       background: linear-gradient(90deg, #10b981, #38bdf8);
       box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
     }
+    .flujo-connector--active {
+      background: linear-gradient(90deg, #10b981, #38bdf8);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+    }
     .flujo-connector--unlit {
       background: #374151;
       border-top: 1px dashed #4b5563;
@@ -819,6 +868,16 @@
     .phase-card--lit .phase-card__name::before {
       content: '💡 ';
       filter: drop-shadow(0 0 6px #10b981);
+    }
+    .phase-card--active {
+      border: 1px solid rgba(56, 189, 248, 0.8) !important;
+      background: linear-gradient(135deg, rgba(31, 41, 55, 0.95), rgba(56, 189, 248, 0.14)) !important;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.35), inset 0 0 14px rgba(56, 189, 248, 0.1) !important;
+      border-top: 3px solid #38bdf8 !important;
+    }
+    .phase-card--active .phase-card__name::before {
+      content: '⚡ ';
+      filter: drop-shadow(0 0 6px #38bdf8);
     }
     .phase-card--unlit {
       opacity: 0.45 !important;
@@ -1490,7 +1549,7 @@
   <nav class="tabs-nav" aria-label="Navegación del tablero">
     <button class="tab-nav__btn active" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
     <button class="tab-nav__btn" onclick="navigateTab('flow')">Flujo Archify</button>
-    <button class="tab-nav__btn" onclick="navigateTab('sections')">Secciones (§0–§18)</button>
+    <button class="tab-nav__btn" onclick="navigateTab('sections')">Secciones del Paper</button>
     <button class="tab-nav__btn" onclick="navigateTab('gates')">Compuertas (Gates)</button>
     <button class="tab-nav__btn" onclick="navigateTab('telemetria')">Telemetría y Costos</button>
     <button class="tab-nav__btn" onclick="navigateTab('atlas')">Atlas de Grafos</button>
@@ -1533,6 +1592,7 @@
           </div>
           <div class="flujo-meta-summary">
             <span class="badge badge--lit" id="flujoLitBadge">💡 0 Superadas (Iluminadas)</span>
+            <span class="badge badge--active" id="flujoActiveBadge" style="background: rgba(56, 189, 248, 0.22); color: #38bdf8; border: 1px solid #38bdf8; font-weight: 700;">⚡ 0 En Curso (Activas)</span>
             <span class="badge badge--unlit" id="flujoUnlitBadge">⚫ 0 Pendientes (Sin Luz)</span>
           </div>
         </div>
@@ -1572,7 +1632,7 @@
     <div id="pane-sections" class="tab-pane">
       <div class="panel">
         <div class="panel__header">
-          <div class="panel__title">Estructura Canónica de 16 Secciones (§0 a §18)</div>
+          <div class="panel__title">Estructura Canónica de Secciones del Manuscrito</div>
           <span class="panel__meta" id="sectionsMetaCount">—</span>
         </div>
         <div class="table-responsive">
@@ -1955,19 +2015,16 @@
 
   <script>
     const PHASES_INFO = [
-      { id: "Fase 0", name: "Fase 0: Ingesta de Insumos", agent: "insumos-observador", gate: "G0.5", desc: "Clasificación de TDR, papers y background; extracción estructurada en insumos.md.", tools: ["read", "bash", "mcp"], outputs: ["artefactos/insumos.md", "artefactos/analisis_TDR.md"] },
-      { id: "Fase 1", name: "Fase 1: Descripción del Problema", agent: "investigador & grant-flow-auditor & disenador-tikz", gate: "G1", desc: "Formulación de los 3 subproblemas, pregunta rectora, humanización estilística y bucle del árbol de problemas TikZ.", tools: ["read", "write", "bash"], outputs: ["sections/03_descripcion_problema.tex", "sections/diag_arbol_problemas.tex"] },
-      { id: "Fase 2", name: "Fase 2: Estado del Arte e Hipótesis", agent: "bibliografo-propuesta & investigador & grant-flow-auditor", gate: "G2", desc: "Construcción del SOTA (≥30 refs Q1/Q2 recientes, ≤3 años), mapa temático TikZ, hipótesis falsable y humanización estilística.", tools: ["read", "write", "mcp"], outputs: ["sections/04_estado_arte.tex", "sections/05_hipotesis.tex", "refs.bib"] },
-      { id: "Fase 3", name: "Fase 3: Justificación y Pertinencia", agent: "redactor & grant-flow-auditor", gate: "G3", desc: "Alineación ODS 3.4, PND y metas multilaterales con nivel de madurez tecnológica TRL 6/7 explícito y revisión de estilo natural.", tools: ["read", "write", "bash"], outputs: ["sections/02_justificacion.tex"] },
-      { id: "Fase 4", name: "Fase 4: Objetivos", agent: "investigador & grant-flow-auditor", gate: "G4", desc: "Objetivo general e hipótesis articulados; mapeo biyectivo 1:1 de los 3 objetivos específicos con los subproblemas y estilo natural.", tools: ["read", "write"], outputs: ["sections/06_objetivo_general.tex", "sections/07_objetivos_especificos.tex"] },
-      { id: "Fase 5", name: "Fase 5: Marco Conceptual y Equipo", agent: "investigador & redactor & grant-flow-auditor", gate: "G5", desc: "Teoría formal de soporte en IA, roles del equipo derivados de objetivos específicos y revisión de estilo natural.", tools: ["read", "write"], outputs: ["sections/08_marco_conceptual.tex", "sections/09_equipo_trabajo.tex"] },
-      { id: "Fase 5.5", name: "Fase 5.5: Metodología y Esquema TikZ", agent: "redactor & grant-flow-auditor & disenador-tikz", gate: "G5.5", desc: "Cadena de valor por fase, causalidad algorítmica, pulido estilístico y diagrama metodológico generado con figura.py.", tools: ["read", "write", "bash"], outputs: ["sections/10_metodologia.tex", "sections/diag_metodologico.tex"] },
-      { id: "Fase 6", name: "Fase 6: Resultados y Consideraciones Éticas", agent: "redactor & grant-flow-auditor", gate: "G6", desc: "Resultados esperados tangibles, bioética, tratamiento de datos, consentimientos informados y humanización de prosa.", tools: ["read", "write"], outputs: ["sections/11_resultados_esperados.tex", "sections/12_consideraciones_eticas.tex"] },
-      { id: "Fase 6.4", name: "Fase 6.4: Presupuesto y Cofinanciación", agent: "presupuestador", gate: "G6.4", desc: "Desglose por rubros, contrapartidas y verificación aritmética exacta alineada a la metodología.", tools: ["read", "write", "bash"], outputs: ["sections/13_presupuesto.tex"] },
-      { id: "Fase 6.45", name: "Fase 6.45: Cronograma, Productos y BibTeX", agent: "redactor & grant-flow-auditor & bibliografo-propuesta", gate: "G6.45", desc: "Gantt a 12 meses exactos, productos entregables comprometidos, consolidación de refs.bib y pulido de prosa.", tools: ["read", "write", "bash"], outputs: ["sections/14_cronograma_actividades.tex", "sections/15_productos_esperados.tex", "refs.bib"] },
-      { id: "Fase 6.46", name: "Fase 6.46: Articulación y Apropiación Territorial", agent: "redactor & grant-flow-auditor", gate: "G6.46", desc: "Estrategia territorial, articulación con comunidades, apropiación social, tablas de anclaje C y revisión de estilo natural.", tools: ["read", "write"], outputs: ["sections/17_articulacion_comunidades.tex", "sections/18_apropiacion_social.tex"] },
-      { id: "Fase 6.5", name: "Fase 6.5: Front-Matter y Resumen", agent: "redactor & grant-flow-auditor", gate: "G6.5", desc: "Resumen ejecutivo en 5 párrafos, Resumen general y Palabras clave; garantía de unicidad del título en portada y humanización de estilo.", tools: ["read", "write"], outputs: ["sections/00_frontmatter.tex"] },
-      { id: "Fase 7", name: "Fase 7: Auditoría Final y Ensamble", agent: "revisor & coordinador-propuesta", gate: "G7", desc: "Auditoría cruzada integral de las secciones, verificación de dependencias y compilación de main.tex a PDF y DOCX.", tools: ["read", "bash", "write"], outputs: ["redaccion/main.tex", "redaccion/main.pdf", "redaccion/main.docx"] }
+      { id: "Fase 1", name: "Fase 1: Configuración de Entorno & Harness", status: "PASS", progress: 1.0, agent: "papersmith-cli & harness", gate: "G-ENV", desc: "Inicialización de workspace, validación de dependencias (pdflatex, bibtex, python), y sincronización de contratos base.", tools: ["bash", "read", "write"], outputs: ["papersmith.toml", "Makefile", "paper/main.tex"] },
+      { id: "Fase 2", name: "Fase 2: Plausibilidad & SOTA Atlas 3D", status: "PASS", progress: 1.0, agent: "atlas-generator & bibliografo", gate: "G-SOTA", desc: "Exploración SOTA, validación de plausibilidad biomédica y generación de Atlas 3D interactivo para neurotecnología.", tools: ["read", "write", "mcp"], outputs: ["paper/sota_atlas.json", "docs/assets/sota_atlas_view.html"] },
+      { id: "Fase 3", name: "Fase 3: Ingestión de Referencias & Tesis Principal", status: "PASS", progress: 1.0, agent: "ingestion-worker & bibliografo", gate: "G-INGEST", desc: "Ingesta de la tesis principal de Julián David Parias Osorio y 30+ referencias Q1 indexadas en BibTeX.", tools: ["read", "write", "bash"], outputs: ["inputs/Master-s-thesis-.md", "paper/references.bib"] },
+      { id: "Fase 4", name: "Fase 4: Deliberación & Publicación de Propuesta", status: "PASS", progress: 1.0, agent: "orchestrator & proposal-engine", gate: "G-DELIB", desc: "Deliberación de arquitectura científica, selección de revista Elsevier y fijación de alcance metodológico.", tools: ["read", "write"], outputs: ["paper/proposal_deliberation.md", "README.md"] },
+      { id: "Fase 5", name: "Fase 5: Andamiaje de Manuscrito & Contratos", status: "PASS", progress: 1.0, agent: "scaffold-builder & linter", gate: "G-SCAFFOLD", desc: "Estructura modular LaTeX (10 secciones canónicas), verificación de contratos de compilación y layouts Elsevier.", tools: ["read", "write", "bash"], outputs: ["paper/sections/", "paper/elsarticle.cls", "paper/main.tex"] },
+      { id: "Fase 6", name: "Fase 6: Declaraciones Operativas & Coautoría", status: "PASS", progress: 1.0, agent: "author-registry & ethics-checker", gate: "G-AUTHORS", desc: "Fijación formal de autoría (Julián David Parias Osorio & Andrés Álvarez), afiliación LabIA UNAL y declaraciones éticas/ICMJE.", tools: ["read", "write"], outputs: ["paper/sections/01_authors.tex", "paper/sections/09_declarations.tex"] },
+      { id: "Fase 7", name: "Fase 7: Redacción Técnica & Transposición", status: "ACTIVE", progress: 0.13, agent: "writer & humanizer", gate: "G-WRITING", desc: "Transposición científica rigurosa desde la tesis hacia el estándar de artículo Elsevier Q1 con humanización de estilo y sin clichés LLM.", tools: ["read", "write"], outputs: ["paper/sections/02_introduction.tex", "paper/sections/04_methodology.tex"] },
+      { id: "Fase 8", name: "Fase 8: Diagramas Técnicos & Grounding", status: "PENDING", progress: 0.0, agent: "tikz-designer & visualizer", gate: "G-TIKZ", desc: "Elaboración de esquemas de hardware 32 canales, diagramas de flujo de firmware y topología bioeléctrica vectorial.", tools: ["read", "write", "bash"], outputs: ["paper/figures/system_architecture.pdf", "paper/figures/flowchart.pdf"] },
+      { id: "Fase 9", name: "Fase 9: Compilación & Manuscrito PDF", status: "ACTIVE", progress: 0.80, agent: "compiler & publisher", gate: "G-BUILD", desc: "Compilación continua LaTeX/PDF, enlace de bibliografía BibTeX y verificación de layout tipográfico Elsevier.", tools: ["bash", "read"], outputs: ["paper/main.pdf", "paper/main.log"] },
+      { id: "Fase 10", name: "Fase 10: Auditoría Transversal & Gates", status: "PASS", progress: 1.0, agent: "qa-auditor & gate-keeper", gate: "G-AUDIT", desc: "Evaluación de gates de calidad científica, citas verificadas, detección de sesgo y consistencia entre código y manuscrito.", tools: ["read", "bash"], outputs: ["paper/audit_report.json"] }
     ];
 
     let currentStatus = null;
@@ -2014,37 +2071,41 @@
     }
 
     function openDrawer(phaseIndex) {
-      const p = PHASES_INFO[phaseIndex];
+      const phases = (currentStatus && currentStatus.fases && currentStatus.fases.length > 0) ? currentStatus.fases : PHASES_INFO;
+      const p = phases[phaseIndex];
       if (!p) return;
       document.getElementById('drawerTitle').textContent = p.name;
       
-      const gateMatch = (currentStatus?.gates || []).find(g => g.id === p.gate);
-      const gateStatus = gateMatch ? gateMatch.status : 'PENDING';
-      const badgeTone = gateStatus === 'PASS' ? 'ok' : (gateStatus === 'BLOCKED' ? 'bad' : 'warn');
+      const gateMatch = (currentStatus?.gates || []).find(g => g.id === p.gate || g.phase === p.id);
+      const gateStatus = p.status || (gateMatch ? gateMatch.status : 'PENDING');
+      const isLit = (gateStatus === 'PASS');
+      const isActive = (gateStatus === 'ACTIVE' || gateStatus === 'IN_PROGRESS');
+      const badgeTone = isLit ? 'ok' : (isActive ? 'info' : (gateStatus === 'BLOCKED' ? 'bad' : 'warn'));
+      const statusIcon = isLit ? '💡 ' : (isActive ? '⚡ ' : '⚫ ');
 
       document.getElementById('drawerBody').innerHTML = `
         <div style="margin-bottom: 1rem;">
-          <span class="badge badge--${badgeTone}">Gate ${p.gate}: ${gateStatus}</span>
-          <span class="badge badge--info" style="margin-left: 0.5rem;">Agente: ${p.agent}</span>
+          <span class="badge badge--${badgeTone}">${statusIcon}Gate ${p.gate || p.id}: ${gateStatus}</span>
+          <span class="badge badge--info" style="margin-left: 0.5rem;">Agente: ${p.agent || 'papersmith-worker'}</span>
         </div>
         <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1.25rem;">${p.desc}</p>
         
         <div style="margin-bottom: 1rem;">
           <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem;">Criterio Evaluado</h4>
-          <p style="font-size: 0.85rem; background: var(--surface-2); padding: 0.75rem; border-radius: var(--radius); border: 1px solid var(--border);">${gateMatch ? gateMatch.criteria : 'Evaluación de consistencia metodológica según guía.'}</p>
+          <p style="font-size: 0.85rem; background: var(--surface-2); padding: 0.75rem; border-radius: var(--radius); border: 1px solid var(--border);">${gateMatch ? gateMatch.criteria : 'Evaluación de consistencia metodológica y científica según guía.'}</p>
         </div>
 
         <div style="margin-bottom: 1rem;">
           <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem;">Herramientas Declaradas</h4>
           <div style="display: flex; gap: 0.5rem;">
-            ${p.tools.map(t => `<span class="badge badge--info">${t}</span>`).join('')}
+            ${(p.tools || ['read', 'write']).map(t => `<span class="badge badge--info">${t}</span>`).join('')}
           </div>
         </div>
 
         <div>
           <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem;">Entregables Clave</h4>
           <ul style="font-size: 0.82rem; color: var(--text-muted); padding-left: 1.25rem;">
-            ${p.outputs.map(o => `<li><code>${o}</code></li>`).join('')}
+            ${(p.outputs || []).map(o => `<li><code>${o}</code></li>`).join('')}
           </ul>
         </div>
       `;
@@ -2094,6 +2155,7 @@
           active_run: data.active_run,
           totals: data.totals,
           gates: data.gates,
+          fases: (data.fases || []).map(f => `${f.id}:${f.status}:${f.progress}`),
           sec_count: (data.sections || []).length,
           tel_count: (data.telemetria || []).length
         });
@@ -2125,29 +2187,30 @@
           <div class="totals__chip"><strong>${totals.sections_count || 0}</strong> secciones</div>
           <div class="totals__chip"><strong>${totals.total_words?.toLocaleString() || 0}</strong> palabras</div>
           <div class="totals__chip"><strong>${totals.bibtex_entries || 0}</strong> refs BibTeX</div>
-          <div class="totals__chip"><strong>${totals.gates_passed || 0}/${totals.gates_total || 13}</strong> gates</div>
+          <div class="totals__chip"><strong>${totals.gates_passed || 0}/${totals.gates_total || 10}</strong> gates</div>
           <div class="totals__chip"><strong>${totals.total_tokens || '0'}</strong> tokens</div>
           <div class="totals__chip"><strong>${totals.pdf_pages || 0}</strong> págs (PDF)</div>
         `;
 
         // Metric Cards
         document.getElementById('statRunId').textContent = data.active_run ? data.active_run.split('-').slice(0, 3).join('-') : '—';
-        document.getElementById('statRunDir').textContent = data.active_run ? `proposals/${data.active_run}` : 'Usa /propuesta-init';
-        document.getElementById('statGatesPassed').textContent = `${totals.gates_passed || 0} / ${totals.gates_total || 13}`;
+        document.getElementById('statRunDir').textContent = data.active_run ? `proposals/${data.active_run}` : 'paper/';
+        document.getElementById('statGatesPassed').textContent = `${totals.gates_passed || 0} / ${totals.gates_total || 10}`;
         
         const pdfOk = details.pdf_ready;
         document.getElementById('statPdfStatus').textContent = pdfOk ? 'Listo' : 'Pendiente';
         document.getElementById('statPdfStatus').style.color = pdfOk ? 'var(--ok)' : 'var(--warn)';
-        document.getElementById('statPdfSub').textContent = pdfOk ? `${Math.round(details.pdf_size / 1024)} KB · ${totals.pdf_pages || 0} págs` : 'Ejecuta build.sh';
+        document.getElementById('statPdfSub').textContent = pdfOk ? `${Math.round(details.pdf_size / 1024)} KB · ${totals.pdf_pages || 0} págs` : 'Ejecuta make pdf';
         document.getElementById('pdfInfoBadge').textContent = `${totals.pdf_pages || 0} páginas · ${Math.round((details.pdf_size || 0) / 1024)} KB`;
 
         const docxOk = details.docx_ready;
         document.getElementById('statDocxStatus').textContent = docxOk ? 'Listo' : 'Pendiente';
         document.getElementById('statDocxStatus').style.color = docxOk ? 'var(--ok)' : 'var(--text-muted)';
-        document.getElementById('statDocxSub').textContent = docxOk ? `${Math.round(details.docx_size / 1024)} KB` : 'build.sh --docx';
+        document.getElementById('statDocxSub').textContent = docxOk ? `${Math.round(details.docx_size / 1024)} KB` : 'pandoc export';
 
         // Helper para resolver el estado exacto de cualquier fase
         function getPhaseVerdict(p) {
+          if (p.status) return p.status;
           const gateMatch = (data.gates || []).find(g => 
             g.id === p.gate || 
             g.phase === p.id ||
@@ -2166,69 +2229,90 @@
           return 'PENDING';
         }
 
-        // Render Illuminated vs Unlit Flujo General
+        const phases = (data.fases && data.fases.length > 0) ? data.fases : PHASES_INFO;
+
+        // Render Illuminated vs Active vs Unlit Flujo General
         const flujoTrack = document.getElementById('flujoTrack');
         if (flujoTrack) {
           flujoTrack.innerHTML = '';
           let litCount = 0;
+          let activeCount = 0;
           let unlitCount = 0;
 
-          PHASES_INFO.forEach((p, idx) => {
-            const gateStatus = getPhaseVerdict(p);
-            const isLit = (gateStatus === 'PASS');
+          phases.forEach((p, idx) => {
+            const status = getPhaseVerdict(p);
+            const isLit = (status === 'PASS');
+            const isActive = (status === 'ACTIVE' || status === 'IN_PROGRESS');
+            const isUnlit = !isLit && !isActive;
 
             if (isLit) litCount++;
+            else if (isActive) activeCount++;
             else unlitCount++;
 
             const stepDiv = document.createElement('div');
-            stepDiv.className = `flujo-step ${isLit ? 'flujo-step--lit' : 'flujo-step--unlit'}`;
+            const stepClass = isLit ? 'flujo-step--lit' : (isActive ? 'flujo-step--active' : 'flujo-step--unlit');
+            stepDiv.className = `flujo-step ${stepClass}`;
             stepDiv.onclick = () => openDrawer(idx);
-            stepDiv.title = `${p.name} · ${isLit ? 'SUPERADA (ILUMINADA)' : 'PENDIENTE (SIN LUZ)'}`;
+            const statusLabel = isLit ? 'SUPERADA (ILUMINADA)' : (isActive ? 'EN CURSO (ACTIVA)' : 'PENDIENTE (SIN LUZ)');
+            stepDiv.title = `${p.name} · ${statusLabel}`;
 
-            const isLast = (idx === PHASES_INFO.length - 1);
-            let nextGateStatus = 'PENDING';
+            const isLast = (idx === phases.length - 1);
+            let nextStatus = 'PENDING';
             if (!isLast) {
-              nextGateStatus = getPhaseVerdict(PHASES_INFO[idx + 1]);
+              nextStatus = getPhaseVerdict(phases[idx + 1]);
             }
-            const isConnectorLit = isLit && (nextGateStatus === 'PASS');
+            let connClass = 'flujo-connector--unlit';
+            if (isLit) {
+              if (nextStatus === 'PASS') connClass = 'flujo-connector--lit';
+              else if (nextStatus === 'ACTIVE' || nextStatus === 'IN_PROGRESS') connClass = 'flujo-connector--active';
+            }
+
+            const beaconIcon = isLit ? '💡' : (isActive ? '⚡' : '⚫');
+            const badgeText = isLit ? 'PASS' : (isActive ? 'EN CURSO' : 'SIN LUZ');
 
             stepDiv.innerHTML = `
-              ${!isLast ? `<div class="flujo-connector ${isConnectorLit ? 'flujo-connector--lit' : 'flujo-connector--unlit'}"></div>` : ''}
+              ${!isLast ? `<div class="flujo-connector ${connClass}"></div>` : ''}
               <div class="flujo-beacon">
-                ${isLit ? '💡' : '⚫'}
+                ${beaconIcon}
               </div>
               <div class="flujo-title">${p.id}</div>
-              <div class="flujo-badge">${isLit ? 'PASS' : 'SIN LUZ'}</div>
+              <div class="flujo-badge">${badgeText}</div>
             `;
             flujoTrack.appendChild(stepDiv);
           });
 
           const litBadge = document.getElementById('flujoLitBadge');
           if (litBadge) litBadge.innerHTML = `💡 ${litCount} Superadas (Iluminadas)`;
+          const activeBadge = document.getElementById('flujoActiveBadge');
+          if (activeBadge) activeBadge.innerHTML = `⚡ ${activeCount} En Curso (Activas)`;
           const unlitBadge = document.getElementById('flujoUnlitBadge');
           if (unlitBadge) unlitBadge.innerHTML = `⚫ ${unlitCount} Pendientes (Sin Luz)`;
         }
 
-        // Render Pipeline Grid with illuminated vs unlit cards
+        // Render Pipeline Grid with illuminated vs active vs unlit cards
         const pipeGrid = document.getElementById('pipelineGrid');
         pipeGrid.innerHTML = '';
-        PHASES_INFO.forEach((p, idx) => {
-          const gateStatus = getPhaseVerdict(p);
-          const isLit = (gateStatus === 'PASS');
-          const badgeTone = isLit ? 'ok' : (gateStatus === 'BLOCKED' ? 'bad' : 'warn');
+        phases.forEach((p, idx) => {
+          const status = getPhaseVerdict(p);
+          const isLit = (status === 'PASS');
+          const isActive = (status === 'ACTIVE' || status === 'IN_PROGRESS');
+          const cardClass = isLit ? 'phase-card--lit' : (isActive ? 'phase-card--active' : 'phase-card--unlit');
+          const badgeTone = isLit ? 'ok' : (isActive ? 'info' : (status === 'BLOCKED' ? 'bad' : 'warn'));
+          const statusIcon = isLit ? '💡 ' : (isActive ? '⚡ ' : '⚫ ');
+          const statusText = isLit ? 'PASS' : (isActive ? 'EN CURSO' : (status || 'PENDIENTE'));
 
           const card = document.createElement('div');
-          card.className = `phase-card ${isLit ? 'phase-card--lit' : 'phase-card--unlit'}`;
+          card.className = `phase-card ${cardClass}`;
           card.onclick = () => openDrawer(idx);
           card.innerHTML = `
             <div class="phase-card__head">
               <span class="phase-card__name">${p.name}</span>
-              <span class="badge badge--${badgeTone}">${isLit ? '💡 ' : ''}${p.gate}: ${gateStatus}</span>
+              <span class="badge badge--${badgeTone}">${statusIcon}${p.gate || p.id}: ${statusText}</span>
             </div>
             <p class="phase-card__desc">${p.desc}</p>
             <div class="phase-card__foot">
-              <span>Agente: <strong>${p.agent.split('&')[0].trim()}</strong></span>
-              <span>${p.outputs.length} artefactos</span>
+              <span>Agente: <strong>${(p.agent || 'papersmith').split('&')[0].trim()}</strong></span>
+              <span>${(p.outputs || []).length} entregables</span>
             </div>
           `;
           pipeGrid.appendChild(card);
