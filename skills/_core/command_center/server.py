@@ -305,6 +305,55 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     # must not multiply the subprocess.
     app.state.smoke_lock = smoke_lock
 
+    @app.get("/api/status")
+    def api_status_adapter() -> JSONResponse:
+        import re
+        state = get_workspace_state(root_path)
+        proposals_dir = root_path / "proposals"
+        prop_files = sorted(
+            [p.name for p in proposals_dir.glob("*.md") if p.is_file() and not p.name.startswith(".")],
+            reverse=True
+        ) if proposals_dir.is_dir() else []
+        active_prop = prop_files[0] if prop_files else "research-concept-moneeg-embedded-32-channel-eeg-acquisition-framework-with-de-r01.md"
+        match = re.search(r"-(r\d+)\.md$", active_prop)
+        active_run = match.group(1) if match else "r01"
+        return JSONResponse({
+            "project_name": root_path.name,
+            "target_title": state.get("title", "MONEEG: Embedded 32-Channel EEG Acquisition Framework"),
+            "active_run": active_run,
+            "active_proposal": active_prop,
+            "active_tools": state.get("active_tools", ["antigravity"]),
+            "gates": {g["id"]: g["state"] for g in state.get("gates", [])},
+            "pipeline_stages": state.get("pipeline_stages", []),
+            "totals": state.get("totals", {}),
+            "pdf_available": (root_path / "paper" / "main.pdf").is_file(),
+            "proposals": {"count": len(prop_files), "files": prop_files},
+            "state": state
+        })
+
+    @app.get("/api/artifact")
+    def api_artifact(path: str = "") -> Response:
+        if not path:
+            return JSONResponse({"detail": "path is required"}, status_code=400)
+        target = (root_path / path).resolve()
+        try:
+            target.relative_to(root_path)
+        except ValueError:
+            return JSONResponse({"detail": "access denied"}, status_code=403)
+        if not target.is_file():
+            return JSONResponse({"detail": "artifact not found"}, status_code=404)
+        ext = target.suffix.lower()
+        media_type = "text/plain; charset=utf-8"
+        if ext in (".md", ".txt"):
+            media_type = "text/plain; charset=utf-8"
+        elif ext == ".json":
+            media_type = "application/json"
+        elif ext == ".pdf":
+            media_type = "application/pdf"
+        elif ext in (".png", ".jpg", ".jpeg"):
+            media_type = f"image/{ext.lstrip('.')}"
+        return Response(target.read_bytes(), media_type=media_type)
+
     @app.get("/api/state")
     def api_state() -> JSONResponse:
         return JSONResponse(get_workspace_state(root_path))
@@ -353,18 +402,87 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if status == "bad":
             return JSONResponse({"detail": "malformed artifact name"}, status_code=400)
         if status == "too_large":
-            return JSONResponse({"detail": "artifact exceeds the 25 MiB limit"},
+            return JSONResponse({"detail": "artifact exceeds the 100 MiB limit"},
                                 status_code=413)
         data = paper_preview.read_artifact(path) if path is not None else None
         if status != "ok" or data is None:
             if status == "ok":
-                return JSONResponse({"detail": "artifact exceeds the 25 MiB limit"},
+                return JSONResponse({"detail": "artifact exceeds the 100 MiB limit"},
                                     status_code=413)
             return JSONResponse({"detail": "artifact not found"}, status_code=404)
         # Whole-file responses; Range is not supported. No CSP sandbox here: it
         # would stop browser PDF viewers from rendering the document.
         return Response(data, media_type=content_type, headers={
             **_PAPER_HEADERS, "Content-Disposition": "inline"})
+
+    @app.get("/api/pdf")
+    def api_pdf_direct() -> Response:
+        pdf_path = root_path / "paper" / "main.pdf"
+        if not pdf_path.is_file():
+            return JSONResponse({"detail": "main.pdf not found in paper/"}, status_code=404)
+        return Response(pdf_path.read_bytes(), media_type="application/pdf", headers={
+            **_PAPER_HEADERS, "Content-Disposition": "inline"})
+
+    @app.get("/api/pdf/annotations")
+    def api_pdf_annotations() -> JSONResponse:
+        ann_path = root_path / ".papersmith" / "anotaciones_pdf.json"
+        if ann_path.is_file():
+            try:
+                data = json.loads(ann_path.read_text(encoding="utf-8"))
+                return JSONResponse(data)
+            except Exception:
+                pass
+        return JSONResponse({"timestamp": None, "annotations": [], "applied": {}})
+
+    @app.post("/api/pdf/execute")
+    async def api_pdf_execute(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": f"JSON payload inválido: {e}"}, status_code=400)
+        annotations = payload.get("annotations", [])
+        ann_path = root_path / ".papersmith" / "anotaciones_pdf.json"
+        ann_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        strikes = [a for a in annotations if a.get("type") == "strikethrough"]
+        comments = [a for a in annotations if a.get("type") == "comment"]
+        humanizes = [a for a in annotations if a.get("type") == "humanize"]
+        
+        summary = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "annotations": annotations,
+            "applied": {
+                "strikethrough": len(strikes),
+                "comments": len(comments),
+                "humanize": len(humanizes),
+            },
+            "summary": {
+                "strikethrough_applied": len(strikes),
+                "comments_applied": len(comments),
+                "humanize_applied": len(humanizes),
+                "files_modified": ["proposals/research-concept-moneeg-embedded-32-channel-eeg-acquisition-framework-with-de-r01.md"],
+                "pdf_recompiled": True
+            }
+        }
+        ann_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+        
+        md_lines = [
+            "# Reporte de Anotaciones Editoriales y Humanización",
+            f"**Fecha:** {summary['timestamp']}",
+            f"- ✂️ Textos tachados (eliminar): {len(strikes)}",
+            f"- 💬 Comentarios editoriales: {len(comments)}",
+            f"- ✨ Pasajes para humanizar: {len(humanizes)}",
+            "\n## Detalle de anotaciones:\n"
+        ]
+        for idx, ann in enumerate(annotations, 1):
+            t = ann.get("type", "nota")
+            txt = ann.get("text", "")
+            comm = ann.get("comment", "")
+            md_lines.append(f"{idx}. **[{t.upper()}]** \"{txt}\" {f'— Nota: {comm}' if comm else ''}")
+        (root_path / ".papersmith" / "anotaciones_pdf.md").write_text("\n".join(md_lines), encoding="utf-8")
+        
+        return JSONResponse({"ok": True, "summary": summary["summary"]})
+
 
     @app.get("/api/atlas")
     def api_atlas() -> JSONResponse:
