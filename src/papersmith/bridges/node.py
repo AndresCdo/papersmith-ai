@@ -108,7 +108,10 @@ def call_engine_with_acceptance(workspace: Path, preview: dict[str, Any], *, tim
         )
         assert process.stdin is not None
         assert process.stdout is not None
-        process.stdin.write(json.dumps(preview, separators=(",", ":")) + "\n")
+        preview_turn = dict(preview)
+        preview_turn.pop("acceptSuccessor", None)
+        preview_turn.pop("successorAcceptanceToken", None)
+        process.stdin.write(json.dumps(preview_turn, separators=(",", ":")) + "\n")
         process.stdin.flush()
         first_line = process.stdout.readline()
         if not first_line:
