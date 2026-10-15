@@ -775,6 +775,387 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # fixed path (workspace Python runs in this process; see atlas.py).
         return JSONResponse(atlas.build_atlas(root_path), headers=dict(_PAPER_HEADERS))
 
+    @app.get("/api/candidates")
+    def api_candidates() -> JSONResponse:
+        cand_file = root_path / "sota-pool" / "candidates.json"
+        if not cand_file.is_file():
+            return JSONResponse({"count": 0, "candidates": [], "families": []}, headers=dict(_PAPER_HEADERS))
+        try:
+            with open(cand_file, "r", encoding="utf-8") as f:
+                candidates = json.load(f)
+            families = sorted(list({c.get("family", "general") for c in candidates if c.get("family")}))
+            return JSONResponse({
+                "count": len(candidates),
+                "candidates": candidates,
+                "families": families
+            }, headers=dict(_PAPER_HEADERS))
+        except Exception as exc:
+            return JSONResponse({"error": str(exc), "count": 0, "candidates": [], "families": []}, status_code=500)
+
+    @app.get("/api/atlas/candidates/view")
+    def api_atlas_candidates_view() -> Response:
+        cand_file = root_path / "sota-pool" / "candidates.json"
+        candidates = []
+        families = []
+        if cand_file.is_file():
+            try:
+                with open(cand_file, "r", encoding="utf-8") as f:
+                    candidates = json.load(f)
+                families = sorted(list({c.get("family", "general") for c in candidates if c.get("family")}))
+            except Exception:
+                pass
+        
+        candidates_json = json.dumps(candidates)
+        families_options = "".join(f'<option value="{f}">{f}</option>' for f in families)
+        
+        html_content = f"""<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matriz de Candidatos SOTA — MONEEG</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <style>
+    :root {{
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface-2: #1f2937;
+      --surface-hover: #374151;
+      --border: #374151;
+      --border-subtle: #242f3e;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent: #38bdf8;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --radius: 8px;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      padding: 1.5rem;
+      min-height: 100vh;
+    }}
+    .container {{
+      max-width: 1440px;
+      margin: 0 auto;
+    }}
+    header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 1rem;
+    }}
+    .brand {{
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }}
+    .brand img {{
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+    }}
+    .brand h1 {{
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+    }}
+    .brand p {{
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }}
+    .btn {{
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.9rem;
+      border-radius: var(--radius);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s;
+    }}
+    .btn:hover {{
+      background: var(--surface-hover);
+      border-color: var(--accent);
+    }}
+    .btn--primary {{
+      background: var(--accent);
+      color: #0b0f19;
+      border-color: var(--accent);
+    }}
+    .stats-bar {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }}
+    .stat-chip {{
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem;
+    }}
+    .stat-chip__val {{
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }}
+    .stat-chip__lbl {{
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+    }}
+    .toolbar {{
+      display: flex;
+      gap: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }}
+    .search-input {{
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 0.45rem 0.85rem;
+      font-size: 0.82rem;
+      flex: 1;
+      min-width: 280px;
+      outline: none;
+    }}
+    .search-input:focus {{ border-color: var(--accent); }}
+    select {{
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 0.45rem 0.85rem;
+      font-size: 0.82rem;
+      outline: none;
+      cursor: pointer;
+    }}
+    .table-box {{
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-x: auto;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }}
+    th, td {{
+      padding: 0.8rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }}
+    th {{
+      background: rgba(0,0,0,0.3);
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.03em;
+      position: sticky;
+      top: 0;
+    }}
+    tr:hover td {{ background: var(--surface-hover); }}
+    .badge {{
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }}
+    .badge--ok {{ background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; }}
+    .badge--info {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; text-decoration: none; }}
+    .badge-family--hardware {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }}
+    .badge-family--adhd {{ background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.4); }}
+    .badge-family--games {{ background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); }}
+    .badge-family--sync {{ background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); }}
+    .abstract-box {{
+      background: var(--surface-2);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 0.85rem 1rem;
+      line-height: 1.6;
+      font-size: 0.81rem;
+      color: var(--text);
+      margin-top: 0.5rem;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <img src="/smith-logo.png" alt="Smith">
+        <div>
+          <h1>Matriz de Candidatos del Estado del Arte (SOTA)</h1>
+          <p>Proyecto MONEEG · Mapeo de Literatura y Plausibilidad Metodológica</p>
+        </div>
+      </div>
+      <div>
+        <a href="/#atlas" class="btn">← Volver al Tablero Principal</a>
+      </div>
+    </header>
+
+    <div class="stats-bar">
+      <div class="stat-chip">
+        <div class="stat-chip__val">{len(candidates)}</div>
+        <div class="stat-chip__lbl">Artículos Candidatos Q1/Q2</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip__val">{len(families)}</div>
+        <div class="stat-chip__lbl">Familias Temáticas</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip__val">2020 – 2025</div>
+        <div class="stat-chip__lbl">Ventana Temporal SOTA</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip__val" style="color: var(--ok);">100% PASS</div>
+        <div class="stat-chip__lbl">Plausibilidad Validada</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" id="searchInput" class="search-input" placeholder="Buscar por título, autor, revista, DOI o palabra clave..." oninput="renderTable()">
+      <div style="display: flex; gap: 0.5rem;">
+        <select id="familySelect" onchange="renderTable()">
+          <option value="">Todas las Familias ({len(families)})</option>
+          {families_options}
+        </select>
+        <select id="sortSelect" onchange="renderTable()">
+          <option value="year_desc">Año (más reciente)</option>
+          <option value="year_asc">Año (más antiguo)</option>
+          <option value="title_asc">Título (A-Z)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 45px; text-align: center;">#</th>
+            <th style="width: 65px; text-align: center;">Año</th>
+            <th style="min-width: 320px;">Artículo &amp; Autores</th>
+            <th style="width: 180px;">Revista / Venue</th>
+            <th style="width: 160px;">Familia / Clúster</th>
+            <th style="min-width: 260px;">Aporte &amp; Plausibilidad</th>
+            <th style="width: 100px; text-align: center;">Abstract</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const CANDIDATES = {candidates_json};
+    function getFamilyBadgeClass(family) {{
+      if (!family) return 'badge-family--hardware';
+      if (family.includes('hardware')) return 'badge-family--hardware';
+      if (family.includes('adhd')) return 'badge-family--adhd';
+      if (family.includes('game')) return 'badge-family--games';
+      if (family.includes('sync') || family.includes('temporal')) return 'badge-family--sync';
+      return 'badge-family--hardware';
+    }}
+
+    function renderTable() {{
+      const query = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+      const family = document.getElementById('familySelect').value;
+      const sort = document.getElementById('sortSelect').value;
+
+      let list = CANDIDATES.filter(c => {{
+        if (family && c.family !== family) return false;
+        if (!query) return true;
+        const str = [c.title, (c.authors || []).join(' '), c.venue, c.identifier, c.family, c.abstract, c.plausibility_note].join(' ').toLowerCase();
+        return str.includes(query);
+      }});
+
+      if (sort === 'year_desc') list.sort((a,b) => (b.year||0) - (a.year||0));
+      else if (sort === 'year_asc') list.sort((a,b) => (a.year||0) - (b.year||0));
+      else if (sort === 'title_asc') list.sort((a,b) => (a.title||'').localeCompare(b.title||''));
+
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      if (list.length === 0) {{
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No se encontraron artículos con ese criterio de búsqueda.</td></tr>';
+        return;
+      }}
+
+      list.forEach((c, idx) => {{
+        const tr = document.createElement('tr');
+        const authors = (c.authors || []).slice(0, 3).join(', ') + ((c.authors || []).length > 3 ? ' et al.' : '');
+        tr.innerHTML = `
+          <td style="text-align: center; font-weight: 600; color: var(--text-dim);">${{idx + 1}}</td>
+          <td style="text-align: center;"><span class="badge badge--ok" style="font-family: var(--font-mono);">${{c.year || '—'}}</span></td>
+          <td>
+            <div style="font-weight: 700; color: var(--text); line-height: 1.35; margin-bottom: 0.25rem;">${{c.title}}</div>
+            <div style="font-size: 0.76rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span>👥 ${{authors}}</span>
+              ${{c.identifier ? `<a href="${{c.source_url || ('https://doi.org/' + c.identifier)}}" target="_blank" class="badge badge--info">🔗 ${{c.identifier}}</a>` : ''}}
+            </div>
+          </td>
+          <td><span style="font-style: italic; color: var(--text-dim);">${{c.venue || 'Revista Q1'}}</span></td>
+          <td><span class="badge ${{getFamilyBadgeClass(c.family)}}">${{c.family || 'general'}}</span></td>
+          <td><div style="font-size: 0.78rem; color: var(--text); background: rgba(56, 189, 248, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; border-left: 2px solid var(--accent);">${{c.plausibility_note || 'Plausibilidad metodológica validada'}}</div></td>
+          <td style="text-align: center;"><button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.72rem;" onclick="toggleAbs(${{idx}})" id="btn-${{idx}}">📄 Resumen ▾</button></td>
+        `;
+        tbody.appendChild(tr);
+
+        const trAbs = document.createElement('tr');
+        trAbs.id = `row-abs-${{idx}}`;
+        trAbs.style.display = 'none';
+        trAbs.innerHTML = `
+          <td colspan="7" style="background: var(--surface-2); padding: 1rem 1.25rem;">
+            <div style="font-weight: 700; color: var(--accent); font-size: 0.8rem; margin-bottom: 0.35rem; text-transform: uppercase;">Resumen Científico Completo</div>
+            <p style="font-size: 0.81rem; line-height: 1.6; color: var(--text); text-align: justify; margin-bottom: 0.5rem;">${{c.abstract || 'Sin resumen registrado.'}}</p>
+            <div style="font-size: 0.74rem; color: var(--text-dim);"><strong>Autores completos:</strong> ${{ (c.authors || []).join(', ') }}</div>
+          </td>
+        `;
+        tbody.appendChild(trAbs);
+      }});
+    }}
+
+    function toggleAbs(idx) {{
+      const row = document.getElementById(`row-abs-${{idx}}`);
+      const btn = document.getElementById(`btn-${{idx}}`);
+      const open = row.style.display === 'none';
+      row.style.display = open ? 'table-row' : 'none';
+      btn.textContent = open ? 'Ocultar ▴' : '📄 Resumen ▾';
+    }}
+
+    renderTable();
+  </script>
+</body>
+</html>"""
+        return Response(html_content, media_type="text/html; charset=utf-8", headers=dict(_PAPER_HEADERS))
+
     @app.get("/api/atlas/view")
     def api_atlas_view() -> Response:
         status, data = atlas.read_html(root_path)

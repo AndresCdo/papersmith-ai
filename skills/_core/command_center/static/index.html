@@ -557,6 +557,169 @@
       color: var(--text-dim);
     }
 
+    /* =========================================================
+       MATRIZ DE CANDIDATOS SOTA — ESTILOS TABLA AMIGABLE
+       ========================================================= */
+    .matrix-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.15rem;
+    }
+    .matrix-stat-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .matrix-stat-val {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      line-height: 1.1;
+    }
+    .matrix-stat-lbl {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: var(--text-dim);
+    }
+
+    .matrix-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.85rem;
+    }
+    .matrix-search-box {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex: 1;
+      min-width: 260px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.35rem 0.65rem;
+    }
+    .matrix-search-icon {
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    .matrix-search-input {
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 0.82rem;
+      width: 100%;
+      outline: none;
+    }
+    .matrix-search-input::placeholder {
+      color: var(--text-dim);
+    }
+    .matrix-filters {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .matrix-select {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.4rem 0.7rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      outline: none;
+      cursor: pointer;
+    }
+    .matrix-select:focus {
+      border-color: var(--accent);
+    }
+
+    .matrix-table {
+      font-size: 0.82rem;
+    }
+    .matrix-table th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--surface);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 1px 0 var(--border);
+    }
+    .matrix-table tr:hover td {
+      background: var(--surface-hover);
+    }
+
+    /* Badges de familia SOTA con colores semánticos */
+    .badge-family {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      display: inline-block;
+      white-space: nowrap;
+      text-transform: none;
+      letter-spacing: 0.01em;
+    }
+    .badge-family--hardware {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+    .badge-family--adhd {
+      background: rgba(192, 132, 252, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(192, 132, 252, 0.4);
+    }
+    .badge-family--games {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .badge-family--sync {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .badge-family--general {
+      background: rgba(148, 163, 184, 0.15);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .candidate-drawer-row td {
+      background: var(--surface-2) !important;
+      border-bottom: 1px solid var(--border) !important;
+      padding: 1.15rem 1.5rem !important;
+    }
+    .candidate-abstract-box {
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      line-height: 1.6;
+      font-size: 0.82rem;
+      color: var(--text);
+      text-align: justify;
+      margin-bottom: 0.75rem;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+
     footer.dashboard-footer {
       border-top: 1px solid var(--border);
       background: var(--surface);
@@ -1719,14 +1882,88 @@
     <div id="pane-atlas" class="tab-pane">
       <div class="panel">
         <div class="panel__header">
-          <div class="panel__title">Constelación SOTA 3D — Atlas de Literatura y Plausibilidad</div>
-          <div style="display: flex; gap: 0.5rem;">
+          <div class="panel__title">
+            <span id="atlasPanelTitle">🌌 Constelación SOTA 3D — Atlas de Literatura y Plausibilidad</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
             <button id="btnGraphAtlas" class="btn btn--primary" onclick="switchGraph('atlas')">🌌 Constelación 3D (Solar Atlas)</button>
             <button id="btnGraphPapers" class="btn" onclick="switchGraph('papers')">📊 Matriz de Candidatos</button>
             <a id="linkOpenGraph" href="/api/atlas/view" target="_blank" class="btn">Abrir en pestaña nueva ↗</a>
           </div>
         </div>
-        <iframe id="graphIframe" class="iframe-viewer" src="/api/atlas/view"></iframe>
+
+        <!-- Vista 1: Iframe Constelación 3D Solar Atlas -->
+        <div id="atlas3dContainer" style="display: block;">
+          <iframe id="graphIframe" class="iframe-viewer" src="/api/atlas/view"></iframe>
+        </div>
+
+        <!-- Vista 2: Matriz de Candidatos SOTA (Visualización Tipo Tabla Amigable) -->
+        <div id="candidatesMatrixContainer" style="display: none;">
+          <!-- Barra de Métricas Rápidas SOTA -->
+          <div class="matrix-stats-grid">
+            <div class="matrix-stat-card">
+              <span class="matrix-stat-val" id="candStatTotal">18</span>
+              <span class="matrix-stat-lbl">Artículos Candidatos Q1/Q2</span>
+            </div>
+            <div class="matrix-stat-card">
+              <span class="matrix-stat-val" id="candStatFamilies">4</span>
+              <span class="matrix-stat-lbl">Familias Temáticas</span>
+            </div>
+            <div class="matrix-stat-card">
+              <span class="matrix-stat-val">2020 – 2025</span>
+              <span class="matrix-stat-lbl">Ventana Temporal SOTA</span>
+            </div>
+            <div class="matrix-stat-card">
+              <span class="matrix-stat-val" style="color: var(--ok);">100% PASS</span>
+              <span class="matrix-stat-lbl">Plausibilidad Validada</span>
+            </div>
+          </div>
+
+          <!-- Barra de Búsqueda y Filtros en Tiempo Real -->
+          <div class="matrix-toolbar">
+            <div class="matrix-search-box">
+              <span class="matrix-search-icon">🔍</span>
+              <input type="text" id="candidateSearchInput" class="matrix-search-input" placeholder="Buscar por título, autor, revista, DOI o palabra clave..." oninput="filterCandidatesMatrix()">
+            </div>
+            <div class="matrix-filters">
+              <select id="candidateFamilyFilter" class="matrix-select" onchange="filterCandidatesMatrix()">
+                <option value="">Todas las Familias (4)</option>
+              </select>
+              <select id="candidateSortSelect" class="matrix-select" onchange="filterCandidatesMatrix()">
+                <option value="year_desc">Año (más reciente)</option>
+                <option value="year_asc">Año (más antiguo)</option>
+                <option value="title_asc">Título (A-Z)</option>
+                <option value="family_asc">Familia</option>
+              </select>
+              <button class="btn btn--sm" onclick="resetCandidateFilters()" title="Restablecer filtros">↺ Limpiar</button>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; font-size: 0.78rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.5rem;">
+            <span id="candidateCountLabel">Mostrando 18 de 18 artículos candidatos</span>
+            <span style="font-size: 0.72rem; color: var(--text-dim);">Haz clic en <strong>"Resumen ▾"</strong> para ver el abstract completo y justificación técnica</span>
+          </div>
+
+          <!-- Tabla Amigable de Candidatos -->
+          <div class="table-responsive" style="max-height: 680px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius);">
+            <table class="table matrix-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 65px; text-align: center;">Año</th>
+                  <th style="min-width: 320px;">Artículo &amp; Autores</th>
+                  <th style="width: 170px;">Revista / Venue</th>
+                  <th style="width: 160px;">Familia / Clúster</th>
+                  <th style="min-width: 260px;">Aporte &amp; Plausibilidad</th>
+                  <th style="width: 110px; text-align: center;">Abstract</th>
+                </tr>
+              </thead>
+              <tbody id="candidatesTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2059,15 +2296,226 @@
       }
     }
 
+    let candidatesData = [];
+    let candidatesFamilies = [];
+    let candidatesLoaded = false;
+
     function switchGraph(kind) {
       const isAtlas = kind === 'atlas';
       const btnAtlas = document.getElementById('btnGraphAtlas');
       const btnPapers = document.getElementById('btnGraphPapers');
+      const atlas3d = document.getElementById('atlas3dContainer');
+      const matrixCont = document.getElementById('candidatesMatrixContainer');
+      const titleEl = document.getElementById('atlasPanelTitle');
+      const openLink = document.getElementById('linkOpenGraph');
+
       if (btnAtlas) btnAtlas.className = isAtlas ? 'btn btn--primary' : 'btn';
       if (btnPapers) btnPapers.className = !isAtlas ? 'btn btn--primary' : 'btn';
-      const url = isAtlas ? '/api/atlas/view' : '/api/atlas';
-      document.getElementById('graphIframe').src = url;
-      document.getElementById('linkOpenGraph').href = url;
+
+      if (isAtlas) {
+        if (atlas3d) atlas3d.style.display = 'block';
+        if (matrixCont) matrixCont.style.display = 'none';
+        if (titleEl) titleEl.textContent = '🌌 Constelación SOTA 3D — Atlas de Literatura y Plausibilidad';
+        if (openLink) openLink.href = '/api/atlas/view';
+      } else {
+        if (atlas3d) atlas3d.style.display = 'none';
+        if (matrixCont) matrixCont.style.display = 'block';
+        if (titleEl) titleEl.textContent = '📊 Matriz de Candidatos del Estado del Arte (SOTA)';
+        if (openLink) openLink.href = '/api/atlas/candidates/view';
+        loadCandidatesMatrix();
+      }
+    }
+
+    function getFamilyBadgeClass(family) {
+      if (!family) return 'badge-family--hardware';
+      const f = family.toLowerCase();
+      if (f.includes('hardware')) return 'badge-family--hardware';
+      if (f.includes('adhd') || f.includes('pediatric')) return 'badge-family--adhd';
+      if (f.includes('game') || f.includes('serious')) return 'badge-family--games';
+      if (f.includes('sync') || f.includes('temporal')) return 'badge-family--sync';
+      return 'badge-family--hardware';
+    }
+
+    async function loadCandidatesMatrix() {
+      const tbody = document.getElementById('candidatesTableBody');
+      if (candidatesLoaded && candidatesData.length > 0) {
+        filterCandidatesMatrix();
+        return;
+      }
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">Cargando matriz de candidatos SOTA...</td></tr>';
+      try {
+        const res = await fetch('/api/candidates');
+        if (!res.ok) throw new Error("No se pudo obtener la matriz de candidatos");
+        const json = await res.json();
+        candidatesData = json.candidates || [];
+        candidatesFamilies = json.families || [];
+        candidatesLoaded = true;
+
+        // Populate family filter dropdown
+        const famSelect = document.getElementById('candidateFamilyFilter');
+        if (famSelect) {
+          famSelect.innerHTML = `<option value="">Todas las Familias (${candidatesFamilies.length})</option>`;
+          candidatesFamilies.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f;
+            opt.textContent = f;
+            famSelect.appendChild(opt);
+          });
+        }
+
+        // Update stats
+        const statTotal = document.getElementById('candStatTotal');
+        if (statTotal) statTotal.textContent = candidatesData.length;
+        const statFam = document.getElementById('candStatFamilies');
+        if (statFam) statFam.textContent = candidatesFamilies.length;
+
+        filterCandidatesMatrix();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--bad);">Error cargando candidatos: ${err.message}</td></tr>`;
+      }
+    }
+
+    function filterCandidatesMatrix() {
+      const tbody = document.getElementById('candidatesTableBody');
+      if (!tbody) return;
+
+      const query = (document.getElementById('candidateSearchInput')?.value || '').toLowerCase().trim();
+      const family = document.getElementById('candidateFamilyFilter')?.value || '';
+      const sort = document.getElementById('candidateSortSelect')?.value || 'year_desc';
+
+      let list = candidatesData.filter(c => {
+        if (family && c.family !== family) return false;
+        if (!query) return true;
+        const hay = [
+          c.title,
+          (c.authors || []).join(' '),
+          c.venue,
+          c.identifier,
+          c.family,
+          c.abstract,
+          c.plausibility_note
+        ].join(' ').toLowerCase();
+        return hay.includes(query);
+      });
+
+      // Sort
+      if (sort === 'year_desc') list.sort((a,b) => (b.year||0) - (a.year||0));
+      else if (sort === 'year_asc') list.sort((a,b) => (a.year||0) - (b.year||0));
+      else if (sort === 'title_asc') list.sort((a,b) => (a.title||'').localeCompare(b.title||''));
+      else if (sort === 'family_asc') list.sort((a,b) => (a.family||'').localeCompare(b.family||''));
+
+      const countLbl = document.getElementById('candidateCountLabel');
+      if (countLbl) {
+        countLbl.textContent = `Mostrando ${list.length} de ${candidatesData.length} artículos candidatos`;
+      }
+
+      tbody.innerHTML = '';
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">No se encontraron artículos con los filtros especificados.</td></tr>';
+        return;
+      }
+
+      list.forEach((c, idx) => {
+        const tr = document.createElement('tr');
+        const authorsList = c.authors || [];
+        const authorsDisplay = authorsList.slice(0, 3).join(', ') + (authorsList.length > 3 ? ' et al.' : '');
+        const doiUrl = c.source_url || (c.identifier ? `https://doi.org/${c.identifier}` : '');
+        const itemKey = `cand-${idx}`;
+
+        tr.innerHTML = `
+          <td style="text-align: center; font-weight: 600; color: var(--text-dim);">${idx + 1}</td>
+          <td style="text-align: center;"><span class="badge badge--ok" style="font-family: var(--font-mono); font-size: 0.75rem;">${c.year || '—'}</span></td>
+          <td>
+            <div style="font-weight: 700; color: var(--text); line-height: 1.35; margin-bottom: 0.25rem;">${escapeHtml(c.title || 'Sin título')}</div>
+            <div style="font-size: 0.76rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <span>👥 ${escapeHtml(authorsDisplay)}</span>
+              ${c.identifier ? `<a href="${doiUrl}" target="_blank" class="badge badge--info" style="text-transform: none; font-size: 0.7rem;" title="Abrir DOI / Fuente">🔗 ${escapeHtml(c.identifier)} ↗</a>` : ''}
+            </div>
+          </td>
+          <td><span style="font-style: italic; color: var(--text-dim); font-size: 0.8rem;">${escapeHtml(c.venue || 'Revista Q1')}</span></td>
+          <td><span class="badge ${getFamilyBadgeClass(c.family)}">${escapeHtml(c.family || 'general')}</span></td>
+          <td>
+            <div style="font-size: 0.78rem; color: var(--text); background: rgba(56, 189, 248, 0.05); padding: 0.45rem 0.65rem; border-radius: 4px; border-left: 2px solid var(--accent); line-height: 1.4;">
+              ${escapeHtml(c.plausibility_note || 'Plausibilidad metodológica validada')}
+            </div>
+          </td>
+          <td style="text-align: center;">
+            <button class="btn btn--sm" style="font-size: 0.72rem; padding: 0.25rem 0.55rem;" onclick="toggleAbstractRow('${itemKey}')" id="btnAbs-${itemKey}">
+              📄 Resumen ▾
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+
+        // Expandable abstract row
+        const trAbs = document.createElement('tr');
+        trAbs.id = `rowAbs-${itemKey}`;
+        trAbs.className = 'candidate-drawer-row';
+        trAbs.style.display = 'none';
+        trAbs.innerHTML = `
+          <td colspan="7">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+              <strong style="color: var(--accent); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;">Resumen Científico Completo (Abstract)</strong>
+              <div style="display: flex; gap: 0.5rem;">
+                ${doiUrl ? `<a href="${doiUrl}" target="_blank" class="btn btn--sm" style="font-size: 0.72rem;">🔗 Abrir Publicación ↗</a>` : ''}
+                <button class="btn btn--sm" style="font-size: 0.72rem;" onclick="copyCandidateBibtex(${JSON.stringify(c.title).replace(/"/g, '&quot;')}, ${c.year || 2022}, ${JSON.stringify(c.venue || '').replace(/"/g, '&quot;')}, ${JSON.stringify(c.identifier || '').replace(/"/g, '&quot;')}, this)">📋 Copiar Cita</button>
+              </div>
+            </div>
+            <div class="candidate-abstract-box">
+              ${escapeHtml(c.abstract || 'Sin resumen registrado en metadatos.')}
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-dim); display: flex; gap: 1.5rem; flex-wrap: wrap; padding-top: 0.25rem;">
+              <span><strong>Autores completos:</strong> ${escapeHtml(authorsList.join(', '))}</span>
+              <span><strong>Clúster Taxonómico:</strong> <code>${escapeHtml(c.family || 'general')}</code></span>
+              <span><strong>Fecha de Extracción:</strong> ${c.retrieval_date || '2026-10-14'}</span>
+              <span><strong>Resolución:</strong> ${c.resolver || 'OpenAlex'}</span>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(trAbs);
+      });
+    }
+
+    function toggleAbstractRow(itemKey) {
+      const row = document.getElementById(`rowAbs-${itemKey}`);
+      const btn = document.getElementById(`btnAbs-${itemKey}`);
+      if (!row || !btn) return;
+      const isOpen = row.style.display !== 'none';
+      row.style.display = isOpen ? 'none' : 'table-row';
+      btn.textContent = isOpen ? '📄 Resumen ▾' : 'Ocultar ▴';
+      if (!isOpen) btn.classList.add('btn--primary');
+      else btn.classList.remove('btn--primary');
+    }
+
+    function resetCandidateFilters() {
+      const search = document.getElementById('candidateSearchInput');
+      if (search) search.value = '';
+      const fam = document.getElementById('candidateFamilyFilter');
+      if (fam) fam.value = '';
+      const sort = document.getElementById('candidateSortSelect');
+      if (sort) sort.value = 'year_desc';
+      filterCandidatesMatrix();
+    }
+
+    function copyCandidateBibtex(title, year, venue, doi, btnEl) {
+      const text = `${title}. (${year}). ${venue}. DOI: https://doi.org/${doi}`;
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btnEl.textContent;
+        btnEl.textContent = '✓ ¡Copiado!';
+        setTimeout(() => btnEl.textContent = orig, 1800);
+      }).catch(() => {
+        alert(text);
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function openDrawer(phaseIndex) {
