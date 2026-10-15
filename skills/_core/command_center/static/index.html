@@ -417,9 +417,9 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      max-width: 640px;
+      max-width: 740px;
       width: 100%;
-      max-height: 85vh;
+      max-height: 88vh;
       overflow-y: auto;
       padding: 1.5rem;
       box-shadow: 0 20px 40px rgba(0,0,0,0.4);
@@ -1809,6 +1809,7 @@
                 <th>Citas APA</th>
                 <th>Figuras</th>
                 <th>Estado</th>
+                <th>Estructura & Reglas</th>
               </tr>
             </thead>
             <tbody id="sectionsTableBody">
@@ -1887,6 +1888,7 @@
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
             <button id="btnGraphAtlas" class="btn btn--primary" onclick="switchGraph('atlas')">🌌 Constelación 3D (Solar Atlas)</button>
+            <button id="btnGraphNovelty" class="btn" onclick="switchGraph('novelty')">🕸️ Grafo 3D de Novedad del Manuscrito</button>
             <button id="btnGraphPapers" class="btn" onclick="switchGraph('papers')">📊 Matriz de Candidatos</button>
             <a id="linkOpenGraph" href="/api/atlas/view" target="_blank" class="btn">Abrir en pestaña nueva ↗</a>
           </div>
@@ -2310,22 +2312,35 @@
     let candidatesLoaded = false;
 
     function switchGraph(kind) {
-      const isAtlas = kind === 'atlas';
       const btnAtlas = document.getElementById('btnGraphAtlas');
+      const btnNovelty = document.getElementById('btnGraphNovelty');
       const btnPapers = document.getElementById('btnGraphPapers');
       const atlas3d = document.getElementById('atlas3dContainer');
       const matrixCont = document.getElementById('candidatesMatrixContainer');
       const titleEl = document.getElementById('atlasPanelTitle');
       const openLink = document.getElementById('linkOpenGraph');
+      const iframe = document.getElementById('graphIframe');
 
-      if (btnAtlas) btnAtlas.className = isAtlas ? 'btn btn--primary' : 'btn';
-      if (btnPapers) btnPapers.className = !isAtlas ? 'btn btn--primary' : 'btn';
+      if (btnAtlas) btnAtlas.className = kind === 'atlas' ? 'btn btn--primary' : 'btn';
+      if (btnNovelty) btnNovelty.className = kind === 'novelty' ? 'btn btn--primary' : 'btn';
+      if (btnPapers) btnPapers.className = kind === 'papers' ? 'btn btn--primary' : 'btn';
 
-      if (isAtlas) {
+      if (kind === 'atlas') {
         if (atlas3d) atlas3d.style.display = 'block';
         if (matrixCont) matrixCont.style.display = 'none';
+        if (iframe && !iframe.src.endsWith('/api/atlas/view')) {
+          iframe.src = '/api/atlas/view';
+        }
         if (titleEl) titleEl.textContent = '🌌 Constelación SOTA 3D — Atlas de Literatura y Plausibilidad';
         if (openLink) openLink.href = '/api/atlas/view';
+      } else if (kind === 'novelty') {
+        if (atlas3d) atlas3d.style.display = 'block';
+        if (matrixCont) matrixCont.style.display = 'none';
+        if (iframe && !iframe.src.endsWith('/api/atlas/novelty/view')) {
+          iframe.src = '/api/atlas/novelty/view';
+        }
+        if (titleEl) titleEl.textContent = '🕸️ Grafo 3D de Novedad e Ideas del Manuscrito (MONEEG vs. SOTA)';
+        if (openLink) openLink.href = '/api/atlas/novelty/view';
       } else {
         if (atlas3d) atlas3d.style.display = 'none';
         if (matrixCont) matrixCont.style.display = 'block';
@@ -2527,45 +2542,325 @@
         .replace(/'/g, '&#39;');
     }
 
+    function copyCliCommand(cmd, btnEl) {
+      navigator.clipboard.writeText(cmd).then(() => {
+        const orig = btnEl.innerHTML;
+        btnEl.innerHTML = '✓ ¡Copiado!';
+        setTimeout(() => btnEl.innerHTML = orig, 1800);
+      }).catch(() => {
+        alert(cmd);
+      });
+    }
+
+    async function triggerRunPhase(phaseId, btnEl) {
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.innerHTML = '⏳ Ejecutando en pipeline...';
+      }
+      const feedbackEl = document.getElementById('drawerPhaseActionFeedback');
+      if (feedbackEl) {
+        feedbackEl.style.display = 'block';
+        feedbackEl.innerHTML = `<span style="color: var(--accent);">⚙️ Lanzando ejecución y auditoría de <strong>${escapeHtml(phaseId)}</strong>...</span>`;
+      }
+      try {
+        const res = await fetch('/api/phase/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phase_id: phaseId })
+        });
+        const result = await res.json();
+        if (feedbackEl) {
+          if (result.ok) {
+            feedbackEl.innerHTML = `<div style="color: var(--ok); font-weight: 600; margin-bottom: 0.25rem;">✅ ${escapeHtml(result.message)}</div><div style="color: var(--text-dim); font-size: 0.75rem; font-family: var(--font-mono);">${escapeHtml(result.log || '')}</div>`;
+          } else {
+            feedbackEl.innerHTML = `<div style="color: var(--bad); font-weight: 600;">❌ Error: ${escapeHtml(result.error || result.message)}</div>`;
+          }
+        }
+        await loadStatus();
+      } catch (err) {
+        if (feedbackEl) {
+          feedbackEl.innerHTML = `<div style="color: var(--bad);">❌ Fallo de red: ${escapeHtml(err.message)}</div>`;
+        }
+      } finally {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.innerHTML = '▶ Re-ejecutar Fase';
+        }
+      }
+    }
+
+    function jumpToPdfPage(pageNum) {
+      closeDrawer();
+      navigateTab('preview');
+      setTimeout(() => {
+        queueRenderPage(pageNum || 1);
+      }, 120);
+    }
+
+    function jumpToArtifact(relPath) {
+      closeDrawer();
+      navigateTab('artifacts');
+      setTimeout(() => {
+        loadArtifact(relPath);
+      }, 120);
+    }
+
     function openDrawer(phaseIndex) {
       const phases = (currentStatus && currentStatus.fases && currentStatus.fases.length > 0) ? currentStatus.fases : PHASES_INFO;
       const p = phases[phaseIndex];
       if (!p) return;
-      document.getElementById('drawerTitle').textContent = p.name;
-      
+
       const gateMatch = (currentStatus?.gates || []).find(g => g.id === p.gate || g.phase === p.id);
       const gateStatus = p.status || (gateMatch ? gateMatch.status : 'PENDING');
       const isLit = (gateStatus === 'PASS');
       const isActive = (gateStatus === 'ACTIVE' || gateStatus === 'IN_PROGRESS');
       const badgeTone = isLit ? 'ok' : (isActive ? 'info' : (gateStatus === 'BLOCKED' ? 'bad' : 'warn'));
       const statusIcon = isLit ? '💡 ' : (isActive ? '⚡ ' : '⚫ ');
+      const statusLabel = isLit ? 'SUPERADA (ILUMINADA)' : (isActive ? 'EN CURSO (ACTIVA)' : 'PENDIENTE (SIN LUZ)');
+
+      document.getElementById('drawerTitle').innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span style="font-size: 1.3rem;">${isLit ? '💡' : (isActive ? '⚡' : '📋')}</span>
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: var(--text);">${escapeHtml(p.name)}</div>
+            <div style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">ID: <code>${escapeHtml(p.id)}</code> · Gate: <code>${escapeHtml(p.gate || p.id)}</code></div>
+          </div>
+        </div>
+      `;
+
+      const cliCmd = p.cli_command || `papersmith run --stage ${p.id.toLowerCase()}`;
+      const subfases = p.subfases || [
+        { id: `${p.id}.1`, name: 'Verificación de entradas e insumos', desc: 'Validación de requisitos previos y fuentes base', status: isLit ? 'PASS' : 'PENDING' },
+        { id: `${p.id}.2`, name: 'Ejecución del agente especializado', desc: 'Transformación y síntesis de evidencia científica', status: isLit ? 'PASS' : (isActive ? 'IN_PROGRESS' : 'PENDING') },
+        { id: `${p.id}.3`, name: 'Generación de artefactos formales', desc: 'Escritura y sellado de entregables en disco', status: isLit ? 'PASS' : 'PENDING' },
+        { id: `${p.id}.4`, name: 'Auditoría y control de compuerta', desc: 'Evaluación de criterios y verificación del Gate', status: isLit ? 'PASS' : 'PENDING' }
+      ];
+
+      const skillsList = (p.skills && p.skills.length > 0) ? p.skills : [p.agent || 'papersmith-worker'];
+      const outputs = p.outputs || [];
+      const manuscriptRef = p.manuscript_ref;
 
       document.getElementById('drawerBody').innerHTML = `
-        <div style="margin-bottom: 1rem;">
-          <span class="badge badge--${badgeTone}">${statusIcon}Gate ${p.gate || p.id}: ${gateStatus}</span>
-          <span class="badge badge--info" style="margin-left: 0.5rem;">Agente: ${p.agent || 'papersmith-worker'}</span>
-        </div>
-        <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1.25rem;">${p.desc}</p>
-        
-        <div style="margin-bottom: 1rem;">
-          <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem;">Criterio Evaluado</h4>
-          <p style="font-size: 0.85rem; background: var(--surface-2); padding: 0.75rem; border-radius: var(--radius); border: 1px solid var(--border);">${gateMatch ? gateMatch.criteria : 'Evaluación de consistencia metodológica y científica según guía.'}</p>
+        <!-- 1. Estado y Control de Ejecución (CLI & UI) -->
+        <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span class="badge badge--${badgeTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${statusIcon}${statusLabel}</span>
+            <span class="badge badge--info" style="font-size: 0.72rem;">🤖 Agente: ${escapeHtml(p.agent || 'papersmith-worker')}</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.03em;">Comando CLI Terminal:</span>
+              <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="copyCliCommand('${escapeHtml(cliCmd)}', this)">📋 Copiar Comando</button>
+            </div>
+            <div style="background: rgba(0,0,0,0.45); border: 1px solid var(--border); border-radius: 4px; padding: 0.55rem 0.75rem; font-family: var(--font-mono); font-size: 0.82rem; color: #38bdf8; overflow-x: auto;">
+              <code>$ ${escapeHtml(cliCmd)}</code>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 0.6rem; align-items: center;">
+            <button class="btn btn--primary" style="flex: 1; justify-content: center; font-size: 0.82rem; padding: 0.5rem 0.75rem;" onclick="triggerRunPhase('${escapeHtml(p.id)}', this)">
+              ▶ Ejecutar / Re-verificar desde Tablero
+            </button>
+          </div>
+          <div id="drawerPhaseActionFeedback" style="display: none; margin-top: 0.6rem; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 0.5rem 0.75rem; border-radius: 4px;"></div>
         </div>
 
-        <div style="margin-bottom: 1rem;">
-          <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem;">Herramientas Declaradas</h4>
-          <div style="display: flex; gap: 0.5rem;">
-            ${(p.tools || ['read', 'write']).map(t => `<span class="badge badge--info">${t}</span>`).join('')}
+        <!-- 2. Objetivo y Misión -->
+        <div style="margin-bottom: 1.25rem;">
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.4rem;">🎯 Misión y Alcance de la Fase</h4>
+          <p style="font-size: 0.86rem; color: var(--text); line-height: 1.5; background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: var(--radius); border-left: 3px solid var(--accent); margin: 0;">
+            ${escapeHtml(p.desc)}
+          </p>
+        </div>
+
+        <!-- 3. Subfases Detalladas -->
+        <div style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin: 0;">📑 Subfases de Ejecución (${subfases.length})</h4>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Seguimiento paso a paso</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.45rem;">
+            ${subfases.map(sf => {
+              const sfIsLit = (sf.status === 'PASS');
+              const sfIsAct = (sf.status === 'IN_PROGRESS');
+              const sfTone = sfIsLit ? 'ok' : (sfIsAct ? 'info' : 'warn');
+              const sfIcon = sfIsLit ? '✓' : (sfIsAct ? '⚡' : '○');
+              return `
+                <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem;">
+                  <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
+                      <strong style="font-size: 0.82rem; color: var(--text);">${escapeHtml(sf.name)}</strong>
+                      <code style="font-size: 0.68rem; color: var(--text-dim);">${escapeHtml(sf.id)}</code>
+                    </div>
+                    <div style="font-size: 0.76rem; color: var(--text-muted); line-height: 1.35;">${escapeHtml(sf.desc)}</div>
+                  </div>
+                  <span class="badge badge--${sfTone}" style="font-size: 0.68rem; font-family: var(--font-mono);">${sfIcon} ${sf.status}</span>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
 
-        <div>
-          <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem;">Entregables Clave</h4>
-          <ul style="font-size: 0.82rem; color: var(--text-muted); padding-left: 1.25rem;">
-            ${(p.outputs || []).map(o => `<li><code>${o}</code></li>`).join('')}
-          </ul>
+        <!-- 4. Agentes y Skills -->
+        <div style="margin-bottom: 1.25rem;">
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.4rem;">🧠 Agentes y Skills Invocados</h4>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.45rem;">
+            ${skillsList.map(s => `<span class="badge badge--info" style="font-size: 0.74rem;">⚡ skill: ${escapeHtml(s)}</span>`).join('')}
+            ${(p.tools || []).map(t => `<span class="badge" style="background: rgba(255,255,255,0.06); font-size: 0.72rem;">🔧 tool: ${escapeHtml(t)}</span>`).join('')}
+          </div>
+        </div>
+
+        <!-- 5. Artefactos Generados -->
+        <div style="margin-bottom: 1.25rem;">
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.4rem;">📁 Artefactos Producidos (${outputs.length})</h4>
+          ${outputs.length === 0 ? '<p style="font-size: 0.8rem; color: var(--text-dim);">No hay artefactos directos declarados.</p>' : `
+            <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+              ${outputs.map(o => `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 4px; padding: 0.45rem 0.75rem;">
+                  <code style="font-size: 0.78rem; color: #38bdf8;">📄 ${escapeHtml(o)}</code>
+                  <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.15rem 0.5rem;" onclick="jumpToArtifact('${escapeHtml(o)}')">Explorar ↗</button>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- 6. Aporte a la Versión Parcial del Manuscrito -->
+        <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius); padding: 0.85rem;">
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--accent); letter-spacing: 0.04em; margin-bottom: 0.35rem;">📖 Aporte a la Versión Parcial del Manuscrito</h4>
+          <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 0.65rem;">
+            ${escapeHtml(manuscriptRef?.summary || 'Esta etapa contribuye a la fundamentación y datos de soporte del documento.')}
+          </p>
+          ${manuscriptRef?.page ? `
+            <button class="btn btn--sm btn--primary" style="font-size: 0.75rem;" onclick="jumpToPdfPage(${manuscriptRef.page})">
+              📄 Ver Sección en el PDF (Página ${manuscriptRef.page}) ↗
+            </button>
+          ` : `
+            <button class="btn btn--sm btn--primary" style="font-size: 0.75rem;" onclick="jumpToPdfPage(1)">
+              📄 Abrir Previsualizador PDF ↗
+            </button>
+          `}
         </div>
       `;
+      document.getElementById('drawerOverlay').classList.add('active');
+    }
+
+    function openSectionDrawer(secId) {
+      const sections = currentStatus?.sections || [];
+      const s = sections.find(item => item.id === secId || item.id.startsWith(secId));
+      if (!s) return;
+
+      const statusTone = s.status === 'SEALED' ? 'ok' : (s.status === 'AUDITED' ? 'info' : 'warn');
+
+      document.getElementById('drawerTitle').innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span style="font-size: 1.3rem;">📝</span>
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: var(--text);">${escapeHtml(s.title)}</div>
+            <div style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">Archivo: <code>sections/${escapeHtml(s.filename)}</code> · Pág. PDF: <strong>${s.pdf_page || 1}</strong></div>
+          </div>
+        </div>
+      `;
+
+      let principles = s.principles || [
+        'Estilo natural académico en tercera persona sin rodeos pasivos.',
+        'Estructura de párrafos con oración tópica, evidencia experimental y transición lógica.',
+        'Precisión metrológica rigurosa según estándares Elsevier / Biomedical Signal Processing.'
+      ];
+      if (typeof principles === 'string') {
+        principles = [principles];
+      }
+
+      const blocks = (s.canonical_blocks && s.canonical_blocks.length > 0) ? s.canonical_blocks : [
+        { id: 'B1', role: 'Contexto e Introducción', question: '¿Cuál es el problema clínico y tecnológico?', status: 'SEALED' },
+        { id: 'B2', role: 'Evidencia Cuantitativa', question: '¿Cuáles son los resultados medidos?', status: 'SEALED' },
+        { id: 'B3', role: 'Implicación y Cierre', question: '¿Cómo avanza este hallazgo el estado del arte?', status: 'SEALED' }
+      ];
+
+      let relations = s.cross_relations || [
+        { target_section: '01_introduction', relation_type: 'Justifica', purpose: 'Alinea los resultados con la brecha identificada' },
+        { target_section: '03_hardware_architecture', relation_type: 'Soporta', purpose: 'Provee los datos experimentales del hardware' }
+      ];
+      if (typeof relations === 'string') {
+        relations = [{ target_section: 'Trazabilidad Cruzada', relation_type: 'Conecta', purpose: relations }];
+      }
+
+      document.getElementById('drawerBody').innerHTML = `
+        <!-- 1. Ficha Técnica y Acciones de la Sección -->
+        <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span class="badge badge--${statusTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">Estado: ${escapeHtml(s.status)}</span>
+            <div style="display: flex; gap: 0.5rem; font-size: 0.75rem; color: var(--text-dim);">
+              <span><strong>${s.words?.toLocaleString() || 0}</strong> palabras</span> · 
+              <span><strong>${s.citations || 0}</strong> citas BibTeX</span> · 
+              <span>${s.has_figures ? '📊 Con Figuras' : 'Sin Figuras'}</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button class="btn btn--primary" style="flex: 1; justify-content: center; font-size: 0.82rem;" onclick="jumpToPdfPage(${s.pdf_page || 1})">
+              📄 Ir a esta Sección en el PDF (Página ${s.pdf_page || 1}) ↗
+            </button>
+            <button class="btn" style="font-size: 0.82rem;" onclick="jumpToArtifact('paper/sections/${escapeHtml(s.filename)}')">
+              🔍 Ver Código LaTeX ↗
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Principios Retóricos y Reglas Editoriales -->
+        <div style="margin-bottom: 1.25rem;">
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.4rem;">📐 Principios y Reglas de Redacción (Elsevier)</h4>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem;">
+            <ul style="font-size: 0.82rem; color: var(--text); padding-left: 1.2rem; line-height: 1.5; margin: 0; display: flex; flex-direction: column; gap: 0.4rem;">
+              ${principles.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3. Estructura de Párrafos y Bloques Canónicos -->
+        <div style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin: 0;">🧱 Bloques Canónicos de la Sección (${blocks.length})</h4>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Estructura granular de párrafos</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            ${blocks.map(b => `
+              <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.7rem 0.85rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span class="badge badge--info" style="font-family: var(--font-mono); font-size: 0.7rem;">${escapeHtml(b.id)}</span>
+                    <strong style="font-size: 0.84rem; color: var(--text);">${escapeHtml(b.role)}</strong>
+                  </div>
+                  <span class="badge badge--ok" style="font-size: 0.68rem;">${escapeHtml(b.status || 'REDACTADO')}</span>
+                </div>
+                <div style="font-size: 0.78rem; color: var(--accent); line-height: 1.35; margin-top: 0.25rem;">
+                  <strong>Pregunta que responde:</strong> <em>"${escapeHtml(b.question)}"</em>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- 4. Relaciones Cruzadas con Otras Secciones -->
+        <div style="margin-bottom: 1rem;">
+          <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.4rem;">🔗 Relaciones y Trazabilidad con Otras Secciones</h4>
+          <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+            ${relations.map(r => `
+              <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.75rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;">
+                    <span class="badge badge--warn" style="font-size: 0.68rem;">${escapeHtml(r.relation_type)}</span>
+                    <strong style="color: var(--text);">${escapeHtml(r.target_section)}</strong>
+                  </div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(r.purpose)}</div>
+                </div>
+                <button class="btn btn--sm" style="font-size: 0.7rem;" onclick="openSectionDrawer('${escapeHtml(r.target_section)}')">Inspeccionar ↗</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
       document.getElementById('drawerOverlay').classList.add('active');
     }
 
@@ -2781,15 +3076,18 @@
         document.getElementById('sectionsMetaCount').textContent = `${(data.sections || []).length} secciones registradas · ${totals.total_words?.toLocaleString()} palabras totales`;
         (data.sections || []).forEach(s => {
           const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          tr.onclick = () => openSectionDrawer(s.id);
           const statusTone = s.status === 'SEALED' ? 'ok' : (s.status === 'AUDITED' ? 'info' : 'warn');
           tr.innerHTML = `
             <td><code>${s.id.split('_')[0]}</code></td>
-            <td><strong>${s.title}</strong></td>
-            <td><code>sections/${s.filename}</code></td>
-            <td>${s.words.toLocaleString()}</td>
-            <td>${s.citations}</td>
+            <td><strong>${escapeHtml(s.title)}</strong></td>
+            <td><code>sections/${escapeHtml(s.filename)}</code></td>
+            <td>${s.words ? s.words.toLocaleString() : 0}</td>
+            <td>${s.citations || 0}</td>
             <td>${s.has_figures ? '✓ Sí' : '—'}</td>
             <td><span class="badge badge--${statusTone}">${s.status}</span></td>
+            <td><button class="btn btn--sm btn--primary" style="font-size: 0.72rem; padding: 0.25rem 0.55rem;" onclick="event.stopPropagation(); openSectionDrawer('${escapeHtml(s.id)}')">📐 Reglas & Párrafos ▾</button></td>
           `;
           secTbody.appendChild(tr);
         });
