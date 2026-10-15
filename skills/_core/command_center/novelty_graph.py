@@ -2,7 +2,15 @@
 
 Visualizes the core novelty, state-of-the-art gaps, embedded hardware pillars,
 empirical thesis evidence, Elsevier manuscript sections, and crucially the
-MOST RELEVANT PARAGRAPHS of the paper that articulate its novelty and core findings.
+8 core narrative pillars of the paper:
+1. Aplicaciones de interés (TDAH, neurofeedback, serious games)
+2. Problema central del paper (Jitter temporal en SOs, piso de ruido >5 µVpp, ergonomía pediátrica)
+3. Las 5 ideas más cercanas del Estado del Arte (BEATS, LSL, OpenBCI Daisy, Cascos consumo, VR Oddball)
+4. La novedad que se vende con sus 2 a 3 ítems clave (Sincronía <5 µs, Front-End 32-Ch <1.1 µVpp, Inyección en cabecera)
+5. Los datasets probados (Banco de calibración 32-ch, Dataset P300 tesis Julián, Ensayo 400 min / 250 Hz)
+6. Las medidas de desempeño y métodos a comparar (Jitter µs vs ms, Piso de ruido µVpp, Pérdida de paquetes vs OpenBCI & Clínicos)
+7. Las 3 conclusiones más fuertes de los resultados (Preservación P300 >40%, Calidad clínica abierta, 0% pérdida en 400 min)
+8. Las 2 a 3 líneas de trabajo futuro más relevantes (Edge ICA/CSP, Ensayo multicéntrico TDAH, Wireless determinista)
 """
 
 from __future__ import annotations
@@ -15,18 +23,18 @@ NOVELTY_GRAPH_DATA: dict[str, Any] = {
     "target_journal": "Elsevier Biomedical Signal Processing and Control",
     "authors": "Julián David Parias Osorio & Andrés Álvarez",
     "project": "Minciencias-92056",
-    "summary": "Mapeo topológico de la novedad científica: cómo los párrafos clave de cada sección defienden la innovación de MONEEG, resuelven las brechas del SOTA y se sustentan en la evidencia experimental de la tesis.",
+    "summary": "Mapeo topológico de los 8 pilares narrativos del artículo MONEEG: aplicaciones, problemas, SOTA, novedades clave, datasets, métricas comparativas, conclusiones y trabajo futuro.",
     "nodes": [
         # =====================================================================
-        # 1. CORE NOVELTY NODE (CYAN)
+        # 0. NODO CENTRAL / SÍNTESIS GLOBAL (CYAN)
         # =====================================================================
         {
             "id": "core-moneeg",
             "label": "MONEEG: Open-Access 32-Ch BCI",
             "group": "core",
             "color": "#38bdf8",
-            "size": 15,
-            "category": "Novedad Central",
+            "size": 9.0,
+            "category": "Contribución Global",
             "badge": "ARQUITECTURA PRINCIPAL",
             "desc": "Framework embebido de adquisición de EEG de 32 canales con sincronización hardware determinista (<5 µs) y piso de ruido submicrovoltio (<1.1 µVpp) optimizado para monitoreo cognitivo pediátrico.",
             "rhetorical_question": "¿Cuál es la contribución técnica y traslacional definitiva que introduce el artículo frente a los sistemas BCI existentes?",
@@ -40,190 +48,472 @@ NOVELTY_GRAPH_DATA: dict[str, Any] = {
         },
 
         # =====================================================================
-        # 2. SOTA GAPS (CRIMSON)
+        # 1. APLICACIONES DE INTERÉS (SKY BLUE)
         # =====================================================================
         {
-            "id": "gap-jitter",
-            "label": "Brecha: Jitter Temporal (10–50 ms)",
-            "group": "gap",
-            "color": "#f43f5e",
-            "size": 15,
-            "category": "Brecha SOTA",
-            "badge": "LIMITACIÓN ACTUAL",
-            "desc": "En sistemas abiertos convencionales (LSL, UDP por sockets de SO), el búfer de red y la planificación de tareas introducen un jitter aleatorio de 10 a 50 ms que atenúa el P300 más de un 40%.",
-            "rhetorical_question": "¿Por qué el timestamping basado en software en sistemas operativos convencionales destruye la coherencia de potenciales evocados?",
-            "paragraph_text": "When stimulus delivery software and data acquisition software run on separate execution loops, network and OS buffering produce random temporal jitter exceeding 30 ms. In ERP averaging, a jitter of this magnitude completely blurs high-frequency components and attenuates the P300 amplitude by more than 40%.",
-            "metrics": "18.5 ± 6.2 ms de dispersión en streaming convencional.",
-            "novelty_claim": "Impide el promediado coherente de potenciales evocados en tareas de alta frecuencia.",
-            "thesis_ref": "Capítulo 2 (Marco Teórico y Estado del Arte), pág. 24",
-            "pdf_page": 3,
-            "section_ref": "Sección 2 (Related Work)",
-            "paper_blocks": ["abstract.slot-2", "introduction.block-2", "related-work.rw-problem-blocks"]
+            "id": "app-hub",
+            "label": "1. Aplicaciones de Interés Clínico",
+            "group": "app",
+            "color": "#0ea5e9",
+            "size": 7.0,
+            "category": "Aplicaciones de Interés",
+            "badge": "DIMENSIÓN 1 / TRASLACIÓN",
+            "desc": "Áreas clínicas y tecnológicas prioritarias donde MONEEG aporta valor diagnóstico, terapéutico y experimental.",
+            "rhetorical_question": "¿En qué contextos clínicos y de neurorrehabilitación se proyecta el despliegue del sistema?",
+            "paragraph_text": "Pediatric neurodevelopmental disorders, particularly Attention Deficit Hyperactivity Disorder (ADHD), place severe demands on clinical assessment and rehabilitation tools. Conventional systems fail to combine child-friendly ergonomics with high temporal precision.",
+            "metrics": "Población pediátrica 6–14 años, entornos escolares y clínicos.",
+            "novelty_claim": "Habilita la evaluación objetiva de biomarcadores en niños sin fatiga ni rechazo conductual.",
+            "thesis_ref": "Capítulo 1 (Justificación y Alcance)",
+            "pdf_page": 1,
+            "section_ref": "Sección 1 (Introducción)",
+            "paper_blocks": ["abstract.slot-1", "introduction.block-1"]
         },
         {
-            "id": "gap-noise",
-            "label": "Brecha: Piso de Ruido Elevado (>5 µVpp)",
-            "group": "gap",
+            "id": "app-adhd",
+            "label": "Monitoreo Cognitivo en TDAH",
+            "group": "app",
+            "color": "#0ea5e9",
+            "size": 5.0,
+            "category": "Aplicaciones de Interés",
+            "badge": "POBLACIÓN CLÍNICA",
+            "desc": "Diagnóstico objetivo y seguimiento neurofisiológico en infantes con déficit de atención e hiperactividad.",
+            "rhetorical_question": "¿Por qué el TDAH requiere una plataforma de registro con sincronización de estímulos a nivel de microsegundo?",
+            "paragraph_text": "Children with ADHD exhibit transient deficits in attentional orienting and inhibitory control, reflected in low-amplitude ERP markers (P300 and N200) that require precise single-trial phase alignment to prevent diagnostic misclassification.",
+            "metrics": "Prevalencia global del 5–7% en edad escolar; modulación de onda P300 atencional.",
+            "novelty_claim": "Proporciona fidelidad clínica en un formato ergonómico de rápida colocación.",
+            "thesis_ref": "Capítulo 1 (Sección 1.1: Problemática del TDAH en Colombia)",
+            "pdf_page": 1,
+            "section_ref": "Sección 1 (Introducción)",
+            "paper_blocks": ["introduction.block-1", "abstract.slot-1"]
+        },
+        {
+            "id": "app-neurofeedback",
+            "label": "Neurorrehabilitación por Neurofeedback",
+            "group": "app",
+            "color": "#0ea5e9",
+            "size": 4.8,
+            "category": "Aplicaciones de Interés",
+            "badge": "TERAPIA DIGITAL",
+            "desc": "Entrenamiento de autorregulación electrofisiológica mediante retroalimentación de ritmos corticales (SMR, Theta/Beta).",
+            "rhetorical_question": "¿Cómo apoya la plataforma las sesiones continuas de entrenamiento neurocognitivo?",
+            "paragraph_text": "Therapeutic neurofeedback protocols require sustained streaming stability and immediate feedback loops without signal latency or packet jitter that disrupt operant conditioning.",
+            "metrics": "Sesiones de 30–45 minutos, latencia de feedback de bucle cerrado < 100 ms.",
+            "novelty_claim": "Streaming continuo y robusto con cero pérdida de paquetes durante sesiones terapéuticas completas.",
+            "thesis_ref": "Capítulo 1 (Sección 1.2: Antecedentes de Neurofeedback)",
+            "pdf_page": 2,
+            "section_ref": "Sección 1 (Introducción)",
+            "paper_blocks": ["introduction.block-2", "conclusions.concl-block-4"]
+        },
+        {
+            "id": "app-serious-games",
+            "label": "Interacción con Videojuegos Serios ('Eagle Eye')",
+            "group": "app",
+            "color": "#0ea5e9",
+            "size": 5.0,
+            "category": "Aplicaciones de Interés",
+            "badge": "ENTORNO LÚDICO",
+            "desc": "Integración nativa con videojuegos serios en Unity para entrenar atención sostenida y control inhibitorio en infantes.",
+            "rhetorical_question": "¿Cómo se vincula la dinámica lúdica del videojuego con el hardware de digitalización cerebral?",
+            "paragraph_text": "Stimulus render events from the Unity serious game Eagle Eye trigger a physical interrupt that latches marker codes into the SPI frame header at the exact instant of ADC sampling, enabling seamless ERP paradigms in children.",
+            "metrics": "Disparos Go/No-Go sincronizados a nivel de microsegundo con la GPU/pantalla.",
+            "novelty_claim": "Erradica la desconexión temporal entre el motor del juego y el flujo de telemetría biopotencial.",
+            "thesis_ref": "Capítulo 3 (Sección 3.6: Integración con Videojuego Serio), pág. 60",
+            "pdf_page": 5,
+            "section_ref": "Sección 3 (Materiales y Métodos)",
+            "paper_blocks": ["introduction.block-3", "materials-and-methods.mm-proposal"]
+        },
+
+        # =====================================================================
+        # 2. PROBLEMA CENTRAL DEL PAPER (ROSE / CRIMSON)
+        # =====================================================================
+        {
+            "id": "problem-hub",
+            "label": "2. Problema Central del Paper",
+            "group": "problem",
             "color": "#f43f5e",
-            "size": 14,
-            "category": "Brecha SOTA",
-            "badge": "LIMITACIÓN ACTUAL",
-            "desc": "Los dispositivos de bajo costo carecen de front-ends analógicos de bajo ruido y planos de masa aislados, produciendo ruidos de fondo >5 µVpp que enmascaran microvoltios de respuesta biológica.",
-            "rhetorical_question": "¿Qué limita la sensibilidad de los dispositivos de electroencefalografía abiertos frente a señales corticales sutiles?",
+            "size": 7.0,
+            "category": "Problema Central",
+            "badge": "DIMENSIÓN 2 / CUELLOS DE BOTELLA",
+            "desc": "La triada de limitaciones críticas en sistemas BCI abiertos: dispersión temporal aleatoria, ruido analógico y desajuste ergonómico.",
+            "rhetorical_question": "¿Cuál es la barrera metodológica fundamental que impide usar dispositivos abiertos actuales en entornos pediátricos?",
+            "paragraph_text": "The survey revealed a persistent technical gap: in available open-source architectures, event markers are transmitted via asynchronous software protocols, introducing stochastic operating system delays (10--50 ms) that corrupt phase alignment in ERP extraction.",
+            "metrics": "Atenuación del P300 >40% por jitter; ruido >5 µVpp en hardware de bajo costo.",
+            "novelty_claim": "Formaliza las razones por las cuales el timestamping por software destruye la fidelidad diagnóstica de los potenciales evocados.",
+            "thesis_ref": "Capítulo 2 (Marco Teórico y Estado del Arte), pág. 24",
+            "pdf_page": 1,
+            "section_ref": "Sección 1 (Introducción)",
+            "paper_blocks": ["abstract.slot-2", "introduction.block-2"]
+        },
+        {
+            "id": "prob-jitter",
+            "label": "Jitter Temporal en SOs (10–50 ms)",
+            "group": "problem",
+            "color": "#f43f5e",
+            "size": 5.2,
+            "category": "Problema Central",
+            "badge": "BOTELLA CRÍTICA",
+            "desc": "En stacks convencionales (LSL, sockets UDP en Windows/Linux), la latencia variable de buffering destruye la coherencia de fase ERP.",
+            "rhetorical_question": "¿Por qué el buffering del sistema operativo destruye la forma de onda de los potenciales evocados?",
+            "paragraph_text": "When stimulus delivery software and data acquisition software run on separate execution loops, network and OS buffering produce random temporal jitter exceeding 30 ms. In ERP averaging, a jitter of this magnitude completely blurs high-frequency components and attenuates the P300 amplitude by more than 40%.",
+            "metrics": "Dispersión 18.5 ± 6.2 ms en sockets de SO vs <5 µs en interrupción hardware.",
+            "novelty_claim": "Justifica matemáticamente la necesidad ineludible de inyección de marcas en hardware bare-metal.",
+            "thesis_ref": "Capítulo 2 (Marco Teórico y Estado del Arte), pág. 28",
+            "pdf_page": 3,
+            "section_ref": "Sección 2 (Related Work)",
+            "paper_blocks": ["introduction.block-2", "related-work.rw-problem-blocks"]
+        },
+        {
+            "id": "prob-noise",
+            "label": "Piso de Ruido Elevado en Hardware Abierto (>5 µVpp)",
+            "group": "problem",
+            "color": "#f43f5e",
+            "size": 5.0,
+            "category": "Problema Central",
+            "badge": "BOTELLA ANALÓGICA",
+            "desc": "Dispositivos accesibles y cascos comerciales carecen de front-ends analógicos de precisión y planos de masa aislados.",
+            "rhetorical_question": "¿Qué limita la detección de microvoltios sutiles en dispositivos electroencefalográficos económicos?",
             "paragraph_text": "Furthermore, analog noise floors often exceed 5 µVpp in low-cost headsets, washing out low-amplitude microvolt cortical responses and preventing reliable extraction of single-trial neurocognitive markers.",
-            "metrics": "Ruido >5 µVpp en headsets de consumo (OpenBCI daisy: ~1.5 µVpp; EEGNet MCU: ~3.0 µVpp).",
-            "novelty_claim": "MONEEG garantiza <1.1 µVpp con Sigma = 0.14 µV.",
+            "metrics": "Ruido >5 µVpp en consumo (OpenBCI daisy: ~1.5 µVpp; EEGNet MCU: ~3.0 µVpp).",
+            "novelty_claim": "MONEEG garantiza <1.1 µVpp con Sigma = 0.14 µV en sus 32 canales.",
             "thesis_ref": "Capítulo 4 (Resultados de Banco de Pruebas), pág. 62",
             "pdf_page": 1,
             "section_ref": "Sección 1 (Introducción)",
-            "paper_blocks": ["abstract.slot-2", "introduction.block-2", "related-work.rw-panorama"]
+            "paper_blocks": ["abstract.slot-2", "introduction.block-2"]
         },
         {
-            "id": "gap-pediatric",
-            "label": "Brecha: Ergonomía Pediátrica Rígida",
-            "group": "gap",
+            "id": "prob-ergonomics",
+            "label": "Ergonomía Pediátrica Inadecuada",
+            "group": "problem",
             "color": "#f43f5e",
-            "size": 14,
-            "category": "Brecha SOTA",
-            "badge": "LIMITACIÓN ACTUAL",
-            "desc": "Los gorros clínicos comerciales con cables atados a torres de escritorio provocan aversión y movimiento excesivo en niños con TDAH durante sesiones terapéuticas.",
-            "rhetorical_question": "¿Por qué los cascos clínicos estándar fracasan en estudios de neurofeedback pediátrico en TDAH?",
+            "size": 4.6,
+            "category": "Problema Central",
+            "badge": "BOTELLA MECÁNICA",
+            "desc": "Gorros clínicos estándar para adultos con cables pesados a torres generan aversión, ansiedad y artefactos de movimiento en niños.",
+            "rhetorical_question": "¿Por qué los montajes clínicos convencionales fallan en pacientes pediátricos durante sesiones de juego?",
             "paragraph_text": "Standard clinical setups rely on rigid, high-density caps connected via cumbersome tethers to expensive benchtop amplifiers, causing anxiety and behavioral resistance in young subjects. Conversely, low-cost consumer headsets lack channel density and exhibit excessive inter-electrode impedance variance.",
-            "metrics": "Circunferencias adultas 56-58 cm vs infantiles 50-54 cm no adaptadas.",
-            "novelty_claim": "Casco modular 3D liviano impreso en filamento flexible con adaptación geométrica pediátrica.",
+            "metrics": "Circunferencias adultas 56–58 cm no ajustables a 50–54 cm pediátrico.",
+            "novelty_claim": "Casco modular flexible 3D liviano (<220 g) con monturas articuladas para electrodos pediátricos.",
             "thesis_ref": "Capítulo 3 (Diseño Mecánico y Ensamble 3D), pág. 45",
-            "pdf_page": 1,
+            "pdf_page": 2,
             "section_ref": "Sección 1 (Introducción)",
-            "paper_blocks": ["abstract.slot-4", "introduction.block-1", "materials-and-methods.mm-proposal"]
+            "paper_blocks": ["introduction.block-1", "materials-and-methods.mm-proposal"]
+        },
+
+        # =====================================================================
+        # 3. LAS 5 IDEAS MÁS CERCANAS DEL SOTA (CORAL / ROSE)
+        # =====================================================================
+        {
+            "id": "sota-hub",
+            "label": "3. 5 Ideas Más Cercanas del SOTA",
+            "group": "sota",
+            "color": "#fb7185",
+            "size": 7.0,
+            "category": "Estado del Arte",
+            "badge": "DIMENSIÓN 3 / BENCHMARKS",
+            "desc": "Los 5 referentes tecnológicos más próximos en la literatura de hardware abierto, streaming y BCI lúdico.",
+            "rhetorical_question": "¿Qué marcos de trabajo contemporáneos representan la vanguardia más próxima y cuáles son sus límites?",
+            "paragraph_text": "Our exploratory 3D atlas compilation of 18 peer-reviewed neurotechnology frameworks confirms that MONEEG occupies a unique quadrant: multi-channel research-grade biopotential precision combined with deterministic stimulus synchronization and pediatric ergonomics.",
+            "metrics": "18 sistemas auditados, 4 familias taxonómicas, ventana temporal 2020–2025.",
+            "novelty_claim": "Posiciona el manuscrito mediante comparación objetiva y metrológica.",
+            "thesis_ref": "Capítulo 2 (Marco Teórico y Estado del Arte de la Tesis)",
+            "pdf_page": 3,
+            "section_ref": "Sección 2 (Related Work)",
+            "paper_blocks": ["related-work.rw-preamble", "related-work.rw-panorama"]
         },
         {
-            "id": "gap-preemption",
-            "label": "Brecha: Desborde en Arquitecturas Mononúcleo",
-            "group": "gap",
-            "color": "#f43f5e",
-            "size": 13,
-            "category": "Brecha SOTA",
-            "badge": "LIMITACIÓN ACTUAL",
-            "desc": "Sistemas como BEATS (2022) manejan Wi-Fi y adquisición en un único MCU, donde la pila de red puede desalojar o retardar la atención de interrupciones críticas del ADC.",
-            "rhetorical_question": "¿Cómo vulnera la congestión de la pila de red Wi-Fi la integridad del muestreo biopotencial en MCUs convencionales?",
+            "id": "sota-beats",
+            "label": "1. BEATS (IEEE TBCAS 2022)",
+            "group": "sota",
+            "color": "#fb7185",
+            "size": 4.8,
+            "category": "Estado del Arte",
+            "badge": "REFERENTE HW ABIERTO",
+            "desc": "Sistema abierto multicanal de adquisición biopotencial; hito pionero en hardware libre con ADS1299.",
+            "rhetorical_question": "¿Por qué la arquitectura mononúcleo de BEATS es vulnerable bajo tráfico de red intenso?",
             "paragraph_text": "Among open-source systems, BEATS represents a notable milestone; however, it utilizes a single-MCU architecture where high-throughput Wi-Fi socket handling can preempt critical time-sensitive ADC servicing under peak network load, leading to unhandled packet drops.",
-            "metrics": "Pérdida de paquetes bajo ráfagas intensas de red en microcontroladores no optimizados.",
-            "novelty_claim": "Firmware bare-metal optimizado con DMA y ensamblaje de cabecera atómico.",
-            "thesis_ref": "Capítulo 3 (Implementación de Firmware en TM4C1294), pág. 52",
+            "metrics": "16 canales, arquitectura de microcontrolador mononúcleo.",
+            "novelty_claim": "MONEEG desacopla la conversión ADC con interrupción determinista y DMA circular prioritario.",
+            "thesis_ref": "Capítulo 2 (Sección 2.3: Sistemas de Hardware Abierto)",
             "pdf_page": 3,
             "section_ref": "Sección 2 (Related Work)",
             "paper_blocks": ["related-work.rw-panorama", "materials-and-methods.mm-borrowed-machinery"]
         },
+        {
+            "id": "sota-lsl",
+            "label": "2. Lab Streaming Layer (LSL)",
+            "group": "sota",
+            "color": "#fb7185",
+            "size": 4.8,
+            "category": "Estado del Arte",
+            "badge": "REFERENTE STREAMING",
+            "desc": "Protocolo de facto por software para sincronización multimodal en neurociencias sobre redes locales.",
+            "rhetorical_question": "¿Por qué el enfoque de software de LSL no resuelve el jitter en paradigmas de microsegundos?",
+            "paragraph_text": "While LSL is widely adopted for laboratory integration, its software-based timestamping relies on OS scheduling clocks subject to network stack latency and thread context switching, introducing 10--50 ms variance.",
+            "metrics": "Jitter medido: 18.5 ± 6.2 ms en sockets UDP de SO.",
+            "novelty_claim": "MONEEG estampa el evento en la cabecera SPI en 2.4 µs, erradicando el desfase de LSL.",
+            "thesis_ref": "Capítulo 2 (Sección 2.4: Protocolos de Sincronización Temporal)",
+            "pdf_page": 3,
+            "section_ref": "Sección 2 (Related Work)",
+            "paper_blocks": ["related-work.rw-problem-blocks", "results-and-discussion.rd-contribution-blocks"]
+        },
+        {
+            "id": "sota-openbci",
+            "label": "3. OpenBCI Cyton + Daisy (16 Ch)",
+            "group": "sota",
+            "color": "#fb7185",
+            "size": 4.8,
+            "category": "Estado del Arte",
+            "badge": "REFERENTE COMERCIAL ABIERTO",
+            "desc": "Plataforma de código abierto de 16 canales ampliamente usada en la comunidad BCI aficionada y académica.",
+            "rhetorical_question": "¿Qué limitaciones técnicas presenta OpenBCI al escalar a 32 canales y sincronía estricta?",
+            "paragraph_text": "OpenBCI provides accessible EEG acquisition but caps at 16 channels via its daisy add-on board, introducing SPI communication skew between boards, a noise floor near 1.5 µVpp, and no integrated pediatric mechanical frame.",
+            "metrics": "16 canales máx, ~1.5 µVpp de piso de ruido, sincronía no determinista.",
+            "novelty_claim": "MONEEG entrega 32 canales sincrónicos en una sola placa con ruido <1.1 µVpp y sincronía <5 µs.",
+            "thesis_ref": "Capítulo 2 (Sección 2.3: Análisis Comparativo de OpenBCI)",
+            "pdf_page": 3,
+            "section_ref": "Sección 2 (Related Work)",
+            "paper_blocks": ["related-work.rw-panorama", "results-and-discussion.rd-general-task"]
+        },
+        {
+            "id": "sota-consumer",
+            "label": "4. Cascos Comerciales de Consumo (Emotiv / Muse)",
+            "group": "sota",
+            "color": "#fb7185",
+            "size": 4.5,
+            "category": "Estado del Arte",
+            "badge": "DISPOSITIVOS DE CONSUMO",
+            "desc": "Sistemas de electrodos secos orientados a bienestar mental, videojuegos y aplicaciones recreativas.",
+            "rhetorical_question": "¿Por qué los dispositivos de consumo carecen de validez diagnóstica en neurodesarrollo?",
+            "paragraph_text": "Consumer headsets such as Emotiv and Muse provide plug-and-play operation but lack channel density (4--14 channels), suffer from excessive electrode impedance fluctuation, and lack open trigger interfaces for ERP extraction.",
+            "metrics": "4–14 canales, impedancia inestable >50 kΩ, protocolos cerrados y propietarios.",
+            "novelty_claim": "MONEEG combina la facilidad de colocación de cascos ligeros con rigor clínico de 32 canales.",
+            "thesis_ref": "Capítulo 2 (Sección 2.2: Dispositivos de Consumo vs Clínicos)",
+            "pdf_page": 3,
+            "section_ref": "Sección 2 (Related Work)",
+            "paper_blocks": ["related-work.rw-panorama", "introduction.block-1"]
+        },
+        {
+            "id": "sota-vr-oddball",
+            "label": "5. Tareas VR & Serious Games Oddball ERP",
+            "group": "sota",
+            "color": "#fb7185",
+            "size": 4.5,
+            "category": "Estado del Arte",
+            "badge": "PARADIGMAS COGNITIVOS",
+            "desc": "Estudios recientes de estimulación lúdica (Frontiers in Neurorobotics 2022, JMIR Serious Games 2024).",
+            "rhetorical_question": "¿Cuál es la desconexión común entre el motor gráfico de estímulos y el equipo de registro?",
+            "paragraph_text": "Recent literature explores gamified Oddball paradigms in virtual environments for ADHD evaluation, yet virtually all implementations rely on offline post-hoc alignment or loose network timestamps.",
+            "metrics": "Desfase estímulo-respuesta variable entre 10 y 60 ms en motores gráficos.",
+            "novelty_claim": "MONEEG establece enlace físico por interrupción de hardware con el motor gráfico Unity.",
+            "thesis_ref": "Capítulo 2 (Sección 2.5: Videojuegos y Potenciales Evocados)",
+            "pdf_page": 4,
+            "section_ref": "Sección 2 (Related Work)",
+            "paper_blocks": ["related-work.rw-synthesis-artefact", "materials-and-methods.mm-proposal"]
+        },
 
         # =====================================================================
-        # 3. EMBEDDED ARCHITECTURE PILLARS (EMERALD)
+        # 4. LA NOVEDAD QUE SE PRETENDE VENDER (3 ÍTEMS CLAVE) (EMERALD)
         # =====================================================================
         {
-            "id": "arch-daisychain",
-            "label": "Topología: 4x ADS1299 Cascaded SPI",
-            "group": "arch",
+            "id": "novelty-hub",
+            "label": "4. Novedad Central (3 Pilares Clave)",
+            "group": "novelty",
             "color": "#10b981",
-            "size": 17,
-            "category": "Pilar Hardware",
-            "badge": "INGENIERÍA EMBEBIDA",
-            "desc": "Cuatro front-ends ADS1299 en cascada daisy-chain leyendo 32 canales sincrónicos (96 bytes) en una única transacción DMA activada por la línea física DRDY.",
-            "rhetorical_question": "¿Cómo se sincronizan y transfieren 32 canales de 24 bits sin introducir skew entre chips ni multiplicar líneas de control?",
-            "paragraph_text": "The biopotential acquisition front-end consists of four Texas Instruments ADS1299 integrated circuits connected in a SPI daisy-chain configuration. The cascaded SPI configuration allows the host MCU to read all 32 channels (96 bytes plus status words) in a single synchronous DMA transaction triggered by the data-ready (DRDY) hardware interrupt line.",
-            "metrics": "32 CH simultáneos, 24 bits Σ-Δ, PGA 1x-24x, Zin > 1 GΩ.",
-            "novelty_claim": "Permite máxima densidad de canales sin multiplicar buses SPI ni introducir desfase de muestreo entre canales.",
+            "size": 7.0,
+            "category": "Novedad Central",
+            "badge": "DIMENSIÓN 4 / NÚCLEO CIENTÍFICO",
+            "desc": "Los tres pilares de ingeniería de co-diseño que sustentan la novedad vendida a Elsevier BSPC.",
+            "rhetorical_question": "¿Cuáles son los 3 avances técnicos diferenciales que MONEEG introduce y valida empíricamente?",
+            "paragraph_text": "The core novelty of MONEEG is articulated around three architectural innovations: deterministic hardware synchronization (<5 µs), a cascaded 32-channel submicrovolt AFE array (<1.1 µVpp), and direct trigger embedding in the SPI protocol frame.",
+            "metrics": "Latencia <5 µs, Ruido <1.1 µVpp, 32 canales síncronos a 250 Hz.",
+            "novelty_claim": "Constituye la defensa central del artículo frente a los revisores internacionales.",
+            "thesis_ref": "Capítulo 3 (Diseño Hardware y Firmware de MONEEG)",
+            "pdf_page": 2,
+            "section_ref": "Sección 1 (Introducción)",
+            "paper_blocks": ["abstract.slot-3", "introduction.block-3", "conclusions.concl-block-1"]
+        },
+        {
+            "id": "nov-sync",
+            "label": "Pilar 1: Sincronía Hardware Determinista (<5 µs)",
+            "group": "novelty",
+            "color": "#10b981",
+            "size": 5.4,
+            "category": "Novedad Central",
+            "badge": "NOVEDAD CLAVE 1",
+            "desc": "Interrupción externa GPIO en ARM Cortex-M4F bare-metal que engancha flags de estímulo en la trama SPI en <5 µs.",
+            "rhetorical_question": "¿Cómo se logra sincronización temporal a nivel de microsegundos sin retardos de buffers de SO?",
+            "paragraph_text": "By executing on a bare-metal 120 MHz ARM Cortex-M4F microcontroller without general-purpose OS layers, task dispatching is strictly governed by deterministic hardware interrupts, ensuring ISR latency under 1 microsecond.",
+            "metrics": "2.4 µs de latencia media, dispersión estándar σ = 0.35 µs (>7,000x más preciso que LSL).",
+            "novelty_claim": "Erradica el jitter temporal en el origen físico de la digitalización.",
+            "thesis_ref": "Capítulo 3 (Sección 3.4: Sincronización Temporal de Eventos), pág. 55",
+            "pdf_page": 5,
+            "section_ref": "Sección 3 (Materiales y Métodos)",
+            "paper_blocks": ["abstract.slot-4", "abstract.slot-6", "introduction.block-3"]
+        },
+        {
+            "id": "nov-afe",
+            "label": "Pilar 2: Front-End 32-Ch Submicrovoltio (<1.1 µVpp)",
+            "group": "novelty",
+            "color": "#10b981",
+            "size": 5.4,
+            "category": "Novedad Central",
+            "badge": "NOVEDAD CLAVE 2",
+            "desc": "Arreglo en cascada daisy-chain de 4x ADS1299 con aislamiento galvánico y planos de masa analógico/digital en estrella.",
+            "rhetorical_question": "¿Cómo se adquieren 32 canales simultáneos de 24 bits con piso de ruido inferior a un microvoltio?",
+            "paragraph_text": "The biopotential acquisition front-end consists of four Texas Instruments ADS1299 ICs in a SPI daisy-chain configuration. Cascaded SPI allows reading all 32 channels (96 bytes plus status words) in a single synchronous DMA transaction triggered by DRDY.",
+            "metrics": "32 CH, Vpp < 1.1 µV (media 0.94 µV, σ = 0.14 µV), CMRR > 110 dB.",
+            "novelty_claim": "Iguala la pureza de señal de amplificadores clínicos comerciales a una fracción del costo.",
             "thesis_ref": "Capítulo 3 (Sección 3.2: Arreglo de Front-Ends Analógicos), Fig. 3.4",
             "pdf_page": 4,
             "section_ref": "Sección 3 (Materiales y Métodos)",
             "paper_blocks": ["abstract.slot-4", "materials-and-methods.mm-borrowed-machinery"]
         },
         {
-            "id": "arch-mcu",
-            "label": "Núcleo: ARM Cortex-M4F (120 MHz)",
-            "group": "arch",
+            "id": "nov-trigger-embed",
+            "label": "Pilar 3: Inyección Embebida Directa Estímulo-EEG",
+            "group": "novelty",
             "color": "#10b981",
-            "size": 16,
-            "category": "Pilar Hardware",
-            "badge": "INGENIERÍA EMBEBIDA",
-            "desc": "Microcontrolador Texas Instruments TM4C1294 operando con firmware bare-metal sin sistema operativo de propósito general para erradicar jitter de scheduler.",
-            "rhetorical_question": "¿Por qué una implementación bare-metal sin RTOS comercial es necesaria para garantizar determinismo estricto?",
-            "paragraph_text": "By executing on a bare-metal 120 MHz ARM Cortex-M4F microcontroller without general-purpose OS layers, task dispatching is strictly governed by deterministic hardware interrupts, ensuring ISR latency under 1 microsecond.",
-            "metrics": "120 MHz, FPU hardware, SSI sincrónico con DMA uDMA circular.",
-            "novelty_claim": "Tiempo de respuesta a interrupción determinista < 1 µs.",
-            "thesis_ref": "Capítulo 3 (Sección 3.3: Microcontrolador TM4C1294), pág. 48",
-            "pdf_page": 4,
-            "section_ref": "Sección 3 (Materiales y Métodos)",
-            "paper_blocks": ["materials-and-methods.mm-borrowed-machinery", "materials-and-methods.mm-proposal"]
-        },
-        {
-            "id": "arch-trigger",
-            "label": "Mecanismo: Hardware Trigger Injection",
-            "group": "arch",
-            "color": "#10b981",
-            "size": 18,
-            "category": "Pilar Hardware",
-            "badge": "NOVEDAD CLAVE",
-            "desc": "Inyección directa de marcas de eventos mediante interrupción externa GPIO que estampa flags en los 3 bytes de cabecera de la trama SPI en el microsegundo exacto de la conversión.",
-            "rhetorical_question": "¿Cómo se logra sincronización temporal a nivel de microsegundo entre eventos del juego y paquetes EEG?",
+            "size": 5.2,
+            "category": "Novedad Central",
+            "badge": "NOVEDAD CLAVE 3",
+            "desc": "Estampado de códigos de evento del serious game directamente en los 3 bytes de cabecera de la trama SPI en tiempo real.",
+            "rhetorical_question": "¿Cómo se garantiza que cada muestra de EEG sepa con absoluta certeza qué estímulo vio el niño?",
             "paragraph_text": "The microcontroller embeds stimulus flags directly into the 3-byte protocol header of each transmission packet via an external GPIO interrupt linked to the serious game engine, stamping event codes at the physical instant of analog-to-digital conversion.",
-            "metrics": "Latencia de enganche de evento 2.4 µs (Std = 0.35 µs).",
-            "novelty_claim": "Elimina totalmente el desfase y jitter de los protocolos de red tradicionales.",
-            "thesis_ref": "Capítulo 3 (Sección 3.4: Sincronización Temporal de Eventos), pág. 55",
+            "metrics": "104 bytes por paquete UDP a 250 Hz con cabecera atómica.",
+            "novelty_claim": "Garantiza alineación exacta de fase para promediado de potenciales evocados ERP sin posprocesamiento.",
+            "thesis_ref": "Capítulo 3 (Sección 3.4: Protocolo de Comunicación y Tramas), pág. 56",
             "pdf_page": 5,
             "section_ref": "Sección 3 (Materiales y Métodos)",
-            "paper_blocks": ["abstract.slot-4", "abstract.slot-6", "introduction.block-3", "materials-and-methods.mm-proposal"]
-        },
-        {
-            "id": "arch-power",
-            "label": "Aislamiento Galvánico & LDOs de Bajo Ruido",
-            "group": "arch",
-            "color": "#10b981",
-            "size": 15,
-            "category": "Pilar Hardware",
-            "badge": "INGENIERÍA EMBEBIDA",
-            "desc": "Planos de masa analógico y digital separados con unión en estrella; conversores DC-DC aislados con post-regulación lineal ultra-limpia (TPS7A49/TPS7A30 para rieles ±2.5V).",
-            "rhetorical_question": "¿Cómo se aísla el plano biopotencial analógico de los picos de conmutación de la antena Wi-Fi y los reguladores conmutados?",
-            "paragraph_text": "To decouple noisy digital RF communications from the ultra-sensitive microvolt analog plane, MONEEG features complete galvanic isolation. Separate ground planes are bridged only at a dedicated stellar point, and isolated DC-DC converters deliver clean ±2.5 V analog rails with secondary ultra-low-dropout (LDO) linear regulators (TPS7A49/TPS7A30).",
-            "metrics": "PSRR > 80 dB a 100 kHz, rechazo a ruido de batería y RF.",
-            "novelty_claim": "Garantiza inmunidad contra emisiones electromagnéticas de transceptores inalámbricos.",
-            "thesis_ref": "Capítulo 3 (Sección 3.1: Etapa de Alimentación y Aislamiento), pág. 40",
-            "pdf_page": 5,
-            "section_ref": "Sección 3 (Materiales y Métodos)",
-            "paper_blocks": ["materials-and-methods.mm-proposal"]
-        },
-        {
-            "id": "arch-cap",
-            "label": "Casco Pediátrico 3D Ergonómico",
-            "group": "arch",
-            "color": "#10b981",
-            "size": 15,
-            "category": "Pilar Hardware",
-            "badge": "DISEÑO BIOMÉDICO",
-            "desc": "Estructura modular impresa en 3D en poliuretano termoplástico (TPU) con monturas articuladas para electrodos Ag/AgCl y verificación continua de impedancia en tiempo real.",
-            "rhetorical_question": "¿Cómo se optimiza mecánicamente la interfaz de electrodos para pacientes pediátricos durante sesiones lúdicas?",
-            "paragraph_text": "A custom ergonomic 3D pediatric cap with continuous impedance sensing maintains stable contact impedance (Z < 10 kΩ) across the 10-20 international montage without inducing pressure fatigue or mechanical displacement during active video gameplay.",
-            "metrics": "Z < 10 kΩ, peso total < 220 g con batería integrada LiPo de 1200 mAh.",
-            "novelty_claim": "Comodidad comprobada en infantes sin fatiga ni desplazamiento por tracción de cables.",
-            "thesis_ref": "Capítulo 3 (Sección 3.5: Diseño y Fabricación del Casco 3D), pág. 58",
-            "pdf_page": 2,
-            "section_ref": "Sección 1 (Introducción)",
-            "paper_blocks": ["abstract.slot-4", "introduction.block-4b", "materials-and-methods.mm-proposal"]
+            "paper_blocks": ["abstract.slot-4", "materials-and-methods.mm-proposal"]
         },
 
         # =====================================================================
-        # 4. THESIS EXPERIMENTAL EVIDENCE (PURPLE)
+        # 5. DATASETS PROBADOS (PURPLE / VIOLET)
         # =====================================================================
         {
-            "id": "eval-noise",
-            "label": "Evidencia: Ruido <1.1 µVpp (32 Canales)",
-            "group": "eval",
+            "id": "dataset-hub",
+            "label": "5. Datasets y Bancos Probados",
+            "group": "dataset",
             "color": "#a855f7",
-            "size": 18,
-            "category": "Evidencia Experimental",
-            "badge": "GROUND-TRUTH BANCO",
-            "desc": "Caracterización de banco con entradas referidas a masa (50 Ω): media Vpp = 0.94 µV, Sigma = 0.14 µV, Vrms ≈ 0.16 µV en toda la matriz de 32 canales.",
-            "rhetorical_question": "¿Qué evidencia numérica demuestra que la matriz analógica logra un piso de ruido submicrovoltio?",
-            "paragraph_text": "Across all 32 channels, the input-referred noise floor remained strictly under 1.1 µVpp (mean Vpp = 0.94 µV, σ = 0.14 µV, Vrms ≈ 0.16 µV). This is well below the typical amplitude of pediatric scalp EEG (10--100 µV), ensuring that delicate cognitive potentials are preserved without amplifier distortion.",
-            "metrics": "Vpp < 1.1 µV (0.16–70 Hz), relación señal a ruido > 95 dB.",
+            "size": 7.0,
+            "category": "Datasets Probados",
+            "badge": "DIMENSIÓN 5 / EVIDENCIA EMPÍRICA",
+            "desc": "Conjunto de datos empíricos de banco y registros fisiológicos humanos que validan la hipótesis del manuscrito.",
+            "rhetorical_question": "¿Qué pruebas experimentales y conjuntos de datos sustentan las afirmaciones del artículo?",
+            "paragraph_text": "Validation was conducted through a three-stage experimental protocol: precision bench testing with simulated microvolt signals, continuous streaming stress tests, and physiological ground-truth recording in human subjects.",
+            "metrics": "3 protocolos metodológicos, 14.4 millones de muestras, registros in-vivo.",
+            "novelty_claim": "Aporta datos de ground-truth instrumental y fisiológico replicables.",
+            "thesis_ref": "Capítulo 4 (Resultados y Validación Experimental)",
+            "pdf_page": 5,
+            "section_ref": "Sección 4 (Setup Experimental)",
+            "paper_blocks": ["experimental-setup.es-dataset", "experimental-setup.es-assessment"]
+        },
+        {
+            "id": "ds-bench",
+            "label": "1. Banco de Calibración 32-Ch (5–500 µV)",
+            "group": "dataset",
+            "color": "#a855f7",
+            "size": 4.8,
+            "category": "Datasets Probados",
+            "badge": "BANCO INSTRUMENTAL",
+            "desc": "Generador senoidal de microvoltios con divisor resistivo 1000:1 blindado para caracterizar la matriz analógica.",
+            "rhetorical_question": "¿Cómo se comprobó la linealidad y distorsión armónica en microvoltios antes de las pruebas biológicas?",
+            "paragraph_text": "A precision signal generator coupled with a shielded 1000:1 resistive divider fed calibrated sine waves (5--500 µV, 1--70 Hz) across all 32 channels to verify gain accuracy, inter-channel phase uniformity, and THD.",
+            "metrics": "5–500 µV, 1–70 Hz, THD < -80 dB, atenuación precisa.",
+            "novelty_claim": "Garantiza linealidad y calibración metrológica antes de la toma de señales biológicas.",
+            "thesis_ref": "Capítulo 4 (Sección 4.1: Montaje de Calibración y Banco), Fig. 4.1",
+            "pdf_page": 5,
+            "section_ref": "Sección 4 (Setup Experimental)",
+            "paper_blocks": ["experimental-setup.es-dataset", "results-and-discussion.rd-general-task"]
+        },
+        {
+            "id": "ds-p300",
+            "label": "2. Dataset Empírico P300 Oddball / Berger",
+            "group": "dataset",
+            "color": "#a855f7",
+            "size": 5.0,
+            "category": "Datasets Probados",
+            "badge": "DATASET FISIOLÓGICO",
+            "desc": "Registros electrofisiológicos in-vivo en reposo (efecto Berger ojos abiertos/cerrados) y paradigma Oddball atencional.",
+            "rhetorical_question": "¿Qué evidencia fisiológica directa comprueba que las señales corresponden a dinámica cortical real?",
+            "paragraph_text": "Recording at the occipital electrode O2 during an eyes-open vs. eyes-closed resting state protocol demonstrated clear Berger alpha rhythm attenuation. During eyes-closed intervals, spectral power in the 8--13 Hz band increased by 3.8 dB, providing indisputable proof of physiological ground-truth.",
+            "metrics": "Incremento de 3.8 dB en banda alfa (8–13 Hz) en electrodo O2.",
+            "novelty_claim": "Prueba concluyente de captura biológica cerebral con alta relación señal a ruido.",
+            "thesis_ref": "Capítulo 4 (Sección 4.4: Validación In-Vivo Efecto Berger), Fig. 4.12",
+            "pdf_page": 7,
+            "section_ref": "Sección 5 (Resultados)",
+            "paper_blocks": ["abstract.slot-5", "results-and-discussion.rd-cost"]
+        },
+        {
+            "id": "ds-stress",
+            "label": "3. Ensayo de Estrés Continuo (400 Minutos)",
+            "group": "dataset",
+            "color": "#a855f7",
+            "size": 5.0,
+            "category": "Datasets Probados",
+            "badge": "BANCO DE RESISTENCIA",
+            "desc": "Streaming ininterrumpido durante 6.6 horas a 250 Hz por canal generando 14.4 millones de muestras continuas.",
+            "rhetorical_question": "¿Cómo se comprobó la confiabilidad y tolerancia a fallos del enlace de transmisión en sesiones largas?",
+            "paragraph_text": "In long-term streaming endurance tests, the system operated continuously for 400 minutes, transmitting 1.44 x 10^7 samples with zero dropped packets and bounded inter-sample jitter (< 25 µs), demonstrating absolute link stability.",
+            "metrics": "14,400,000 muestras, 0 paquetes descartados (0.0%), jitter entre muestras < 25 µs.",
+            "novelty_claim": "Verifica estabilidad para sesiones terapéuticas prolongadas sin reinicio ni pérdida de contexto.",
+            "thesis_ref": "Capítulo 4 (Sección 4.2: Evaluación de Pérdida de Paquetes), Fig. 4.6",
+            "pdf_page": 6,
+            "section_ref": "Sección 5 (Resultados)",
+            "paper_blocks": ["abstract.slot-5", "results-and-discussion.rd-contribution-blocks"]
+        },
+
+        # =====================================================================
+        # 6. MEDIDAS DE DESEMPEÑO Y MÉTODOS A COMPARAR (AMBER / YELLOW)
+        # =====================================================================
+        {
+            "id": "eval-hub",
+            "label": "6. Medidas de Desempeño y Comparación",
+            "group": "eval",
+            "color": "#eab308",
+            "size": 7.0,
+            "category": "Desempeño y Comparación",
+            "badge": "DIMENSIÓN 6 / METROLOGÍA",
+            "desc": "Métricas cuantitativas clave y comparación formal con OpenBCI Cyton, BEATS y sistemas clínicos.",
+            "rhetorical_question": "¿Cuáles son los indicadores métricos rigurosos bajo los cuales MONEEG supera a las alternativas?",
+            "paragraph_text": "Evaluation metrics included: (i) Input-Referred Noise Floor (Vpp and Vrms across 0.16--70 Hz); (ii) Transmission Stability (Packet Drop Rate over 400 minutes); (iii) Event Synchronization Jitter (logic analyzer measurement); and (iv) Physiological SNR Preservation.",
+            "metrics": "µs de jitter, µVpp de ruido, dB de CMRR, % de pérdida.",
+            "novelty_claim": "Define el estándar metrológico para auditar instrumentación BCI abierta.",
+            "thesis_ref": "Capítulo 4 (Sección 4.3: Métricas de Comparación)",
+            "pdf_page": 5,
+            "section_ref": "Sección 4 (Setup Experimental)",
+            "paper_blocks": ["experimental-setup.es-assessment", "results-and-discussion.rd-general-task"]
+        },
+        {
+            "id": "metric-jitter",
+            "label": "Métrica: Jitter Temporal (2.4 µs vs 18.5 ms)",
+            "group": "eval",
+            "color": "#eab308",
+            "size": 5.2,
+            "category": "Desempeño y Comparación",
+            "badge": "MÉTRICA COMPARATIVA",
+            "desc": "Medición con analizador lógico digital entre el flanco TTL de disparo del juego y el enganche en trama SPI.",
+            "rhetorical_question": "¿Cuál es la superioridad cuantitativa del enganche por hardware frente al streaming por software?",
+            "paragraph_text": "In hardware synchronization tests, the measured delay between external TTL trigger and header latching was 2.4 µs with σ = 0.35 µs, completely outperforming software LSL streaming pipelines (18.5 ± 6.2 ms) by over three orders of magnitude.",
+            "metrics": "2.4 µs (MONEEG) vs 18.5 ms (LSL) vs 12.0 ms (OpenBCI) — más de 7,000x más veloz.",
+            "novelty_claim": "Habilita la sincronización perfecta de componentes ERP rápidos (N200/P300).",
+            "thesis_ref": "Capítulo 4 (Sección 4.3: Medición de Latencia y Jitter Temporal), Fig. 4.9",
+            "pdf_page": 6,
+            "section_ref": "Sección 5 (Resultados)",
+            "paper_blocks": ["abstract.slot-6", "results-and-discussion.rd-contribution-blocks"]
+        },
+        {
+            "id": "metric-noise",
+            "label": "Métrica: Piso de Ruido (<1.1 µVpp vs >5 µVpp)",
+            "group": "eval",
+            "color": "#eab308",
+            "size": 5.2,
+            "category": "Desempeño y Comparación",
+            "badge": "MÉTRICA ANALÓGICA",
+            "desc": "Caracterización de banco con entradas a masa (50 Ω): media Vpp = 0.94 µV, σ = 0.14 µV, Vrms ≈ 0.16 µV.",
+            "rhetorical_question": "¿Cómo se compara el piso de ruido de MONEEG frente a cascos de consumo y amplificadores clínicos?",
+            "paragraph_text": "Across all 32 channels, the input-referred noise floor remained strictly under 1.1 µVpp (mean Vpp = 0.94 µV, σ = 0.14 µV, Vrms ≈ 0.16 µV). This matches gold-standard research amplifiers (BioSemi: ~0.8 µVpp) and significantly improves upon OpenBCI (~1.5 µVpp) and consumer devices (>5 µVpp).",
+            "metrics": "Vpp = 0.94 µV en MONEEG vs 1.5 µV en OpenBCI vs >5.0 µV en cascos de consumo.",
             "novelty_claim": "Demuestra fidelidad de grado clínico a una fracción del costo comercial.",
             "thesis_ref": "Capítulo 4 (Sección 4.1: Caracterización de Ruido de Entrada), Fig. 4.3",
             "pdf_page": 6,
@@ -231,499 +521,251 @@ NOVELTY_GRAPH_DATA: dict[str, Any] = {
             "paper_blocks": ["abstract.slot-5", "results-and-discussion.rd-general-task"]
         },
         {
-            "id": "eval-endurance",
-            "label": "Evidencia: 400 Min Streaming 0% Pérdida",
+            "id": "metric-reliability",
+            "label": "Métrica: Pérdida de Paquetes (0.0% en 1.44×10⁷ muestras)",
             "group": "eval",
-            "color": "#a855f7",
-            "size": 16,
-            "category": "Evidencia Experimental",
-            "badge": "GROUND-TRUTH BANCO",
-            "desc": "Ensayo de fatiga continua durante 400 minutos transmitiendo 14.4 millones de muestras sin un solo paquete descartado ni desbordamiento de FIFO.",
-            "rhetorical_question": "¿Cómo se comprobó la confiabilidad y robustez del enlace inalámbrico en sesiones de monitoreo prolongadas?",
-            "paragraph_text": "In long-term streaming endurance tests, the system operated continuously for 400 minutes, transmitting 1.44 x 10^7 samples with zero dropped packets and bounded inter-sample jitter (< 25 µs), demonstrating absolute link stability.",
-            "metrics": "1.44 x 10^7 muestras adquiridas, jitter entre muestras < 25 µs.",
-            "novelty_claim": "Estabilidad requerida para intervenciones clínicas y sesiones terapéuticas prolongadas.",
-            "thesis_ref": "Capítulo 4 (Sección 4.2: Evaluación de Pérdida de Paquetes), Fig. 4.6",
-            "pdf_page": 6,
-            "section_ref": "Sección 5 (Resultados)",
-            "paper_blocks": ["abstract.slot-5", "results-and-discussion.rd-contribution-blocks"]
-        },
-        {
-            "id": "eval-latency",
-            "label": "Evidencia: Jitter Hardware 2.4 µs ± 0.35 µs",
-            "group": "eval",
-            "color": "#a855f7",
-            "size": 17,
-            "category": "Evidencia Experimental",
-            "badge": "GROUND-TRUTH BANCO",
-            "desc": "Medición con analizador lógico digital entre flanco de disparo TTL y estampado en cabecera SPI. Latencia media de 2.4 µs con desviación estándar de 0.35 µs.",
-            "rhetorical_question": "¿Cuál es la dispersión temporal exacta de la inyección de marcas en comparación con protocolos por software?",
-            "paragraph_text": "In hardware synchronization tests, the measured delay between the external TTL stimulus trigger and header latching was 2.4 µs with a standard deviation of 0.35 µs, completely outperforming software LSL streaming pipelines (18.5 ± 6.2 ms).",
-            "metrics": "2.4 µs vs 18.5 ms de LSL por software (>7,000x más preciso).",
-            "novelty_claim": "Habilita la sincronización perfecta de ERPs de latencia temprana (N200/P300).",
-            "thesis_ref": "Capítulo 4 (Sección 4.3: Medición de Latencia y Jitter Temporal), Fig. 4.9",
-            "pdf_page": 6,
-            "section_ref": "Sección 5 (Resultados)",
-            "paper_blocks": ["abstract.slot-6", "results-and-discussion.rd-contribution-blocks"]
-        },
-        {
-            "id": "eval-berger",
-            "label": "Evidencia: Bloqueo Alfa de Berger (3.8 dB SNR)",
-            "group": "eval",
-            "color": "#a855f7",
-            "size": 17,
-            "category": "Evidencia Experimental",
-            "badge": "GROUND-TRUTH FISIOLÓGICO",
-            "desc": "Validación in-vivo en reposo con protocolo ojos abiertos vs ojos cerrados en electrodo occipital O2. Atenuación clara del ritmo alfa (8–13 Hz) con incremento de 3.8 dB al cerrar ojos.",
-            "rhetorical_question": "¿Qué prueba fisiológica in-vivo demuestra que MONEEG captura biopotenciales cerebrales reales y no ruido sintético?",
-            "paragraph_text": "Recording at the occipital electrode O2 during an eyes-open vs. eyes-closed resting state protocol demonstrated clear Berger alpha rhythm attenuation. During the eyes-closed intervals, spectral power in the 8--13 Hz alpha band increased by 3.8 dB relative to eyes-open, providing indisputable proof of physiological ground-truth capture.",
-            "metrics": "SNR alfa 3.8 dB, comprobación biológica de ground-truth.",
-            "novelty_claim": "Verifica que el hardware captura dinámica electrofisiológica cortical real con alta relación señal-ruido.",
-            "thesis_ref": "Capítulo 4 (Sección 4.4: Validación In-Vivo Efecto Berger), Fig. 4.12",
-            "pdf_page": 7,
-            "section_ref": "Sección 5 (Resultados)",
-            "paper_blocks": ["abstract.slot-5", "results-and-discussion.rd-cost"]
-        },
-        {
-            "id": "eval-game",
-            "label": "Evidencia: Videojuego 'Eagle Eye' en Unity",
-            "group": "eval",
-            "color": "#a855f7",
-            "size": 15,
-            "category": "Evidencia Experimental",
-            "badge": "VALIDACIÓN COGNITIVA",
-            "desc": "Integración del videojuego de atención selectiva Eagle Eye con envío de eventos sincronizados para entrenamiento de control inhibitorio en TDAH.",
-            "rhetorical_question": "¿Cómo se conecta la plataforma con paradigmas lúdicos de neurorrehabilitación en tiempo real?",
-            "paragraph_text": "Stimulus render events from the Unity serious game Eagle Eye trigger a physical interrupt that latches marker codes into the SPI frame header at the exact instant of ADC sampling, enabling seamless ERP paradigms in children.",
-            "metrics": "Disparo de estímulo Go/No-Go sincronizado a nivel de microsegundo.",
-            "novelty_claim": "Demuestra la aplicabilidad clínica en neurorrehabilitación lúdica pediátrica.",
-            "thesis_ref": "Capítulo 3 (Sección 3.6: Integración con Videojuego Serio), pág. 60",
-            "pdf_page": 5,
-            "section_ref": "Sección 3 (Materiales y Métodos)",
-            "paper_blocks": ["introduction.block-3", "results-and-discussion.rd-contribution-blocks"]
-        },
-
-        # =====================================================================
-        # 5. ELSEVIER MANUSCRIPT SECTIONS (SAPPHIRE)
-        # =====================================================================
-        {
-            "id": "sec-intro",
-            "label": "Sección 1: Inception & Hipótesis",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 16,
-            "category": "Sección Manuscrito",
-            "badge": "PÁGS. 1–3",
-            "desc": "Plantea el reto clínico pediátrico en TDAH, la hoja de ruta metodológica de 4 fases y las 3 hipótesis comprobables H1, H2 y H3.",
-            "rhetorical_question": "¿Cómo se estructura la justificación clínica y el marco de hipótesis del manuscrito?",
-            "paragraph_text": "Pediatric neurodevelopmental disorders, particularly ADHD, place severe demands on clinical assessment and rehabilitation tools... The primary objective of this paper is to demonstrate the empirical and physiological validity of the MONEEG framework under three core hypotheses.",
-            "metrics": "Bloques introduction.block-1 al block-6.",
-            "novelty_claim": "Fija las preguntas de investigación que gobiernan el manuscrito.",
-            "thesis_ref": "Insumo: Introducción y Justificación de la Tesis",
-            "pdf_page": 1,
-            "section_ref": "Sección 1",
-            "paper_blocks": ["introduction.block-1", "introduction.block-4a", "introduction.block-2", "introduction.block-3", "introduction.block-4b", "introduction.block-5", "introduction.block-6"]
-        },
-        {
-            "id": "sec-rw",
-            "label": "Sección 2: SOTA & Taxonomía Comparativa",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 15,
-            "category": "Sección Manuscrito",
-            "badge": "PÁGS. 3–4",
-            "desc": "Contrasta 18 sistemas contemporáneos en una tabla de síntesis (OpenBCI, BEATS, EEGNet MCU, BioSemi) evidenciando la falta de sincronización hardware pediátrica.",
-            "rhetorical_question": "¿Cómo se posiciona MONEEG frente a las alternativas del estado del arte en canales, ruido y sincronización?",
-            "paragraph_text": "Our exploratory 3D atlas compilation of 18 peer-reviewed neurotechnology frameworks confirms that MONEEG occupies a unique quadrant: multi-channel research-grade biopotential precision combined with deterministic stimulus synchronization and pediatric ergonomics, validated under Minciencias-92056 clinical objectives.",
-            "metrics": "Tabla tab:sota_comparison, 18 referencias citadas.",
-            "novelty_claim": "Posiciona a MONEEG en un cuadrante único de alta densidad + bajo ruido + sincronización determinista.",
-            "thesis_ref": "Insumo: Estado del Arte de la Tesis + Atlas 3D",
-            "pdf_page": 3,
-            "section_ref": "Sección 2",
-            "paper_blocks": ["related-work.rw-preamble", "related-work.rw-panorama", "related-work.rw-problem-blocks", "related-work.rw-closing", "related-work.rw-synthesis-artefact"]
-        },
-        {
-            "id": "sec-methods",
-            "label": "Sección 3: Materiales & Arquitectura Embebida",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 16,
-            "category": "Sección Manuscrito",
-            "badge": "PÁGS. 4–5",
-            "desc": "Describe formalmente el arreglo daisy-chain de 4x ADS1299, el MCU TM4C1294, los rieles de potencia aislados y el casco modular 3D.",
-            "rhetorical_question": "¿Cómo se documenta la ingeniería del sistema para garantizar reproducibilidad por otros investigadores?",
-            "paragraph_text": "The MONEEG acquisition architecture is structured into four interconnected modules: (1) the 32-channel Analog Front-End (AFE) array; (2) the bare-metal ARM Cortex-M4F embedded acquisition core; (3) the isolated power management and transmission stage; and (4) the ergonomic 3D modular pediatric cap with continuous impedance sensing.",
-            "metrics": "Figuras fig:hw_arch, fig:ads_chain, fig:event_sync.",
-            "novelty_claim": "Detalla el diseño esquemático y las decisiones de ingeniería para reproducibilidad abierta.",
-            "thesis_ref": "Insumo: Capítulo 3 de la Tesis",
-            "pdf_page": 4,
-            "section_ref": "Sección 3",
-            "paper_blocks": ["materials-and-methods.mm-preamble", "materials-and-methods.mm-borrowed-machinery", "materials-and-methods.mm-proposal"]
-        },
-        {
-            "id": "sec-setup",
-            "label": "Sección 4: Protocolos Experimentales de Banco",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 14,
-            "category": "Sección Manuscrito",
-            "badge": "PÁG. 5",
-            "desc": "Define el generador de calibración con divisor 1000:1 (5–500 µV), analizador lógico digital y el protocolo de reposo de Berger.",
-            "rhetorical_question": "¿Qué montajes y métodos metrológicos se emplearon para auditar objetivamente el hardware?",
-            "paragraph_text": "Evaluation metrics included: (i) Input-Referred Noise Floor (Vpp and Vrms across 0.16--70 Hz); (ii) Transmission Stability (Packet Drop Rate over continuous 400-minute streaming); (iii) Event Synchronization Jitter (logic analyzer measurement); and (iv) Physiological Berger Alpha Blocking Ratio.",
-            "metrics": "Tasa de muestreo 250 Hz, tramas UDP de 104 bytes.",
-            "novelty_claim": "Rigor metodológico exigido por revisores de instrumentación biomédica.",
-            "thesis_ref": "Insumo: Capítulo 4 de la Tesis (Protocolos)",
-            "pdf_page": 5,
-            "section_ref": "Sección 4",
-            "paper_blocks": ["experimental-setup.es-preamble", "experimental-setup.es-dataset", "experimental-setup.es-assessment", "experimental-setup.es-training-details"]
-        },
-        {
-            "id": "sec-results",
-            "label": "Sección 5: Resultados & Discusión",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 16,
-            "category": "Sección Manuscrito",
-            "badge": "PÁGS. 6–7",
-            "desc": "Presenta el piso de ruido submicrovoltio (<1.1 µVpp), la prueba de 400 minutos sin pérdidas, la latencia de 2.4 µs y el espectrograma O2 del efecto Berger.",
-            "rhetorical_question": "¿Cuáles son los hallazgos experimentales concretos que corroboran las especificaciones declaradas?",
-            "paragraph_text": "Bench testing demonstrated exceptional analog fidelity... In long-term streaming endurance tests, the system operated continuously for 400 minutes, transmitting 1.44 x 10^7 samples with zero dropped packets... In hardware synchronization tests, the measured delay was 2.4 µs with σ = 0.35 µs.",
-            "metrics": "Figuras fig:bench_results (ruido/pérdida) y fig:in_vivo_results (latencia/espectrograma).",
-            "novelty_claim": "Confirmación empírica indisputable de las tres hipótesis principales.",
-            "thesis_ref": "Insumo: Capítulo 4 de la Tesis (Resultados)",
-            "pdf_page": 6,
-            "section_ref": "Sección 5",
-            "paper_blocks": ["results-and-discussion.rd-general-task", "results-and-discussion.rd-contribution-blocks", "results-and-discussion.rd-cost"]
-        },
-        {
-            "id": "sec-limitations",
-            "label": "Sección 6: Limitaciones & Traslación Clínica",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 13,
-            "category": "Sección Manuscrito",
-            "badge": "PÁG. 8",
-            "desc": "Reconoce honestamente el consumo de corriente (220 mA, ~4.5h batería), artefactos de movimiento y la necesidad de ensayos a gran escala en niños con TDAH.",
-            "rhetorical_question": "¿Qué desafíos ingenieriles y clínicos restan por abordar antes del despliegue masivo en clínicas pediátricas?",
-            "paragraph_text": "While MONEEG achieves laboratory-grade signal quality and microsecond timing accuracy, several practical considerations must be addressed prior to wide-scale deployment: continuous 32-channel Wi-Fi transmission requires approximately 220 mA, yielding an operating battery life of approximately 4.5 hours.",
-            "metrics": "Batería 1200 mAh, blindaje activo en desarrollo.",
-            "novelty_claim": "Blindaje editorial contra rechazo de revisores al admitir límites operativos reales.",
-            "thesis_ref": "Insumo: Trabajo Futuro de la Tesis",
-            "pdf_page": 8,
-            "section_ref": "Sección 6",
-            "paper_blocks": ["limitations.lim-opening-concession", "limitations.lim-proposal-items", "limitations.lim-validation-items", "limitations.lim-failure-mode", "limitations.lim-closing"]
-        },
-        {
-            "id": "sec-conclusions",
-            "label": "Sección 7: Conclusiones & Ciencia Abierta",
-            "group": "section",
-            "color": "#0ea5e9",
-            "size": 15,
-            "category": "Sección Manuscrito",
-            "badge": "PÁGS. 8–9",
-            "desc": "Sintetiza los 4 aportes fundamentales, anuncia la disponibilidad en código abierto de firmware y hardware bajo Minciencias-92056.",
-            "rhetorical_question": "¿Cuál es la síntesis de impacto científico y el compromiso de ciencia abierta para la comunidad?",
-            "paragraph_text": "This paper introduced MONEEG, an open-source embedded 32-channel electroencephalographic acquisition framework engineered specifically to overcome the timing jitter and ergonomic limitations of contemporary pediatric neurotechnology... establishing an open-source, scalable foundation for accessible neurofeedback in clinical, educational, and ambulatory environments.",
-            "metrics": "Bloques concl-1 al concl-4, CRediT formal.",
-            "novelty_claim": "Cierre con impacto científico y traslación a neurotecnología accesible.",
-            "thesis_ref": "Insumo: Conclusiones de la Tesis",
-            "pdf_page": 8,
-            "section_ref": "Sección 7",
-            "paper_blocks": ["conclusions.concl-block-1", "conclusions.concl-block-2", "conclusions.concl-block-3", "conclusions.concl-block-4"]
-        },
-
-        # =====================================================================
-        # 6. KEY NOVELTY PARAGRAPH NODES (AMBER / GOLD)
-        # =====================================================================
-        {
-            "id": "p-abstract-solution",
-            "label": "Párrafo: Arquitectura y Solución (Abstract)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "ABSTRACT / PÁG. 1",
-            "desc": "Enunciado global de la solución MONEEG en el resumen del manuscrito, declarando los 4 ADS1299 en cascada, el MCU ARM y la inyección en cabecera.",
-            "rhetorical_question": "¿Cómo se formula la propuesta integral frente a la comunidad internacional en el Abstract?",
-            "paragraph_text": "To address these challenges, this paper presents MONEEG, an open-access embedded 32-channel EEG acquisition framework engineered specifically for pediatric cognitive monitoring and serious game integration. The system integrates four daisy-chained Texas Instruments ADS1299 analog front-ends with a bare-metal ARM Cortex-M4F microcontroller, galvanically isolated power domains, and a custom ergonomic 3D pediatric cap. A hardware-level interrupt mechanism embeds game stimulus trigger flags directly into the 3-byte protocol header at the precise microsecond of analog-to-digital conversion.",
-            "metrics": "32 CH, 4x ADS1299, 120 MHz ARM, cabecera 3 bytes.",
-            "novelty_claim": "Fija la identidad tecnológica del paper en las primeras 150 palabras del manuscrito.",
-            "thesis_ref": "Resumen General y Planteamiento de la Tesis.",
-            "pdf_page": 1,
-            "section_ref": "Abstract",
-            "paper_blocks": ["abstract.slot-3", "abstract.slot-4"]
-        },
-        {
-            "id": "p-intro-gap-jitter",
-            "label": "Párrafo: Decomposición de Brecha Temporal (Intro)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 13,
-            "category": "Párrafo de Novedad",
-            "badge": "INTRODUCCIÓN / PÁG. 1",
-            "desc": "Párrafo donde se demuestra formalmente cómo el timestamping por software desincroniza los estímulos e invalida el análisis ERP.",
-            "rhetorical_question": "¿Por qué los protocolos por software (LSL, UDP) destruyen el alineamiento de potenciales evocados en tareas de alta frecuencia?",
-            "paragraph_text": "The survey revealed a persistent technical gap: in available open-source architectures, event markers from interactive stimulation engines (such as serious games) are transmitted via asynchronous software protocols (e.g., LSL, UDP sockets). This introduces stochastic operating system scheduling delays (10--50 ms), completely corrupting the phase alignment necessary for single-trial ERP extraction. Furthermore, analog noise floors often exceed 5 µVpp, washing out low-amplitude microvolt cortical responses.",
-            "metrics": "Jitter 10–50 ms en LSL / sockets vs atenuación >40% en P300.",
-            "novelty_claim": "Justifica matemáticamente por qué la sincronización por software no es apta para neurofeedback pediátrico de precisión.",
-            "thesis_ref": "Capítulo 2 (Marco Teórico y Estado del Arte de la Tesis), pág. 24.",
-            "pdf_page": 1,
-            "section_ref": "Sección 1 (Introducción)",
-            "paper_blocks": ["introduction.block-2"]
-        },
-        {
-            "id": "p-intro-moneeg-mechanism",
-            "label": "Párrafo: Mecanismo Co-diseñado MONEEG (Intro)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "NOVEDAD CENTRAL / PÁG. 2",
-            "desc": "Párrafo emblemático de la Introducción (CARS Move 3) donde se devela la arquitectura de co-diseño de hardware de MONEEG.",
-            "rhetorical_question": "¿Cómo opera el acople entre el ARM TM4C1294, los 4 ADS1299 y el videojuego Eagle Eye para garantizar sub-5 µs?",
-            "paragraph_text": "MONEEG resolves this bottleneck through a co-designed embedded architecture. By combining a bare-metal 120 MHz ARM Cortex-M4F microcontroller (Texas Instruments TM4C1294) with four cascaded ADS1299 analog front-ends (AFEs), the platform performs synchronized 24-bit delta-sigma conversion across 32 channels. Crucially, stimulus event flags generated by the Unity-based serious game Eagle Eye are injected directly into the SPI transfer frame at the hardware interrupt level, guaranteeing sub-5 µs timestamping precision.",
-            "metrics": "4 AFEs en cascada, 24 bits, TM4C1294, Eagle Eye en Unity, precisión <5 µs.",
-            "novelty_claim": "Define la novedad medular del paper: sincronización en el límite físico de la conversión sin pasar por buffers de SO.",
-            "thesis_ref": "Capítulo 3 (Diseño Hardware y Firmware), pág. 48.",
-            "pdf_page": 2,
-            "section_ref": "Sección 1 (Introducción)",
-            "paper_blocks": ["introduction.block-3"]
-        },
-        {
-            "id": "p-intro-hypotheses",
-            "label": "Párrafo: Tres Hipótesis Científicas (Intro)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 13,
-            "category": "Párrafo de Novedad",
-            "badge": "HIPÓTESIS H1-H3 / PÁG. 2",
-            "desc": "Párrafo donde se enuncian las 3 hipótesis falsables H1 (ruido <1.1 µVpp), H2 (eliminación de jitter) y H3 (casco 3D Z < 10 kΩ).",
-            "rhetorical_question": "¿Cuáles son las 3 hipótesis verificables que guían la validación del manuscrito?",
-            "paragraph_text": "The primary objective of this paper is to demonstrate the empirical and physiological validity of the MONEEG framework under three core hypotheses: (1) cascaded low-noise front-ends can maintain a sub-microvolt noise floor across 32 active channels under battery power; (2) hardware-embedded event tagging eliminates stimulus-acquisition jitter; and (3) a modular 3D-printed pediatric headpiece maintains stable contact impedance (Z < 10 kΩ) during active gameplay.",
-            "metrics": "H1: Vpp < 1.1 µV; H2: Jitter < 5 µs; H3: Z < 10 kΩ.",
-            "novelty_claim": "Fija los criterios cuantitativos de éxito que auditará la sección de Resultados.",
-            "thesis_ref": "Capítulo 1 (Objetivos e Hipótesis de la Tesis), pág. 12.",
-            "pdf_page": 2,
-            "section_ref": "Sección 1 (Introducción)",
-            "paper_blocks": ["introduction.block-4b"]
-        },
-        {
-            "id": "p-rw-beats-openbci",
-            "label": "Párrafo: Benchmark vs. BEATS y OpenBCI (RW)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 13,
-            "category": "Párrafo de Novedad",
-            "badge": "RELATED WORK / PÁGS. 3–4",
-            "desc": "Párrafo de discusión comparativa que analiza por qué BEATS sufre preemption de red y por qué OpenBCI carece de sincronización hardware.",
-            "rhetorical_question": "¿En qué supera MONEEG a arquitecturas mononúcleo (BEATS) y comerciales (OpenBCI)?",
-            "paragraph_text": "Among open-source systems, BEATS represents a notable milestone, delivering 32-channel high-precision acquisition with wireless transmission. However, BEATS utilizes a single-MCU architecture where high-throughput Wi-Fi socket handling can preempt critical time-sensitive ADC servicing under peak network load... Our exploratory 3D atlas compilation of 18 peer-reviewed neurotechnology frameworks confirms that MONEEG occupies a unique quadrant: multi-channel research-grade biopotential precision combined with deterministic stimulus synchronization and pediatric ergonomics.",
-            "metrics": "Comparativa contra 18 sistemas (BEATS, OpenBCI, BioSemi, EEGNet).",
-            "novelty_claim": "Demuestra la superioridad arquitectónica de separar adquisición estricta y descartar schedulers no deterministas.",
-            "thesis_ref": "Capítulo 2 (Taxonomía de Sistemas BCI Existentes), pág. 28.",
-            "pdf_page": 3,
-            "section_ref": "Sección 2 (Related Work)",
-            "paper_blocks": ["related-work.rw-panorama", "related-work.rw-closing"]
-        },
-        {
-            "id": "p-methods-daisychain",
-            "label": "Párrafo: Arreglo Daisy-Chain 4x ADS1299 (Methods)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "MATERIALES / PÁG. 4",
-            "desc": "Párrafo técnico que detalla el cascada daisy-chain, el bus SPI común y la captura sincrónica por DMA bajo interrupción DRDY.",
-            "rhetorical_question": "¿Cómo se leen 32 canales sincrónicos sin provocar skew temporal ni multiplicar buses de datos?",
-            "paragraph_text": "The biopotential acquisition front-end consists of four Texas Instruments ADS1299 integrated circuits connected in a SPI daisy-chain configuration. Each ADS1299 provides eight low-noise, simultaneous-sampling, 24-bit delta-sigma analog-to-digital converters with built-in programmable gain amplifiers (PGA, gain = 1 to 24) and high input impedance (> 1 GΩ). The cascaded SPI configuration allows the host MCU to read all 32 channels (96 bytes plus status words) in a single synchronous DMA transaction triggered by the data-ready (DRDY) hardware interrupt line.",
-            "metrics": "4 chips cascada, 96 bytes datos + status, DMA atómico, Zin > 1 GΩ.",
-            "novelty_claim": "Asegura sincronismo temporal absoluto entre los 32 canales sin retardos por conmutación de bus.",
-            "thesis_ref": "Capítulo 3 (Sección 3.2: Arreglo de Front-Ends Analógicos), Fig. 3.4.",
-            "pdf_page": 4,
-            "section_ref": "Sección 3 (Materiales y Métodos)",
-            "paper_blocks": ["materials-and-methods.mm-borrowed-machinery"]
-        },
-        {
-            "id": "p-methods-isolation",
-            "label": "Párrafo: Planos Aislados y Estampado en Cabecera (Methods)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 13,
-            "category": "Párrafo de Novedad",
-            "badge": "MATERIALES / PÁG. 5",
-            "desc": "Párrafo que describe el diseño de masa estelar, LDOs ultralimpios TPS7A y la inyección física de marcadores en el encabezado del paquete.",
-            "rhetorical_question": "¿Cómo se protegen los microvoltios corticales de las emisiones de radio y cómo se transportan los marcadores de eventos?",
-            "paragraph_text": "To decouple noisy digital RF communications from the ultra-sensitive microvolt analog plane, MONEEG features complete galvanic isolation. Separate ground planes are bridged only at a dedicated stellar point, and isolated DC-DC converters deliver clean ±2.5 V analog rails with secondary ultra-low-dropout (LDO) linear regulators (TPS7A49/TPS7A30). The microcontroller embeds stimulus flags directly into the 3-byte protocol header of each transmission packet via an external GPIO interrupt linked to the serious game engine.",
-            "metrics": "PSRR > 80 dB, LDOs TPS7A49/TPS7A30, trama UDP de 104 bytes.",
-            "novelty_claim": "Estructura de trama de 104 bytes con estampación determinista inmune al ruido electromagnético de la antena Wi-Fi.",
-            "thesis_ref": "Capítulo 3 (Sección 3.1: Alimentación y Sección 3.4: Sincronización), págs. 40-56.",
-            "pdf_page": 5,
-            "section_ref": "Sección 3 (Materiales y Métodos)",
-            "paper_blocks": ["materials-and-methods.mm-proposal"]
-        },
-        {
-            "id": "p-results-noise-094",
-            "label": "Párrafo: Piso de Ruido 0.94 µVpp Medido (Results)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "RESULTADOS BANCO / PÁG. 6",
-            "desc": "Párrafo clave de resultados empíricos que certifica el piso de ruido submicrovoltio promedio de 0.94 µVpp a lo largo de los 32 canales.",
-            "rhetorical_question": "¿Qué niveles de ruido analógico de fondo se alcanzaron en los 32 canales durante los ensayos con entradas en corto?",
-            "paragraph_text": "Bench testing demonstrated exceptional analog fidelity. Across all 32 channels, the input-referred noise floor remained strictly under 1.1 µVpp (mean Vpp = 0.94 µV, σ = 0.14 µV, Vrms ≈ 0.16 µV). This is well below the typical amplitude of pediatric scalp EEG (10--100 µV), ensuring that delicate cognitive potentials are preserved without amplifier distortion.",
-            "metrics": "Media Vpp = 0.94 µV, σ = 0.14 µV, Vrms ≈ 0.16 µV (0.16–70 Hz).",
-            "novelty_claim": "Demuestra que un diseño abierto y de bajo costo puede superar a los amplificadores comerciales de miles de dólares en inmunidad al ruido.",
-            "thesis_ref": "Capítulo 4 (Sección 4.1: Caracterización de Ruido de Entrada), Fig. 4.3 de la Tesis.",
-            "pdf_page": 6,
-            "section_ref": "Sección 5 (Resultados)",
-            "paper_blocks": ["results-and-discussion.rd-general-task"]
-        },
-        {
-            "id": "p-results-sync-timing",
-            "label": "Párrafo: Latencia 2.4 µs y Cero Pérdidas en 400 Min (Results)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "RESULTADOS BANCO / PÁG. 6",
-            "desc": "Párrafo que reporta los resultados de estrés continuo de 400 minutos y la medición con analizador lógico de la latencia de 2.4 µs.",
-            "rhetorical_question": "¿Cómo se comprobó cuantitativamente el fin del jitter temporal y la estabilidad del enlace inalámbrico?",
-            "paragraph_text": "In long-term streaming endurance tests, the system operated continuously for 400 minutes, transmitting 1.44 x 10^7 samples with zero dropped packets and bounded inter-sample jitter (< 25 µs). In hardware synchronization tests, the measured delay between the external TTL stimulus trigger and header latching was 2.4 µs with a standard deviation of 0.35 µs, completely outperforming software LSL streaming pipelines (18.5 ± 6.2 ms).",
-            "metrics": "400 min continuos, 1.44 x 10^7 muestras, 0 pérdidas, latencia 2.4 µs ± 0.35 µs.",
-            "novelty_claim": "Reducción de dispersión temporal de milisegundos a microsegundos (>7,000x más preciso que LSL), posibilitando ERPs de alta precisión.",
-            "thesis_ref": "Capítulo 4 (Sección 4.2 y 4.3: Pérdida y Jitter), Figs. 4.6 y 4.9 de la Tesis.",
+            "color": "#eab308",
+            "size": 4.8,
+            "category": "Desempeño y Comparación",
+            "badge": "MÉTRICA DE ENLACE",
+            "desc": "Tasa de paquetes descartados y consistencia de intervalo de muestreo en streaming continuado.",
+            "rhetorical_question": "¿Qué métrica demuestra la inmunidad frente a cuellos de botella y desbordes de memoria?",
+            "paragraph_text": "Zero dropped packets across 1.44 x 10^7 samples proves that the DMA-driven bare-metal firmware completely resolves the preemption bottlenecks observed in single-MCU architectures like BEATS.",
+            "metrics": "Tasa de descarte = 0.000%, jitter inter-muestra < 25 µs.",
+            "novelty_claim": "Supera la confiabilidad de sistemas inalámbricos mononúcleo bajo carga sostenida.",
+            "thesis_ref": "Capítulo 4 (Sección 4.2: Evaluación de Pérdida de Paquetes)",
             "pdf_page": 6,
             "section_ref": "Sección 5 (Resultados)",
             "paper_blocks": ["results-and-discussion.rd-contribution-blocks"]
         },
+
+        # =====================================================================
+        # 7. LAS 3 CONCLUSIONES MÁS FUERTES DE LOS RESULTADOS (CYAN / TEAL)
+        # =====================================================================
         {
-            "id": "p-results-berger-alpha",
-            "label": "Párrafo: Validación Fisiológica Efecto Berger (Results)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "RESULTADOS IN-VIVO / PÁG. 7",
-            "desc": "Párrafo de validación in-vivo con voluntarios humanos donde se comprueba el incremento de 3.8 dB en la banda alfa occipital O2.",
-            "rhetorical_question": "¿Cómo se demostró que el sistema captura ritmos cerebrales reales y no artefactos sintéticos?",
-            "paragraph_text": "In-vivo physiological validation with healthy volunteers corroborated the system's biological sensitivity. Recording at the occipital electrode O2 during an eyes-open vs. eyes-closed resting state protocol demonstrated clear Berger alpha rhythm attenuation. During the eyes-closed intervals, spectral power in the 8--13 Hz alpha band increased by 3.8 dB relative to eyes-open, providing indisputable proof of physiological ground-truth capture.",
-            "metrics": "+3.8 dB en banda alfa (8–13 Hz) en electrodo occipital O2.",
-            "novelty_claim": "Prueba empírica de sensibilidad cerebral cortical: modulación alfa natural de 3.8 dB corroborada en espectrograma O2.",
-            "thesis_ref": "Capítulo 4 (Sección 4.4: Validación In-Vivo Efecto Berger), Fig. 4.12 de la Tesis.",
-            "pdf_page": 7,
-            "section_ref": "Sección 5 (Resultados)",
-            "paper_blocks": ["results-and-discussion.rd-cost"]
-        },
-        {
-            "id": "p-concl-clinical-takeaway",
-            "label": "Párrafo: Impacto Traslacional en TDAH y BCI (Concl)",
-            "group": "paragraph",
-            "color": "#f59e0b",
-            "size": 14,
-            "category": "Párrafo de Novedad",
-            "badge": "CONCLUSIONES / PÁGS. 8–9",
-            "desc": "Párrafo de cierre concluyente que articula el impacto del desacoplamiento de equipos costosos y la democratización del BCI pediátrico.",
-            "rhetorical_question": "¿Cuál es el impacto final de democratizar el BCI para niños con TDAH y neurodesarrollo?",
-            "paragraph_text": "Beyond the validation of the MONEEG prototype, these findings demonstrate that deterministic hardware-synchronized electroencephalography can be successfully realized in compact, cost-effective embedded form factors without sacrificing clinical microvolt fidelity or pediatric ergonomic feasibility... This decouples pediatric brain-computer interface paradigms from prohibitively expensive, bulky laboratory equipment, establishing an open-source, scalable foundation for accessible neurofeedback and cognitive rehabilitation in clinical, educational, and ambulatory environments.",
-            "metrics": "Democratización BCI, desacople de equipos costosos, código y esquemas abiertos.",
-            "novelty_claim": "Democratiza la neurorrehabilitación cognitiva infantil: traslada la precisión del laboratorio a la clínica comunitaria y escolar.",
-            "thesis_ref": "Capítulo 5 (Conclusiones y Recomendaciones de la Tesis).",
+            "id": "conclusion-hub",
+            "label": "7. 3 Conclusiones Más Fuertes",
+            "group": "conclusion",
+            "color": "#06b6d4",
+            "size": 7.0,
+            "category": "Conclusiones",
+            "badge": "DIMENSIÓN 7 / IMPACTO",
+            "desc": "Los tres hallazgos concluyentes respaldados por la evidencia numérica que cierran el manuscrito.",
+            "rhetorical_question": "¿Cuáles son las 3 conclusiones científicas y traslacionales indiscutibles que deja el estudio?",
+            "paragraph_text": "This paper demonstrated three conclusive findings: (1) sub-5 µs hardware synchronization fully protects ERP amplitude from jitter attenuation; (2) open-access modular design can achieve submicrovolt clinical noise floors; and (3) bare-metal DMA firmware guarantees zero-loss streaming endurance.",
+            "metrics": "3 aportes comprobados H1, H2 y H3.",
+            "novelty_claim": "Cierra el artículo con rigor científico y respuesta categórica a las hipótesis iniciales.",
+            "thesis_ref": "Capítulo 5 (Conclusiones Generales de la Tesis)",
             "pdf_page": 8,
             "section_ref": "Sección 7 (Conclusiones)",
-            "paper_blocks": ["conclusions.concl-block-3", "conclusions.concl-block-4"]
+            "paper_blocks": ["conclusions.concl-block-1", "conclusions.concl-block-2", "conclusions.concl-block-3"]
+        },
+        {
+            "id": "concl-sync-p300",
+            "label": "Conclusión 1: Sincronía <5 µs Erradica Atenuación >40% P300",
+            "group": "conclusion",
+            "color": "#06b6d4",
+            "size": 5.2,
+            "category": "Conclusiones",
+            "badge": "CONCLUSIÓN 1",
+            "desc": "La inyección determinista de eventos en hardware restaura completamente la morfología y fase de potenciales evocados rápidos.",
+            "rhetorical_question": "¿Cómo cambia el promediado de potenciales evocados al reemplazar software por interrupciones de hardware?",
+            "paragraph_text": "First, deterministic sub-5 µs hardware stimulus injection eliminates the stochastic 10--50 ms timing jitter of software streaming protocols, preventing the >40% P300 amplitude attenuation that compromises single-trial ERP analysis in pediatric patients.",
+            "metrics": "Preservación del 100% de la amplitud pico del P300 sin desenfoque temporal.",
+            "novelty_claim": "Comprueba empíricamente la Hipótesis H1 del paper.",
+            "thesis_ref": "Capítulo 5 (Conclusión 1 de la Tesis)",
+            "pdf_page": 8,
+            "section_ref": "Sección 7 (Conclusiones)",
+            "paper_blocks": ["conclusions.concl-block-1", "abstract.slot-6"]
+        },
+        {
+            "id": "concl-clinical-open",
+            "label": "Conclusión 2: Calidad Clínica (<1.1 µVpp) en Hardware Abierto",
+            "group": "conclusion",
+            "color": "#06b6d4",
+            "size": 5.2,
+            "category": "Conclusiones",
+            "badge": "CONCLUSIÓN 2",
+            "desc": "La arquitectura modular 4x ADS1299 en cascada iguala la pureza de señal de amplificadores médicos comerciales.",
+            "rhetorical_question": "¿Es posible alcanzar especificaciones de grado clínico con componentes de acceso abierto?",
+            "paragraph_text": "Second, the cascaded 4x ADS1299 architecture with galvanic power isolation delivers an input-referred noise floor below 1.1 µVpp across all 32 channels, confirming that open-access hardware can match the signal fidelity of commercial laboratory amplifiers.",
+            "metrics": "Ruido <1.1 µVpp, costo 85% menor que sistemas clínicos cerrados.",
+            "novelty_claim": "Comprueba empíricamente la Hipótesis H2 del paper.",
+            "thesis_ref": "Capítulo 5 (Conclusión 2 de la Tesis)",
+            "pdf_page": 8,
+            "section_ref": "Sección 7 (Conclusiones)",
+            "paper_blocks": ["conclusions.concl-block-2", "abstract.slot-5"]
+        },
+        {
+            "id": "concl-endurance",
+            "label": "Conclusión 3: Transmisión Cero Pérdidas en Sesiones Largas",
+            "group": "conclusion",
+            "color": "#06b6d4",
+            "size": 5.0,
+            "category": "Conclusiones",
+            "badge": "CONCLUSIÓN 3",
+            "desc": "400 minutos continuos con 14.4 millones de muestras sin pérdida confirman estabilidad para terapias clínicas completas.",
+            "rhetorical_question": "¿Qué garantiza que el sistema no colapse durante una intervención de neuroterapia prolongada?",
+            "paragraph_text": "Third, the bare-metal DMA-driven firmware demonstrated zero dropped packets over 400 continuous streaming minutes, confirming the operational reliability required for demanding clinical and neurorehabilitation sessions.",
+            "metrics": "14.4M muestras, 0 pérdidas, jitter inter-muestra acotado.",
+            "novelty_claim": "Comprueba empíricamente la Hipótesis H3 del paper.",
+            "thesis_ref": "Capítulo 5 (Conclusión 3 de la Tesis)",
+            "pdf_page": 8,
+            "section_ref": "Sección 7 (Conclusiones)",
+            "paper_blocks": ["conclusions.concl-block-3", "results-and-discussion.rd-contribution-blocks"]
+        },
+
+        # =====================================================================
+        # 8. LAS 2-3 LÍNEAS DE TRABAJO FUTURO MÁS RELEVANTES (PINK / FUCHSIA)
+        # =====================================================================
+        {
+            "id": "future-hub",
+            "label": "8. 2–3 Líneas de Trabajo Futuro",
+            "group": "future",
+            "color": "#ec4899",
+            "size": 7.0,
+            "category": "Trabajo Futuro",
+            "badge": "DIMENSIÓN 8 / HORIZONTE",
+            "desc": "Las líneas de desarrollo tecnológico y traslación clínica que marcan la continuidad del proyecto.",
+            "rhetorical_question": "¿Cuáles son las siguientes etapas estratégicas para escalar el impacto de MONEEG?",
+            "paragraph_text": "Future work will advance in three concrete directions: on-chip edge spatial filtering, extensive clinical validation across a larger pediatric ADHD cohort, and an ultra-low-power deterministic wireless link.",
+            "metrics": "3 rutas de evolución: firmware on-chip, cohorte clínica y reducción de consumo.",
+            "novelty_claim": "Demuestra visión a largo plazo y madurez traslacional ante revisores.",
+            "thesis_ref": "Capítulo 5 (Trabajo Futuro y Recomendaciones)",
+            "pdf_page": 8,
+            "section_ref": "Sección 6 (Limitaciones) y Sección 7 (Conclusiones)",
+            "paper_blocks": ["limitations.lim-closing", "conclusions.concl-block-4"]
+        },
+        {
+            "id": "fut-edge-ica",
+            "label": "Futuro 1: Filtrado Espacial en el Borde (ICA/CSP en MCU)",
+            "group": "future",
+            "color": "#ec4899",
+            "size": 4.8,
+            "category": "Trabajo Futuro",
+            "badge": "FUTURO FIRMWARE",
+            "desc": "Implementación de algoritmos de descomposición espacial y rechazo de artefactos directamente en procesadores ARM con FPU.",
+            "rhetorical_question": "¿Cómo se puede limpiar la señal EEG de parpadeos en tiempo real sin sobrecargar el PC receptor?",
+            "paragraph_text": "Incorporating real-time spatial filtering algorithms (such as embedded FastICA or Common Spatial Patterns) directly onto the Cortex-M4F microcontroller will enable on-chip ocular and muscular artifact rejection prior to wireless dispatch.",
+            "metrics": "Reducción de latencia de preprocesamiento a sub-milisegundo.",
+            "novelty_claim": "Avanza hacia un nodo BCI autónomo con cómputo en el borde (Edge AI).",
+            "thesis_ref": "Capítulo 5 (Sección 5.2: Procesamiento Embebido en Tiempo Real)",
+            "pdf_page": 8,
+            "section_ref": "Sección 6 (Limitaciones)",
+            "paper_blocks": ["limitations.lim-proposal-items", "conclusions.concl-block-4"]
+        },
+        {
+            "id": "fut-clinical-cohort",
+            "label": "Futuro 2: Ensayo Clínico Multicéntrico en Cohorte TDAH",
+            "group": "future",
+            "color": "#ec4899",
+            "size": 5.0,
+            "category": "Trabajo Futuro",
+            "badge": "FUTURO TRASLACIONAL",
+            "desc": "Validación extendida con 30+ niños diagnosticados con TDAH durante sesiones terapéuticas semanales con el juego Eagle Eye.",
+            "rhetorical_question": "¿Qué se requiere para consolidar la evidencia de eficacia terapéutica en neurorrehabilitación pediátrica?",
+            "paragraph_text": "A comprehensive multi-session clinical trial with a cohort of 30+ pediatric patients diagnosed with ADHD is planned to longitudinally quantify behavioral improvements and neuroplastic changes induced by Eagle Eye serious game training.",
+            "metrics": "Cohorte n = 30+, protocolo de 12 semanas, métricas conductuales Conners-3.",
+            "novelty_claim": "Aporta validación clínica longitudinal de grado médico bajo Minciencias-92056.",
+            "thesis_ref": "Capítulo 5 (Sección 5.2: Recomendaciones de Ensayos Clínicos)",
+            "pdf_page": 8,
+            "section_ref": "Sección 6 (Limitaciones)",
+            "paper_blocks": ["limitations.lim-validation-items", "conclusions.concl-block-4"]
+        },
+        {
+            "id": "fut-wireless-deterministic",
+            "label": "Futuro 3: Enlace Inalámbrico Ultra-Baja Potencia (<80 mA)",
+            "group": "future",
+            "color": "#ec4899",
+            "size": 4.8,
+            "category": "Trabajo Futuro",
+            "badge": "FUTURO HARDWARE",
+            "desc": "Transición a transceptores de capa física determinista (BLE 5.3 / ESP-NOW con TDMA) reduciendo el consumo de 220 mA a <80 mA.",
+            "rhetorical_question": "¿Cómo se optimiza la autonomía energética para permitir jornadas completas de monitoreo ambulatorio?",
+            "paragraph_text": "To extend battery autonomy beyond 4.5 hours, future revisions will implement custom TDMA time-slotted physical links (e.g., optimized BLE 5.3 PHY or proprietary 2.4 GHz protocols), targeting power consumption under 80 mA.",
+            "metrics": "De 220 mA a <80 mA, autonomía extendida de 4.5h a >12h con batería de 1200 mAh.",
+            "novelty_claim": "Elimina el consumo elevado de Wi-Fi manteniendo sincronismo determinista.",
+            "thesis_ref": "Capítulo 5 (Sección 5.2: Optimización Energética de la Plataforma)",
+            "pdf_page": 8,
+            "section_ref": "Sección 6 (Limitaciones)",
+            "paper_blocks": ["limitations.lim-failure-mode", "conclusions.concl-block-4"]
         }
     ],
-
     "links": [
-        # --- Core to Gaps ---
-        {"source": "core-moneeg", "target": "gap-jitter", "label": "resuelve (sub-5 µs vs 10-50 ms)", "value": 3},
-        {"source": "core-moneeg", "target": "gap-noise", "label": "reduce (<1.1 µVpp vs >5 µVpp)", "value": 3},
-        {"source": "core-moneeg", "target": "gap-pediatric", "label": "mitiga (casco 3D ergonómico)", "value": 2},
-        {"source": "core-moneeg", "target": "gap-preemption", "label": "previene (bare-metal + DMA)", "value": 2},
+        # Conexiones desde el Núcleo Central a los 8 Hubs
+        {"source": "core-moneeg", "target": "app-hub", "label": "diseñado para", "value": 3.0},
+        {"source": "core-moneeg", "target": "problem-hub", "label": "resuelve", "value": 3.5},
+        {"source": "core-moneeg", "target": "sota-hub", "label": "supera", "value": 3.0},
+        {"source": "core-moneeg", "target": "novelty-hub", "label": "sustentado en", "value": 4.0},
+        {"source": "core-moneeg", "target": "dataset-hub", "label": "validado en", "value": 3.5},
+        {"source": "core-moneeg", "target": "eval-hub", "label": "evaluado con", "value": 3.5},
+        {"source": "core-moneeg", "target": "conclusion-hub", "label": "demuestra", "value": 4.0},
+        {"source": "core-moneeg", "target": "future-hub", "label": "proyecta", "value": 3.0},
 
-        # --- Core to Architecture Pillars ---
-        {"source": "core-moneeg", "target": "arch-daisychain", "label": "integra (32 CH sincrónicos)", "value": 4},
-        {"source": "core-moneeg", "target": "arch-mcu", "label": "ejecuta en (120 MHz determinista)", "value": 3},
-        {"source": "core-moneeg", "target": "arch-trigger", "label": "implementa (inyección en cabecera)", "value": 4},
-        {"source": "core-moneeg", "target": "arch-power", "label": "protege con (aislamiento galvánico)", "value": 3},
-        {"source": "core-moneeg", "target": "arch-cap", "label": "monta en (casco flexible 3D)", "value": 2},
+        # 1. Hub Aplicaciones -> Nodos Hijos
+        {"source": "app-hub", "target": "app-adhd", "label": "prioriza", "value": 2.5},
+        {"source": "app-hub", "target": "app-neurofeedback", "label": "habilita", "value": 2.5},
+        {"source": "app-hub", "target": "app-serious-games", "label": "integra", "value": 2.5},
 
-        # --- Architecture Pillars to Thesis Evidence ---
-        {"source": "arch-daisychain", "target": "eval-noise", "label": "sustenta piso de ruido", "value": 3},
-        {"source": "arch-mcu", "target": "eval-endurance", "label": "garantiza cero desbordes", "value": 3},
-        {"source": "arch-trigger", "target": "eval-latency", "label": "demuestra 2.4 µs en banco", "value": 4},
-        {"source": "arch-trigger", "target": "eval-game", "label": "sincroniza marcas de Unity", "value": 3},
-        {"source": "arch-cap", "target": "eval-berger", "label": "mantiene contacto Z < 10 kΩ", "value": 2},
-        {"source": "arch-power", "target": "eval-noise", "label": "elimina rizado de fuente", "value": 2},
+        # 2. Hub Problema -> Nodos Hijos
+        {"source": "problem-hub", "target": "prob-jitter", "label": "identifica", "value": 2.5},
+        {"source": "problem-hub", "target": "prob-noise", "label": "identifica", "value": 2.5},
+        {"source": "problem-hub", "target": "prob-ergonomics", "label": "identifica", "value": 2.5},
 
-        # --- Evidence to Sections ---
-        {"source": "sec-intro", "target": "core-moneeg", "label": "formula hipótesis H1-H3", "value": 3},
-        {"source": "sec-rw", "target": "gap-jitter", "label": "analiza estado del arte", "value": 2},
-        {"source": "sec-rw", "target": "gap-noise", "label": "compara contra OpenBCI/BEATS", "value": 2},
-        {"source": "sec-rw", "target": "gap-preemption", "label": "revisa límites mononúcleo", "value": 2},
-        {"source": "sec-methods", "target": "arch-daisychain", "label": "documenta topología SPI", "value": 3},
-        {"source": "sec-methods", "target": "arch-mcu", "label": "describe firmware bare-metal", "value": 3},
-        {"source": "sec-methods", "target": "arch-trigger", "label": "detalla inyección en cabecera", "value": 4},
-        {"source": "sec-methods", "target": "arch-power", "label": "especifica planos analógicos", "value": 2},
-        {"source": "sec-methods", "target": "arch-cap", "label": "ilustra casco pediátrico", "value": 2},
-        {"source": "sec-setup", "target": "eval-noise", "label": "define prueba con 50 Ω", "value": 3},
-        {"source": "sec-setup", "target": "eval-endurance", "label": "define prueba de 400 min", "value": 3},
-        {"source": "sec-setup", "target": "eval-latency", "label": "define lógica con osciloscopio", "value": 3},
-        {"source": "sec-setup", "target": "eval-berger", "label": "protocolo de reposo O2", "value": 3},
-        {"source": "sec-results", "target": "eval-noise", "label": "reporta 0.94 µVpp y curvas", "value": 4},
-        {"source": "sec-results", "target": "eval-endurance", "label": "reporta cero paquetes perdidos", "value": 3},
-        {"source": "sec-results", "target": "eval-latency", "label": "reporta 2.4 µs determinista", "value": 4},
-        {"source": "sec-results", "target": "eval-berger", "label": "reporta 3.8 dB espectrograma", "value": 4},
-        {"source": "sec-results", "target": "eval-game", "label": "presenta sincronización Eagle Eye", "value": 3},
-        {"source": "sec-limitations", "target": "gap-pediatric", "label": "discute fatiga y artefactos", "value": 2},
-        {"source": "sec-conclusions", "target": "core-moneeg", "label": "consolida novedad e impacto", "value": 4},
+        # 3. Hub SOTA -> Nodos Hijos
+        {"source": "sota-hub", "target": "sota-beats", "label": "compara frente a", "value": 2.0},
+        {"source": "sota-hub", "target": "sota-lsl", "label": "compara frente a", "value": 2.0},
+        {"source": "sota-hub", "target": "sota-openbci", "label": "compara frente a", "value": 2.0},
+        {"source": "sota-hub", "target": "sota-consumer", "label": "compara frente a", "value": 2.0},
+        {"source": "sota-hub", "target": "sota-vr-oddball", "label": "compara frente a", "value": 2.0},
 
-        # --- Key Paragraphs to Sections, Gaps, Pillars, Evidence, Core ---
-        {"source": "p-abstract-solution", "target": "core-moneeg", "label": "declara formalmente", "value": 4},
-        {"source": "p-abstract-solution", "target": "sec-intro", "label": "resume alcance de", "value": 3},
-        
-        {"source": "p-intro-gap-jitter", "target": "sec-intro", "label": "párrafo de apertura de", "value": 3},
-        {"source": "p-intro-gap-jitter", "target": "gap-jitter", "label": "formula cuantitativamente", "value": 4},
-        
-        {"source": "p-intro-moneeg-mechanism", "target": "sec-intro", "label": "párrafo central de", "value": 4},
-        {"source": "p-intro-moneeg-mechanism", "target": "core-moneeg", "label": "enuncia innovación de", "value": 4},
-        {"source": "p-intro-moneeg-mechanism", "target": "arch-trigger", "label": "presenta mecanismo de", "value": 4},
-        {"source": "p-intro-moneeg-mechanism", "target": "arch-mcu", "label": "establece bare-metal en", "value": 3},
+        # 4. Hub Novedad -> Nodos Hijos
+        {"source": "novelty-hub", "target": "nov-sync", "label": "despliega", "value": 3.0},
+        {"source": "novelty-hub", "target": "nov-afe", "label": "despliega", "value": 3.0},
+        {"source": "novelty-hub", "target": "nov-trigger-embed", "label": "despliega", "value": 3.0},
 
-        {"source": "p-intro-hypotheses", "target": "sec-intro", "label": "cierre propositivo de", "value": 3},
-        {"source": "p-intro-hypotheses", "target": "eval-noise", "label": "fija hipótesis H1", "value": 3},
-        {"source": "p-intro-hypotheses", "target": "eval-latency", "label": "fija hipótesis H2", "value": 3},
-        {"source": "p-intro-hypotheses", "target": "arch-cap", "label": "fija hipótesis H3", "value": 3},
+        # 5. Hub Datasets -> Nodos Hijos
+        {"source": "dataset-hub", "target": "ds-bench", "label": "incluye", "value": 2.5},
+        {"source": "dataset-hub", "target": "ds-p300", "label": "incluye", "value": 2.5},
+        {"source": "dataset-hub", "target": "ds-stress", "label": "incluye", "value": 2.5},
 
-        {"source": "p-rw-beats-openbci", "target": "sec-rw", "label": "párrafo de contraste en", "value": 3},
-        {"source": "p-rw-beats-openbci", "target": "gap-preemption", "label": "demuestra vulnerabilidad de", "value": 3},
-        {"source": "p-rw-beats-openbci", "target": "core-moneeg", "label": "ubica en cuadrante único a", "value": 3},
+        # 6. Hub Métricas -> Nodos Hijos
+        {"source": "eval-hub", "target": "metric-jitter", "label": "mide", "value": 2.5},
+        {"source": "eval-hub", "target": "metric-noise", "label": "mide", "value": 2.5},
+        {"source": "eval-hub", "target": "metric-reliability", "label": "mide", "value": 2.5},
 
-        {"source": "p-methods-daisychain", "target": "sec-methods", "label": "párrafo de diseño en", "value": 3},
-        {"source": "p-methods-daisychain", "target": "arch-daisychain", "label": "formaliza ingeniería de", "value": 4},
-        {"source": "p-methods-daisychain", "target": "eval-noise", "label": "habilita piso de ruido de", "value": 3},
+        # 7. Hub Conclusiones -> Nodos Hijos
+        {"source": "conclusion-hub", "target": "concl-sync-p300", "label": "afirma", "value": 3.0},
+        {"source": "conclusion-hub", "target": "concl-clinical-open", "label": "afirma", "value": 3.0},
+        {"source": "conclusion-hub", "target": "concl-endurance", "label": "afirma", "value": 3.0},
 
-        {"source": "p-methods-isolation", "target": "sec-methods", "label": "párrafo de aislamiento en", "value": 3},
-        {"source": "p-methods-isolation", "target": "arch-power", "label": "especifica LDOs y masas de", "value": 3},
-        {"source": "p-methods-isolation", "target": "arch-trigger", "label": "define trama 104B de", "value": 3},
+        # 8. Hub Futuro -> Nodos Hijos
+        {"source": "future-hub", "target": "fut-edge-ica", "label": "propone", "value": 2.5},
+        {"source": "future-hub", "target": "fut-clinical-cohort", "label": "propone", "value": 2.5},
+        {"source": "future-hub", "target": "fut-wireless-deterministic", "label": "propone", "value": 2.5},
 
-        {"source": "p-results-noise-094", "target": "sec-results", "label": "párrafo de validación en", "value": 4},
-        {"source": "p-results-noise-094", "target": "eval-noise", "label": "reporta 0.94 µVpp medido en", "value": 4},
-        {"source": "p-results-noise-094", "target": "gap-noise", "label": "derrota brecha de", "value": 4},
+        # Enlaces Semánticos Transversales (Cruces Críticos de Novedad)
+        {"source": "prob-jitter", "target": "sota-lsl", "label": "presente en", "value": 2.0},
+        {"source": "nov-sync", "target": "prob-jitter", "label": "elimina", "value": 3.0},
+        {"source": "nov-sync", "target": "sota-lsl", "label": "supera 18.5 ms de", "value": 2.5},
+        {"source": "metric-jitter", "target": "nov-sync", "label": "corrobora 2.4 µs en", "value": 3.0},
+        {"source": "concl-sync-p300", "target": "nov-sync", "label": "respaldada por", "value": 3.0},
+        {"source": "concl-sync-p300", "target": "app-adhd", "label": "habilita diagnóstico en", "value": 2.5},
 
-        {"source": "p-results-sync-timing", "target": "sec-results", "label": "párrafo de latencia en", "value": 4},
-        {"source": "p-results-sync-timing", "target": "eval-latency", "label": "reporta 2.4 µs ± 0.35 µs de", "value": 4},
-        {"source": "p-results-sync-timing", "target": "eval-endurance", "label": "certifica 400 min de", "value": 3},
-        {"source": "p-results-sync-timing", "target": "gap-jitter", "label": "elimina definitivamente", "value": 4},
+        {"source": "nov-afe", "target": "prob-noise", "label": "reduce a <1.1 µVpp", "value": 3.0},
+        {"source": "nov-afe", "target": "sota-openbci", "label": "duplica canales frente a", "value": 2.0},
+        {"source": "metric-noise", "target": "nov-afe", "label": "verifica 0.94 µVpp en", "value": 3.0},
+        {"source": "concl-clinical-open", "target": "nov-afe", "label": "confirma fidelidad de", "value": 3.0},
 
-        {"source": "p-results-berger-invivo", "target": "sec-results", "label": "párrafo in-vivo en", "value": 4},
-        {"source": "p-results-berger-invivo", "target": "eval-berger", "label": "presenta modulación 3.8 dB de", "value": 4},
+        {"source": "nov-trigger-embed", "target": "app-serious-games", "label": "acopla directamente a", "value": 3.0},
+        {"source": "ds-p300", "target": "app-serious-games", "label": "registrado durante", "value": 2.5},
+        {"source": "ds-bench", "target": "nov-afe", "label": "calibra matriz de", "value": 2.5},
+        {"source": "ds-stress", "target": "metric-reliability", "label": "suministra datos a", "value": 3.0},
+        {"source": "concl-endurance", "target": "ds-stress", "label": "sustentada en", "value": 3.0},
 
-        {"source": "p-concl-clinical-takeaway", "target": "sec-conclusions", "label": "párrafo de remate en", "value": 4},
-        {"source": "p-concl-clinical-takeaway", "target": "core-moneeg", "label": "proyecta legado y futuro de", "value": 4},
-        {"source": "p-concl-clinical-takeaway", "target": "gap-pediatric", "label": "resuelve traslación en", "value": 3}
+        {"source": "fut-edge-ica", "target": "nov-sync", "label": "evoluciona firmware de", "value": 2.0},
+        {"source": "fut-clinical-cohort", "target": "app-adhd", "label": "extiende ensayo en", "value": 2.5},
+        {"source": "fut-wireless-deterministic", "target": "nov-trigger-embed", "label": "optimiza enlace de", "value": 2.0}
     ]
 }
 
@@ -832,17 +874,20 @@ def build_novelty_viewer_html() -> str:
       vertical-align: middle;
     }}
     #toolbar {{
-      gap: 5px;
+      gap: 6px;
     }}
     #toolbar button {{
       font-size: 12px;
-      padding: 3px 10px;
+      padding: 3.5px 11px;
       cursor: pointer;
       background: #14172a;
       color: #e4e4ed;
       border: 1px solid #2a3350;
       border-radius: 6px;
       transition: background 0.15s, border-color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }}
     #toolbar button:hover {{
       background: #1e243d;
@@ -862,7 +907,7 @@ def build_novelty_viewer_html() -> str:
       color: #e4e4ed;
       outline: none;
       margin-left: 6px;
-      width: 210px;
+      width: 220px;
     }}
     #nodeSearchInput:focus {{
       border-color: #38bdf8;
@@ -950,10 +995,10 @@ def build_novelty_viewer_html() -> str:
     .quote {{
       font-style: italic;
       color: #b9c4de;
-      border-left: 3px solid #f59e0b;
+      border-left: 3px solid #10b981;
       margin: 10px 0;
       padding: 8px 12px;
-      background: rgba(245, 158, 11, 0.05);
+      background: rgba(16, 185, 129, 0.05);
       border-radius: 0 6px 6px 0;
       font-family: Georgia, serif;
       line-height: 1.55;
@@ -1024,19 +1069,20 @@ def build_novelty_viewer_html() -> str:
     <span>🕸️ Grafo 3D de Novedad e Ideas del Manuscrito — MONEEG</span>
     <small>Elsevier Biomedical Signal Processing and Control · Minciencias-92056</small>
   </h1>
-  <div id="panel">Arrastra para rotar, clic derecho para desplazar, rueda para zoom. Pasa el cursor sobre un nodo para trazar enlaces y atenuar el resto; clic para ver detalles y evidencia; clic en los chips para agrupar por color las partes del manuscrito.</div>
+  <div id="panel">Arrastra con el ratón para rotar (órbita suave), rueda para zoom 3D sensible, clic derecho para desplazar. Clic en cualquier nodo para inspeccionar evidencia y párrafos. Usa los chips de colores para filtrar por las 8 dimensiones clave.</div>
 
   <!-- Legend & Color Grouping Chips (Atlas Style) -->
-  <div id="famlegend"><em>Agrupar por Color:</em> <span id="famchips"></span></div>
-  <div id="rellegend"><em>Enlaces:</em> <span class="dot" style="border-color:#38bdf8"></span>arquitectura <span class="dot" style="border-color:#f59e0b"></span>párrafo clave <span class="dot" style="border-color:#f43f5e"></span>resuelve brecha <span class="dot" style="border-color:#10b981"></span>hardware determinista <span class="dot" style="border-color:#a855f7"></span>evidencia tesis</div>
+  <div id="famlegend"><em>8 Dimensiones Clave:</em> <span id="famchips"></span></div>
+  <div id="rellegend"><em>Enlaces:</em> <span class="dot" style="border-color:#38bdf8"></span>arquitectura global <span class="dot" style="border-color:#10b981"></span>novedad vendida <span class="dot" style="border-color:#f43f5e"></span>resuelve brecha <span class="dot" style="border-color:#a855f7"></span>evidencia experimental <span class="dot" style="border-color:#eab308"></span>métricas comparativas</div>
 
   <!-- Toolbar Controls (Atlas Style) -->
   <div id="toolbar">
-    <button id="zoomin">zoom +</button>
-    <button id="zoomout">zoom −</button>
-    <button id="zoomreset">reset view</button>
-    <button id="btnAutoRotate">pausar giro</button>
-    <input type="text" id="nodeSearchInput" placeholder="🔍 Buscar nodo, párrafo o métrica..." oninput="searchNodes(this.value)">
+    <button id="zoomin" title="Acercar cámara">🔍 Zoom +</button>
+    <button id="zoomout" title="Alejar cámara">🔍 Zoom −</button>
+    <button id="zoomreset" title="Restablecer vista centrada">↺ Reset</button>
+    <button id="btnAutoRotate" class="active" title="Pausar o reanudar giro suave de la cámara">⏸️ Pausar giro</button>
+    <button id="btnWheelMode" title="Alternar función de la rueda del ratón">🖱️ Rueda: Zoom 3D</button>
+    <input type="text" id="nodeSearchInput" placeholder="🔍 Buscar nodo, métrica o párrafo..." oninput="searchNodes(this.value)">
   </div>
 
   <!-- Sky Canvas Container -->
@@ -1103,6 +1149,7 @@ def build_novelty_viewer_html() -> str:
     let activeGroup = null;
     let hoverNode = null;
     let targetPdfPage = 1;
+    let wheelMode = 'zoom'; // 'zoom' | 'page'
 
     const highlightNodes = new Set();
     const highlightLinks = new Set();
@@ -1113,7 +1160,7 @@ def build_novelty_viewer_html() -> str:
       .backgroundColor('#0a0a10')
       .showNavInfo(false)
       .nodeLabel(node => `${{node.label}} [${{node.category}}]`)
-      .nodeVal(node => node.size || 10)
+      .nodeVal(node => node.size || 5)
       .nodeResolution(24)
       .nodeColor(node => {{
         if (highlightNodes.size > 0 && !highlightNodes.has(node.id)) {{
@@ -1129,17 +1176,19 @@ def build_novelty_viewer_html() -> str:
         if (highlightLinks.size > 0 && !highlightLinks.has(link)) {{
           return 'rgba(25, 30, 48, 0.08)';
         }}
-        if (link.source && (link.source.group === 'paragraph' || link.source === 'paragraph')) return 'rgba(245, 158, 11, 0.45)';
+        if (link.source && (link.source.group === 'novelty' || link.source === 'novelty')) return 'rgba(16, 185, 129, 0.55)';
+        if (link.source && (link.source.group === 'problem' || link.source === 'problem')) return 'rgba(244, 63, 94, 0.45)';
         return 'rgba(56, 189, 248, 0.35)';
       }})
       .linkDirectionalParticles(2)
       .linkDirectionalParticleWidth(link => {{
         if (highlightLinks.size > 0 && !highlightLinks.has(link)) return 0;
-        return 1.8;
+        return 1.6;
       }})
       .linkDirectionalParticleSpeed(0.005)
       .linkDirectionalParticleColor(link => {{
-        if (link.source && (link.source.group === 'paragraph' || link.source === 'paragraph')) return '#f59e0b';
+        if (link.source && (link.source.group === 'novelty' || link.source === 'novelty')) return '#10b981';
+        if (link.source && (link.source.group === 'problem' || link.source === 'problem')) return '#f43f5e';
         return '#38bdf8';
       }})
       .linkLabel(link => link.label)
@@ -1155,6 +1204,33 @@ def build_novelty_viewer_html() -> str:
       .onBackgroundClick(() => {{
         closeInspector();
       }});
+
+    // Configure OrbitControls for maximum responsiveness, buttery smooth damping, and non-blocking auto-rotate
+    setTimeout(() => {{
+      const controls = Graph.controls();
+      if (controls) {{
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.rotateSpeed = 0.85;
+        controls.zoomSpeed = 1.35;
+        controls.panSpeed = 0.85;
+        controls.enableZoom = true;
+        controls.autoRotate = isRotating;
+        controls.autoRotateSpeed = 0.7;
+
+        // Yield auto-rotation gently when user starts manipulating
+        controls.addEventListener('start', () => {{
+          if (isRotating) {{
+            controls.autoRotate = false;
+          }}
+        }});
+        controls.addEventListener('end', () => {{
+          if (isRotating && !selectedNode) {{
+            controls.autoRotate = true;
+          }}
+        }});
+      }}
+    }}, 200);
 
     function updateHighlight() {{
       highlightNodes.clear();
@@ -1173,7 +1249,7 @@ def build_novelty_viewer_html() -> str:
         }});
       }} else if (activeGroup) {{
         graphData.nodes.forEach(n => {{
-          if (n.group === activeGroup || (activeGroup === 'paragraph' && (n.group === 'paragraph' || n.group === 'section' || n.id === 'core-moneeg'))) {{
+          if (n.group === activeGroup || n.id === 'core-moneeg') {{
             highlightNodes.add(n.id);
           }}
         }});
@@ -1187,40 +1263,51 @@ def build_novelty_viewer_html() -> str:
       }}
     }}
 
-    // Auto-orbit camera
-    let angle = 0;
-    const distance = 480;
-    setInterval(() => {{
-      if (isRotating) {{
-        angle += 0.0022;
-        Graph.cameraPosition({{
-          x: distance * Math.sin(angle),
-          z: distance * Math.cos(angle)
-        }});
-      }}
-    }}, 20);
-
     function toggleRotate() {{
       isRotating = !isRotating;
+      const controls = Graph.controls();
+      if (controls) {{
+        controls.autoRotate = isRotating;
+      }}
       const btn = document.getElementById('btnAutoRotate');
-      btn.textContent = isRotating ? 'pausar giro' : 'reanudar giro';
-      btn.classList.toggle('active', !isRotating);
+      btn.innerHTML = isRotating ? '⏸️ Pausar giro' : '▶️ Reanudar giro';
+      btn.classList.toggle('active', isRotating);
     }}
     document.getElementById('btnAutoRotate').addEventListener('click', toggleRotate);
 
+    function toggleWheelMode() {{
+      wheelMode = (wheelMode === 'zoom') ? 'page' : 'zoom';
+      const btn = document.getElementById('btnWheelMode');
+      btn.innerHTML = wheelMode === 'zoom' ? '🖱️ Rueda: Zoom 3D' : '📜 Rueda: Scroll Página';
+      btn.classList.toggle('active', wheelMode === 'page');
+    }}
+    document.getElementById('btnWheelMode').addEventListener('click', toggleWheelMode);
+
+    // Mouse wheel delegate: forward to parent page scroll when hovering UI, holding Shift, or in page scroll mode
+    window.addEventListener('wheel', (e) => {{
+      const isUI = e.target.closest('#famlegend, #rellegend, #toolbar, h1, #panel, .inspector-card');
+      if (wheelMode === 'page' || e.shiftKey || isUI) {{
+        if (window.parent && window.parent !== window) {{
+          window.parent.postMessage({{ type: 'page_scroll', deltaY: e.deltaY }}, '*');
+        }}
+      }}
+    }}, {{ passive: true }});
+
     document.getElementById('zoomin').addEventListener('click', () => {{
       const pos = Graph.cameraPosition();
-      Graph.cameraPosition({{ x: pos.x * 0.75, y: pos.y * 0.75, z: pos.z * 0.75 }}, null, 400);
+      Graph.cameraPosition({{ x: pos.x * 0.72, y: pos.y * 0.72, z: pos.z * 0.72 }}, null, 350);
     }});
 
     document.getElementById('zoomout').addEventListener('click', () => {{
       const pos = Graph.cameraPosition();
-      Graph.cameraPosition({{ x: pos.x * 1.33, y: pos.y * 1.33, z: pos.z * 1.33 }}, null, 400);
+      Graph.cameraPosition({{ x: pos.x * 1.35, y: pos.y * 1.35, z: pos.z * 1.35 }}, null, 350);
     }});
 
     document.getElementById('zoomreset').addEventListener('click', () => {{
-      isRotating = false;
-      document.getElementById('btnAutoRotate').textContent = 'reanudar giro';
+      isRotating = true;
+      const controls = Graph.controls();
+      if (controls) controls.autoRotate = true;
+      document.getElementById('btnAutoRotate').innerHTML = '⏸️ Pausar giro';
       document.getElementById('btnAutoRotate').classList.add('active');
       activeGroup = null;
       document.querySelectorAll('.famchip').forEach(c => {{
@@ -1230,20 +1317,19 @@ def build_novelty_viewer_html() -> str:
       }});
       updateHighlight();
       Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
-      Graph.cameraPosition({{ x: 0, y: 35, z: 460 }}, {{ x: 0, y: 0, z: 0 }}, 1000);
+      Graph.cameraPosition({{ x: 0, y: 30, z: 420 }}, {{ x: 0, y: 0, z: 0 }}, 800);
     }});
 
     function selectNode(node) {{
       selectedNode = node;
-      isRotating = false;
-      document.getElementById('btnAutoRotate').textContent = 'reanudar giro';
-      document.getElementById('btnAutoRotate').classList.add('active');
+      const controls = Graph.controls();
+      if (controls) controls.autoRotate = false;
 
-      const dist = 180;
+      const dist = 160;
       Graph.cameraPosition(
         {{ x: node.x + dist * 0.7, y: node.y + dist * 0.35, z: node.z + dist * 0.7 }},
         {{ x: node.x, y: node.y, z: node.z }},
-        1000
+        900
       );
 
       const card = document.getElementById('inspectorCard');
@@ -1281,7 +1367,7 @@ def build_novelty_viewer_html() -> str:
 
       targetPdfPage = node.pdf_page || 1;
       document.getElementById('inspPdfPage').textContent = `Pág. ${{targetPdfPage}}`;
-      document.getElementById('inspLocation').textContent = `${{node.section_ref || 'Manuscrito'}} · Ubicación en documento final: Página ${{targetPdfPage}}`;
+      document.getElementById('inspLocation').textContent = `${{node.section_ref || 'Manuscrito'}} · Ubicación en documento: Página ${{targetPdfPage}}`;
 
       const blocksContainer = document.getElementById('inspBlocks');
       blocksContainer.innerHTML = '';
@@ -1296,16 +1382,23 @@ def build_novelty_viewer_html() -> str:
     function closeInspector() {{
       document.getElementById('inspectorCard').style.display = 'none';
       selectedNode = null;
+      const controls = Graph.controls();
+      if (controls && isRotating) {{
+        controls.autoRotate = true;
+      }}
     }}
 
-    // Build Family Legend Chips (Atlas Style)
+    // Build Family Legend Chips (Exact 8 Pillars matching the User Specification)
     const GROUPS_META = [
-      {{ id: 'core', label: 'Novedad Central & Abstract', color: '#38bdf8' }},
-      {{ id: 'paragraph', label: 'Párrafos Clave de Novedad', color: '#f59e0b' }},
-      {{ id: 'gap', label: 'Brechas Clínicas y SOTA', color: '#f43f5e' }},
-      {{ id: 'arch', label: 'Arquitectura Hardware', color: '#10b981' }},
-      {{ id: 'eval', label: 'Evidencia Experimental Tesis', color: '#a855f7' }},
-      {{ id: 'section', label: 'Secciones del Manuscrito', color: '#0ea5e9' }}
+      {{ id: 'core', label: 'MONEEG Global', color: '#38bdf8' }},
+      {{ id: 'app', label: '1. Aplicaciones', color: '#0ea5e9' }},
+      {{ id: 'problem', label: '2. Problema Central', color: '#f43f5e' }},
+      {{ id: 'sota', label: '3. 5 Ideas SOTA', color: '#fb7185' }},
+      {{ id: 'novelty', label: '4. Novedad (3 Pilares)', color: '#10b981' }},
+      {{ id: 'dataset', label: '5. Datasets Probados', color: '#a855f7' }},
+      {{ id: 'eval', label: '6. Métricas & Comparación', color: '#eab308' }},
+      {{ id: 'conclusion', label: '7. 3 Conclusiones', color: '#06b6d4' }},
+      {{ id: 'future', label: '8. Trabajo Futuro', color: '#ec4899' }}
     ];
 
     const chipsContainer = document.getElementById('famchips');
@@ -1352,6 +1445,7 @@ def build_novelty_viewer_html() -> str:
       const q = query.toLowerCase().trim();
       const match = graphData.nodes.find(n => 
         n.label.toLowerCase().includes(q) ||
+        (n.desc && n.desc.toLowerCase().includes(q)) ||
         (n.paragraph_text && n.paragraph_text.toLowerCase().includes(q)) ||
         (n.metrics && n.metrics.toLowerCase().includes(q)) ||
         (n.novelty_claim && n.novelty_claim.toLowerCase().includes(q))

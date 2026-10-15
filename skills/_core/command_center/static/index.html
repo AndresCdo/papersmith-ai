@@ -2186,6 +2186,12 @@
           </div>
         </div>
 
+        <!-- Barra de Ayuda y Sensibilidad de Interacción del Ratón -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.8rem; background: var(--surface-2); border-bottom: 1px solid var(--border-subtle); font-size: 0.76rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.5rem;">
+          <span>🖱️ <strong>Sensibilidad de ratón:</strong> Arrastra para rotar en 3D · <strong>Rueda para zoom 3D</strong> sensible y continuo · Para deslizar la página, haz scroll sobre esta barra o usa <strong>Shift + rueda</strong>.</span>
+          <span style="font-size: 0.72rem; color: var(--accent);">✨ 8 Pilares de Novedad Activos</span>
+        </div>
+
         <!-- Vista 1: Iframe Constelación 3D Solar Atlas -->
         <div id="atlas3dContainer" style="display: block;">
           <iframe id="graphIframe" class="iframe-viewer" src="/api/atlas/view"></iframe>
@@ -4754,6 +4760,13 @@
     window.addEventListener('hashchange', () => {
       const hash = window.location.hash.replace('#', '');
       if (hash) navigateTab(hash);
+    });
+
+    // Listen for wheel scroll events from nested iframes (3D Atlas and Novelty Graph)
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'page_scroll') {
+        window.scrollBy({ top: e.data.deltaY, behavior: 'auto' });
+      }
     });
   </script>
 </body>
