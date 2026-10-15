@@ -25,7 +25,7 @@ NOVELTY_GRAPH_DATA: dict[str, Any] = {
             "label": "MONEEG: Open-Access 32-Ch BCI",
             "group": "core",
             "color": "#38bdf8",
-            "size": 24,
+            "size": 15,
             "category": "Novedad Central",
             "badge": "ARQUITECTURA PRINCIPAL",
             "desc": "Framework embebido de adquisición de EEG de 32 canales con sincronización hardware determinista (<5 µs) y piso de ruido submicrovoltio (<1.1 µVpp) optimizado para monitoreo cognitivo pediátrico.",
@@ -734,7 +734,8 @@ def build_novelty_graph() -> dict[str, Any]:
 
 
 def build_novelty_viewer_html() -> str:
-    """Generate the full responsive 3D WebGL viewer for the novelty graph."""
+    """Generate the full responsive 3D WebGL viewer for the novelty graph,
+    matching the exact style, typography, libraries, and constellation aesthetics of SOTA Atlas."""
     graph_json = json.dumps(NOVELTY_GRAPH_DATA, ensure_ascii=False)
     
     return f"""<!DOCTYPE html>
@@ -745,184 +746,162 @@ def build_novelty_viewer_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
   <style>
-    :root {{
-      --bg: #090d16;
-      --card-bg: rgba(15, 23, 42, 0.92);
-      --border: rgba(56, 189, 248, 0.28);
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-      --cyan: #38bdf8;
-      --emerald: #10b981;
-      --purple: #a855f7;
-      --rose: #f43f5e;
-      --blue: #0ea5e9;
-      --amber: #f59e0b;
-    }}
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    html, body {{
+      height: 100%;
+      margin: 0;
+      padding: 10px 14px;
+      box-sizing: border-box;
+      background: #0a0a10;
+      color: #e4e4ed;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
-      width: 100vw;
-      height: 100vh;
+    }}
+    h1 {{
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 4px;
+      letter-spacing: .02em;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    h1 small {{
+      font-size: 11px;
+      font-weight: 400;
+      color: #64748b;
+      letter-spacing: 0;
+    }}
+    #panel {{
+      color: #9aa3bd;
+      font-size: 12px;
+      margin: 0 0 6px;
+      line-height: 1.35;
+    }}
+    #famlegend, #rellegend, #toolbar {{
+      margin: 0 0 5px;
+      font-size: 12px;
+      color: #9aa3bd;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+    }}
+    #famlegend em, #rellegend em {{
+      font-style: normal;
+      font-weight: 600;
+      margin-right: 6px;
+      color: #cbd5e1;
+    }}
+    .famchip {{
+      margin: 2px 4px 2px 0;
+      padding: 2.5px 10px;
+      cursor: pointer;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #14172a;
+      color: #e4e4ed;
+      font-size: 11.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      user-select: none;
+    }}
+    .famchip:hover {{
+      background: #1e243d;
+      border-color: #475569;
+    }}
+    .famchip.on {{
+      font-weight: 700;
+      box-shadow: 0 0 10px currentColor;
+    }}
+    .famchip-dot {{
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }}
+    .dot {{
+      display: inline-block;
+      width: 14px;
+      height: 0;
+      border-top: 2px solid;
+      margin: 0 3px 2px 8px;
+      vertical-align: middle;
+    }}
+    #toolbar {{
+      gap: 5px;
+    }}
+    #toolbar button {{
+      font-size: 12px;
+      padding: 3px 10px;
+      cursor: pointer;
+      background: #14172a;
+      color: #e4e4ed;
+      border: 1px solid #2a3350;
+      border-radius: 6px;
+      transition: background 0.15s, border-color 0.15s;
+    }}
+    #toolbar button:hover {{
+      background: #1e243d;
+      border-color: #38bdf8;
+    }}
+    #toolbar button.active {{
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+    }}
+    #nodeSearchInput {{
+      background: #14172a;
+      border: 1px solid #2a3350;
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: #e4e4ed;
+      outline: none;
+      margin-left: 6px;
+      width: 210px;
+    }}
+    #nodeSearchInput:focus {{
+      border-color: #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+    }}
+    .sky {{
+      flex: 1 1 auto;
+      min-height: 420px;
+      width: 100%;
+      background: #0a0a10;
+      border: 1px solid #1e2236;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+      cursor: grab;
+    }}
+    .sky:active {{
+      cursor: grabbing;
     }}
     #3d-graph {{
       width: 100%;
       height: 100%;
     }}
-    /* Topbar HUD */
-    .hud-topbar {{
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      right: 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      pointer-events: none;
-      z-index: 10;
-    }}
-    .hud-title-badge {{
-      background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 16px;
-      pointer-events: auto;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }}
-    .hud-title-badge h1 {{
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      letter-spacing: -0.01em;
-    }}
-    .hud-title-badge p {{
-      font-size: 0.72rem;
-      color: var(--muted);
-      margin-top: 2px;
-    }}
-    .hud-controls {{
-      display: flex;
-      gap: 8px;
-      pointer-events: auto;
-      align-items: center;
-    }}
-    .hud-btn {{
-      background: rgba(30, 41, 59, 0.85);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 7px 12px;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      cursor: pointer;
-      backdrop-filter: blur(8px);
-      transition: all 0.2s;
-    }}
-    .hud-btn:hover, .hud-btn.active {{
-      background: rgba(56, 189, 248, 0.2);
-      border-color: var(--cyan);
-      color: #fff;
-      transform: translateY(-1px);
-    }}
-    .hud-btn--primary {{
-      background: linear-gradient(135deg, #0284c7, #0369a1);
-      border-color: #38bdf8;
-      color: #fff;
-    }}
 
-    /* Search Input HUD */
-    .hud-search {{
-      position: absolute;
-      top: 76px;
-      left: 14px;
-      z-index: 10;
-      width: 280px;
-    }}
-    .hud-search input {{
-      width: 100%;
-      background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 0.78rem;
-      color: var(--text);
-      outline: none;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    }}
-    .hud-search input:focus {{
-      border-color: var(--cyan);
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
-    }}
-
-    /* Legend HUD */
-    .hud-legend {{
-      position: absolute;
-      bottom: 18px;
-      left: 18px;
-      background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 0.72rem;
-      z-index: 10;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }}
-    .legend-title {{
-      font-weight: 700;
-      text-transform: uppercase;
-      font-size: 0.65rem;
-      letter-spacing: 0.05em;
-      color: var(--muted);
-      margin-bottom: 2px;
-    }}
-    .legend-item {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
-      transition: background 0.15s;
-    }}
-    .legend-item:hover {{
-      background: rgba(255,255,255,0.06);
-    }}
-    .legend-dot {{
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-      box-shadow: 0 0 6px currentColor;
-    }}
-
-    /* Side Inspector Drawer */
+    /* Side Inspector Card (Modal Style matching SOTA Atlas) */
     .inspector-card {{
       position: absolute;
-      top: 14px;
-      right: 14px;
+      top: 12px;
+      right: 12px;
       width: 440px;
       max-width: calc(100vw - 28px);
-      max-height: calc(100vh - 28px);
-      background: var(--card-bg);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--border);
+      max-height: calc(100% - 24px);
+      background: #11131f;
+      border: 1px solid #2a3350;
       border-radius: 10px;
-      padding: 16px;
+      padding: 16px 18px;
       overflow-y: auto;
       z-index: 20;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      box-shadow: 0 0 40px rgba(14, 165, 233, 0.2);
       display: none;
       scrollbar-width: thin;
     }}
@@ -930,260 +909,246 @@ def build_novelty_viewer_html() -> str:
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #1e243d;
     }}
     .inspector-badge {{
       display: inline-block;
-      font-size: 0.68rem;
+      font-size: 11px;
       font-weight: 700;
-      padding: 3px 8px;
+      padding: 2px 8px;
       border-radius: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }}
     .inspector-close {{
-      background: none;
-      border: none;
-      color: var(--muted);
-      font-size: 1.25rem;
+      background: #1a1d2e;
+      border: 1px solid #2a3350;
+      color: #e4e4ed;
+      font-size: 13px;
+      padding: 1px 8px;
+      border-radius: 4px;
       cursor: pointer;
-      padding: 0 4px;
     }}
-    .inspector-close:hover {{ color: #fff; }}
+    .inspector-close:hover {{
+      background: #2a3350;
+    }}
     .inspector-title {{
-      font-size: 1.08rem;
+      font-size: 15px;
       font-weight: 700;
       color: #fff;
       margin-bottom: 6px;
       line-height: 1.3;
     }}
     .inspector-desc {{
-      font-size: 0.82rem;
-      color: var(--muted);
-      line-height: 1.45;
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.5;
       margin-bottom: 12px;
     }}
+    .quote {{
+      font-style: italic;
+      color: #b9c4de;
+      border-left: 3px solid #f59e0b;
+      margin: 10px 0;
+      padding: 8px 12px;
+      background: rgba(245, 158, 11, 0.05);
+      border-radius: 0 6px 6px 0;
+      font-family: Georgia, serif;
+      line-height: 1.55;
+      font-size: 12.5px;
+    }}
     .inspector-meta-block {{
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 6px;
-      padding: 9px 12px;
-      margin-bottom: 8px;
-      font-size: 0.78rem;
+      margin-bottom: 10px;
+      font-size: 12px;
+      line-height: 1.45;
     }}
     .inspector-meta-block strong {{
-      color: var(--cyan);
+      color: #cbd5e1;
       display: block;
       margin-bottom: 3px;
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }}
-    .inspector-meta-block em {{
-      color: #f8fafc;
-      font-style: italic;
-    }}
-
-    /* Card Especial para Párrafos del Manuscrito */
-    .inspector-paragraph-box {{
-      background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, rgba(15, 23, 42, 0.4) 100%);
-      border: 1px solid rgba(245, 158, 11, 0.35);
-      border-left: 3px solid var(--amber);
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 10px;
-    }}
-    .inspector-paragraph-box strong {{
-      color: var(--amber);
-      display: block;
-      margin-bottom: 6px;
-      font-size: 0.72rem;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }}
-    .inspector-paragraph-text {{
-      font-family: Georgia, serif;
-      font-size: 0.84rem;
-      line-height: 1.55;
-      color: #f1f5f9;
+    .inspector-meta-block em {{
+      color: #38bdf8;
       font-style: normal;
-      background: rgba(0,0,0,0.25);
-      padding: 8px 10px;
-      border-radius: 4px;
-      border: 1px solid rgba(255,255,255,0.05);
     }}
-
+    .inspector-meta-block span {{
+      color: #94a3b8;
+    }}
     .inspector-blocks {{
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
-      margin-top: 6px;
+      margin-top: 4px;
     }}
     .block-pill {{
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      color: var(--cyan);
-      padding: 2px 6px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #38bdf8;
+      padding: 1px 6px;
       border-radius: 3px;
-      font-size: 0.68rem;
+      font-size: 10.5px;
       font-family: monospace;
     }}
     .btn-action-jump {{
       width: 100%;
-      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      background: #0284c7;
       color: #fff;
-      border: none;
-      padding: 9px 12px;
+      border: 1px solid #38bdf8;
+      padding: 8px 12px;
       border-radius: 6px;
-      font-size: 0.8rem;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      margin-top: 8px;
-      transition: opacity 0.2s, transform 0.15s;
+      margin-top: 10px;
+      transition: background 0.15s, transform 0.15s;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
     }}
     .btn-action-jump:hover {{
-      opacity: 0.92;
+      background: #0369a1;
       transform: translateY(-1px);
     }}
   </style>
 </head>
 <body>
 
-  <!-- Topbar HUD -->
-  <div class="hud-topbar">
-    <div class="hud-title-badge">
-      <h1>🕸️ Grafo 3D de Novedad e Ideas del Manuscrito</h1>
-      <p>Párrafos del manuscrito, evidencia de tesis y estructura del paper (Elsevier BSPC)</p>
-    </div>
-    <div class="hud-controls">
-      <button class="hud-btn" id="btnAutoRotate" onclick="toggleRotate()">⏸ Pausar Giro</button>
-      <button class="hud-btn" onclick="resetCamera()">🎯 Centrar Novedad</button>
-      <button class="hud-btn hud-btn--primary" onclick="filterGroup('paragraph')">📜 Ver Párrafos Clave</button>
-      <button class="hud-btn" onclick="filterGroup('all')">Ver Todo</button>
-    </div>
-  </div>
+  <!-- Top Title and Instructions (Atlas Style) -->
+  <h1>
+    <span>🕸️ Grafo 3D de Novedad e Ideas del Manuscrito — MONEEG</span>
+    <small>Elsevier Biomedical Signal Processing and Control · Minciencias-92056</small>
+  </h1>
+  <div id="panel">Arrastra para rotar, clic derecho para desplazar, rueda para zoom. Pasa el cursor sobre un nodo para trazar enlaces y atenuar el resto; clic para ver detalles y evidencia; clic en los chips para agrupar por color las partes del manuscrito.</div>
 
-  <!-- Search Input HUD -->
-  <div class="hud-search">
+  <!-- Legend & Color Grouping Chips (Atlas Style) -->
+  <div id="famlegend"><em>Agrupar por Color:</em> <span id="famchips"></span></div>
+  <div id="rellegend"><em>Enlaces:</em> <span class="dot" style="border-color:#38bdf8"></span>arquitectura <span class="dot" style="border-color:#f59e0b"></span>párrafo clave <span class="dot" style="border-color:#f43f5e"></span>resuelve brecha <span class="dot" style="border-color:#10b981"></span>hardware determinista <span class="dot" style="border-color:#a855f7"></span>evidencia tesis</div>
+
+  <!-- Toolbar Controls (Atlas Style) -->
+  <div id="toolbar">
+    <button id="zoomin">zoom +</button>
+    <button id="zoomout">zoom −</button>
+    <button id="zoomreset">reset view</button>
+    <button id="btnAutoRotate">pausar giro</button>
     <input type="text" id="nodeSearchInput" placeholder="🔍 Buscar nodo, párrafo o métrica..." oninput="searchNodes(this.value)">
   </div>
 
-  <!-- 3D Canvas Container -->
-  <div id="3d-graph"></div>
+  <!-- Sky Canvas Container -->
+  <div id="sky" class="sky">
+    <div id="3d-graph"></div>
 
-  <!-- Bottom Legend HUD -->
-  <div class="hud-legend">
-    <span class="legend-title">Capas y Dimensiones Semánticas</span>
-    <div class="legend-item" onclick="filterGroup('core')">
-      <span class="legend-dot" style="background: var(--cyan); color: var(--cyan);"></span>
-      <span>Novedad Central (MONEEG)</span>
-    </div>
-    <div class="legend-item" onclick="filterGroup('paragraph')">
-      <span class="legend-dot" style="background: var(--amber); color: var(--amber);"></span>
-      <span><strong>Párrafos Clave de Novedad</strong> (Manuscrito)</span>
-    </div>
-    <div class="legend-item" onclick="filterGroup('gap')">
-      <span class="legend-dot" style="background: var(--rose); color: var(--rose);"></span>
-      <span>Brechas SOTA (Problemas Clínicos)</span>
-    </div>
-    <div class="legend-item" onclick="filterGroup('arch')">
-      <span class="legend-dot" style="background: var(--emerald); color: var(--emerald);"></span>
-      <span>Pilares Embebidos (Hardware)</span>
-    </div>
-    <div class="legend-item" onclick="filterGroup('eval')">
-      <span class="legend-dot" style="background: var(--purple); color: var(--purple);"></span>
-      <span>Evidencia Tesis (Ground-Truth)</span>
-    </div>
-    <div class="legend-item" onclick="filterGroup('section')">
-      <span class="legend-dot" style="background: var(--blue); color: var(--blue);"></span>
-      <span>Secciones Manuscrito (Elsevier)</span>
-    </div>
+    <!-- Side Inspector Drawer / Modal -->
+    <aside class="inspector-card" id="inspectorCard">
+      <div class="inspector-card__header">
+        <span class="inspector-badge" id="inspBadge">Categoría</span>
+        <button class="inspector-close" onclick="closeInspector()">✕ cerrar</button>
+      </div>
+      <div class="inspector-title" id="inspTitle">Nombre del Nodo</div>
+      <p class="inspector-desc" id="inspDesc">Descripción detallada del nodo y su rol en la investigación.</p>
+      
+      <!-- Extracto del Párrafo del Manuscrito -->
+      <div id="inspParagraphBox" style="display: none; margin-bottom: 10px;">
+        <strong style="font-size: 11px; text-transform: uppercase; color: #cbd5e1; letter-spacing: 0.04em;">📜 Extracto del Párrafo del Manuscrito (LaTeX)</strong>
+        <div class="quote" id="inspParagraphText">—</div>
+      </div>
+
+      <!-- Pregunta Retórica que Responde -->
+      <div class="inspector-meta-block" id="inspQuestionBox">
+        <strong>❓ Pregunta Retórica que Responde</strong>
+        <em id="inspQuestion">—</em>
+      </div>
+
+      <!-- Respuesta a la Novedad para Elsevier -->
+      <div class="inspector-meta-block">
+        <strong>🎯 Respuesta a la Novedad (Elsevier BSPC)</strong>
+        <span id="inspNovelty">—</span>
+      </div>
+
+      <!-- Métrica Cuantitativa -->
+      <div class="inspector-meta-block">
+        <strong>⚡ Métrica / Hecho Cuantitativo</strong>
+        <span id="inspMetrics">—</span>
+      </div>
+
+      <!-- Sustento en la Tesis de Julián -->
+      <div class="inspector-meta-block">
+        <strong>📖 Sustento en la Tesis de Maestría de Julián</strong>
+        <span id="inspThesis">—</span>
+      </div>
+
+      <!-- Bloques Canónicos y Ubicación -->
+      <div class="inspector-meta-block">
+        <strong>📑 Bloques Canónicos y Ubicación</strong>
+        <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;" id="inspLocation">—</div>
+        <div class="inspector-blocks" id="inspBlocks"></div>
+      </div>
+
+      <button class="btn-action-jump" id="btnJumpPdf" onclick="jumpToPaperPreview()">
+        📄 Ir a esta Sección en el Visor PDF (<span id="inspPdfPage">Pág. 1</span>) ↗
+      </button>
+    </aside>
   </div>
-
-  <!-- Side Inspector Drawer -->
-  <aside class="inspector-card" id="inspectorCard">
-    <div class="inspector-card__header">
-      <span class="inspector-badge" id="inspBadge" style="background: rgba(56,189,248,0.2); color: var(--cyan);">Categoría</span>
-      <button class="inspector-close" onclick="closeInspector()">&times;</button>
-    </div>
-    <div class="inspector-title" id="inspTitle">Nombre del Nodo</div>
-    <p class="inspector-desc" id="inspDesc">Descripción detallada del nodo y su rol en la investigación.</p>
-    
-    <!-- Extracto del Párrafo del Manuscrito -->
-    <div class="inspector-paragraph-box" id="inspParagraphBox">
-      <strong>📜 Extracto del Párrafo del Manuscrito (LaTeX)</strong>
-      <div class="inspector-paragraph-text" id="inspParagraphText">—</div>
-    </div>
-
-    <!-- Pregunta Retórica que Responde -->
-    <div class="inspector-meta-block" id="inspQuestionBox">
-      <strong>❓ Pregunta Retórica que Responde</strong>
-      <em id="inspQuestion">—</em>
-    </div>
-
-    <!-- Respuesta a la Novedad para Elsevier -->
-    <div class="inspector-meta-block">
-      <strong>🎯 Respuesta a la Novedad (Elsevier BSPC)</strong>
-      <span id="inspNovelty">—</span>
-    </div>
-
-    <!-- Métrica Cuantitativa -->
-    <div class="inspector-meta-block">
-      <strong>⚡ Métrica / Hecho Cuantitativo</strong>
-      <span id="inspMetrics">—</span>
-    </div>
-
-    <!-- Sustento en la Tesis de Julián -->
-    <div class="inspector-meta-block">
-      <strong>📖 Sustento en la Tesis de Maestría de Julián</strong>
-      <span id="inspThesis">—</span>
-    </div>
-
-    <!-- Bloques Canónicos y Ubicación -->
-    <div class="inspector-meta-block">
-      <strong>📑 Bloques Canónicos y Ubicación</strong>
-      <div style="font-size: 0.74rem; color: var(--muted); margin-bottom: 4px;" id="inspLocation">—</div>
-      <div class="inspector-blocks" id="inspBlocks"></div>
-    </div>
-
-    <button class="btn-action-jump" id="btnJumpPdf" onclick="jumpToPaperPreview()">
-      📄 Ir a esta Sección en el Visor PDF (<span id="inspPdfPage">Pág. 1</span>) ↗
-    </button>
-  </aside>
 
   <script>
     const graphData = {graph_json};
 
     let isRotating = true;
     let selectedNode = null;
-    let currentFilter = 'all';
+    let activeGroup = null;
+    let hoverNode = null;
     let targetPdfPage = 1;
+
+    const highlightNodes = new Set();
+    const highlightLinks = new Set();
 
     const elem = document.getElementById('3d-graph');
     const Graph = ForceGraph3D()(elem)
       .graphData(graphData)
-      .backgroundColor('#090d16')
+      .backgroundColor('#0a0a10')
       .showNavInfo(false)
       .nodeLabel(node => `${{node.label}} [${{node.category}}]`)
-      .nodeColor(node => node.color)
-      .nodeVal(node => node.size)
+      .nodeVal(node => node.size || 10)
       .nodeResolution(24)
-      .linkWidth(link => link.value ? link.value * 0.7 : 1)
-      .linkColor(() => 'rgba(56, 189, 248, 0.25)')
+      .nodeColor(node => {{
+        if (highlightNodes.size > 0 && !highlightNodes.has(node.id)) {{
+          return 'rgba(45, 52, 75, 0.22)';
+        }}
+        return node.color || '#38bdf8';
+      }})
+      .linkWidth(link => {{
+        if (highlightLinks.size > 0 && !highlightLinks.has(link)) return 0.5;
+        return link.value ? link.value * 0.7 : 1.2;
+      }})
+      .linkColor(link => {{
+        if (highlightLinks.size > 0 && !highlightLinks.has(link)) {{
+          return 'rgba(25, 30, 48, 0.08)';
+        }}
+        if (link.source && (link.source.group === 'paragraph' || link.source === 'paragraph')) return 'rgba(245, 158, 11, 0.45)';
+        return 'rgba(56, 189, 248, 0.35)';
+      }})
       .linkDirectionalParticles(2)
-      .linkDirectionalParticleWidth(1.8)
+      .linkDirectionalParticleWidth(link => {{
+        if (highlightLinks.size > 0 && !highlightLinks.has(link)) return 0;
+        return 1.8;
+      }})
       .linkDirectionalParticleSpeed(0.005)
       .linkDirectionalParticleColor(link => {{
         if (link.source && (link.source.group === 'paragraph' || link.source === 'paragraph')) return '#f59e0b';
         return '#38bdf8';
       }})
       .linkLabel(link => link.label)
+      .onNodeHover(node => {{
+        elem.style.cursor = node ? 'pointer' : null;
+        hoverNode = node;
+        updateHighlight();
+        Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
+      }})
       .onNodeClick(node => {{
         selectNode(node);
       }})
@@ -1191,12 +1156,43 @@ def build_novelty_viewer_html() -> str:
         closeInspector();
       }});
 
+    function updateHighlight() {{
+      highlightNodes.clear();
+      highlightLinks.clear();
+
+      if (hoverNode) {{
+        highlightNodes.add(hoverNode.id);
+        graphData.links.forEach(l => {{
+          const sId = typeof l.source === 'object' ? l.source.id : l.source;
+          const tId = typeof l.target === 'object' ? l.target.id : l.target;
+          if (sId === hoverNode.id || tId === hoverNode.id) {{
+            highlightLinks.add(l);
+            highlightNodes.add(sId);
+            highlightNodes.add(tId);
+          }}
+        }});
+      }} else if (activeGroup) {{
+        graphData.nodes.forEach(n => {{
+          if (n.group === activeGroup || (activeGroup === 'paragraph' && (n.group === 'paragraph' || n.group === 'section' || n.id === 'core-moneeg'))) {{
+            highlightNodes.add(n.id);
+          }}
+        }});
+        graphData.links.forEach(l => {{
+          const sId = typeof l.source === 'object' ? l.source.id : l.source;
+          const tId = typeof l.target === 'object' ? l.target.id : l.target;
+          if (highlightNodes.has(sId) && highlightNodes.has(tId)) {{
+            highlightLinks.add(l);
+          }}
+        }});
+      }}
+    }}
+
     // Auto-orbit camera
     let angle = 0;
-    const distance = 520;
+    const distance = 480;
     setInterval(() => {{
       if (isRotating) {{
-        angle += 0.0025;
+        angle += 0.0022;
         Graph.cameraPosition({{
           x: distance * Math.sin(angle),
           z: distance * Math.cos(angle)
@@ -1207,29 +1203,49 @@ def build_novelty_viewer_html() -> str:
     function toggleRotate() {{
       isRotating = !isRotating;
       const btn = document.getElementById('btnAutoRotate');
-      btn.textContent = isRotating ? '⏸ Pausar Giro' : '▶ Reanudar Giro';
+      btn.textContent = isRotating ? 'pausar giro' : 'reanudar giro';
+      btn.classList.toggle('active', !isRotating);
     }}
+    document.getElementById('btnAutoRotate').addEventListener('click', toggleRotate);
 
-    function resetCamera() {{
+    document.getElementById('zoomin').addEventListener('click', () => {{
+      const pos = Graph.cameraPosition();
+      Graph.cameraPosition({{ x: pos.x * 0.75, y: pos.y * 0.75, z: pos.z * 0.75 }}, null, 400);
+    }});
+
+    document.getElementById('zoomout').addEventListener('click', () => {{
+      const pos = Graph.cameraPosition();
+      Graph.cameraPosition({{ x: pos.x * 1.33, y: pos.y * 1.33, z: pos.z * 1.33 }}, null, 400);
+    }});
+
+    document.getElementById('zoomreset').addEventListener('click', () => {{
       isRotating = false;
-      document.getElementById('btnAutoRotate').textContent = '▶ Reanudar Giro';
-      Graph.cameraPosition({{ x: 0, y: 35, z: 460 }}, {{ x: 0, y: 0, z: 0 }}, 1200);
-    }}
+      document.getElementById('btnAutoRotate').textContent = 'reanudar giro';
+      document.getElementById('btnAutoRotate').classList.add('active');
+      activeGroup = null;
+      document.querySelectorAll('.famchip').forEach(c => {{
+        c.classList.remove('on');
+        c.style.background = '#14172a';
+        c.style.color = '#e4e4ed';
+      }});
+      updateHighlight();
+      Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
+      Graph.cameraPosition({{ x: 0, y: 35, z: 460 }}, {{ x: 0, y: 0, z: 0 }}, 1000);
+    }});
 
     function selectNode(node) {{
       selectedNode = node;
       isRotating = false;
-      document.getElementById('btnAutoRotate').textContent = '▶ Reanudar Giro';
+      document.getElementById('btnAutoRotate').textContent = 'reanudar giro';
+      document.getElementById('btnAutoRotate').classList.add('active');
 
-      // Focus camera on clicked node
-      const dist = 190;
+      const dist = 180;
       Graph.cameraPosition(
         {{ x: node.x + dist * 0.7, y: node.y + dist * 0.35, z: node.z + dist * 0.7 }},
         {{ x: node.x, y: node.y, z: node.z }},
         1000
       );
 
-      // Populate inspector
       const card = document.getElementById('inspectorCard');
       card.style.display = 'block';
       
@@ -1245,7 +1261,6 @@ def build_novelty_viewer_html() -> str:
       document.getElementById('inspNovelty').textContent = node.novelty_claim || '—';
       document.getElementById('inspThesis').textContent = node.thesis_ref || 'Tesis de Maestría';
 
-      // Paragraph Box
       const paraBox = document.getElementById('inspParagraphBox');
       const paraText = document.getElementById('inspParagraphText');
       if (node.paragraph_text) {{
@@ -1255,7 +1270,6 @@ def build_novelty_viewer_html() -> str:
         paraBox.style.display = 'none';
       }}
 
-      // Question Box
       const qBox = document.getElementById('inspQuestionBox');
       const qText = document.getElementById('inspQuestion');
       if (node.rhetorical_question) {{
@@ -1265,7 +1279,6 @@ def build_novelty_viewer_html() -> str:
         qBox.style.display = 'none';
       }}
 
-      // Location & PDF page
       targetPdfPage = node.pdf_page || 1;
       document.getElementById('inspPdfPage').textContent = `Pág. ${{targetPdfPage}}`;
       document.getElementById('inspLocation').textContent = `${{node.section_ref || 'Manuscrito'}} · Ubicación en documento final: Página ${{targetPdfPage}}`;
@@ -1285,33 +1298,55 @@ def build_novelty_viewer_html() -> str:
       selectedNode = null;
     }}
 
-    function filterGroup(group) {{
-      currentFilter = group;
-      if (group === 'all') {{
-        Graph.graphData(graphData);
-      }} else if (group === 'paragraph') {{
-        // Show paragraph nodes + connected sections and core
-        const filteredNodes = graphData.nodes.filter(n => n.group === 'paragraph' || n.id === 'core-moneeg' || n.group === 'section');
-        const nodeIds = new Set(filteredNodes.map(n => n.id));
-        const filteredLinks = graphData.links.filter(l => 
-          nodeIds.has(typeof l.source === 'object' ? l.source.id : l.source) &&
-          nodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
-        );
-        Graph.graphData({{ nodes: filteredNodes, links: filteredLinks }});
-      }} else {{
-        const filteredNodes = graphData.nodes.filter(n => n.group === group || n.id === 'core-moneeg');
-        const nodeIds = new Set(filteredNodes.map(n => n.id));
-        const filteredLinks = graphData.links.filter(l => 
-          nodeIds.has(typeof l.source === 'object' ? l.source.id : l.source) &&
-          nodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
-        );
-        Graph.graphData({{ nodes: filteredNodes, links: filteredLinks }});
-      }}
-    }}
+    // Build Family Legend Chips (Atlas Style)
+    const GROUPS_META = [
+      {{ id: 'core', label: 'Novedad Central & Abstract', color: '#38bdf8' }},
+      {{ id: 'paragraph', label: 'Párrafos Clave de Novedad', color: '#f59e0b' }},
+      {{ id: 'gap', label: 'Brechas Clínicas y SOTA', color: '#f43f5e' }},
+      {{ id: 'arch', label: 'Arquitectura Hardware', color: '#10b981' }},
+      {{ id: 'eval', label: 'Evidencia Experimental Tesis', color: '#a855f7' }},
+      {{ id: 'section', label: 'Secciones del Manuscrito', color: '#0ea5e9' }}
+    ];
+
+    const chipsContainer = document.getElementById('famchips');
+    GROUPS_META.forEach(g => {{
+      const count = graphData.nodes.filter(n => n.group === g.id).length;
+      if (count === 0) return;
+      const chip = document.createElement('span');
+      chip.className = 'famchip';
+      chip.dataset.group = g.id;
+      chip.style.borderColor = g.color;
+      chip.innerHTML = `<span class="famchip-dot" style="background:${{g.color}}"></span>${{g.label}} (${{count}})`;
+      
+      chip.addEventListener('click', () => {{
+        if (activeGroup === g.id) {{
+          activeGroup = null;
+          chip.classList.remove('on');
+          chip.style.background = '#14172a';
+          chip.style.color = '#e4e4ed';
+        }} else {{
+          activeGroup = g.id;
+          document.querySelectorAll('.famchip').forEach(c => {{
+            c.classList.remove('on');
+            c.style.background = '#14172a';
+            c.style.color = '#e4e4ed';
+          }});
+          chip.classList.add('on');
+          chip.style.background = g.color;
+          chip.style.color = '#0a0a10';
+        }}
+        updateHighlight();
+        Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
+      }});
+
+      chipsContainer.appendChild(chip);
+    }});
 
     function searchNodes(query) {{
       if (!query || !query.trim()) {{
-        Graph.graphData(graphData);
+        activeGroup = null;
+        updateHighlight();
+        Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
         return;
       }}
       const q = query.toLowerCase().trim();

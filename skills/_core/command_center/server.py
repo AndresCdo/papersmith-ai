@@ -623,6 +623,15 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "category": "Constelación SOTA",
                 "size_kb": round((root_path / "sota-pool" / "atlas.json").stat().st_size / 1024, 1)
             })
+        sections_dir = root_path / "sections"
+        if sections_dir.is_dir():
+            for sp in sorted(sections_dir.glob("*.md")):
+                artifacts.append({
+                    "rel_path": f"sections/{sp.name}",
+                    "name": f"Reglas: {sp.name}",
+                    "category": "Reglas de Sección",
+                    "size_kb": round(sp.stat().st_size / 1024, 1)
+                })
 
         SECTION_METADATA = {
             "09-title-and-keywords": {
