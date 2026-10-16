@@ -11,6 +11,57 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.15.0
+
+### Added
+
+- **PDF preview annotation unmarking suite with selective category controls and layer toggles.**
+  The continuous PDF preview tab incorporates fine-grained unmarking controls:
+  individual item unmarking checkboxes, selective category buttons for comments,
+  strikethroughs, and humanization remarks, as well as a master toggle to clear
+  all annotations. In addition, an annotation layer visibility control allows toggling
+  annotations without permanently discarding them, and a topbar quick unmark dropdown
+  makes annotation filtering accessible from anywhere in the document view.
+- **3D Semantic Novelty Graph structured in 8 narrative pillars.**
+  The 3D novelty knowledge graph models the scientific paper's narrative core across
+  eight explicit thematic clusters:
+  1. *Applications of interest* (`aplicaciones`)
+  2. *Central problem* (`problema_central`)
+  3. *Top 5 nearest State-of-the-Art benchmarks* (`sota_cercano`)
+  4. *Core novelty and 2–3 key claims* (`novedad_central`)
+  5. *Evaluated benchmark datasets* (`datasets`)
+  6. *Performance metrics and comparative baselines* (`metricas_metodos`)
+  7. *Top 3 empirical conclusions* (`conclusiones`)
+  8. *Top 2–3 future research directions* (`trabajo_futuro`)
+  Node sizes and distances are calibrated with constellation visual styling, smooth
+  OrbitControls damping, auto-rotation yield on user interaction, and isolated mouse-wheel
+  scroll delegation so the dashboard page remains smoothly scrollable without 3D canvas trapping.
+- **Friendly web artifact and writing rules viewer.**
+  Inspection drawers for paper section canonical blocks, operational writing rules, and
+  intermediate phase artifacts now render cleanly formatted Markdown via `marked.min.js`,
+  including structured tables, alert callouts, and code blocks, with a seamless toggle
+  between formatted Web View and raw JSON/Markdown source.
+- **Continuous multi-page PDF manuscript preview.**
+  The manuscript preview tab renders documents in a continuous vertical scroll flow
+  with page jump indicators, zoom controls, fit-to-width mode, and automatic resolution
+  of partially drafted manuscript versions as research phases advance.
+- **Interactive research lifecycle phase execution.**
+  Workflow tracking in both CLI and dashboard enables step-by-step phase advancement
+  (plausibility, SOTA matrix, experimental formulation, proof of concept, and section-by-section
+  manuscript drafting) with illuminated phase badges and live status indicators.
+- **Tabular candidate matrix for State-of-the-Art exploration.**
+  The SOTA candidate matrix presents paper discovery candidates in a modern, user-friendly
+  table layout with instant multi-field searching, metric score filters, and expandable abstract drawers.
+- **High-tech Agent Smith anime companion branding.**
+  Canonical character artwork and matching high-resolution favicons are integrated across
+  the dashboard topbar, browser tabs, and documentation.
+
+### Fixed
+
+- **Deliberation engine turn preview flag stripping.**
+  `call_engine_with_acceptance` strips premature `acceptSuccessor` flags during preview
+  turns, ensuring safe dry-run candidate generation before explicit user acceptance.
+
 ## 0.14.0
 
 ### Fixed
