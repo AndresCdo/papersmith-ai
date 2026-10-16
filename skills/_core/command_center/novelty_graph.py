@@ -38,7 +38,7 @@ NOVELTY_GRAPH_DATA: dict[str, Any] = {
             "badge": "ARQUITECTURA PRINCIPAL",
             "desc": "Framework embebido de adquisición de EEG de 32 canales con sincronización hardware determinista (<5 µs) y piso de ruido submicrovoltio (<1.1 µVpp) optimizado para monitoreo cognitivo pediátrico.",
             "rhetorical_question": "¿Cuál es la contribución técnica y traslacional definitiva que introduce el artículo frente a los sistemas BCI existentes?",
-            "paragraph_text": "MONEEG resolves this bottleneck through a co-designed embedded architecture. By combining a bare-metal 120 MHz ARM Cortex-M4F microcontroller with four cascaded ADS1299 analog front-ends, the platform performs synchronized 24-bit delta-sigma conversion across 32 channels, embedding serious game stimulus trigger flags directly into the SPI transfer frame at the hardware interrupt level.",
+            "paragraph_text": "MONEEG resolves this bottleneck through a co-designed embedded architecture. By combining a bare-metal 120 MHz ARM Cortex-M4F microcontroller with four cascaded ADS1299 analog front-ends, the platform performs synchronized 24-bit delta-sigma conversion across 32 channels, embedding serious game stimulus trigger flags directly into the SPI transmission frame at the hardware interrupt level.",
             "metrics": "32 Canales, 24 bits, ADC Σ-Δ, 250 Hz, <1.1 µVpp, latencia <5 µs, 0% pérdida en 400 min.",
             "novelty_claim": "Supera la disyuntiva entre amplificadores clínicos inaccesibles/pesados y cascos comerciales ruidosos con jitter temporal severo.",
             "thesis_ref": "Capítulo 3 (Diseño Hardware y Firmware), Tesis J. Parias",
