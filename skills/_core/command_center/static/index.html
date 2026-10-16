@@ -1630,6 +1630,164 @@
     .btn-link:hover {
       color: var(--bad);
     }
+    .btn-link--danger {
+      color: var(--bad) !important;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .btn-link--danger:hover {
+      text-decoration: underline;
+    }
+
+    /* Herramientas de Desmarcado de Anotaciones */
+    .unmark-actions-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
+      margin-bottom: 0.55rem;
+    }
+    .btn-unmark-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.4rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.76rem;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .btn-unmark-chip:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .btn-unmark-chip:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      border-color: var(--border-subtle);
+    }
+    .btn-unmark--comment:hover:not(:disabled) {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+    .btn-unmark--strike:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+    .btn-unmark--humanize:hover:not(:disabled) {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: #10b981;
+      color: #10b981;
+    }
+
+    .unmark-selection-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0.6rem;
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.55rem;
+      font-size: 0.74rem;
+    }
+
+    .layer-visibility-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.55rem;
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.65rem;
+      flex-wrap: wrap;
+    }
+    .layer-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    .layer-chip input[type="checkbox"] {
+      cursor: pointer;
+      width: 13px;
+      height: 13px;
+      accent-color: var(--accent);
+    }
+    .layer-chip .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dropdown-unmark-container {
+      position: relative;
+      display: inline-block;
+    }
+    .dropdown-unmark-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.4rem 0;
+      min-width: 230px;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .dropdown-header {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-dim);
+      font-weight: 700;
+    }
+    .dropdown-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      padding: 0.45rem 0.75rem;
+      background: none;
+      border: none;
+      font-size: 0.76rem;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .dropdown-item:hover {
+      background: var(--surface-hover);
+    }
+    .dropdown-divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 0.3rem 0;
+    }
+
+    .annot-card--selected {
+      border-color: #38bdf8 !important;
+      background: rgba(56, 189, 248, 0.08) !important;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+    }
+    .annot-card__checkbox {
+      cursor: pointer;
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+    }
 
     /* Footer del panel con botón de ejecución */
     .control-panel__footer {
@@ -2306,6 +2464,38 @@
 
             <div class="pdf-topbar__right">
               <span id="pdfRenderStatus" class="badge badge--warn" style="font-size: 0.72rem; display: none;">⚡ Renderizando...</span>
+
+              <!-- Menú Rápido de Desmarcado en la Barra Superior -->
+              <div class="dropdown-unmark-container">
+                <button class="btn btn--sm" id="btnTopbarUnmark" onclick="toggleTopbarUnmarkDropdown(event)" title="Opciones para desmarcar comentarios, tachados, humanización o selección">
+                  🏷️ Desmarcar ▾ (<span id="topbarAnnotsCount">0</span>)
+                </button>
+                <div class="dropdown-unmark-menu" id="topbarUnmarkMenu" style="display: none;">
+                  <div class="dropdown-header">Desmarcar por categoría</div>
+                  <button class="dropdown-item" onclick="unmarkByType('comment')">
+                    <span>💬 Desmarcar Comentarios</span>
+                    <span class="badge badge--info" id="dropCountComment">0</span>
+                  </button>
+                  <button class="dropdown-item" onclick="unmarkByType('strikethrough')">
+                    <span>✂️ Desmarcar Tachados</span>
+                    <span class="badge badge--bad" id="dropCountStrike">0</span>
+                  </button>
+                  <button class="dropdown-item" onclick="unmarkByType('humanize')">
+                    <span>✨ Desmarcar Humanización</span>
+                    <span class="badge badge--ok" id="dropCountHumanize">0</span>
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item text-warn" id="dropBtnUnmarkSelected" onclick="unmarkSelectedAnnotations()" style="display: none;">
+                    <span>✕ Desmarcar seleccionadas</span>
+                    <span class="badge badge--warn" id="dropCountSelected">0</span>
+                  </button>
+                  <button class="dropdown-item text-danger" onclick="clearAllAnnotations()">
+                    <span>🗑️ Desmarcar todas las marcas</span>
+                    <span class="badge" id="dropCountAll">0</span>
+                  </button>
+                </div>
+              </div>
+
               <button class="btn btn--sm" onclick="toggleNativeViewer()" id="btnToggleNative" title="Alternar entre PDF.js y visor nativo del navegador">Visor Nativo</button>
               <a href="/api/pdf" download class="btn btn--sm" title="Descargar main.pdf compilado">⬇ Descargar</a>
             </div>
@@ -2387,12 +2577,73 @@
             </div>
           </div>
 
-          <!-- 3. Lista de Marcas Pendientes -->
+          <!-- 3. Lista de Marcas Pendientes con Controles de Desmarcado y Selección -->
           <div class="control-panel__section">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div class="section-label">Marcas Pendientes (<span id="sidebarCount">0</span>)</div>
-              <button class="btn-link" onclick="clearAllAnnotations()" title="Descartar todas las marcas">Vaciar marcas</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+              <div class="section-label" style="margin-bottom: 0;">Marcas Pendientes (<span id="sidebarCount">0</span>)</div>
+              <button class="btn-link btn-link--danger" id="btnClearAllAnnots" onclick="clearAllAnnotations()" title="Descartar todas las marcas pendientes del lote">🗑️ Desmarcar todas</button>
             </div>
+
+            <!-- Botones Rápidos de Desmarcado por Categoría -->
+            <div class="unmark-actions-grid">
+              <button class="btn-unmark-chip btn-unmark--comment" id="btnUnmarkComments" onclick="unmarkByType('comment')" disabled title="Eliminar todos los comentarios del lote">
+                <span style="display: flex; align-items: center; gap: 0.35rem;">
+                  <span>💬</span>
+                  <span>Desmarcar Comentarios</span>
+                </span>
+                <span class="badge badge--info" id="countComments">0</span>
+              </button>
+              <button class="btn-unmark-chip btn-unmark--strike" id="btnUnmarkStrikes" onclick="unmarkByType('strikethrough')" disabled title="Eliminar todos los tachados del lote">
+                <span style="display: flex; align-items: center; gap: 0.35rem;">
+                  <span>✂️</span>
+                  <span>Desmarcar Tachados</span>
+                </span>
+                <span class="badge badge--bad" id="countStrikes">0</span>
+              </button>
+              <button class="btn-unmark-chip btn-unmark--humanize" id="btnUnmarkHumanize" onclick="unmarkByType('humanize')" disabled title="Eliminar todas las marcas de humanización del lote">
+                <span style="display: flex; align-items: center; gap: 0.35rem;">
+                  <span>✨</span>
+                  <span>Desmarcar Humanización</span>
+                </span>
+                <span class="badge badge--ok" id="countHumanize">0</span>
+              </button>
+            </div>
+
+            <!-- Barra de Selección Múltiple ("alguna que se seleccione") -->
+            <div class="unmark-selection-toolbar" id="unmarkSelectionToolbar">
+              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <input type="checkbox" id="chkSelectAllAnnots" onchange="toggleSelectAllAnnots(this.checked)" disabled title="Seleccionar o deseleccionar todas las marcas">
+                <label for="chkSelectAllAnnots" style="font-size: 0.73rem; cursor: pointer; color: var(--text-muted); user-select: none;">
+                  Todas
+                </label>
+              </div>
+              <div style="display: flex; gap: 0.35rem; align-items: center;">
+                <button class="btn btn--xs btn--bad" id="btnUnmarkSelected" onclick="unmarkSelectedAnnotations()" disabled title="Desmarcar y eliminar del lote las marcas seleccionadas">
+                  ✕ Desmarcar selec. (<span id="countSelectedAnnots">0</span>)
+                </button>
+                <button class="btn btn--xs" onclick="invertAnnotSelection()" title="Invertir selección actual">
+                  ⇄ Invertir
+                </button>
+              </div>
+            </div>
+
+            <!-- Control de Visibilidad de Capas en PDF (Ocultar / Mostrar) -->
+            <div class="layer-visibility-bar">
+              <span style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); font-weight: 600;">Ver en PDF:</span>
+              <label class="layer-chip" id="chipVisComment" title="Mostrar/ocultar comentarios en el visor PDF">
+                <input type="checkbox" id="chkVisComment" checked onchange="toggleLayerVisibility('comment', this.checked)">
+                <span class="dot" style="background: #38bdf8;"></span> 💬
+              </label>
+              <label class="layer-chip" id="chipVisStrike" title="Mostrar/ocultar tachados en el visor PDF">
+                <input type="checkbox" id="chkVisStrike" checked onchange="toggleLayerVisibility('strikethrough', this.checked)">
+                <span class="dot" style="background: #ef4444;"></span> ✂️
+              </label>
+              <label class="layer-chip" id="chipVisHumanize" title="Mostrar/ocultar marcas de humanización en el visor PDF">
+                <input type="checkbox" id="chkVisHumanize" checked onchange="toggleLayerVisibility('humanize', this.checked)">
+                <span class="dot" style="background: #10b981;"></span> ✨
+              </label>
+            </div>
+
             <div class="annots-list" id="annotsList">
               <div class="annots-empty">
                 <p>No hay marcas pendientes.</p>
@@ -4495,16 +4746,167 @@
       showToast('Texto marcado para humanizar (subrayado verde)');
     }
 
+    let selectedAnnotIds = new Set();
+    let visibleLayers = { comment: true, strikethrough: true, humanize: true };
+
+    function toggleLayerVisibility(type, visible) {
+      visibleLayers[type] = visible;
+      renderPdfAnnotationsOverlay();
+      const labels = { comment: 'Comentarios', strikethrough: 'Tachados', humanize: 'Humanización' };
+      showToast(`Capa ${labels[type] || type}: ${visible ? 'Visible en PDF' : 'Oculta en PDF'}`);
+    }
+
+    function unmarkByType(type) {
+      const labels = { comment: 'comentarios', strikethrough: 'textos tachados', humanize: 'marcas de humanización' };
+      const matching = queuedAnnotations.filter(a => a.type === type);
+      const count = matching.length;
+      if (count === 0) {
+        showToast(`No hay ${labels[type] || type} pendientes`);
+        closeTopbarUnmarkDropdown();
+        return;
+      }
+      queuedAnnotations = queuedAnnotations.filter(a => a.type !== type);
+      matching.forEach(m => selectedAnnotIds.delete(m.id));
+      renderAnnotationsTray();
+      closeTopbarUnmarkDropdown();
+      showToast(`Se desmarcaron ${count} ${labels[type] || type}`);
+    }
+
+    function unmarkSelectedAnnotations() {
+      if (selectedAnnotIds.size === 0) {
+        alert("Por favor selecciona primero una o más marcas activando sus casillas de verificación.");
+        return;
+      }
+      const count = selectedAnnotIds.size;
+      queuedAnnotations = queuedAnnotations.filter(a => !selectedAnnotIds.has(a.id));
+      selectedAnnotIds.clear();
+      renderAnnotationsTray();
+      closeTopbarUnmarkDropdown();
+      showToast(`Se desmarcaron ${count} marca(s) seleccionada(s)`);
+    }
+
+    function toggleSelectAllAnnots(checked) {
+      if (checked) {
+        queuedAnnotations.forEach(a => selectedAnnotIds.add(a.id));
+      } else {
+        selectedAnnotIds.clear();
+      }
+      renderAnnotationsTray();
+    }
+
+    function invertAnnotSelection() {
+      if (queuedAnnotations.length === 0) return;
+      queuedAnnotations.forEach(a => {
+        if (selectedAnnotIds.has(a.id)) {
+          selectedAnnotIds.delete(a.id);
+        } else {
+          selectedAnnotIds.add(a.id);
+        }
+      });
+      renderAnnotationsTray();
+    }
+
+    function toggleAnnotSelection(id, checked) {
+      if (checked) {
+        selectedAnnotIds.add(id);
+      } else {
+        selectedAnnotIds.delete(id);
+      }
+      updateUnmarkControlsUI();
+      const card = document.querySelector(`.annot-card[data-id="${id}"]`);
+      if (card) {
+        card.classList.toggle('annot-card--selected', checked);
+      }
+    }
+
+    function updateUnmarkControlsUI() {
+      const total = queuedAnnotations.length;
+      const countComment = queuedAnnotations.filter(a => a.type === 'comment').length;
+      const countStrike = queuedAnnotations.filter(a => a.type === 'strikethrough').length;
+      const countHuman = queuedAnnotations.filter(a => a.type === 'humanize').length;
+      const countSelected = selectedAnnotIds.size;
+
+      // Badges y contadores en panel lateral
+      const elCountComment = document.getElementById('countComments');
+      if (elCountComment) elCountComment.textContent = countComment;
+      const elCountStrike = document.getElementById('countStrikes');
+      if (elCountStrike) elCountStrike.textContent = countStrike;
+      const elCountHuman = document.getElementById('countHumanize');
+      if (elCountHuman) elCountHuman.textContent = countHuman;
+      const elCountSel = document.getElementById('countSelectedAnnots');
+      if (elCountSel) elCountSel.textContent = countSelected;
+
+      // Habilitar / deshabilitar botones
+      const btnComment = document.getElementById('btnUnmarkComments');
+      if (btnComment) btnComment.disabled = countComment === 0;
+      const btnStrike = document.getElementById('btnUnmarkStrikes');
+      if (btnStrike) btnStrike.disabled = countStrike === 0;
+      const btnHuman = document.getElementById('btnUnmarkHumanize');
+      if (btnHuman) btnHuman.disabled = countHuman === 0;
+      const btnSel = document.getElementById('btnUnmarkSelected');
+      if (btnSel) btnSel.disabled = countSelected === 0;
+
+      // Contadores en dropdown de barra superior
+      const elTopCount = document.getElementById('topbarAnnotsCount');
+      if (elTopCount) elTopCount.textContent = total;
+      const elDropComment = document.getElementById('dropCountComment');
+      if (elDropComment) elDropComment.textContent = countComment;
+      const elDropStrike = document.getElementById('dropCountStrike');
+      if (elDropStrike) elDropStrike.textContent = countStrike;
+      const elDropHuman = document.getElementById('dropCountHumanize');
+      if (elDropHuman) elDropHuman.textContent = countHuman;
+      const elDropSel = document.getElementById('dropCountSelected');
+      if (elDropSel) elDropSel.textContent = countSelected;
+      const elDropAll = document.getElementById('dropCountAll');
+      if (elDropAll) elDropAll.textContent = total;
+      const dropBtnSel = document.getElementById('dropBtnUnmarkSelected');
+      if (dropBtnSel) dropBtnSel.style.display = countSelected > 0 ? 'flex' : 'none';
+
+      // Checkbox general "seleccionar todas"
+      const chkAll = document.getElementById('chkSelectAllAnnots');
+      if (chkAll) {
+        chkAll.checked = total > 0 && countSelected === total;
+        chkAll.indeterminate = countSelected > 0 && countSelected < total;
+        chkAll.disabled = total === 0;
+      }
+    }
+
+    function toggleTopbarUnmarkDropdown(event) {
+      if (event) event.stopPropagation();
+      const menu = document.getElementById('topbarUnmarkMenu');
+      if (menu) {
+        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    function closeTopbarUnmarkDropdown() {
+      const menu = document.getElementById('topbarUnmarkMenu');
+      if (menu) menu.style.display = 'none';
+    }
+
+    document.addEventListener('click', (e) => {
+      const container = e.target.closest('.dropdown-unmark-container');
+      if (!container) {
+        closeTopbarUnmarkDropdown();
+      }
+    });
+
     function removeAnnotation(id) {
       queuedAnnotations = queuedAnnotations.filter(a => a.id !== id);
+      selectedAnnotIds.delete(id);
       renderAnnotationsTray();
+      showToast('Marca desmarcada del lote');
     }
 
     function clearAllAnnotations() {
       if (queuedAnnotations.length === 0) return;
-      if (confirm("¿Descartar todas las marcas pendientes sin ejecutar?")) {
+      if (confirm(`¿Descartar y desmarcar todas las marcas pendientes (${queuedAnnotations.length}) del lote?`)) {
+        const count = queuedAnnotations.length;
         queuedAnnotations = [];
+        selectedAnnotIds.clear();
         renderAnnotationsTray();
+        closeTopbarUnmarkDropdown();
+        showToast(`Se desmarcaron todas las marcas (${count})`);
       }
     }
 
@@ -4529,7 +4931,7 @@
       if (!overlay) return;
       overlay.innerHTML = '';
 
-      const pageAnnots = queuedAnnotations.filter(a => a.page === pageNum);
+      const pageAnnots = queuedAnnotations.filter(a => a.page === pageNum && (visibleLayers[a.type] !== false));
       if (pageAnnots.length === 0) return;
 
       pageAnnots.forEach(ann => {
@@ -4577,9 +4979,13 @@
       const btnBadge = document.getElementById('sidebarBtnCount');
       if (btnBadge) btnBadge.textContent = count;
 
+      updateUnmarkControlsUI();
+
       const list = document.getElementById('annotsList');
       if (!list) return;
       if (count === 0) {
+        selectedAnnotIds.clear();
+        updateUnmarkControlsUI();
         list.innerHTML = `
           <div class="annots-empty">
             <p>No hay marcas pendientes.</p>
@@ -4593,11 +4999,12 @@
       list.innerHTML = '';
       queuedAnnotations.forEach(ann => {
         const card = document.createElement('div');
+        const isSelected = selectedAnnotIds.has(ann.id);
         const typeClass = ann.type === 'comment' ? 'annot-card--comment' : (ann.type === 'strikethrough' ? 'annot-card--strike' : 'annot-card--humanize');
         const typeLabel = ann.type === 'comment' ? '💬 Comentario' : (ann.type === 'strikethrough' ? '✂️ Tachar' : '✨ Humanizar');
         const badgeColor = ann.type === 'comment' ? 'info' : (ann.type === 'strikethrough' ? 'bad' : 'ok');
 
-        card.className = `annot-card ${typeClass}`;
+        card.className = `annot-card ${typeClass} ${isSelected ? 'annot-card--selected' : ''}`;
         card.setAttribute('data-id', ann.id);
         card.onclick = () => {
           if (ann.page && ann.page !== pdfCurrentPage) {
@@ -4606,8 +5013,13 @@
         };
         card.innerHTML = `
           <div class="annot-card__head">
-            <span class="badge badge--${badgeColor}">${typeLabel} · Pág. ${ann.page}</span>
-            <button class="annot-card__del" onclick="event.stopPropagation(); removeAnnotation('${ann.id}')" title="Eliminar marca">✕</button>
+            <div style="display: flex; align-items: center; gap: 0.45rem;">
+              <input type="checkbox" class="annot-card__checkbox" ${isSelected ? 'checked' : ''} onchange="toggleAnnotSelection('${ann.id}', this.checked)" onclick="event.stopPropagation()" title="Seleccionar para desmarcar">
+              <span class="badge badge--${badgeColor}">${typeLabel} · Pág. ${ann.page}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              <button class="annot-card__del" onclick="event.stopPropagation(); removeAnnotation('${ann.id}')" title="Desmarcar / eliminar esta marca">✕</button>
+            </div>
           </div>
           <div class="annot-card__quote">"${escapeHtml(ann.text)}"</div>
           ${ann.comment ? `<div class="annot-card__note"><strong>Instrucción:</strong> ${escapeHtml(ann.comment)}</div>` : ''}
@@ -4664,6 +5076,7 @@
 
         // Execution successful
         queuedAnnotations = [];
+        selectedAnnotIds.clear();
         renderAnnotationsTray();
 
         // Populate summary modal
