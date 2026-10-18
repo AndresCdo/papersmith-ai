@@ -84,7 +84,9 @@ UNMEASURED_REASONS: tuple[str, ...] = (
 
 _VERDICTS = ("pass", "fail", "unmeasured")
 
-_CITE_RE = re.compile(rb"\\cite\{([^}]*)\}")
+# `\cite`, `\citep`, `\citet` -- optionally starred, up to two `[...]` options,
+# with the whitespace TeX skips after a control word and between arguments.
+_CITE_RE = re.compile(rb"\\cite[pt]?\*?\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}")
 _BIB_ENTRY_RE = re.compile(rb"@[A-Za-z]+\{\s*([^,\s]+)\s*,")
 _ITEM_RE = re.compile(r"^\\item (.*)$", re.MULTILINE)
 _CLOSING_RE = re.compile(r"^Closing: (.*)$", re.MULTILINE)

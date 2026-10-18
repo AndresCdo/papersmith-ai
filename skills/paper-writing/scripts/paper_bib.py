@@ -57,7 +57,9 @@ import paper_resolve  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_core" / "implementation"))
 from impl_refusals import Refused  # noqa: E402
 
-_CITE_RE = re.compile(r"\\cite\{([^}]*)\}")
+# `\cite`, `\citep`, `\citet` -- optionally starred, up to two `[...]` options,
+# with the whitespace TeX skips after a control word and between arguments.
+_CITE_RE = re.compile(r"\\cite[pt]?\*?\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}")
 _BIB_ENTRY_RE = re.compile(r"@\w+\{([^,]+),")
 
 
