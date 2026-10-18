@@ -2300,6 +2300,9 @@ def _run_git(
     argv = ["git", *args]
     env = {name: os.environ[name] for name in GIT_ENV_ALLOWLIST if name in os.environ}
     env["GIT_TERMINAL_PROMPT"] = "0"
+    # Issue #56: no transport helper (`ext::`, `fd::`) and no plaintext
+    # transport is reachable from a value a cloned run-config.json supplies.
+    env["GIT_ALLOW_PROTOCOL"] = GIT_ALLOWED_PROTOCOLS
     if extra_env:
         env.update(extra_env)
     try:
@@ -2322,6 +2325,31 @@ def _run_git(
             f"git {' '.join(args)} exited {result.returncode}: {result.stderr.strip()}"
         )
     return result
+
+
+GIT_ALLOWED_PROTOCOLS = "https:ssh:file"
+
+_REMOTE_HELPER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*::")
+
+
+def _inadmissible_remote_argument(value: str) -> str | None:
+    """Why `value` may not reach git as a remote URL or ref, or `None`.
+
+    A repository URL and ref come from `run-config.json`, which a cloned
+    repository controls, so neither may be read by git as an option
+    (`--upload-pack=...`), select a transport helper (`ext::sh -c ...`), or
+    smuggle control characters. Transport schemes are further restricted by
+    `GIT_ALLOW_PROTOCOL` inside `_run_git` (issue #56).
+    """
+    if not value:
+        return "is empty"
+    if value.startswith("-"):
+        return "starts with '-' and would be read as a git option"
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        return "contains a control character"
+    if _REMOTE_HELPER_RE.match(value):
+        return "names a git remote helper ('<transport>::'), which runs a program"
+    return None
 
 
 def _looks_like_ssh_remote(repo_url: str) -> bool:
@@ -2641,6 +2669,13 @@ def _verify_commit_reachable(
     reader's `no-local-repository` unmeasurable path without a single git
     call.
     """
+    for label, value in (("remote", repo_url), ("pinned commit", commit)):
+        reason = _inadmissible_remote_argument(value)
+        if reason:
+            raise JobFolderError(
+                f"{decision} refuses: the declared {label} {value!r} {reason}; "
+                "declare an https:// (or ssh) repository URL and a plain commit."
+            )
     if repo_credential_path is not None:
         if repo_url.startswith("https://"):
             try:
@@ -2690,7 +2725,7 @@ def _verify_commit_reachable(
             _run_git(["init", "-q"], cwd=scratch)
             if credential_value is None:
                 _run_git(
-                    ["fetch", "--dry-run", "--depth", "1", repo_url, commit],
+                    ["fetch", "--dry-run", "--depth", "1", "--", repo_url, commit],
                     cwd=scratch,
                     timeout=PIN_PUBLISHED_TIMEOUT_SECONDS,
                 )
@@ -2699,7 +2734,7 @@ def _verify_commit_reachable(
                 askpass.write_text(REPO_CREDENTIAL_ASKPASS_SCRIPT, encoding="utf-8")
                 os.chmod(askpass, 0o700)
                 _run_git(
-                    ["fetch", "--dry-run", "--depth", "1", repo_url, commit],
+                    ["fetch", "--dry-run", "--depth", "1", "--", repo_url, commit],
                     cwd=scratch,
                     timeout=PIN_PUBLISHED_TIMEOUT_SECONDS,
                     extra_env={
@@ -3166,8 +3201,10 @@ def _published_equivalent(
     """
     if not (repo_url and repo_ref and clone_paths):
         return None
+    if _inadmissible_remote_argument(repo_url) or _inadmissible_remote_argument(repo_ref):
+        return None
     try:
-        listed = _run_git(["ls-remote", repo_url, repo_ref], cwd=target).stdout
+        listed = _run_git(["ls-remote", "--", repo_url, repo_ref], cwd=target).stdout
     except JobFolderError:
         return None
     tip = listed.split("\t", 1)[0].strip() if listed.strip() else ""
