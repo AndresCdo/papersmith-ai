@@ -58,7 +58,7 @@ from impl_domain_profile import PROFILE, declared_holder_filenames  # noqa: E402
 # `tests/test_proposal_implementation.py` reads it as `impl.LFS_POINTER_PREFIX`.
 # Reaching a name through this namespace is a consumer, and a search for uses
 # INSIDE the engine cannot see one -- which is how it got called dead.
-from impl_layout import FORGE_ROOT, IGNORED_DIRS, LFS_POINTER_PREFIX  # noqa: E402
+from impl_layout import FORGE_ROOT, IGNORED_DIRS, LFS_POINTER_PREFIX, WORKSPACE  # noqa: E402
 from impl_refusals import NameRefused, Refused  # noqa: E402
 from impl_gitops import (git, lfs_state, present_files,  # noqa: E402
                          repository_ignored, tracked_files)

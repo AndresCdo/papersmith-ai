@@ -486,6 +486,33 @@ class SealComparisonTests(unittest.TestCase):
                 self.assertEqual(actual, digests[case_id], case_id)
 
 
+class SealReachesBehaviorTests(unittest.TestCase):
+    """A sealed refusal is the command's own, never argparse's (#52).
+
+    `adopt-same-target` once omitted `--name`, so its golden recorded
+    argparse's usage exit (2, empty stdout) and the case never reached the
+    adoption it is named for -- which is how `adopt`'s missing `WORKSPACE`
+    import stayed invisible to the seal. A deliberate refusal case still
+    passes: the engine writes its refusal to stdout, argparse writes nothing.
+    """
+
+    def test_seal_adopt_reaches_behavior(self):
+        result = _captured_results()["adopt-same-target"]
+        self.assertEqual(result.exit_status, 2, result.stdout_text)
+        self.assertTrue(result.stdout_text, "empty stdout is argparse's usage exit")
+        payload = json.loads(result.stdout_text)
+        self.assertEqual(payload.get("code"), "DESTINATION_CONFLICT", result.stdout_text)
+
+    def test_no_sealed_case_is_an_argparse_usage_exit(self):
+        for case_id, golden in _load_digests().items():
+            if case_id == seal_capture.CORPUS_FINGERPRINT_KEY:
+                continue
+            with self.subTest(case=case_id):
+                self.assertFalse(
+                    golden["exit"] == 2 and golden["bytes"] == 0,
+                    f"{case_id} seals argparse's usage exit, not the command")
+
+
 class SealMutationProofTests(unittest.TestCase):
     """Spec.md "Seal Is Mutation-Provable": a single-byte change in any
     captured golden must turn the comparison red. Demonstrated in memory —
