@@ -29,7 +29,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, decisions, history, paper_preview, novelty_graph
+from . import atlas, decisions, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -308,20 +308,29 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     @app.get("/api/status")
     def api_status_adapter() -> JSONResponse:
         import re
+        from datetime import datetime, timezone
+
         state = get_workspace_state(root_path)
+        paper_meta = state.get("paper_metadata", {})
+        project_name = root_path.name
+        target_title = paper_meta.get("title") or state.get("title") or project_name
+        topic = paper_meta.get("topic") or "unspecified"
+        authors_raw = paper_meta.get("authors") or []
+        authors = ", ".join(a if isinstance(a, str) else a.get("name", "") for a in authors_raw) if authors_raw else "Sin autor asignado"
+
         proposals_dir = root_path / "proposals"
         prop_files = sorted(
             [p.name for p in proposals_dir.glob("*.md") if p.is_file() and not p.name.startswith(".")],
             reverse=True
         ) if proposals_dir.is_dir() else []
-        active_prop = prop_files[0] if prop_files else "research-concept-moneeg-embedded-32-channel-eeg-acquisition-framework-with-de-r01.md"
+        active_prop = prop_files[0] if prop_files else "Sin propuesta activa"
         match = re.search(r"-(r\d+)\.md$", active_prop)
-        active_run = match.group(1) if match else "r01"
+        active_run = match.group(1) if match else ("r00" if not prop_files else "r01")
 
         totals_meta = state.get("totals", {})
-        written_blocks = totals_meta.get("blocks_written", 6)
+        written_blocks = totals_meta.get("blocks_written", 0)
         total_blocks = totals_meta.get("blocks_total", 46)
-        total_words = totals_meta.get("word_count", 299)
+        total_words = totals_meta.get("word_count", 0)
         pdf_file = root_path / "paper" / "main.pdf"
         pdf_exists = pdf_file.is_file()
 
@@ -363,12 +372,110 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
         # BibTeX reference counts
         bib_file = root_path / "paper" / "refs.bib"
-        bib_count = 19
+        bib_count = 0
         if bib_file.is_file():
             try:
                 bib_count = len(re.findall(r"@\w+\s*\{", bib_file.read_text(encoding="utf-8", errors="ignore")))
             except Exception:
                 pass
+
+        # Check real workspace artifacts to compute dynamic phases
+        harness_ok = (root_path / ".papersmith").is_dir() and (root_path / "papersmith.yaml").is_file()
+        sota_atlas = (root_path / "sota-pool" / "atlas.json").is_file()
+        sota_cand = (root_path / "sota-pool" / "candidates.json").is_file()
+
+        guidance_ref_dir = root_path / "guidance" / "reference-papers"
+        guidance_refs = [d for d in guidance_ref_dir.iterdir() if d.is_dir() and not d.name.startswith(".")] if guidance_ref_dir.is_dir() else []
+        guidance_loose_pdfs = list((root_path / "guidance").glob("*.pdf")) + (list(guidance_ref_dir.glob("*.pdf")) if guidance_ref_dir.is_dir() else [])
+
+        has_deliberated_prop = any(re.search(r"-r\d+\.md$", p) for p in prop_files)
+        exp_dir = root_path / "experiments"
+        exp_files = [f for f in exp_dir.iterdir() if f.is_file() and not f.name.startswith(".")] if exp_dir.is_dir() else []
+        has_poc = any("protocol" in f.name.lower() or "poc" in f.name.lower() or "validation" in f.name.lower() for f in exp_files)
+
+        has_scaffold = tex_file.is_file()
+        has_decl = False
+        if has_scaffold:
+            try:
+                has_decl = "%% paper-writing declarations begin" in tex_file.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                pass
+
+        audit_file = root_path / ".papersmith" / "audit.json"
+        has_audit = audit_file.is_file()
+
+        # Fase 1
+        fase1_status = "PASS" if harness_ok else "PENDING"
+        # Fase 2
+        if sota_atlas:
+            fase2_status, fase2_prog, fase2_det = "PASS", 1.0, "Atlas SOTA 3D compilado en sota-pool/"
+        elif sota_cand:
+            fase2_status, fase2_prog, fase2_det = "ACTIVE", 0.5, "Candidatos SOTA descubiertos, pendiente atlas"
+        else:
+            fase2_status, fase2_prog, fase2_det = "PENDING", 0.0, "Sin artefactos en sota-pool/"
+
+        # Fase 3
+        if guidance_refs and not guidance_loose_pdfs:
+            fase3_status, fase3_prog, fase3_det = "PASS", 1.0, f"{len(guidance_refs)} referencias ingeridas, cero PDFs sueltos"
+        elif guidance_loose_pdfs or guidance_refs:
+            fase3_status, fase3_prog, fase3_det = "ACTIVE", 0.5, f"{len(guidance_loose_pdfs)} PDFs pendientes de ingerir"
+        else:
+            fase3_status, fase3_prog, fase3_det = "PENDING", 0.0, "Sin artículos de referencia en guidance/"
+
+        # Fase 4
+        if has_deliberated_prop:
+            fase4_status, fase4_prog, fase4_det = "PASS", 1.0, f"Propuesta deliberada ({active_prop})"
+        elif prop_files:
+            fase4_status, fase4_prog, fase4_det = "ACTIVE", 0.5, f"Borrador en curso ({prop_files[0]})"
+        else:
+            fase4_status, fase4_prog, fase4_det = "PENDING", 0.0, "Sin propuesta en proposals/"
+
+        # Fase 5
+        if has_poc:
+            fase5_status, fase5_prog, fase5_det = "PASS", 1.0, f"{len(exp_files)} protocolo(s) experimental(es) deliberado(s)"
+        elif exp_files:
+            fase5_status, fase5_prog, fase5_det = "ACTIVE", 0.5, f"{len(exp_files)} archivo(s) en experiments/"
+        else:
+            fase5_status, fase5_prog, fase5_det = "PENDING", 0.0, "Sin protocolos experimentales en experiments/"
+
+        # Fase 6
+        if has_scaffold:
+            fase6_status, fase6_prog, fase6_det = "PASS", 1.0, "paper/main.tex y contratos de sección andamiados"
+        else:
+            fase6_status, fase6_prog, fase6_det = "PENDING", 0.0, "paper/main.tex pendiente de andamiaje"
+
+        # Fase 7
+        if has_decl:
+            fase7_status, fase7_prog, fase7_det = "PASS", 1.0, "Declaraciones operativas fijadas en main.tex"
+        else:
+            fase7_status, fase7_prog, fase7_det = "PENDING", 0.0, "Declaraciones pendientes de fijación"
+
+        # Fase 8
+        if written_blocks >= total_blocks and total_blocks > 0:
+            fase8_status, fase8_prog = "PASS", 1.0
+        elif written_blocks > 0:
+            fase8_status, fase8_prog = "ACTIVE", round(written_blocks / max(1, total_blocks), 3)
+        else:
+            fase8_status, fase8_prog = "PENDING", 0.0
+        fase8_det = f"{written_blocks}/{total_blocks} bloques canónicos redactados ({total_words} palabras)"
+
+        # Fase 9
+        if fig_count >= 1:
+            fase9_status, fase9_prog, fase9_det = "PASS", 1.0, f"{fig_count} figura(s) vectorial(es) en paper/Figures/"
+        else:
+            fase9_status, fase9_prog, fase9_det = "PENDING", 0.0, "0 figuras en paper/Figures/"
+
+        # Fase 10
+        if pdf_exists:
+            fase10_status, fase10_prog, fase10_det = "PASS", 1.0, f"Manuscrito PDF compilado ({pdf_pages} págs, {round(pdf_size / 1024, 1)} KB)"
+        else:
+            fase10_status, fase10_prog, fase10_det = "PENDING", 0.0, "paper/main.pdf pendiente de compilación"
+
+        # Fase 11
+        if has_audit:
+            fase11_status, fase11_prog, fase11_det = "PASS", 1.0, "Auditoría transversal ejecutada y superada"
+        else:
+            fase11_status, fase11_prog, fase11_det = "PENDING", 0.0, "Auditoría transversal pendiente"
 
         fases = [
             {
@@ -377,19 +484,19 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": "Fase 1: Configuración de Entorno & Harness",
                 "gate": "G-HARNESS",
                 "agent": "ecosystem-orchestrator",
-                "desc": "Estructura de workspace, proyecciones de harness (.claude, .opencode, .pi, .agents), entorno micromamba y validación de Python 3.12 y Node.js.",
+                "desc": "Estructura de workspace, proyecciones de harness (.claude, .opencode, .pi, .agents), entorno micromamba y validación de runtimes.",
                 "tools": ["read", "bash"],
                 "skills": ["harness-setup", "workspace-verifier"],
                 "cli_command": "papersmith init --harness-only",
                 "outputs": [".papersmith/", "papersmith.yaml", "pyproject.toml"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "4/4 proyecciones de harness operativas",
+                "status": fase1_status,
+                "progress": 1.0 if fase1_status == "PASS" else 0.0,
+                "detail": "Proyecciones de harness operativas" if fase1_status == "PASS" else "Entorno pendiente de inicialización",
                 "subfases": [
-                    {"id": "1.1", "name": "Workspace & Manifiesto", "status": "PASS", "detail": "papersmith.yaml y estructura base versionada"},
-                    {"id": "1.2", "name": "Proyección de Agentes", "status": "PASS", "detail": "Enlaces simbólicos a .claude, .opencode, .pi y .agents"},
-                    {"id": "1.3", "name": "Aislamiento Micromamba", "status": "PASS", "detail": "Python 3.12, Node.js y dependencias resueltas"},
-                    {"id": "1.4", "name": "Integridad de CLI", "status": "PASS", "detail": "CLI papersmith verificado y operativo"}
+                    {"id": "1.1", "name": "Workspace & Manifiesto", "status": fase1_status, "detail": "papersmith.yaml y estructura base versionada"},
+                    {"id": "1.2", "name": "Proyección de Agentes", "status": fase1_status, "detail": "Enlaces simbólicos a arneses operacionales"},
+                    {"id": "1.3", "name": "Aislamiento Micromamba", "status": fase1_status, "detail": "Python 3.12 y dependencias del entorno"},
+                    {"id": "1.4", "name": "Integridad de CLI", "status": fase1_status, "detail": "CLI papersmith verificado"}
                 ]
             },
             {
@@ -398,174 +505,196 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": "Fase 2: Plausibilidad & SOTA Atlas 3D",
                 "gate": "G-SOTA",
                 "agent": "sota-scout & sota-grapher & novelty-screener",
-                "desc": "Mapeo exhaustivo del estado del arte en EEG embebido de 32 canales, compilación del Atlas 3D (19 sistemas, 176 planetas) y cribado de novedad.",
+                "desc": "Exploración SOTA, validación de plausibilidad y compilación del Atlas 3D de candidatos y constelación conceptual.",
                 "tools": ["read", "write", "mcp"],
                 "skills": ["sota-scout", "semantic-scholar", "pubmed-search"],
                 "cli_command": "papersmith run --stage plausibility",
                 "outputs": ["sota-pool/atlas.json", "sota-pool/atlas.html", "sota-pool/candidates.json"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "Atlas 3D con 19 sistemas y 176 planetas compilado",
+                "status": fase2_status,
+                "progress": fase2_prog,
+                "detail": fase2_det,
                 "subfases": [
-                    {"id": "2.1", "name": "Discovery de 18 Artículos SOTA", "status": "PASS", "detail": "Recuperación de papers Q1/Q2 (IEEE, MDPI, Frontiers)"},
-                    {"id": "2.2", "name": "Extracción de Metadatos & Familias", "status": "PASS", "detail": "Clasificación en 4 familias temáticas"},
-                    {"id": "2.3", "name": "Embedding Espacial & Constelación 3D", "status": "PASS", "detail": "19 sistemas solares y 176 planetas en WebGL"},
-                    {"id": "2.4", "name": "Detección de Brecha de Novedad", "status": "PASS", "detail": "Identificación del vacío en sincronización hardware pediátrica"}
+                    {"id": "2.1", "name": "Discovery de Artículos SOTA", "status": fase2_status, "detail": "Búsqueda y filtrado de literatura Q1/Q2"},
+                    {"id": "2.2", "name": "Extracción de Metadatos & Familias", "status": fase2_status, "detail": "Clasificación taxonómica de candidatos"},
+                    {"id": "2.3", "name": "Embedding Espacial & Constelación 3D", "status": fase2_status, "detail": "Generación de atlas.json para visualización WebGL"},
+                    {"id": "2.4", "name": "Detección de Brecha de Novedad", "status": fase2_status, "detail": "Identificación de vacíos conceptuales y oportunidad"}
                 ]
             },
             {
                 "id": "Fase 3",
                 "stage_id": "ingestion",
-                "name": "Fase 3: Ingestión de Referencias & Tesis Principal",
+                "name": "Fase 3: Ingestión de Referencias & Literatura",
                 "gate": "G-INGEST",
                 "agent": "paper-ingestion",
-                "desc": "Ingestión completa a Markdown de 9 artículos de referencia y la Tesis de Maestría de Julián David Parias Osorio (105 páginas, 60+ figuras).",
+                "desc": "Ingestión a Markdown de artículos de referencia, normalización BibTeX de bibliografía y extracción de insumos base.",
                 "tools": ["read", "write", "marker"],
                 "skills": ["paper-ingestion", "pdf-extractor", "bibtex-parser"],
-                "cli_command": "papersmith ingest guidance/reference-papers/thesis_parias2023_moneeg/thesis_parias2023_moneeg.pdf",
-                "outputs": ["guidance/reference-papers/thesis_parias2023_moneeg/", "paper/refs.bib", "paper/Figures/"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "9/9 artículos ingeridos (100%), cero PDFs sueltos",
+                "cli_command": "papersmith ingest guidance/reference-papers/",
+                "outputs": ["guidance/reference-papers/", "paper/refs.bib", "paper/Figures/"],
+                "status": fase3_status,
+                "progress": fase3_prog,
+                "detail": fase3_det,
                 "subfases": [
-                    {"id": "3.1", "name": "Ingestión de Tesis Base (105 p.)", "status": "PASS", "detail": "Conversión estructural de la tesis de Julián Parias"},
-                    {"id": "3.2", "name": "Normalización BibTeX (refs.bib)", "status": "PASS", "detail": "19 referencias verificadas y consolidadas"},
-                    {"id": "3.3", "name": "Extracción Vectorial de 7 Figuras", "status": "PASS", "detail": "Arquitectura, cascada ADS1299, jitter, ruido y Berger"},
-                    {"id": "3.4", "name": "Extracción de Hechos de Hardware", "status": "PASS", "detail": "Ruido <1.1 µVpp, latencia <5 µs y 0% packet loss"}
+                    {"id": "3.1", "name": "Ingestión de Artículos Base", "status": fase3_status, "detail": "Conversión estructural de PDFs a Markdown limpio"},
+                    {"id": "3.2", "name": "Normalización BibTeX (refs.bib)", "status": fase3_status, "detail": "Citas verificadas y consolidadas"},
+                    {"id": "3.3", "name": "Extracción Vectorial de Figuras", "status": fase3_status, "detail": "Figuras y diagramas de referencia"},
+                    {"id": "3.4", "name": "Extracción de Hechos e Insumos", "status": fase3_status, "detail": "Extracción de parámetros para el manuscrito"}
                 ]
             },
             {
                 "id": "Fase 4",
                 "stage_id": "proposal",
-                "name": "Fase 4: Deliberación & Publicación de Propuesta",
+                "name": "Fase 4: Deliberación de Propuesta & Modelo Conceptual",
                 "gate": "G-PROP",
-                "agent": "deliberation-publish",
-                "desc": "Deliberación y aprobación formal del sucesor r02 con formalización de coautoría Julián David Parias Osorio & Andrés Álvarez (LabIA UNAL) y target Elsevier.",
+                "agent": "deliberation-publish & mathematical-tutor",
+                "desc": "Deliberación científica formal de la propuesta (rNN), definición de novedad y formalización conceptual.",
                 "tools": ["read", "write", "deliberate"],
                 "skills": ["proposal-deliberation", "peer-review-simulator"],
-                "cli_command": "papersmith deliberate proposals/research-concept-moneeg-embedded-32-channel-eeg-acquisition-framework-with-de-r01.md",
-                "outputs": ["proposals/research-concept-moneeg-embedded-32-channel-eeg-acquisition-framework-with-de-r02.md"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "Revisión r02 aprobada y publicada con coautoría",
+                "cli_command": "papersmith deliberate proposals/",
+                "outputs": ["proposals/"],
+                "status": fase4_status,
+                "progress": fase4_prog,
+                "detail": fase4_det,
                 "subfases": [
-                    {"id": "4.1", "name": "Formulación de Hipótesis H1–H3", "status": "PASS", "detail": "Ruido analógico, inyección hardware y casco ergonómico"},
-                    {"id": "4.2", "name": "Deliberación de Revisión r02", "status": "PASS", "detail": "Alineación de alcance con TDAH pediátrico"},
-                    {"id": "4.3", "name": "Fijación de Coautoría LabIA", "status": "PASS", "detail": "Julián Parias (Primer Autor) y Andrés Álvarez (Supervisor)"},
-                    {"id": "4.4", "name": "Aprobación Minciencias-92056", "status": "PASS", "detail": "Compromiso de entrega de código y esquemas abiertos"}
+                    {"id": "4.1", "name": "Stage bound: Delimitación & Locus", "status": fase4_status, "detail": "Definición del problema y anclaje de locus conceptual"},
+                    {"id": "4.2", "name": "Stage deliberated: Novedad & Consenso", "status": fase4_status, "detail": "Discusión de hipótesis y pilares de innovación"},
+                    {"id": "4.3", "name": "Stage composed: Modelo Matemático Básico", "status": fase4_status, "detail": "Formalización matemática y ecuaciones clave"},
+                    {"id": "4.4", "name": "Stage published: Publicación & Recibo Criptográfico", "status": fase4_status, "detail": "Revisión sellada con hash SHA-256"}
                 ]
             },
             {
                 "id": "Fase 5",
-                "stage_id": "scaffolding",
-                "name": "Fase 5: Andamiaje de Manuscrito & Contratos",
-                "gate": "G-SCAFFOLD",
-                "agent": "contract-auditor",
-                "desc": "Andamiaje de paper/main.tex con 46 bloques canónicos y 10 contratos de sección bajo la clase estándar elsarticle.",
-                "tools": ["read", "write"],
-                "skills": ["scaffold-generator", "latex-contract-indexer"],
-                "cli_command": "papersmith implement scaffold --target elsevier",
-                "outputs": ["paper/main.tex", "paper/refs.bib", "sections/*.md"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "46/46 bloques canónicos abiertos e indexados",
+                "stage_id": "poc_experiments",
+                "name": "Fase 5: Deliberación & Planeación Experimental (PoC)",
+                "gate": "G-EXP-POC",
+                "agent": "experimental-deliberation & experimental-validation",
+                "desc": "Diseño y deliberación del protocolo experimental de prueba de concepto, baselines SOTA y métricas de éxito.",
+                "tools": ["read", "write", "validate"],
+                "skills": ["experimental-deliberation", "experimental-implementation"],
+                "cli_command": "papersmith deliberate experiments/",
+                "outputs": ["experiments/"],
+                "status": fase5_status,
+                "progress": fase5_prog,
+                "detail": fase5_det,
                 "subfases": [
-                    {"id": "5.1", "name": "Estructura de 10 Secciones", "status": "PASS", "detail": "Contratos canónicos en sections/*.md"},
-                    {"id": "5.2", "name": "Apertura de 46 Bloques Canónicos", "status": "PASS", "detail": "Marcadores y hashes SHA-256 integrados"},
-                    {"id": "5.3", "name": "Asignación de Roles Retóricos", "status": "PASS", "detail": "Preguntas editoriales y acoplamiento de hechos"},
-                    {"id": "5.4", "name": "Configuración Elsevier elsarticle", "status": "PASS", "detail": "Journal Biomedical Signal Processing and Control"}
+                    {"id": "5.1", "name": "Stage bound: Anclaje de Claims & Métricas", "status": fase5_status, "detail": "Criterios de éxito y métricas cuantificables"},
+                    {"id": "5.2", "name": "Stage validated: Baselines & SOTA", "status": fase5_status, "detail": "Contraste contra sistemas y modelos de referencia"},
+                    {"id": "5.3", "name": "Stage deliberated: Diseño Metrológico & Protocolos", "status": fase5_status, "detail": "Protocolos de ensayo y validación"},
+                    {"id": "5.4", "name": "Stage composed: Especificación de Experimentos", "status": fase5_status, "detail": "Formalización de experimentos con instrumentación"},
+                    {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": fase5_status, "detail": "Superación de compuerta G-EXP-POC"}
                 ]
             },
             {
                 "id": "Fase 6",
-                "stage_id": "declarations",
-                "name": "Fase 6: Declaraciones Operativas & Coautoría",
-                "gate": "G-DECLARATIONS",
-                "agent": "declarations-recorder",
-                "desc": "Fijación de 6/6 declaraciones operativas: autoría CRediT, financiación Minciencias-92056, repositorio público y ética pediátrica.",
+                "stage_id": "scaffolding",
+                "name": "Fase 6: Andamiaje de Manuscrito & Contratos",
+                "gate": "G-SCAFFOLD",
+                "agent": "contract-auditor",
+                "desc": "Andamiaje de paper/main.tex con bloques canónicos y contratos de sección bajo la clase tipográfica del journal.",
                 "tools": ["read", "write"],
-                "skills": ["credit-taxonomy", "ethics-compliance"],
-                "cli_command": "papersmith implement declarations --credit-coauthors",
-                "outputs": ["paper/main.tex (declarations region)"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "6/6 declaraciones fijadas satisfactoriamente",
+                "skills": ["scaffold-generator", "latex-contract-indexer"],
+                "cli_command": "papersmith implement scaffold",
+                "outputs": ["paper/main.tex", "paper/refs.bib", "sections/*.md"],
+                "status": fase6_status,
+                "progress": fase6_prog,
+                "detail": fase6_det,
                 "subfases": [
-                    {"id": "6.1", "name": "Taxonomía CRediT de Coautoría", "status": "PASS", "detail": "Roles formalizados para Julián Parias y Andrés Álvarez"},
-                    {"id": "6.2", "name": "Declaración Ética Pediátrica", "status": "PASS", "detail": "Protocolos no invasivos acordes a Minciencias"},
-                    {"id": "6.3", "name": "Declaración de Datos Abiertos", "status": "PASS", "detail": "Repositorio institucional de registros crudos"},
-                    {"id": "6.4", "name": "Sellado en main.tex", "status": "PASS", "detail": "Región declarations bloqueada con hash criptográfico"}
+                    {"id": "6.1", "name": "Estructura de Secciones", "status": fase6_status, "detail": "Contratos canónicos en sections/*.md"},
+                    {"id": "6.2", "name": "Apertura de Bloques Canónicos", "status": fase6_status, "detail": "Marcadores y hashes SHA-256 integrados"},
+                    {"id": "6.3", "name": "Asignación de Roles Retóricos", "status": fase6_status, "detail": "Preguntas editoriales y acoplamiento de hechos"},
+                    {"id": "6.4", "name": "Configuración Tipográfica", "status": fase6_status, "detail": "Plantilla LaTeX del journal objetivo"}
                 ]
             },
             {
                 "id": "Fase 7",
-                "stage_id": "writing",
-                "name": "Fase 7: Redacción Técnica & Transposición",
-                "gate": "G-WRITING",
-                "agent": "redactor & style-sampler & insumos-observer",
-                "desc": "Redacción técnica por oleadas (Waves 1-9) de los 46 bloques canónicos del paper a partir de los datos experimentales y fisiológicos de la tesis.",
-                "tools": ["read", "write", "substitute"],
-                "skills": ["technical-writing", "facts-coupler", "style-shield"],
-                "cli_command": "python3 scripts/build_manuscript.py",
-                "outputs": ["paper/main.tex", "sections/10-back-matter.md", "sections/07-conclusions.md"],
-                "status": "PASS" if written_blocks >= total_blocks else "ACTIVE",
-                "progress": round(written_blocks / max(1, total_blocks), 3),
-                "detail": f"{written_blocks}/{total_blocks} bloques canónicos redactados ({total_words} palabras)",
-                "manuscript_ref": {"pages": "1–10", "words": total_words},
+                "stage_id": "declarations",
+                "name": "Fase 7: Declaraciones Operativas & Coautoría",
+                "gate": "G-DECLARATIONS",
+                "agent": "declarations-recorder",
+                "desc": "Fijación de declaraciones operativas: autoría CRediT, financiación, repositorio abierto y consideraciones éticas.",
+                "tools": ["read", "write"],
+                "skills": ["credit-taxonomy", "ethics-compliance"],
+                "cli_command": "papersmith implement declarations",
+                "outputs": ["paper/main.tex (declarations)"],
+                "status": fase7_status,
+                "progress": fase7_prog,
+                "detail": fase7_det,
                 "subfases": [
-                    {"id": "7.1", "name": "Wave 1: Título, Keywords & Abstract", "status": "PASS", "detail": "7 slots estructurados (170 palabras) en pág. 1"},
-                    {"id": "7.2", "name": "Wave 2: Introducción & Hipótesis", "status": "PASS", "detail": "6 bloques (810 palabras) en págs. 1–3"},
-                    {"id": "7.3", "name": "Wave 3: Related Work & SOTA", "status": "PASS", "detail": "5 bloques + tabla comparativa en págs. 3–4"},
-                    {"id": "7.4", "name": "Wave 4–9: Métodos, Resultados & Cierre", "status": "PASS", "detail": "28 bloques técnicos transmutados en págs. 4–10"}
+                    {"id": "7.1", "name": "Taxonomía CRediT de Coautoría", "status": fase7_status, "detail": "Roles autorales formalizados"},
+                    {"id": "7.2", "name": "Declaración Ética", "status": fase7_status, "detail": "Protocolos éticos e institucionales"},
+                    {"id": "7.3", "name": "Disponibilidad de Datos y Código", "status": fase7_status, "detail": "Repositorio y accesibilidad"},
+                    {"id": "7.4", "name": "Sellado en main.tex", "status": fase7_status, "detail": "Región declarations bloqueada con hash"}
                 ]
             },
             {
                 "id": "Fase 8",
-                "stage_id": "figures",
-                "name": "Fase 8: Diagramas Técnicos & Grounding",
-                "gate": "G-FIGURES",
-                "agent": "diagram-author & figure-auditor",
-                "desc": "Diagramas de arquitectura hardware (TM4C1294 + CM4), front-end analógico ADS1299, sincronización Unity y rasterizado vectorial.",
-                "tools": ["read", "write", "latexmk"],
-                "skills": ["vector-graphics", "sips-optimizer", "figure-grounding"],
-                "cli_command": "papersmith audit --figures",
-                "outputs": ["paper/Figures/"],
-                "status": "PASS" if fig_count >= 5 else "PENDING",
-                "progress": 1.0 if fig_count >= 5 else 0.0,
-                "detail": f"{fig_count} figuras vectoriales de la tesis integradas y optimizadas",
+                "stage_id": "writing",
+                "name": "Fase 8: Redacción Técnica & Transposición",
+                "gate": "G-WRITING",
+                "agent": "redactor & style-sampler & insumos-observer",
+                "desc": "Redacción técnica por oleadas de los bloques canónicos del manuscrito a partir de los datos experimentales.",
+                "tools": ["read", "write", "substitute"],
+                "skills": ["technical-writing", "facts-coupler", "style-shield"],
+                "cli_command": "python3 scripts/build_manuscript.py",
+                "outputs": ["paper/main.tex", "sections/*.md"],
+                "status": fase8_status,
+                "progress": fase8_prog,
+                "detail": fase8_det,
+                "manuscript_ref": {"pages": "1–10", "words": total_words},
                 "subfases": [
-                    {"id": "8.1", "name": "Esquemas de Hardware (Figs 1–2)", "status": "PASS", "detail": "Arquitectura modular y cascada daisy-chain SPI"},
-                    {"id": "8.2", "name": "Curvas de Banco (Figs 3–4)", "status": "PASS", "detail": "Piso de ruido (<1.1 µVpp) y estabilidad (400 min)"},
-                    {"id": "8.3", "name": "Sincronización & Jitter (Figs 5 & 7)", "status": "PASS", "detail": "Latencia 2.4 µs e inyección de marcas Unity"},
-                    {"id": "8.4", "name": "Validación Fisiológica (Fig 6)", "status": "PASS", "detail": "Espectrograma O2 y bloqueo alfa de Berger"}
+                    {"id": "8.1", "name": "Wave 1: Título, Keywords & Abstract", "status": fase8_status, "detail": "Slots iniciales en pág. 1"},
+                    {"id": "8.2", "name": "Wave 2: Introducción & Hipótesis", "status": fase8_status, "detail": "Bloques de introducción y motivación"},
+                    {"id": "8.3", "name": "Wave 3: Related Work & SOTA", "status": fase8_status, "detail": "Estado del arte y tabla comparativa"},
+                    {"id": "8.4", "name": "Wave 4–9: Métodos, Resultados & Conclusiones", "status": fase8_status, "detail": "Bloques técnicos y experimentales"}
                 ]
             },
             {
                 "id": "Fase 9",
-                "stage_id": "paper",
-                "name": "Fase 9: Compilación & Manuscrito PDF",
-                "gate": "G-PDF",
-                "agent": "latex-compiler",
-                "desc": "Compilación del manuscrito LaTeX a PDF con maquetación Elsevier, verificación de referencias BibTeX y visor interactivo.",
-                "tools": ["read", "bash"],
-                "skills": ["pdflatex-engine", "bibtex-linker", "pdfjs-viewer"],
-                "cli_command": "cd paper && pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex main.tex",
-                "outputs": ["paper/main.pdf"],
-                "status": "PASS" if pdf_exists else "PENDING",
-                "progress": 1.0 if pdf_exists else 0.0,
-                "detail": f"Manuscrito Elsevier compilado exitosamente ({pdf_pages} páginas, {round(pdf_size / (1024*1024), 2)} MB)",
-                "manuscript_ref": {"pages": pdf_pages, "size_mb": round(pdf_size / (1024*1024), 2), "file": "paper/main.pdf"},
+                "stage_id": "figures",
+                "name": "Fase 9: Diagramas Técnicos & Grounding",
+                "gate": "G-FIGURES",
+                "agent": "diagram-author & figure-auditor",
+                "desc": "Elaboración de diagramas de arquitectura, figuras vectoriales, esquemas y grounding con el texto.",
+                "tools": ["read", "write", "latexmk"],
+                "skills": ["vector-graphics", "sips-optimizer", "figure-grounding"],
+                "cli_command": "papersmith audit --figures",
+                "outputs": ["paper/Figures/"],
+                "status": fase9_status,
+                "progress": fase9_prog,
+                "detail": fase9_det,
                 "subfases": [
-                    {"id": "9.1", "name": "Compilación pdfTeX elsarticle", "status": "PASS", "detail": "0 errores fatales, tipografía Computer Modern Super"},
-                    {"id": "9.2", "name": "Vinculación BibTeX (19 citas)", "status": "PASS", "detail": "Estilo elsarticle-num-names sin citas huérfanas"},
-                    {"id": "9.3", "name": "Optimización Vectorial (1.8 MB)", "status": "PASS", "detail": "Carga instantánea en navegador (10 páginas)"},
-                    {"id": "9.4", "name": "Visor PDF Interactivo", "status": "PASS", "detail": "PDF.js con control de cambios, zoom y notas"}
+                    {"id": "9.1", "name": "Diagramas de Arquitectura & Sistema", "status": fase9_status, "detail": "Figuras estructurales y topológicas"},
+                    {"id": "9.2", "name": "Curvas y Gráficas Experimentales", "status": fase9_status, "detail": "Rendimiento y contrastes empíricos"},
+                    {"id": "9.3", "name": "Esquemas Metodológicos", "status": fase9_status, "detail": "Flujos de procesamiento y transducción"},
+                    {"id": "9.4", "name": "Grounding de Figuras en Texto", "status": fase9_status, "detail": "Anclaje de referencias cruzadas"}
                 ]
             },
             {
                 "id": "Fase 10",
+                "stage_id": "paper",
+                "name": "Fase 10: Compilación & Manuscrito PDF",
+                "gate": "G-PDF",
+                "agent": "latex-compiler",
+                "desc": "Compilación del manuscrito LaTeX a PDF con maquetación editorial, verificación de referencias BibTeX y visor interactivo.",
+                "tools": ["read", "bash"],
+                "skills": ["pdflatex-engine", "bibtex-linker", "pdfjs-viewer"],
+                "cli_command": "cd paper && pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex main.tex",
+                "outputs": ["paper/main.pdf"],
+                "status": fase10_status,
+                "progress": fase10_prog,
+                "detail": fase10_det,
+                "manuscript_ref": {"pages": pdf_pages, "size_mb": round(pdf_size / (1024*1024), 2), "file": "paper/main.pdf"},
+                "subfases": [
+                    {"id": "10.1", "name": "Compilación pdfTeX", "status": fase10_status, "detail": "0 errores fatales en compilación"},
+                    {"id": "10.2", "name": "Vinculación BibTeX", "status": fase10_status, "detail": f"{bib_count} citas vinculadas sin huérfanas"},
+                    {"id": "10.3", "name": "Optimización Vectorial", "status": fase10_status, "detail": "Generación de PDF optimizado"},
+                    {"id": "10.4", "name": "Visor PDF Interactivo", "status": fase10_status, "detail": "Visor PDF.js con control de cambios"}
+                ]
+            },
+            {
+                "id": "Fase 11",
                 "stage_id": "audit",
-                "name": "Fase 10: Auditoría Transversal & Gates",
+                "name": "Fase 11: Auditoría Transversal & Gates",
                 "gate": "G-AUDIT",
                 "agent": "audit-report",
                 "desc": "Verificación estricta de las 4 compuertas del framework: readiness, acoplamiento de hechos, blindaje de estilo y figuras.",
@@ -573,14 +702,14 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "skills": ["cross-auditor", "gate-checker", "hash-verifier"],
                 "cli_command": "papersmith audit",
                 "outputs": [".papersmith/audit.json"],
-                "status": "PASS",
-                "progress": 1.0,
-                "detail": "4/4 gates verificados y superados (100%)",
+                "status": fase11_status,
+                "progress": fase11_prog,
+                "detail": fase11_det,
                 "subfases": [
-                    {"id": "10.1", "name": "Gate G1: Writing Readiness", "status": "PASS", "detail": "46/46 bloques canónicos sellados con SHA-256"},
-                    {"id": "10.2", "name": "Gate G2: Coupling Verification", "status": "PASS", "detail": "Hechos acoplados con la tesis de Julián Parias"},
-                    {"id": "10.3", "name": "Gate G3: Style Shield", "status": "PASS", "detail": "Blindaje retórico conforme directrices Elsevier"},
-                    {"id": "10.4", "name": "Gate G4: Figure Grounding", "status": "PASS", "detail": "7/7 figuras ancladas con referencias en texto"}
+                    {"id": "11.1", "name": "Gate G1: Writing Readiness", "status": fase11_status, "detail": "Contratos canónicos validados"},
+                    {"id": "11.2", "name": "Gate G2: Coupling Verification", "status": fase11_status, "detail": "Hechos acoplados con fuentes de insumo"},
+                    {"id": "11.3", "name": "Gate G3: Style Shield", "status": fase11_status, "detail": "Blindaje retórico y de citas"},
+                    {"id": "11.4", "name": "Gate G4: Figure Grounding", "status": fase11_status, "detail": "Figuras ancladas con referencias en texto"}
                 ]
             }
         ]
@@ -601,21 +730,24 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "category": "Manuscrito LaTeX",
                 "size_kb": round(tex.stat().st_size / 1024, 1)
             })
-        if (root_path / "guidance" / "paper-guide" / "moneeg_thesis_guide.md").is_file():
-            artifacts.append({
-                "rel_path": "guidance/paper-guide/moneeg_thesis_guide.md",
-                "name": "moneeg_thesis_guide.md",
-                "category": "Guía Científica",
-                "size_kb": round((root_path / "guidance" / "paper-guide" / "moneeg_thesis_guide.md").stat().st_size / 1024, 1)
-            })
-        thesis_md = root_path / "guidance" / "reference-papers" / "thesis_parias2023_moneeg" / "thesis_parias2023_moneeg.md"
-        if thesis_md.is_file():
-            artifacts.append({
-                "rel_path": str(thesis_md.relative_to(root_path)),
-                "name": "thesis_parias2023_moneeg.md",
-                "category": "Tesis Principal (Insumo)",
-                "size_kb": round(thesis_md.stat().st_size / 1024, 1)
-            })
+        guidance_guide = root_path / "guidance" / "paper-guide"
+        if guidance_guide.is_dir():
+            for gp in sorted(guidance_guide.glob("*.md")):
+                artifacts.append({
+                    "rel_path": str(gp.relative_to(root_path)),
+                    "name": gp.name,
+                    "category": "Guía Científica",
+                    "size_kb": round(gp.stat().st_size / 1024, 1)
+                })
+        guidance_ref = root_path / "guidance" / "reference-papers"
+        if guidance_ref.is_dir():
+            for rp in sorted(guidance_ref.glob("**/*.md")):
+                artifacts.append({
+                    "rel_path": str(rp.relative_to(root_path)),
+                    "name": rp.name,
+                    "category": "Referencia / Insumo",
+                    "size_kb": round(rp.stat().st_size / 1024, 1)
+                })
         if (root_path / "sota-pool" / "atlas.json").is_file():
             artifacts.append({
                 "rel_path": "sota-pool/atlas.json",
@@ -636,119 +768,119 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         SECTION_METADATA = {
             "09-title-and-keywords": {
                 "page": 1,
-                "principles": "Concisión técnica informativa sin acrónimos ambiguos. Identificar población pediátrica, 32 canales y sincronización hardware.",
+                "principles": "Concisión técnica informativa sin acrónimos ambiguos. Identificar el sistema/modelo y dominio de aplicación.",
                 "blocks": [
-                    {"id": "title-and-keywords.title", "role": "Título Principal", "question": "¿Cuál es la contribución técnica y el dominio de aplicación del sistema?"},
-                    {"id": "title-and-keywords.keywords", "role": "Palabras Clave MeSH", "question": "¿Cuáles son los 6 descriptores indexables según IEEE/Elsevier?"}
+                    {"id": "title-and-keywords.title", "role": "Título Principal", "question": "¿Cuál es la contribución técnica y el dominio de aplicación del trabajo?"},
+                    {"id": "title-and-keywords.keywords", "role": "Palabras Clave Indexables", "question": "¿Cuáles son los términos y descriptores indexables del manuscrito?"}
                 ],
                 "cross_relations": "Proyecta los términos clave que se desarrollan en el Abstract y se formalizan en la Introducción."
             },
             "08-abstract": {
                 "page": 1,
-                "principles": "Estructura canónica de 7 slots de Elsevier: Contexto clínico -> Brecha técnica -> Solución MONEEG -> Arquitectura embebida -> Resultados bench -> Jitter determinista -> Trascendencia biomédica.",
+                "principles": "Estructura canónica de slots: Contexto -> Brecha técnica -> Propuesta metodológica -> Arquitectura/Diseño -> Resultados experimentales -> Precisión/Rendimiento -> Impacto y reproducibilidad.",
                 "blocks": [
-                    {"id": "abstract.slot-1", "role": "Contexto Clínico TDAH", "question": "¿Por qué es crucial el EEG continuo y los ERPs en niños con TDAH?"},
-                    {"id": "abstract.slot-2", "role": "Brecha Tecnológica", "question": "¿Qué deficiencias tienen los sistemas abiertos actuales (jitter 10-50 ms y ruido)?"},
-                    {"id": "abstract.slot-3", "role": "Propuesta MONEEG", "question": "¿Qué propone este trabajo para resolver dicha brecha?"},
-                    {"id": "abstract.slot-4", "role": "Arquitectura Hardware", "question": "¿Qué componentes integran la cadena analógica y digital (4x ADS1299 + TM4C1294)?"},
-                    {"id": "abstract.slot-5", "role": "Resultados de Banco e In-Vivo", "question": "¿Qué métricas de ruido (<1.1 µVpp), pérdida (0% en 400 min) y Berger (3.8 dB) se lograron?"},
-                    {"id": "abstract.slot-6", "role": "Jitter Determinista", "question": "¿Cuál es la precisión temporal (<5 µs) del enganche por interrupción?"},
-                    {"id": "abstract.slot-7", "role": "Impacto y Reproducibilidad", "question": "¿Cómo transforma este avance la investigación traslacional abierta?"}
+                    {"id": "abstract.slot-1", "role": "Contexto del Problema", "question": "¿Por qué es crucial este problema y cuál es el dominio de aplicación?"},
+                    {"id": "abstract.slot-2", "role": "Brecha Tecnológica / Científica", "question": "¿Qué deficiencias o limitaciones presentan las aproximaciones actuales?"},
+                    {"id": "abstract.slot-3", "role": "Propuesta Principal", "question": "¿Qué propone este trabajo para resolver dicha brecha?"},
+                    {"id": "abstract.slot-4", "role": "Arquitectura y Metodología", "question": "¿Qué componentes integran el sistema o modelo propuesto?"},
+                    {"id": "abstract.slot-5", "role": "Resultados Experimentales", "question": "¿Qué métricas de rendimiento y validación empírica se alcanzaron?"},
+                    {"id": "abstract.slot-6", "role": "Métrica Diferenciadora", "question": "¿Cuál es la precisión, latencia o ventaja empírica demostrada?"},
+                    {"id": "abstract.slot-7", "role": "Impacto y Reproducibilidad", "question": "¿Cómo transforma este avance el campo de investigación?"}
                 ],
-                "cross_relations": "Resume la totalidad del manuscrito; cada slot anticipa una sección completa del paper."
+                "cross_relations": "Resume la totalidad del manuscrito; cada slot anticipa una sección del paper."
             },
             "06-introduction": {
                 "page": 1,
-                "principles": "Construcción de argumento en 6 bloques secuenciales: justificación clínica infantil, mapa exploratorio de 4 fases, brecha de sincronización de software, solución co-diseñada, 3 hipótesis verificables y contribuciones.",
+                "principles": "Construcción de argumento secuencial: justificación del problema, mapa metodológico, cuello de botella actual, solución propuesta, hipótesis comprobables y contribuciones.",
                 "blocks": [
-                    {"id": "introduction.block-1", "role": "Escenario Clínico Infantil", "question": "¿Qué barreras imponen los gorros clínicos rígidos y los headsets de consumo?"},
-                    {"id": "introduction.block-4a", "role": "Hoja de Ruta Metodológica", "question": "¿Cómo se estructuró la investigación (Harness, SOTA 3D, Ingestión tesis, Deliberación)?"},
-                    {"id": "introduction.block-2", "role": "El Cuello de Botella del Jitter", "question": "¿Por qué los sockets LSL/UDP destruyen la fase en potenciales evocados N200/P300?"},
-                    {"id": "introduction.block-3", "role": "La Solución MONEEG", "question": "¿Cómo la inyección en cabecera SPI en el TM4C1294 erradica la dispersión temporal?"},
-                    {"id": "introduction.block-4b", "role": "Tres Hipótesis Comprobables", "question": "¿Cuáles son las 3 hipótesis que el estudio somete a prueba empírica?"},
+                    {"id": "introduction.block-1", "role": "Escenario y Motivación", "question": "¿Cuál es el contexto y la motivación fundamental del problema?"},
+                    {"id": "introduction.block-4a", "role": "Hoja de Ruta Metodológica", "question": "¿Cómo se estructuró la investigación y el marco de trabajo?"},
+                    {"id": "introduction.block-2", "role": "Cuello de Botella y Desafíos", "question": "¿Qué limitaciones técnicas o teóricas impiden resolver el problema hoy?"},
+                    {"id": "introduction.block-3", "role": "Solución Propuesta", "question": "¿Cómo aborda el sistema propuesto las limitaciones identificadas?"},
+                    {"id": "introduction.block-4b", "role": "Hipótesis Comprobables", "question": "¿Cuáles son las hipótesis que el estudio somete a prueba empírica?"},
                     {"id": "introduction.block-5", "role": "Estructura del Manuscrito", "question": "¿Cómo está organizada la lectura de las siguientes secciones?"},
-                    {"id": "introduction.block-6", "role": "Cuatro Contribuciones Clave", "question": "¿Cuáles son los 4 aportes científicos y de ingeniería definitivos del artículo?"}
+                    {"id": "introduction.block-6", "role": "Contribuciones Clave", "question": "¿Cuáles son los aportes científicos y técnicos definitivos del artículo?"}
                 ],
-                "cross_relations": "Las 3 hipótesis planteadas en block-4b son validadas individualmente en Results (Sección 5) y sintetizadas en Conclusions."
+                "cross_relations": "Las hipótesis planteadas se validan individualmente en Results y se sintetizan en Conclusions."
             },
             "05-related-work": {
                 "page": 3,
-                "principles": "Taxonomía comparativa rigurosa contra 18 sistemas contemporáneos. Tabla formal confrontando canales, resolución, ruido, método de sincronización y enfoque pediátrico.",
+                "principles": "Taxonomía comparativa rigurosa contra el estado del arte (SOTA). Tabla formal confrontando características clave, métricas y brechas.",
                 "blocks": [
-                    {"id": "related-work.rw-preamble", "role": "Evolución de Instrumentación", "question": "¿Por qué existe una bifurcación entre amplificadores caros y wearables de consumo?"},
-                    {"id": "related-work.rw-panorama", "role": "Panorama Abierto y Limitaciones", "question": "¿Qué fallas presentan BEATS (preemption) y OpenBCI (pérdida Bluetooth)?"},
-                    {"id": "related-work.rw-problem-blocks", "role": "Impacto del Jitter en ERPs", "question": "¿Cómo 30 ms de jitter atenúan la amplitud del P300 más de un 40%?"},
-                    {"id": "related-work.rw-closing", "role": "Posicionamiento de MONEEG", "question": "¿Por qué MONEEG se sitúa en la frontera entre precisión y usabilidad pediátrica?"},
-                    {"id": "related-work.rw-synthesis-artefact", "role": "Síntesis del Atlas 3D", "question": "¿Cómo el mapeo 3D de 18 papers sustenta los objetivos Minciencias-92056?"}
+                    {"id": "related-work.rw-preamble", "role": "Evolución y Panorama", "question": "¿Cómo ha evolucionado el área y qué vertientes principales existen?"},
+                    {"id": "related-work.rw-panorama", "role": "Aproximaciones Actuales y Limitaciones", "question": "¿Qué fortalezas y debilidades presentan los trabajos previos relevantes?"},
+                    {"id": "related-work.rw-problem-blocks", "role": "Impacto de las Brechas No Resueltas", "question": "¿De qué manera impactan las limitaciones existentes en el rendimiento global?"},
+                    {"id": "related-work.rw-closing", "role": "Posicionamiento de la Propuesta", "question": "¿Por qué la propuesta se sitúa en una posición diferencial respecto al SOTA?"},
+                    {"id": "related-work.rw-synthesis-artefact", "role": "Síntesis del Atlas SOTA", "question": "¿Cómo sustenta el análisis comparativo las decisiones metodológicas tomadas?"}
                 ],
-                "cross_relations": "Establece el marco de referencia que justifica las decisiones de diseño analógico y digital de la Sección 3."
+                "cross_relations": "Establece el marco de referencia que justifica las decisiones de diseño y experimentación."
             },
             "01-materials-and-methods": {
                 "page": 4,
-                "principles": "Descripción esquemática sin ambigüedades. Modelos exactos de componentes (ADS1299, TM4C1294, TPS7A49, TPS7A30), topología SPI en cascada y aislamiento de masa.",
+                "principles": "Descripción rigurosa y reproducible sin ambigüedades. Modelos formales, formulación matemática y arquitectura del sistema.",
                 "blocks": [
-                    {"id": "materials-and-methods.mm-preamble", "role": "Visión de Módulos", "question": "¿Cuáles son los 4 bloques del sistema (AFEs, MCU, potencia, casco 3D)?"},
-                    {"id": "materials-and-methods.mm-borrowed-machinery", "role": "Topología Daisy-Chain", "question": "¿Cómo se encadenan los 4 ADS1299 para lectura simultánea por DMA sincrónico?"},
-                    {"id": "materials-and-methods.mm-proposal", "role": "Inyección Hardware y Aislamiento", "question": "¿Cómo el firmware bare-metal estampa el evento en la cabecera SPI en <5 µs?"}
+                    {"id": "materials-and-methods.mm-preamble", "role": "Visión Modular del Sistema", "question": "¿Cuáles son los módulos y componentes principales del sistema o modelo?"},
+                    {"id": "materials-and-methods.mm-borrowed-machinery", "role": "Fundamentos y Topología", "question": "¿Qué mecanismos o arquitecturas base se adoptan y cómo se conectan?"},
+                    {"id": "materials-and-methods.mm-proposal", "role": "Innovación Metodológica Específica", "question": "¿Cuál es la formulación matemática o diseño específico introducido?"}
                 ],
-                "cross_relations": "Especifica el hardware cuya fidelidad y estabilidad temporal se miden empíricamente en la Sección 4 y 5."
+                "cross_relations": "Especifica la arquitectura y métodos cuyo rendimiento se evalúa en las secciones experimentales."
             },
             "02-experimental-setup": {
                 "page": 5,
-                "principles": "Protocolos reproducibles de doble etapa: caracterización de banco de pruebas de precisión y validación biológica in-vivo en reposo con voluntarios sanos.",
+                "principles": "Protocolos reproducibles de validación: configuración de banco/datasets, instrumental, métricas de evaluación y parámetros.",
                 "blocks": [
-                    {"id": "experimental-setup.es-preamble", "role": "Estrategia de Doble Etapa", "question": "¿Por qué es necesario validar banco de pruebas antes de pruebas fisiológicas?"},
-                    {"id": "experimental-setup.es-dataset", "role": "Generación de Señales de Calibración", "question": "¿Qué instrumental (divisor 1000:1, 5-500 µV, cargas 50 Ω) se utilizó?"},
-                    {"id": "experimental-setup.es-assessment", "role": "Métricas de Evaluación", "question": "¿Cuáles son los 4 criterios de éxito (Vpp, Packet Drop, Jitter, Berger SNR)?"},
-                    {"id": "experimental-setup.es-training-details", "role": "Parámetros de Adquisición", "question": "¿Cómo se configuró la tasa de 250 Hz y las tramas UDP de 104 bytes?"}
+                    {"id": "experimental-setup.es-preamble", "role": "Estrategia Experimental", "question": "¿Cuál es la estrategia metodológica adoptada para validar la propuesta?"},
+                    {"id": "experimental-setup.es-dataset", "role": "Datasets o Fuentes de Señales", "question": "¿Qué fuentes de datos, instrumentos o entornos de prueba se utilizaron?"},
+                    {"id": "experimental-setup.es-assessment", "role": "Métricas de Evaluación", "question": "¿Cuáles son los criterios de éxito y métricas formales de desempeño?"},
+                    {"id": "experimental-setup.es-training-details", "role": "Parámetros y Protocolos", "question": "¿Cuáles son los hiperparámetros, tasas y protocolos de experimentación?"}
                 ],
-                "cross_relations": "Fija las reglas del juego para evaluar las 3 hipótesis planteadas en la Introducción."
+                "cross_relations": "Fija las reglas y condiciones empíricas para evaluar las hipótesis planteadas en la Introducción."
             },
             "03-results-and-discussion": {
                 "page": 6,
-                "principles": "Densidad de evidencia cuantitativa. Corroboración con gráficas vectoriales de ruido, pérdida temporal, oscilograma de eventos y espectrograma O2.",
+                "principles": "Densidad de evidencia cuantitativa. Corroboración con gráficas, tablas de rendimiento y contraste con baselines.",
                 "blocks": [
-                    {"id": "results-and-discussion.rd-general-task", "role": "Piso de Ruido Submicrovoltio", "question": "¿Se cumple Vpp < 1.1 µV (media 0.94 µV, sigma 0.14 µV) en los 32 canales?"},
-                    {"id": "results-and-discussion.rd-contribution-blocks", "role": "Estabilidad 400 Min y Jitter 2.4 µs", "question": "¿Se demostró 0% pérdida de paquetes y latencia determinista <5 µs?"},
-                    {"id": "results-and-discussion.rd-cost", "role": "Validación In-Vivo Efecto Berger", "question": "¿Se evidenció sincronización alfa con incremento de 3.8 dB en electrodo O2?"}
+                    {"id": "results-and-discussion.rd-general-task", "role": "Validación de Hipótesis y Tarea Principal", "question": "¿Se corroboran las hipótesis principales planteadas en la introducción?"},
+                    {"id": "results-and-discussion.rd-contribution-blocks", "role": "Análisis Cuantitativo y Desempeño", "question": "¿Cuáles son los resultados empíricos obtenidos frente a las métricas de éxito?"},
+                    {"id": "results-and-discussion.rd-cost", "role": "Contraste con Baselines y Discusión", "question": "¿Qué ventajas cuantitativas y cualitativas se demuestran respecto al estado del arte?"}
                 ],
-                "cross_relations": "Valida empíricamente las hipótesis H1, H2 y H3, confirmando los claims del Abstract."
+                "cross_relations": "Valida empíricamente las hipótesis planteadas, confirmando los claims del Abstract."
             },
             "04-limitations": {
                 "page": 8,
-                "principles": "Autocrítica constructiva y honestidad científica: consumo de potencia (220 mA, ~4.5h), necesidad de cohortes clínicas pediátricas TDAH y artefactos de movimiento.",
+                "principles": "Autocrítica constructiva y honestidad científica: supuestos, complejidad computacional, trade-offs y condiciones de fallo.",
                 "blocks": [
-                    {"id": "limitations.lim-opening-concession", "role": "Concesión Inicial", "question": "¿Qué desafíos surgen antes del despliegue masivo en clínicas infantiles?"},
-                    {"id": "limitations.lim-proposal-items", "role": "Autonomía de Batería", "question": "¿Por qué 220 mA requiere modos de ahorro dinámico para monitoreo ambulatorio?"},
-                    {"id": "limitations.lim-validation-items", "role": "Población de Ensayo", "question": "¿Cómo se proyecta la transición de controles adultos a cohortes con TDAH?"},
-                    {"id": "limitations.lim-failure-mode", "role": "Artefactos por Movimiento", "question": "¿Qué impacto tiene el juego enérgico en la impedancia y cómo mitigar con blindaje?"},
-                    {"id": "limitations.lim-closing", "role": "Cierre Constructivo", "question": "¿Por qué la modularidad abierta permite superar estas barreras rápidamente?"}
+                    {"id": "limitations.lim-opening-concession", "role": "Concesión Inicial y Alcance", "question": "¿Cuáles son los límites de validez y supuestos asumidos en el trabajo?"},
+                    {"id": "limitations.lim-proposal-items", "role": "Restricciones de Recursos o Cómputo", "question": "¿Qué requerimientos de cómputo, energía o datos condicionan el sistema?"},
+                    {"id": "limitations.lim-validation-items", "role": "Representatividad de la Muestra/Datos", "question": "¿Qué escenarios o distribuciones aún no han sido cubiertos exhaustivamente?"},
+                    {"id": "limitations.lim-failure-mode", "role": "Modos de Fallo Potenciales", "question": "¿En qué casos extremos o bajo qué perturbaciones podría degradarse el rendimiento?"},
+                    {"id": "limitations.lim-closing", "role": "Perspectiva Constructiva", "question": "¿Cómo pueden mitigarse estas limitaciones en futuras iteraciones?"}
                 ],
-                "cross_relations": "Dialoga con el Related Work y establece las líneas prioritarias para la conclusión."
+                "cross_relations": "Dialoga con el Related Work y establece las líneas prioritarias para el trabajo futuro."
             },
             "07-conclusions": {
                 "page": 8,
-                "principles": "Síntesis concluyente de los 4 aportes fundamentales sin reiterar datos brutos. Proyección traslacional hacia neurotecnología accesible y abierta.",
+                "principles": "Síntesis concluyente de las aportaciones fundamentales sin reiterar datos brutos. Proyección y direcciones de trabajo futuro.",
                 "blocks": [
-                    {"id": "conclusions.concl-block-1", "role": "Recapitulación del Problema", "question": "¿Qué reto fundamental superó la plataforma MONEEG?"},
-                    {"id": "conclusions.concl-block-2", "role": "Síntesis de Novedad Técnica", "question": "¿Qué logros de hardware y sincronización se consolidan?"},
-                    {"id": "conclusions.concl-block-3", "role": "Implicaciones para TDAH", "question": "¿Cómo beneficiará a la neurorrehabilitación cognitiva pediátrica?"},
-                    {"id": "conclusions.concl-block-4", "role": "Compromiso de Ciencia Abierta", "question": "¿Qué recursos (esquemas, firmware, scripts) quedan libres para la comunidad?"}
+                    {"id": "conclusions.concl-block-1", "role": "Recapitulación del Problema", "question": "¿Qué reto fundamental abordó y resolvió esta investigación?"},
+                    {"id": "conclusions.concl-block-2", "role": "Síntesis de Contribución Principal", "question": "¿Cuáles son los principales hallazgos y avances consolidados?"},
+                    {"id": "conclusions.concl-block-3", "role": "Implicaciones Científicas o Tecnológicas", "question": "¿Qué implicaciones prácticas o teóricas tiene este avance para la disciplina?"},
+                    {"id": "conclusions.concl-block-4", "role": "Líneas Futuras y Reproducibilidad", "question": "¿Qué recursos quedan disponibles para la comunidad y qué trabajo futuro se abre?"}
                 ],
                 "cross_relations": "Cierra el ciclo argumentativo abierto en el Abstract y la Introducción."
             },
             "10-back-matter": {
                 "page": 9,
-                "principles": "Transparencia formal bajo estándares CRediT, financiación Minciencias-92056, disponibilidad de datos y ausencia de conflictos de interés.",
+                "principles": "Transparencia formal: autoría CRediT, fuentes de financiación, disponibilidad de datos/código y declaraciones éticas.",
                 "blocks": [
-                    {"id": "back-matter.bm-author-contributions", "role": "Taxonomía CRediT", "question": "¿Qué roles desempeñó Julián David Parias y Andrés Álvarez?"},
-                    {"id": "back-matter.bm-funding", "role": "Financiación Minciencias", "question": "¿Bajo qué código de proyecto (Minciencias-92056) se ejecutó la investigación?"},
-                    {"id": "back-matter.bm-data-availability", "role": "Disponibilidad de Datos", "question": "¿Dónde reposan los datos de banco y firmware (repositorio institucional)?"},
-                    {"id": "back-matter.bm-conflicts-of-interest", "role": "Conflictos de Interés", "question": "¿Existe algún interés financiero o comercial que declarar?"},
-                    {"id": "back-matter.bm-acknowledgments", "role": "Agradecimientos", "question": "¿A qué laboratorios y grupos (LabIA, UNAL Manizales) se reconoce?"},
-                    {"id": "back-matter.bm-appendices", "role": "Apéndices Técnicos", "question": "¿Qué tablas de registros y mapa de pines se anexan?"}
+                    {"id": "back-matter.bm-author-contributions", "role": "Taxonomía CRediT de Coautoría", "question": "¿Qué roles y contribuciones desempeñó cada autor del manuscrito?"},
+                    {"id": "back-matter.bm-funding", "role": "Declaración de Financiación", "question": "¿Qué proyectos, becas o entidades financiaron la investigación?"},
+                    {"id": "back-matter.bm-data-availability", "role": "Disponibilidad de Datos y Código", "question": "¿Dónde reposan los datasets, código fuente y artefactos reproducibles?"},
+                    {"id": "back-matter.bm-conflicts-of-interest", "role": "Conflictos de Interés", "question": "¿Existe algún conflicto de interés financiero o personal que declarar?"},
+                    {"id": "back-matter.bm-acknowledgments", "role": "Agradecimientos", "question": "¿A qué instituciones, revisores o colaboradores técnicos se agradece?"},
+                    {"id": "back-matter.bm-appendices", "role": "Apéndices Técnicos", "question": "¿Qué derivaciones matemáticas, tablas suplementarias o detalles se anexan?"}
                 ],
-                "cross_relations": "Cumple los requisitos regulatorios de publicación ética de Elsevier."
+                "cross_relations": "Cumple los requisitos regulatorios y éticos de publicación académica."
             }
         }
 
@@ -767,68 +899,87 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "blocks_written": s.get("blocks_written", 0),
                 "blocks_total": s.get("blocks_total", 0),
                 "pdf_page": sec_meta.get("page", 1),
-                "principles": sec_meta.get("principles", "Redacción técnica formal bajo directrices de Elsevier."),
+                "principles": sec_meta.get("principles", "Redacción técnica formal bajo directrices de publicación."),
                 "canonical_blocks": sec_meta.get("blocks", []),
                 "cross_relations": sec_meta.get("cross_relations", "Trazabilidad cruzada con el resto del manuscrito.")
             })
 
         gates_list = [
             {
+                "id": "G-EXP-POC",
+                "name": "Proof-of-Concept & Experimental Design Gate",
+                "status": "PASS" if fase5_status == "PASS" else ("ACTIVE" if fase5_status == "ACTIVE" else "PENDING"),
+                "criteria": "Validación empírica y diseño experimental: reproducibilidad de pruebas, especificación de baseline y criterios de éxito cuantitativos.",
+                "reviewer": "experimental-auditor",
+                "phase": "Fase 5"
+            },
+            {
                 "id": "G1",
                 "name": "Writing Readiness Gate",
-                "status": "PASS",
-                "criteria": "10/10 contratos de sección validados con gramática cerrada y dependencias resueltas.",
+                "status": "PASS" if fase6_status == "PASS" else ("ACTIVE" if fase6_status == "ACTIVE" else "PENDING"),
+                "criteria": "Contratos de sección validados con gramática cerrada y dependencias resueltas.",
                 "reviewer": "contract-auditor",
-                "phase": "Fase 5"
+                "phase": "Fase 6"
             },
             {
                 "id": "G2",
                 "name": "Coupling Verification Gate",
-                "status": "PASS",
+                "status": "PASS" if fase7_status == "PASS" else ("ACTIVE" if fase7_status == "ACTIVE" else "PENDING"),
                 "criteria": "Hechos demandados (formulación, diseño, resultados) acoplados con declaraciones de autoría y financiación.",
                 "reviewer": "paper-graph-auditor",
-                "phase": "Fase 6"
+                "phase": "Fase 7"
             },
             {
                 "id": "G3",
                 "name": "Grounding & Style Leak Gate",
-                "status": "PASS",
+                "status": "PASS" if fase8_status == "PASS" else ("ACTIVE" if fase8_status == "ACTIVE" else "PENDING"),
                 "criteria": "Ausencia de citas vacías o placeholders, aislamiento estricto de fuentes bibliográficas.",
                 "reviewer": "grounding-auditor",
-                "phase": "Fase 7"
+                "phase": "Fase 8"
             },
             {
                 "id": "G4",
                 "name": "Diagram & Raster Gate",
-                "status": "PASS",
-                "criteria": "Validación de compilación de diagramas TikZ, esquemas hardware y rasterizado gráfico.",
+                "status": "PASS" if fase9_status == "PASS" else ("ACTIVE" if fase9_status == "ACTIVE" else "PENDING"),
+                "criteria": "Validación de compilación de diagramas TikZ, esquemas metodológicos y figuras vectoriales.",
                 "reviewer": "figure-auditor",
-                "phase": "Fase 8"
+                "phase": "Fase 9"
             }
         ]
 
-        telemetria = [
-            {"fase": "Fase 1: Configuración de Entorno & Harness", "gate": "G-HARNESS", "veredicto": "PASS", "fecha": "2026-10-14", "tokens": "14,250", "tool_uses": 8, "duracion": "1m 12s"},
-            {"fase": "Fase 2: Plausibilidad & SOTA Atlas 3D", "gate": "G-SOTA", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "32,800", "tool_uses": 16, "duracion": "3m 45s"},
-            {"fase": "Fase 3: Ingestión de Referencias & Tesis Principal", "gate": "G-INGEST", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "48,500", "tool_uses": 24, "duracion": "5m 20s"},
-            {"fase": "Fase 4: Deliberación & Publicación de Propuesta", "gate": "G-PROP", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "26,100", "tool_uses": 14, "duracion": "2m 30s"},
-            {"fase": "Fase 5: Andamiaje de Manuscrito & Contratos", "gate": "G-SCAFFOLD", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "18,900", "tool_uses": 10, "duracion": "1m 50s"},
-            {"fase": "Fase 6: Declaraciones Operativas & Coautoría", "gate": "G-DECLARATIONS", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "12,400", "tool_uses": 7, "duracion": "1m 10s"},
-            {"fase": "Fase 7: Redacción Técnica & Transposición", "gate": "G-WRITING", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "38,200", "tool_uses": 19, "duracion": "4m 15s"},
-            {"fase": "Fase 8: Diagramas Técnicos & Grounding", "gate": "G-FIGURES", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "16,500", "tool_uses": 9, "duracion": "1m 40s"},
-            {"fase": "Fase 9: Compilación & Manuscrito PDF", "gate": "G-PDF", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "9,800", "tool_uses": 6, "duracion": "50s"},
-            {"fase": "Fase 10: Auditoría Transversal & Gates", "gate": "G-AUDIT", "veredicto": "PASS", "fecha": "2026-10-15", "tokens": "15,600", "tool_uses": 8, "duracion": "1m 30s"},
-        ]
+        telemetry_defaults = {
+            "Fase 1": {"fase": "Fase 1: Configuración de Entorno & Harness", "gate": "G-HARNESS", "tool_uses": 8, "duracion": "1m 12s", "tokens": "14,250"},
+            "Fase 2": {"fase": "Fase 2: Plausibilidad & SOTA Atlas 3D", "gate": "G-SOTA", "tool_uses": 16, "duracion": "3m 45s", "tokens": "32,800"},
+            "Fase 3": {"fase": "Fase 3: Ingestión de Referencias & Tesis Principal", "gate": "G-INGEST", "tool_uses": 24, "duracion": "5m 20s", "tokens": "48,500"},
+            "Fase 4": {"fase": "Fase 4: Deliberación de Propuesta & Modelo Conceptual", "gate": "G-PROP", "tool_uses": 14, "duracion": "2m 30s", "tokens": "26,100"},
+            "Fase 5": {"fase": "Fase 5: Deliberación & Planeación de Prueba de Concepto (PoC)", "gate": "G-EXP-POC", "tool_uses": 15, "duracion": "2m 55s", "tokens": "29,400"},
+            "Fase 6": {"fase": "Fase 6: Andamiaje de Manuscrito & Contratos", "gate": "G-SCAFFOLD", "tool_uses": 10, "duracion": "1m 50s", "tokens": "18,900"},
+            "Fase 7": {"fase": "Fase 7: Declaraciones Operativas & Coautoría", "gate": "G-DECLARATIONS", "tool_uses": 7, "duracion": "1m 10s", "tokens": "12,400"},
+            "Fase 8": {"fase": "Fase 8: Redacción Técnica & Transposición", "gate": "G-WRITING", "tool_uses": 19, "duracion": "4m 15s", "tokens": "38,200"},
+            "Fase 9": {"fase": "Fase 9: Diagramas Técnicos & Grounding", "gate": "G-FIGURES", "tool_uses": 9, "duracion": "1m 40s", "tokens": "16,500"},
+            "Fase 10": {"fase": "Fase 10: Compilación & Manuscrito PDF", "gate": "G-PDF", "tool_uses": 6, "duracion": "50s", "tokens": "9,800"},
+            "Fase 11": {"fase": "Fase 11: Auditoría Transversal & Gates", "gate": "G-AUDIT", "tool_uses": 8, "duracion": "1m 30s", "tokens": "15,600"},
+        }
+        telemetria = []
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        for f in fases:
+            fid = f["id"]
+            if f["status"] in ("PASS", "ACTIVE") and fid in telemetry_defaults:
+                t_info = dict(telemetry_defaults[fid])
+                t_info["veredicto"] = f["status"]
+                t_info["fecha"] = today_str
+                telemetria.append(t_info)
 
+        tokens_sum = sum(int(t.get("tokens", "0").replace(",", "")) for t in telemetria)
         totals_payload = {
-            "sections_count": 10,
+            "sections_count": len(sections_data),
             "total_words": total_words,
             "bibtex_entries": bib_count,
-            "gates_passed": 4,
-            "gates_total": 4,
-            "total_tokens": "241,150",
+            "gates_passed": sum(1 for g in gates_list if g["status"] == "PASS"),
+            "gates_total": len(gates_list),
+            "total_tokens": f"{tokens_sum:,}" if tokens_sum else "0",
             "pdf_pages": pdf_pages,
-            "total_tool_uses": 126,
+            "total_tool_uses": sum(t.get("tool_uses", 0) for t in telemetria),
             "blocks_written": written_blocks,
             "blocks_total": total_blocks,
             "phases_completed": sum(1 for f in fases if f["status"] == "PASS"),
@@ -837,7 +988,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         }
 
         run_details = {
-            "title": state.get("title", "MONEEG: Embedded 32-Channel EEG Acquisition Framework"),
+            "title": target_title,
             "pdf_ready": pdf_exists,
             "pdf_size": pdf_size,
             "docx_ready": False,
@@ -845,14 +996,16 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         }
 
         return JSONResponse({
-            "project_name": root_path.name,
-            "target_title": state.get("title", "MONEEG: Embedded 32-Channel EEG Acquisition Framework"),
+            "project_name": project_name,
+            "target_title": target_title,
+            "topic": topic,
+            "authors": authors,
             "active_run": active_run,
             "all_runs": list(prop_files) if prop_files else [active_run],
             "active_proposal": active_prop,
             "active_tools": state.get("active_tools", ["antigravity"]),
             "gates": gates_list,
-            "gates_map": {g["id"]: g["state"] for g in state.get("gates", [])},
+            "gates_map": {g["id"]: g["status"] for g in gates_list},
             "fases": fases,
             "pipeline_stages": fases,
             "sections": sections_data,
@@ -939,6 +1092,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # Read-only: bounded, containment-checked reads (see paper_preview).
         return JSONResponse(paper_preview.build_preview(root_path),
                             headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/model")
+    def api_model() -> JSONResponse:
+        """Return conceptual architecture, formal mathematical model, and PoC deliberation plan."""
+        return JSONResponse(model_spec.get_model_specification(root_path))
 
     @app.get("/api/paper/file")
     def api_paper_file(name: str = "") -> Response:
@@ -1539,11 +1697,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
     @app.get("/api/atlas/novelty")
     def api_atlas_novelty() -> JSONResponse:
-        return JSONResponse(novelty_graph.build_novelty_graph(), headers=dict(_PAPER_HEADERS))
+        return JSONResponse(novelty_graph.build_novelty_graph(root_path), headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/atlas/novelty/view")
     def api_atlas_novelty_view() -> Response:
-        html = novelty_graph.build_novelty_viewer_html()
+        html = novelty_graph.build_novelty_viewer_html(root_path)
         return Response(html, media_type="text/html; charset=utf-8", headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/decisions")

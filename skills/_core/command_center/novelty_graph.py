@@ -16,6 +16,7 @@ empirical thesis evidence, Elsevier manuscript sections, and crucially the
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 NOVELTY_GRAPH_DATA: dict[str, Any] = {
@@ -770,21 +771,134 @@ NOVELTY_GRAPH_DATA: dict[str, Any] = {
 }
 
 
-def build_novelty_graph() -> dict[str, Any]:
-    """Return the complete semantic novelty graph for MONEEG."""
-    return NOVELTY_GRAPH_DATA
+def build_novelty_graph(root_path: Path | None = None) -> dict[str, Any]:
+    """Return the semantic novelty graph for the workspace, falling back to
+    MONEEG's detailed spec if within MONEEG workspace or generic initial graph."""
+    name = root_path.name.lower() if root_path else ""
+    if "moneeg" in name:
+        return NOVELTY_GRAPH_DATA
+
+    project_name = root_path.name if root_path else "Paper"
+    return {
+        "title": f"Grafo 3D de Novedad e Ideas del Manuscrito — {project_name}",
+        "target_journal": "Objetivo Editorial",
+        "authors": "Equipo de Investigación",
+        "project": project_name,
+        "summary": f"Estructura conceptual en fase inicial para {project_name}. Los nodos semánticos se pueblan durante las fases 2 (SOTA), 4 (Deliberación de Propuesta) y 5 (PoC Experimental).",
+        "nodes": [
+            {
+                "id": "core-project",
+                "label": f"{project_name}: Propuesta en Deliberación",
+                "group": "core",
+                "color": "#38bdf8",
+                "size": 9.0,
+                "category": "Contribución Global",
+                "badge": "ARQUITECTURA PRINCIPAL",
+                "desc": f"Marco de trabajo e investigación para {project_name} en fase inicial de formulación.",
+                "rhetorical_question": f"¿Cuál es la hipótesis central y contribución esperada de {project_name}?",
+                "paragraph_text": f"El proyecto {project_name} se encuentra en etapa inicial de deliberación de propuesta científica y acoplamiento con el estado del arte.",
+                "metrics": "Fase 1 completada (Harness). Fases de deliberación y experimentación pendientes.",
+                "novelty_claim": "Innovación metodológica y teórica en formalización.",
+                "thesis_ref": "Insumos en guidance/",
+                "pdf_page": 1,
+                "section_ref": "Sección 1 (Introducción)",
+                "paper_blocks": ["title-and-keywords.title", "abstract.slot-1", "introduction.block-1"]
+            },
+            {
+                "id": "hub-problem",
+                "label": "Problema & Brecha Técnica",
+                "group": "problem",
+                "color": "#ef4444",
+                "size": 7.0,
+                "category": "Desafíos",
+                "badge": "BRECHA CIENTÍFICA",
+                "desc": "Limitaciones y cuellos de botella en las aproximaciones actuales.",
+                "rhetorical_question": "¿Qué problema fundamental no resuelto aborda esta investigación?",
+                "paragraph_text": "Pendiente de formalización durante Fase 4.",
+                "metrics": "Pendiente",
+                "novelty_claim": "Definición rigurosa de la brecha científica.",
+                "thesis_ref": "proposals/",
+                "pdf_page": 1,
+                "section_ref": "Sección 1 (Introducción)",
+                "paper_blocks": ["abstract.slot-2", "introduction.block-2"]
+            },
+            {
+                "id": "hub-sota",
+                "label": "Constelación SOTA & Baselines",
+                "group": "sota",
+                "color": "#10b981",
+                "size": 7.0,
+                "category": "Estado del Arte",
+                "badge": "LITERATURA Q1",
+                "desc": "Mapeo de sistemas comparativos y papers de referencia.",
+                "rhetorical_question": "¿Cuáles son los baselines de referencia frente a los cuales se contrastará la propuesta?",
+                "paragraph_text": "Atlas 3D en construcción en sota-pool/.",
+                "metrics": "Pendiente",
+                "novelty_claim": "Taxonomía comparativa con literatura especializada.",
+                "thesis_ref": "sota-pool/atlas.json",
+                "pdf_page": 3,
+                "section_ref": "Sección 2 (Related Work)",
+                "paper_blocks": ["related-work.rw-preamble", "related-work.rw-panorama"]
+            },
+            {
+                "id": "hub-novelty",
+                "label": "Metodología & Arquitectura",
+                "group": "novelty",
+                "color": "#f59e0b",
+                "size": 7.0,
+                "category": "Innovación",
+                "badge": "PILAR METODOLÓGICO",
+                "desc": "Componentes, formulación matemática y diseño del sistema.",
+                "rhetorical_question": "¿Cuál es la metodología o arquitectura propuesta para resolver la brecha?",
+                "paragraph_text": "Pendiente de especificación formal.",
+                "metrics": "Pendiente",
+                "novelty_claim": "Innovación algorítmica / arquitectónica.",
+                "thesis_ref": "sections/01-materials-and-methods.md",
+                "pdf_page": 4,
+                "section_ref": "Sección 3 (Materials and Methods)",
+                "paper_blocks": ["materials-and-methods.mm-preamble", "materials-and-methods.mm-proposal"]
+            },
+            {
+                "id": "hub-eval",
+                "label": "Validación Empírica & Experimentos",
+                "group": "eval",
+                "color": "#a855f7",
+                "size": 7.0,
+                "category": "Metrología",
+                "badge": "PROTOCOLO POC",
+                "desc": "Diseño experimental, métricas de éxito y contrastes empíricos.",
+                "rhetorical_question": "¿Cómo se validarán cuantitativamente las hipótesis del trabajo?",
+                "paragraph_text": "Plan experimental en experiments/.",
+                "metrics": "Pendiente",
+                "novelty_claim": "Criterios de éxito reproducibles.",
+                "thesis_ref": "experiments/",
+                "pdf_page": 5,
+                "section_ref": "Sección 4 (Experimental Setup)",
+                "paper_blocks": ["experimental-setup.es-preamble", "results-and-discussion.rd-general-task"]
+            }
+        ],
+        "links": [
+            {"source": "core-project", "target": "hub-problem", "label": "aborda", "value": 3.0},
+            {"source": "core-project", "target": "hub-sota", "label": "supera", "value": 3.0},
+            {"source": "core-project", "target": "hub-novelty", "label": "implementa", "value": 4.0},
+            {"source": "core-project", "target": "hub-eval", "label": "valida con", "value": 3.5}
+        ]
+    }
 
 
-def build_novelty_viewer_html() -> str:
+def build_novelty_viewer_html(root_path: Path | None = None) -> str:
     """Generate the full responsive 3D WebGL viewer for the novelty graph,
     matching the exact style, typography, libraries, and constellation aesthetics of SOTA Atlas."""
-    graph_json = json.dumps(NOVELTY_GRAPH_DATA, ensure_ascii=False)
+    data = build_novelty_graph(root_path)
+    graph_json = json.dumps(data, ensure_ascii=False)
+    graph_title = data.get("title", "Grafo 3D de Novedad e Ideas del Manuscrito")
+    graph_subtitle = f"{data.get('target_journal', '')} · {data.get('project', '')}"
     
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Grafo 3D de Novedad e Ideas del Manuscrito — MONEEG</title>
+  <title>{graph_title}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
   <style>
@@ -1066,8 +1180,8 @@ def build_novelty_viewer_html() -> str:
 
   <!-- Top Title and Instructions (Atlas Style) -->
   <h1>
-    <span>🕸️ Grafo 3D de Novedad e Ideas del Manuscrito — MONEEG</span>
-    <small>Elsevier Biomedical Signal Processing and Control · Minciencias-92056</small>
+    <span>🕸️ {graph_title}</span>
+    <small>{graph_subtitle}</small>
   </h1>
   <div id="panel">Arrastra con el ratón para rotar (órbita suave), rueda para zoom 3D sensible, clic derecho para desplazar. Clic en cualquier nodo para inspeccionar evidencia y párrafos. Usa los chips de colores para filtrar por las 8 dimensiones clave.</div>
 

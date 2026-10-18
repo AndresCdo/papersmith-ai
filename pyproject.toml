@@ -46,6 +46,7 @@ Issues = "https://github.com/LIAUNAL/papersmith-ai/issues"
 
 [project.scripts]
 papersmith = "papersmith.cli:main"
+smith = "papersmith.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -7,6 +7,7 @@ process exit code and raises ``PapersmithError`` for typed failures.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 
 from . import __version__
@@ -25,9 +26,9 @@ from .errors import PapersmithError
 from .mcp import cli as mcp_command
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(prog: str = "papersmith") -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="papersmith",
+        prog=prog,
         description="CLI workspace orchestrator for the papersmith-ai framework: "
         "initialize, upgrade, and run decoupled paper research workspaces.",
     )
@@ -93,8 +94,10 @@ def parse_argv(parser: argparse.ArgumentParser, argv: list[str] | None):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+    prog = Path(sys.argv[0]).stem if sys.argv and Path(sys.argv[0]).stem in ("smith", "papersmith") else "papersmith"
+    parser = build_parser(prog=prog)
     args = parse_argv(parser, argv)
+    setattr(args, "_prog", prog)
     handler = getattr(args, "handler", None)
     if handler is None:
         parser.print_help()
@@ -102,10 +105,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return handler(args)
     except PapersmithError as exc:
-        print(f"papersmith: error: {exc}", file=sys.stderr)
+        print(f"{prog}: error: {exc}", file=sys.stderr)
         return exc.exit_code
     except KeyboardInterrupt:
-        print("papersmith: interrupted", file=sys.stderr)
+        print(f"{prog}: interrupted", file=sys.stderr)
         return 1
 
 

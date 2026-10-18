@@ -274,13 +274,14 @@ def run_cli(args) -> int:
     if args.port < 1 or args.port > 65535:
         raise UserError(f"port out of range: {args.port}")
     port = args.port if port_is_free(args.host, args.port) else find_available_port(args.host, args.port)
+    prog = getattr(args, "_prog", "papersmith")
     if port != args.port:
-        print(f"papersmith ui: port {args.port} is busy; using {port}", file=sys.stderr)
+        print(f"{prog} ui: port {args.port} is busy; using {port}", file=sys.stderr)
 
     url = f"http://{args.host}:{port}/"
     require_runnable_backend(workspace, interpreter)
-    print(f"papersmith ui: serving {workspace} at {url}")
-    print("papersmith ui: press Ctrl+C to stop")
+    print(f"{prog} ui: serving {workspace} at {url}")
+    print(f"{prog} ui: press Ctrl+C to stop")
     argv = build_server_argv(workspace, args.host, port, no_browser=args.no_browser,
                              interpreter=interpreter,
                              allowed_hosts=getattr(args, "allowed_host", None))

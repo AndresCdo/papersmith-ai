@@ -3498,12 +3498,12 @@ subject today; drift is reported, not fixed.
 > `python3 skills/kaggle-accounts/scripts/accounts_cli.py …` or indirectly
 > through `target check`.
 
-### `papersmith ui [<dir>]`
+### `smith ui [<dir>]`
 
 ```bash
-papersmith ui --port 8080
-papersmith ui ~/papers/sparse-ae --no-browser
-papersmith ui --export-static ./dashboard-static
+smith ui --port 8080
+smith ui ~/papers/sparse-ae --no-browser
+smith ui --export-static ./dashboard-static
 ```
 
 | Flag | Effect |
