@@ -1204,6 +1204,18 @@ named, currently-unused exception reserved for a sibling skill's own
    delegate to the `contract-auditor` again on the same draft and rerun
    `write`; that refusal spends no re-draft.
 
+Write each envelope as the bare JSON object, never inside a Markdown code
+fence. `write` reads `--draft`, `--audit` and `--grounding` before any stage:
+a file that is unreadable, larger than 4 MiB, fenced, not JSON, not an
+object, or missing a field the pipeline reads (or holding the wrong type)
+refuses `DRAFT_UNREADABLE`, `AUDIT_ACCOUNT_UNREADABLE` or
+`GROUNDING_ACCOUNT_UNREADABLE` with the reason, and spends no re-draft. So
+does a verdict word outside `fires`/`clear`/`undecidable` (audit) or
+`supported`/`unsupported`/`undecidable` (grounding), a binding that is not
+`evidence:<id>`, `fact:<id>` or `structural`, and two entries that disagree
+about one sentence or bullet. Keys the pipeline does not read are ignored. Fix the file, or ask the agent that
+produced it again, and rerun `write`.
+
 **Measure this before delegating (redactor/contract-auditor):** confirm the
 contract's own `sections/*.md` file and its evidence set are both already
 readable; an agent asked to draft or audit against a source it cannot read

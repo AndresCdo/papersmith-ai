@@ -8911,8 +8911,13 @@ class RefusalRosterTests(unittest.TestCase):
         in the draft, which used to pass as a non-blocking `undecidable`.
         Reachable the moment the raise site lands; no new import needed.
         Measured directly against `reachable_paper_refusal_codes()`, never
-        forecast."""
-        self.assertEqual(len(reachable_paper_refusal_codes()), 166)
+        forecast.
+
+        Moved from 166 to 169 for #71: `DRAFT_UNREADABLE`,
+        `AUDIT_ACCOUNT_UNREADABLE` and `GROUNDING_ACCOUNT_UNREADABLE`, one per
+        envelope `write` reads, raised by `paper_cli.py`'s readers and by
+        `write_block`'s shape checks."""
+        self.assertEqual(len(reachable_paper_refusal_codes()), 169)
 
 
 class ObjectiveNorthTests(unittest.TestCase):
@@ -10222,13 +10227,206 @@ class WriteGateTests(unittest.TestCase):
     def test_write_on_the_same_block_proceeds_once_wave_1_is_written(self) -> None:
         """tasks.md 6b.4: a gate that never opens is as wrong as one that
         never closes. Opening `phase-a.a` clears the gate; `cmd_write`
-        then runs PAST it and fails on the very next real stage instead
+        then runs PAST it and refuses on the very next real stage instead
         -- the draft file this test deliberately never creates --
-        `FileNotFoundError`, never `Refused('PHASE_NOT_READY')`."""
+        `DRAFT_UNREADABLE` (#71; a `FileNotFoundError` traceback before),
+        never `PHASE_NOT_READY`."""
         paper_block.open_block(self.paper_dir, "phase-a.a", at_end=True)
 
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(Refused) as ctx:
             paper_cli.cmd_write(self.args)
+        self.assertEqual(ctx.exception.code, "DRAFT_UNREADABLE")
+        self.assertIn("draft.json", ctx.exception.detail)
+
+
+class WriteEnvelopeTests(unittest.TestCase):
+    """#71: the envelopes `write` reads are agent output, so each is checked
+    before any stage indexes it. A malformed one refuses with its own code
+    and the reason, never a traceback, leaves `main.tex` alone and spends no
+    re-draft."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.paper_dir = self.root / "paper"
+        self.original = _marker_pair("mm-proposal", b"Old body.\n")
+        _write_fixture(self.paper_dir, self.original)
+        self.contract = _write_contract(citations_regime="none", evidence_set=())
+
+    def _file(self, data: bytes) -> Path:
+        path = self.root / f"envelope-{uuid.uuid4().hex[:8]}.json"
+        path.write_bytes(data)
+        return path
+
+    def _refused(self, code: str, draft, audit, grounding=None) -> str:
+        with self.assertRaises(Refused) as ctx:
+            paper_write.write_block(
+                self.paper_dir, self.contract, draft, audit, grounding_account=grounding)
+        self.assertEqual(ctx.exception.code, code)
+        self.assertEqual((self.paper_dir / "main.tex").read_bytes(), self.original)
+        self.assertFalse(paper_write._ledger_path(self.paper_dir, self.contract.block_id).exists())
+        return ctx.exception.detail
+
+    def test_read_envelope_returns_the_object_a_file_holds(self) -> None:
+        path = self._file(b'\n  {"latex": "x", "extra": [1]}\n')
+        self.assertEqual(paper_write.read_envelope(path), {"latex": "x", "extra": [1]})
+
+    def test_read_envelope_says_why_a_file_holds_no_object(self) -> None:
+        for name, data, reason in (
+            ("fenced", b'```json\n{"latex": "x"}\n```\n', "code fence"),
+            ("indented fence", b"  ```\n{}\n```", "code fence"),
+            ("invalid JSON", b'{"latex": ', "invalid JSON"),
+            ("not UTF-8", b'{"latex": "\xff"}', "not UTF-8"),
+            ("an array", b"[]", "not an array"),
+            ("a string", b'"x"', "not a string"),
+            ("null", b"null", "not null"),
+            ("nested too deeply", b"[" * 100_000, "nested too deeply"),
+            ("an integer past Python's digit limit", b'{"latex": 1' + b"0" * 5000 + b"}",
+             "invalid JSON"),
+        ):
+            with self.subTest(name):
+                with self.assertRaises(paper_write.EnvelopeUnreadable) as ctx:
+                    paper_write.read_envelope(self._file(data))
+                self.assertIn(reason, str(ctx.exception))
+
+    def test_read_envelope_refuses_a_missing_file(self) -> None:
+        missing = self.root / "never-written.json"
+        with self.assertRaises(paper_write.EnvelopeUnreadable) as ctx:
+            paper_write.read_envelope(missing)
+        self.assertIn(str(missing), str(ctx.exception))
+
+    def test_read_envelope_reads_up_to_its_byte_limit_and_no_further(self) -> None:
+        at_limit = b'{"latex": "' + b"x" * 20 + b'"}'
+        with unittest.mock.patch.object(paper_write, "ENVELOPE_MAX_BYTES", len(at_limit)):
+            self.assertEqual(paper_write.read_envelope(self._file(at_limit))["latex"], "x" * 20)
+            with self.assertRaises(paper_write.EnvelopeUnreadable) as ctx:
+                paper_write.read_envelope(self._file(at_limit + b" "))
+        self.assertIn(f"more than {len(at_limit)} bytes", str(ctx.exception))
+
+    def test_a_malformed_draft_refuses_draft_unreadable(self) -> None:
+        for name, draft, reason in (
+            ("not an object", [], "must be a JSON object, not an array"),
+            ("no latex", {"bindings": []}, "no 'latex'"),
+            ("latex not a string", {"latex": ["x"], "bindings": []}, "'latex' must be a string"),
+            ("no bindings", {"latex": "x"}, "no 'bindings'"),
+            ("bindings not an array", {"latex": "x", "bindings": {}}, "'bindings' must be an array"),
+            ("entry not an object", {"latex": "x", "bindings": ["x"]}, "bindings[0] must be an object"),
+            ("entry without binding", {"latex": "x", "bindings": [{"sentence": "x"}]},
+             "bindings[0] has no 'binding'"),
+            ("binding not a string", {"latex": "x", "bindings": [{"sentence": "x", "binding": 3}]},
+             "must be a string, not a number"),
+            ("binding of no known form", {"latex": "x", "bindings": [{"sentence": "x", "binding": "cited"}]},
+             "is not evidence:<id>, fact:<id>, or structural"),
+            ("two bindings for one sentence", {"latex": "x", "bindings": [
+                {"sentence": "x", "binding": "evidence:E9"}, {"sentence": "x", "binding": "structural"}]},
+             "bindings[0] and bindings[1] disagree about one sentence"),
+        ):
+            with self.subTest(name):
+                self.assertIn(reason, self._refused("DRAFT_UNREADABLE", draft, _CLEAN_AUDIT))
+
+    def test_a_malformed_audit_account_refuses_audit_account_unreadable(self) -> None:
+        for name, audit, reason in (
+            ("not an object", "fires", "must be a JSON object, not a string"),
+            ("no verdicts", {}, "no 'verdicts'"),
+            ("verdicts not an array", {"verdicts": "clear"}, "'verdicts' must be an array"),
+            ("entry without bullet", {"verdicts": [{"verdict": "clear"}]}, "verdicts[0] has no 'bullet'"),
+            ("span not a string",
+             {"verdicts": [{"bullet": _SAMPLE_DISQUALIFIER, "verdict": "fires", "span": ["x"]}]},
+             "must be a string or null, not an array"),
+            ("verdict outside the vocabulary",
+             {"verdicts": [{"bullet": _SAMPLE_DISQUALIFIER, "verdict": "FIRES",
+                            "span": "This paragraph closes the section"}]},
+             "is 'FIRES', not one of fires, clear, undecidable"),
+            ("a fires dropped by a later clear", {"verdicts": [
+                {"bullet": _SAMPLE_DISQUALIFIER, "verdict": "fires",
+                 "span": "This paragraph closes the section"},
+                {"bullet": _SAMPLE_DISQUALIFIER, "verdict": "clear"}]},
+             "verdicts[0] and verdicts[1] disagree about one bullet"),
+        ):
+            with self.subTest(name):
+                self.assertIn(reason, self._refused("AUDIT_ACCOUNT_UNREADABLE", _CLEAN_DRAFT, audit))
+
+    def test_a_malformed_grounding_account_refuses_grounding_account_unreadable(self) -> None:
+        for name, grounding, reason in (
+            ("not an object", [], "must be a JSON object, not an array"),
+            ("support not an array", {"support": "all"}, "'support' must be an array"),
+            ("fact not a string",
+             {"support": [{"sentence": "s", "verdict": "supported", "fact": ["f"]}]},
+             "must be a string or null, not an array"),
+            ("verdict outside the vocabulary", {"support": [{"sentence": "s", "verdict": "UNSUPPORTED"}]},
+             "is 'UNSUPPORTED', not one of supported, unsupported, undecidable"),
+            ("an unsupported dropped by a later supported", {"support": [
+                {"sentence": "s", "verdict": "unsupported"},
+                {"sentence": "s", "verdict": "supported", "span": "s"}]},
+             "support[0] and support[1] disagree about one sentence"),
+        ):
+            with self.subTest(name):
+                self.assertIn(reason, self._refused(
+                    "GROUNDING_ACCOUNT_UNREADABLE", _CLEAN_DRAFT, _CLEAN_AUDIT, grounding))
+
+    def test_well_formed_envelopes_with_extra_keys_and_null_spans_still_write(self) -> None:
+        """The checks refuse a wrong shape, never a right one: keys the
+        pipeline does not read are ignored, a null `span` reads as no span,
+        and an account with no `support` reads as no entries, as before."""
+        draft = dict(_CLEAN_DRAFT, notes="the redactor's own aside")
+        audit = {"verdicts": [dict(_CLEAN_AUDIT["verdicts"][0], span=None)], "model": "any"}
+        result = paper_write.write_block(
+            self.paper_dir, self.contract, draft, audit, grounding_account={})
+        self.assertEqual(result["status"], "written")
+
+    def test_an_exact_repeat_of_one_entry_changes_nothing_and_still_writes(self) -> None:
+        """Only entries that disagree are ambiguous: the same verdict or
+        binding twice is the same judgment, so it is not refused."""
+        draft = dict(_CLEAN_DRAFT, bindings=_CLEAN_DRAFT["bindings"] * 2)
+        audit = {"verdicts": _CLEAN_AUDIT["verdicts"] * 2}
+        result = paper_write.write_block(self.paper_dir, self.contract, draft, audit)
+        self.assertEqual(result["status"], "written")
+
+
+class WriteEnvelopeCLITests(unittest.TestCase):
+    """#71 through the real `cmd_write`: the files `--draft`, `--audit` and
+    `--grounding` name are read as envelopes, so a malformed file refuses
+    with its own code. Borrows `WriteGateTests`' scratch paper and opens
+    wave 1, so `cmd_write` gets past its gate to the reads."""
+
+    setUp = WriteGateTests.setUp
+
+    def _write(self, **files: bytes) -> Refused:
+        paper_block.open_block(self.paper_dir, "phase-a.a", at_end=True)
+        for flag, data in files.items():
+            path = self.test_root / f"{flag}.json"
+            path.write_bytes(data)
+            setattr(self.args, flag, str(path))
+        with self.assertRaises(Refused) as ctx:
+            paper_cli.cmd_write(self.args)
+        return ctx.exception
+
+    def test_a_fenced_draft_refuses_draft_unreadable(self) -> None:
+        fenced = b"```json\n" + json.dumps(_CLEAN_DRAFT).encode("utf-8") + b"\n```\n"
+        refusal = self._write(draft=fenced)
+        self.assertEqual(refusal.code, "DRAFT_UNREADABLE")
+        self.assertIn("code fence", refusal.detail)
+
+    def test_an_audit_file_that_is_not_json_refuses_audit_account_unreadable(self) -> None:
+        refusal = self._write(draft=json.dumps(_CLEAN_DRAFT).encode("utf-8"), audit=b"all clear")
+        self.assertEqual(refusal.code, "AUDIT_ACCOUNT_UNREADABLE")
+        self.assertIn("invalid JSON", refusal.detail)
+
+    def test_a_grounding_file_holding_an_array_refuses_grounding_account_unreadable(self) -> None:
+        refusal = self._write(
+            draft=json.dumps(_CLEAN_DRAFT).encode("utf-8"),
+            audit=json.dumps(_CLEAN_AUDIT).encode("utf-8"),
+            grounding=b"[]",
+        )
+        self.assertEqual(refusal.code, "GROUNDING_ACCOUNT_UNREADABLE")
+        self.assertIn("not an array", refusal.detail)
+
+    def test_a_draft_of_the_wrong_shape_refuses_before_any_stage(self) -> None:
+        refusal = self._write(
+            draft=b'{"latex": 5, "bindings": []}', audit=json.dumps(_CLEAN_AUDIT).encode("utf-8"))
+        self.assertEqual(refusal.code, "DRAFT_UNREADABLE")
+        self.assertIn("'latex' must be a string", refusal.detail)
 
 
 class WriteGateMutationProofTests(unittest.TestCase):
@@ -11849,11 +12047,12 @@ class PacketWriteGateTests(unittest.TestCase):
 
     def test_a_readable_corpus_proceeds_past_the_packet_gate(self) -> None:
         """A packet that assembles cleanly is not itself the failure --
-        `cmd_write` proceeds past the gate and fails on the very next real
-        stage instead, the draft file this test deliberately never
-        creates, never `Refused('GUIDANCE_MARKDOWN_UNREADABLE')`."""
-        with self.assertRaises(FileNotFoundError):
+        `cmd_write` proceeds past the gate and refuses on the very next real
+        stage instead, `DRAFT_UNREADABLE` on the draft file this test
+        deliberately never creates, never `Refused('GUIDANCE_MARKDOWN_UNREADABLE')`."""
+        with self.assertRaises(Refused) as ctx:
             paper_cli.cmd_write(self.args)
+        self.assertEqual(ctx.exception.code, "DRAFT_UNREADABLE")
 
 
 class PacketWriteGateMutationProofTests(unittest.TestCase):
@@ -12292,8 +12491,9 @@ class CitationReadinessGateTests(unittest.TestCase):
             json.dumps({"class": "evidence"}), encoding="utf-8",
         )
 
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(Refused) as ctx:
             paper_cli.cmd_write(self.args)
+        self.assertEqual(ctx.exception.code, "DRAFT_UNREADABLE")
 
     def test_a_none_regime_block_is_never_gated_even_with_no_guidance_folder_at_all(self) -> None:
         """A guard that blocks everything is as wrong as one that blocks
@@ -12301,8 +12501,9 @@ class CitationReadinessGateTests(unittest.TestCase):
         "none"`, so it is written with no citations to gate at all, even
         though `guidance/cited-section/` still does not exist."""
         args = argparse.Namespace(**{**vars(self.args), "block": "uncited"})
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(Refused) as ctx:
             paper_cli.cmd_write(args)
+        self.assertEqual(ctx.exception.code, "DRAFT_UNREADABLE")
 
 
 class CitationReadinessGateMutationProofTests(unittest.TestCase):

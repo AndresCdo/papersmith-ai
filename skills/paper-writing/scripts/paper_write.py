@@ -12,9 +12,11 @@ audits, never spawns anything — it reconciles what it is given against
 Public surface:
 
     BlockContract                    -> the pipeline's one immutable input shape
+    read_envelope(path) -> dict      (raises EnvelopeUnreadable; the CLI names the code)
     write_block(paper_dir, contract, draft, audit_account) -> dict
-        (raises MODE_ABSENT, EVIDENCE_SET_REQUIRED, AUDIT_EXHAUSTED,
-         AUDIT_FINDING_UNVERIFIED, plus every code `paper_bindings`/`paper_audit` themselves raise)
+        (raises DRAFT_UNREADABLE, AUDIT_ACCOUNT_UNREADABLE, GROUNDING_ACCOUNT_UNREADABLE,
+         MODE_ABSENT, EVIDENCE_SET_REQUIRED, AUDIT_EXHAUSTED, AUDIT_FINDING_UNVERIFIED,
+         plus every code `paper_bindings`/`paper_audit` themselves raise)
 """
 from __future__ import annotations
 
@@ -58,6 +60,182 @@ class BlockContract:
     #: `source_bindings` precedent, so every construction site that
     #: predates this field stays green unchanged.
     source_sections: tuple = ()
+
+
+#: Bytes one envelope file may hold. A drafted block and its accounts run to
+#: kilobytes, so only a runaway answer reaches this (#71).
+ENVELOPE_MAX_BYTES = 4 * 1024 * 1024
+#: The verdict words `paper_audit.reconcile_verdicts` and
+#: `paper_grounding.reconcile_support` decide on. Any other word would pass
+#: as neither a finding nor a clearance, so the envelope check refuses it.
+AUDIT_VERDICTS = ("fires", "clear", "undecidable")
+GROUNDING_VERDICTS = ("supported", "unsupported", "undecidable")
+
+
+def _json_type(value) -> str:
+    """The JSON name of `value`'s type, for a refusal's detail."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):  # before int: a Python bool is an int too
+        return "a boolean"
+    if isinstance(value, (int, float)):
+        return "a number"
+    if isinstance(value, str):
+        return "a string"
+    if isinstance(value, list):
+        return "an array"
+    if isinstance(value, dict):
+        return "an object"
+    return type(value).__name__
+
+
+class EnvelopeUnreadable(Exception):
+    """Why an envelope file holds no JSON object. The caller turns it into
+    the refusal code of the envelope it was reading."""
+
+
+def read_envelope(path: Path) -> dict:
+    """The JSON object `path` holds, as an agent handed it back (#71).
+
+    Bounded to `ENVELOPE_MAX_BYTES` and strict UTF-8. A Markdown code fence
+    around the JSON is refused rather than stripped, so what `write` judges
+    is exactly what was written: the agent is told to write the bare object.
+    """
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(ENVELOPE_MAX_BYTES + 1)
+    except OSError as exc:
+        raise EnvelopeUnreadable(f"{path}: {exc.strerror or exc}") from None
+    if len(raw) > ENVELOPE_MAX_BYTES:
+        raise EnvelopeUnreadable(f"{path}: more than {ENVELOPE_MAX_BYTES} bytes")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise EnvelopeUnreadable(f"{path}: not UTF-8 (byte {exc.start})") from None
+    if text.lstrip().startswith("```"):
+        raise EnvelopeUnreadable(
+            f"{path}: a Markdown code fence wraps the JSON; write the bare object"
+        )
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise EnvelopeUnreadable(
+            f"{path}: invalid JSON: {exc.msg} at line {exc.lineno} column {exc.colno}"
+        ) from None
+    except ValueError as exc:  # e.g. an integer past Python's digit limit
+        raise EnvelopeUnreadable(f"{path}: invalid JSON: {exc}") from None
+    except RecursionError:
+        raise EnvelopeUnreadable(f"{path}: JSON nested too deeply") from None
+    if not isinstance(value, dict):
+        raise EnvelopeUnreadable(f"{path}: must be a JSON object, not {_json_type(value)}")
+    return value
+
+
+def _entries_problem(
+    envelope: dict,
+    key: str,
+    required: tuple,
+    optional: tuple = (),
+    *,
+    subject: str,
+    verdicts: tuple = (),
+) -> str | None:
+    """Why `envelope[key]` is not an array of objects whose `required` fields
+    are strings and whose `optional` fields, where present, are strings or
+    null; None when it is.
+
+    Each entry judges one `subject` (a sentence, a bullet), and the pipeline
+    keeps the last entry per subject, so two entries for one subject that
+    disagree would silently drop the first; that is refused, while an exact
+    repeat changes nothing and is not. With `verdicts`, an entry's `verdict`
+    must be one of them.
+    """
+    entries = envelope[key]
+    if not isinstance(entries, list):
+        return f"{key!r} must be an array, not {_json_type(entries)}"
+    first_for: dict[str, int] = {}
+    for index, entry in enumerate(entries):
+        where = f"{key}[{index}]"
+        if not isinstance(entry, dict):
+            return f"{where} must be an object, not {_json_type(entry)}"
+        for field in required:
+            if field not in entry:
+                return f"{where} has no {field!r}"
+            if not isinstance(entry[field], str):
+                return f"{where}[{field!r}] must be a string, not {_json_type(entry[field])}"
+        for field in optional:
+            value = entry.get(field)
+            if value is not None and not isinstance(value, str):
+                return f"{where}[{field!r}] must be a string or null, not {_json_type(value)}"
+        if verdicts and entry["verdict"] not in verdicts:
+            return f"{where}['verdict'] is {entry['verdict']!r}, not one of {', '.join(verdicts)}"
+        earlier = first_for.setdefault(entry[subject], index)
+        if entries[earlier] != entry:
+            return f"{key}[{earlier}] and {where} disagree about one {subject}: {entry[subject]!r}"
+    return None
+
+
+def draft_problem(draft) -> str | None:
+    """Why `draft` is not `{"latex": str, "bindings": [{"sentence": str,
+    "binding": str}, ...]}`, the redactor's envelope, with one binding per
+    sentence, each `evidence:<id>`, `fact:<id>` or `structural`; None when
+    it is. Other keys are ignored."""
+    if not isinstance(draft, dict):
+        return f"the draft must be a JSON object, not {_json_type(draft)}"
+    if "latex" not in draft:
+        return "the draft has no 'latex'"
+    if not isinstance(draft["latex"], str):
+        return f"'latex' must be a string, not {_json_type(draft['latex'])}"
+    if "bindings" not in draft:
+        return "the draft has no 'bindings'"
+    problem = _entries_problem(draft, "bindings", ("sentence", "binding"), subject="sentence")
+    if problem:
+        return problem
+    for index, entry in enumerate(draft["bindings"]):
+        try:
+            paper_bindings.parse_binding(entry["binding"])
+        except ValueError as exc:
+            return f"bindings[{index}]['binding']: {exc}"
+    return None
+
+
+def audit_account_problem(account) -> str | None:
+    """Why `account` is not `{"verdicts": [{"bullet": str, "verdict": str,
+    "span": str | null}, ...]}`, the contract-auditor's envelope, with one
+    verdict per bullet from `AUDIT_VERDICTS`; None when it is. `span` may be
+    absent."""
+    if not isinstance(account, dict):
+        return f"the audit account must be a JSON object, not {_json_type(account)}"
+    if "verdicts" not in account:
+        return "the audit account has no 'verdicts'"
+    return _entries_problem(
+        account,
+        "verdicts",
+        ("bullet", "verdict"),
+        ("span",),
+        subject="bullet",
+        verdicts=AUDIT_VERDICTS,
+    )
+
+
+def grounding_account_problem(account) -> str | None:
+    """Why `account` is not `{"support": [{"sentence": str, "verdict": str,
+    "fact": str | null, "span": str | null}, ...]}`, the section-grounding
+    auditor's envelope, with one judgment per sentence from
+    `GROUNDING_VERDICTS`; None when it is. An absent `support` still reads
+    as no entries at all, as `paper_grounding` has always read it."""
+    if not isinstance(account, dict):
+        return f"the grounding account must be a JSON object, not {_json_type(account)}"
+    if "support" not in account:
+        return None
+    return _entries_problem(
+        account,
+        "support",
+        ("sentence", "verdict"),
+        ("fact", "span"),
+        subject="sentence",
+        verdicts=GROUNDING_VERDICTS,
+    )
 
 
 def _attempt_key(contract: BlockContract) -> str:
@@ -164,7 +342,23 @@ def write_block(
     (#72): with nothing verified firing, `write` refuses
     `AUDIT_FINDING_UNVERIFIED` naming it, before `substitute` and without
     touching the ledger, so the same draft can be audited again.
+
+    The envelopes are checked before any stage reads them (#71): a draft or
+    account that is not the shape its agent is told to return refuses
+    `DRAFT_UNREADABLE`, `AUDIT_ACCOUNT_UNREADABLE` or
+    `GROUNDING_ACCOUNT_UNREADABLE` saying what is wrong, never a traceback,
+    and spends no re-draft.
     """
+    problem = draft_problem(draft)
+    if problem:
+        raise Refused("DRAFT_UNREADABLE", f"{contract.block_id}: {problem}")
+    problem = audit_account_problem(audit_account)
+    if problem:
+        raise Refused("AUDIT_ACCOUNT_UNREADABLE", f"{contract.block_id}: {problem}")
+    if grounding_account is not None:
+        problem = grounding_account_problem(grounding_account)
+        if problem:
+            raise Refused("GROUNDING_ACCOUNT_UNREADABLE", f"{contract.block_id}: {problem}")
     _stage_readiness(contract)
     bindings = _stage_evidence_audit(contract, draft)
 
