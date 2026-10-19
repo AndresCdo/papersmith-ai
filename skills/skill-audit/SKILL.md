@@ -771,11 +771,12 @@ and `2` only when it could not look: something other than exactly two
 surface it names.
 
 `sensitivity` exits `0` for **any** verdict, a `not adjudicable` finding
-included, and for the degenerate "this subject declares no computed values"
-result. It exits `2` only when it could not look: an occupied box, a control
-that never proved the producer reads its copy, a restore that did not
-reproduce its pre-variation bytes, or a drive that wrote outside its own box.
-None of those four is a finding; each is an inability to look.
+included. It exits `2` only when it could not look: a subject that declares
+no computed values, an occupied box, a control that never proved the
+producer reads its copy, a baseline drive that refused with every input
+present, a restore that did not reproduce its pre-variation bytes, or a
+drive that wrote outside its own box. None of those six is a finding; each
+is an inability to look.
 
 `inversion` exits `0` for **any** verdict, a not-adjudicable finding
 included, and `2` only for an inability to look: no `mutations` block, an

@@ -2302,9 +2302,9 @@ def run_sensitivity(args):
                 "input present, the producer exited "
                 f"{baseline_completed.returncode}. A refusal once one input "
                 "is removed means nothing from a producer that refuses with "
-                "none removed, and the declared values were never this "
-                "drive's product. Every pair is unreached until the "
-                "baseline drive exits 0")
+                "none removed, and no baseline was established to compare "
+                "the other drives against. Every pair is unreached until "
+                "the baseline drive exits 0")
         baseline_text = read_site(declared_path)
         baseline_pairs = dict(declared_value_pairs(baseline_text, declared_site))
 
