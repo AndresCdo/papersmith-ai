@@ -10,6 +10,8 @@ network.
 | `pdf_viewer.css` | `pdfjs-dist@3.11.174` `web/pdf_viewer.css` | |
 | `cmaps/` | `pdfjs-dist@3.11.174` `cmaps/` (CJK character maps) | |
 | `pdfjs-LICENSE` | `pdfjs-dist@3.11.174` `LICENSE` (Apache-2.0) | |
+| `xterm.js`, `xterm.css`, `xterm-LICENSE` | `@xterm/xterm@5.5.0` `lib/`, `css/`, `LICENSE` (MIT) | `1f991ac3b4b2` |
+| `xterm-addon-fit.js` | `@xterm/addon-fit@0.10.0` `lib/addon-fit.js` | `bdaefa370b1b` |
 | `marked.min.js` | marked (artifact Markdown rendering) | |
 
 Refresh pdf.js with `npm pack pdfjs-dist@<version>` and copy the same paths;

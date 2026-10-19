@@ -10,6 +10,10 @@
   <link rel="stylesheet" href="./vendor/pdf_viewer.css">
   <script src="./vendor/pdf.min.js"></script>
   <script src="./vendor/marked.min.js"></script>
+  <link rel="stylesheet" href="./vendor/xterm.css">
+  <script src="./vendor/xterm.js"></script>
+  <script src="./vendor/xterm-addon-fit.js"></script>
+  <script src="./cli-console.js"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2333,6 +2337,46 @@
       gap: 0.65rem;
     }
 
+
+    /* ---- Support terminal ("CLI de apoyo") ---- */
+    .cli-fab {
+      position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 900;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.6rem 0.95rem; border-radius: 999px; cursor: pointer;
+      background: var(--surface-2); color: var(--text, #e5e7eb);
+      border: 1px solid var(--accent); font: 600 0.82rem var(--font-mono);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+    .cli-fab:hover { background: var(--surface); }
+    .cli-window {
+      position: fixed; right: 1.25rem; bottom: 4.6rem; z-index: 901;
+      width: min(760px, calc(100vw - 2.5rem)); height: min(460px, calc(100vh - 7rem));
+      display: none; flex-direction: column; overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+    .cli-window.open { display: flex; }
+    .cli-window__bar {
+      display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+      padding: 0.45rem 0.6rem; background: var(--surface-2); border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+    }
+    .cli-window__title { font-weight: 700; margin-right: auto; }
+    .cli-window__bar select, .cli-window__bar button {
+      font-size: 0.74rem; padding: 0.2rem 0.5rem; border-radius: 6px;
+      background: var(--surface); color: inherit; border: 1px solid var(--border); cursor: pointer;
+    }
+    .cli-status { font-size: 0.72rem; color: var(--text-muted); }
+    .cli-status[data-tone="ok"] { color: var(--ok); }
+    .cli-status[data-tone="warn"] { color: var(--warn); }
+    .cli-status[data-tone="bad"] { color: var(--bad); }
+    .cli-quick { display: flex; gap: 0.35rem; flex-wrap: wrap; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
+    .cli-quick:empty { display: none; }
+    .cli-quick__btn {
+      font: 0.72rem var(--font-mono); padding: 0.15rem 0.5rem; border-radius: 4px; cursor: pointer;
+      background: rgba(56, 189, 248, 0.08); color: var(--accent); border: 1px solid var(--border);
+    }
+    .cli-term { flex: 1 1 auto; min-height: 0; padding: 0.35rem; background: #0b0f19; }
   </style>
 </head>
 <body>
@@ -4225,7 +4269,10 @@
           <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.85rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.03em;">Comando CLI Terminal:</span>
-              <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="copyCliCommand('${escapeHtml(cliCmd)}', this)">📋 Copiar Comando</button>
+              <span style="display: inline-flex; gap: 0.35rem;">
+                <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="copyCliCommand('${escapeHtml(cliCmd)}', this)">📋 Copiar Comando</button>
+                <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" data-cli="${escapeHtml(cliCmd)}" onclick="sendToCli(this.dataset.cli, false)" title="Escribe el comando en la terminal de apoyo; pulsa Enter allí para ejecutarlo">⌨️ Enviar a CLI</button>
+              </span>
             </div>
             <div style="background: rgba(0,0,0,0.45); border: 1px solid var(--border); border-radius: 4px; padding: 0.55rem 0.75rem; font-family: var(--font-mono); font-size: 0.82rem; color: #38bdf8; overflow-x: auto;">
               <code>$ ${escapeHtml(cliCmd)}</code>
@@ -6227,5 +6274,20 @@
       }
     });
   </script>
+
+  <!-- Support terminal ("CLI de apoyo"): see cli-console.js and terminal.py -->
+  <button id="cliFab" class="cli-fab" type="button" title="Abrir la terminal de apoyo (shell o agente) en el workspace">⌨️ CLI</button>
+  <div id="cliWindow" class="cli-window" role="dialog" aria-label="Terminal de apoyo" aria-hidden="true">
+    <div class="cli-window__bar">
+      <span class="cli-window__title">⌨️ Terminal de apoyo</span>
+      <select id="cliAgent" title="Shell o agente a lanzar en el workspace"></select>
+      <button id="cliConnect" type="button">Conectar</button>
+      <button id="cliStop" type="button">Detener</button>
+      <span id="cliStatus" class="cli-status" data-tone="muted">Sin sesión</span>
+      <button id="cliClose" type="button" title="Ocultar (la sesión sigue viva)">✕</button>
+    </div>
+    <div id="cliQuick" class="cli-quick"></div>
+    <div id="cliTerm" class="cli-term"></div>
+  </div>
 </body>
 </html>

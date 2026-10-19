@@ -179,7 +179,8 @@ def find_available_port(host: str, preferred: int,
 def build_server_argv(workspace: Path, host: str, port: int, *, no_browser: bool,
                       export_static: str | None = None,
                       interpreter: str | None = None,
-                      allowed_hosts: list[str] | None = None) -> list[str]:
+                      allowed_hosts: list[str] | None = None,
+                      no_terminal: bool = False) -> list[str]:
     """Build the child command that runs the workspace's backend."""
     argv = [
         interpreter or sys.executable,
@@ -200,6 +201,9 @@ def build_server_argv(workspace: Path, host: str, port: int, *, no_browser: bool
     # flag keeps working.
     for allowed in allowed_hosts or []:
         argv.extend(["--allowed-host", allowed])
+    # Same rule: only forwarded when asked for.
+    if no_terminal:
+        argv.append("--no-terminal")
     return argv
 
 
@@ -284,7 +288,8 @@ def run_cli(args) -> int:
     print(f"{prog} ui: press Ctrl+C to stop")
     argv = build_server_argv(workspace, args.host, port, no_browser=args.no_browser,
                              interpreter=interpreter,
-                             allowed_hosts=getattr(args, "allowed_host", None))
+                             allowed_hosts=getattr(args, "allowed_host", None),
+                             no_terminal=getattr(args, "no_terminal", False))
     return _run_child(argv, workspace)
 
 
@@ -306,6 +311,9 @@ def register(subparsers) -> None:
     parser.add_argument("--allowed-host", action="append", default=None, metavar="HOST:PORT",
                         help="also accept this Host header (repeatable), e.g. when forwarding "
                              "the port or running the Vite dev server")
+    parser.add_argument("--no-terminal", action="store_true",
+                        help="do not offer the dashboard's support terminal (it is only "
+                             "offered on a loopback bind)")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
     parser.set_defaults(handler=run_cli)
 

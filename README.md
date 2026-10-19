@@ -3513,6 +3513,7 @@ smith ui --export-static ./dashboard-static
 | `--no-browser` | Does not open the browser |
 | `--export-static <dir>` | Copies the dashboard build to `<dir>` and exits |
 | `--allowed-host HOST:PORT` | Also accepts that `Host` header (repeatable); only forwarded to the backend when supplied |
+| `--no-terminal` | Does not offer the dashboard's support terminal (it is only ever offered on a loopback bind) |
 
 Serves the **Paper Command Center**: a local dashboard inside the workspace with
 its two flows, the four quality gates, the ten-section matrix and the health of
@@ -3578,6 +3579,22 @@ module accepts the same flag):
 ```bash
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
+
+**Support terminal ("CLI de apoyo").** The **⌨️ CLI** button opens a floating
+xterm.js console bound to a pseudo-terminal in the workspace root: a login shell,
+or `claude`, `opencode` or `pi` when they are on `PATH`. Quick buttons type
+`smith status`, `smith atlas build` and `smith audit` in the shell, or the
+projected slash commands (`.claude/commands/`) inside an agent. Each phase card
+has **⌨️ Enviar a CLI**, which types that phase's command into the console and
+waits for your Enter; **▶ Ejecutar** keeps its own path. Routes:
+`GET /api/terminal/agents`, `POST /api/terminal/sessions`,
+`POST /api/terminal/sessions/<id>/input` (`data`, or `cols`/`rows` to resize),
+`DELETE /api/terminal/sessions/<id>` and `GET /api/terminal/sessions/<id>/stream`
+(SSE, base64 `output` frames then `exit`). At most four sessions; they close
+with the server. The console is a shell with your privileges, so it is only
+offered on a loopback bind (`smith ui --no-terminal` turns it off) and every
+call must be same-origin: a foreign `Origin` or `Sec-Fetch-Site`, a missing
+`X-Papersmith-Terminal: 1` header or a non-JSON body answers `403`.
 
 **Live PDF preview.** The *Previsualización PDF* tab renders `paper/main.pdf`
 with pdf.js 3.11.174, vendored in `skills/_core/command_center/static/vendor/`
