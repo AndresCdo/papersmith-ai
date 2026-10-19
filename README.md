@@ -3736,6 +3736,27 @@ node scripts/command-center-visual-check.mjs --out /tmp/shots --full-page --clic
 It is a development tool (it needs Chromium); it does not run in CI. The UI tests
 (`npm --prefix ui test`) do run in CI.
 
+### `smith atlas build [<dir>]`
+
+```bash
+smith atlas build
+smith atlas build ~/papers/sparse-ae --json
+```
+
+| Flag | Effect |
+|------|--------|
+| `--json` | Prints the result object instead of one line |
+
+Regenerates the SOTA atlas page, the same action as the dashboard's
+**⚡ Regenerar grafo** button (`POST /api/atlas/build`). It runs the workspace's
+own `skills/plausibility/scripts/check_atlas.py` on `sota-pool/atlas.json` (with
+`--pool sota-pool/candidates.json` when the pool exists) and, only when the
+checker is green, `render_atlas.py` to `sota-pool/atlas.html`. A failing atlas
+never replaces a good page. Exit `0` when the page was written, `1` otherwise.
+The route answers `200`, `404` (no `atlas.json` or no scripts), `422` (the
+checker or renderer refused) or `504` (timeout), always with
+`{ok, stage, detail}` plus the system, planet and link counts on success.
+
 ### `papersmith mcp {serve,inspect,print-config}`
 
 ```bash

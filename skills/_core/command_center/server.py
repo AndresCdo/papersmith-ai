@@ -6,9 +6,12 @@ channel fed by a debounced filesystem watcher, and the compiled dashboard from
 
     python -m skills._core.command_center.server --port 8080
 
-The API is read-only. The one mutating-looking endpoint,
-``POST /api/health/run-wiring-smoke``, runs the workspace's own verification
+The API is read-only except for explicit dashboard actions.
+``POST /api/health/run-wiring-smoke`` runs the workspace's own verification
 script and reports its output; it changes no paper byte.
+``POST /api/atlas/build`` ("Regenerar grafo") re-renders
+``sota-pool/atlas.html`` through the plausibility checker and renderer
+(:mod:`.atlas_build`); it writes nothing else.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, decisions, history, paper_preview, novelty_graph, model_spec
+from . import atlas, atlas_build, decisions, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -1694,6 +1697,21 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                                 headers=dict(_PAPER_HEADERS))
         return Response(data, media_type="text/html; charset=utf-8",
                         headers=dict(_ATLAS_VIEW_HEADERS))
+
+    @app.post("/api/atlas/build")
+    def api_atlas_build() -> JSONResponse:
+        # "Regenerar grafo": the workspace's own checker, then its renderer.
+        # Writes only sota-pool/atlas.html, and only when the checker is green.
+        result = atlas_build.build(root_path)
+        if result["ok"]:
+            status_code = 200
+        elif result["stage"] in ("absent", "scripts"):
+            status_code = 404
+        elif result["stage"] == "timeout":
+            status_code = 504
+        else:
+            status_code = 422
+        return JSONResponse(result, status_code=status_code, headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/atlas/novelty")
     def api_atlas_novelty() -> JSONResponse:

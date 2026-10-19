@@ -69,6 +69,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "target",
     "audit",
     "ui",
+    "atlas",
     "mcp",
 )
 
@@ -1471,6 +1472,11 @@ CLI_DISPOSITIONS: dict[str, str] = {
     # exposed. Its own `/api/*` surface is what an agent would read, and that
     # surface is not a CLI command.
     "ui": "out",
+    # `atlas build` re-renders sota-pool/atlas.html: the dashboard's
+    # "Regenerar grafo" button from a terminal, an operator action like `ui`.
+    # An agent regenerates the atlas through the plausibility skill's own
+    # check_atlas.py/render_atlas.py, which this command only sequences.
+    "atlas": "out",
     # The server host itself: never a tool it exposes.
     "mcp": "out",
 }

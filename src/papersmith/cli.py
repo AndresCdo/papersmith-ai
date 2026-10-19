@@ -15,6 +15,7 @@ from .bridges import deliberation as deliberation_command
 from .bridges import implementation as implementation_command
 from .bridges import audit as audit_command
 from .bridges import remote as remote_command
+from .core import atlas as atlas_command
 from .core import executor as executor_command
 from .core import init as init_command
 from .core import ingest as ingest_command
@@ -51,6 +52,7 @@ _REGISTRY: list = [
     target_command.register,
     audit_command.register,
     ui_command.register,
+    atlas_command.register,
     mcp_command.register,
 ]
 
