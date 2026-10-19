@@ -27656,6 +27656,76 @@ class GateCommandTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2, proc.stdout)
         self.assertEqual(json.loads(proc.stdout)["code"], "GATE_AUTHORIZATION_STALE")
 
+    def test_gate_names_a_text_only_binding_and_its_token_needs_a_fresh_offer(self):
+        """#84: a binding's identity is the revision's bytes. Every binding
+        here is taken while `r1.md` has LF lines -- its bytes ARE its text's
+        encoding, exactly what a binding taken over the decoded text stored
+        -- and then its lines turn CRLF: the same text, other bytes. `gate`
+        refuses `POSITION_STALE` naming that cause and both repairs:
+        `position`, the structured resolution, and `offer`, to launch. Once
+        `position` binds the bytes, the token minted over the old ones still
+        refuses, and a fresh one gates."""
+        proposals = self._proposals()
+        box, commit = self._box()
+        self._write_job_folder(box, commit)
+        self._write_smoke_pass(box, commit=commit)
+        header = {"revision": self.PROPOSAL_REVISION,
+                  "revisionSha256": self.PROPOSAL_SHA256,
+                  "derivedAt": "2026-08-27T00:00:00Z", "session": "s1", "target": "final"}
+        items = [{"ordinal": 1, "mark": " ", "text": "Rehearse the job.",
+                  "witness": {"kind": "rehearsal", "operand": "job1"}}]
+        (box / "Method" / "AGREED.md").write_text(
+            impl_position.render(header, items), encoding="utf-8")
+        refresh = ("position", "--target", str(box), "--name", "Method",
+                   "--revision", self.PROPOSAL_REVISION, "--session", "s1")
+        # Marks settled first, so the one fact the old token can later
+        # disagree on is the revision's identity.
+        proc = self.run_cli(*refresh, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self._propose(box, jobs=["job1"])
+        old_token = self._mint_authorization(box, proposals)
+
+        (proposals / self.PROPOSAL_REVISION).write_bytes(
+            self.PROPOSAL_TEXT.replace("\n", "\r\n").encode("utf-8"))
+        gate = ("gate", "--target", str(box), "--name", "Method",
+                "--revision", self.PROPOSAL_REVISION, "--session", "s1",
+                "--job", "job1", "--worker", "w1",
+                "--justification", "Rehearsal passed at the pinned commit.",
+                "--elect", "job1")
+        proc = self.run_cli(*gate, "--authorization", old_token, proposals=proposals)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        refusal = json.loads(proc.stdout)
+        self.assertEqual(refusal["code"], "POSITION_STALE")
+        self.assertIn("names the decoded text of that revision, not its bytes",
+                      refusal["detail"])
+        self.assertIn("`offer`", refusal["detail"])
+        self.assertEqual(refusal["resolve"]["kind"], "command", refusal)
+        self.assertIn(" position ", refusal["resolve"]["command"], refusal)
+
+        proc = self.run_cli(*refresh, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        proc = self.run_cli(*gate, "--authorization", old_token, proposals=proposals)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["code"], "GATE_AUTHORIZATION_STALE")
+
+        fresh_token = self._mint_authorization(box, proposals)
+        self.assertNotEqual(fresh_token, old_token)
+        proc = self.run_cli(*gate, "--authorization", fresh_token, proposals=proposals)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(json.loads(proc.stdout)["status"], "recorded")
+
+        ledger = box / "Method" / ".implementation" / "position.jsonl"
+        minted = {event["token"]: event
+                  for event in map(json.loads, ledger.read_text(encoding="utf-8").splitlines())
+                  if event["kind"] == "authorization"}
+        self.assertEqual(minted[old_token]["revisionSha256"], self.PROPOSAL_SHA256)
+        self.assertEqual(
+            minted[fresh_token]["revisionSha256"],
+            hashlib.sha256((proposals / self.PROPOSAL_REVISION).read_bytes()).hexdigest())
+        # Nothing else the gate re-derives moved between the two tokens.
+        for key in ("commit", "entrypoint", "rung", "positionStatus"):
+            self.assertEqual(minted[old_token][key], minted[fresh_token][key], key)
+
     def test_gate_refuses_authorization_consumed_on_reuse(self):
         """Single-use: a token that already authorized one successful
         `gate` call is refused on a second presentation, and the ledger
@@ -30160,6 +30230,61 @@ class CloseCommandTests(unittest.TestCase):
             self.assertIn("- [x] 1. Rehearse the job.", on_disk,
                           "a refused close must not silently correct the very "
                           "mark its refusal exists to report")
+
+    def test_close_names_why_its_position_is_stale(self):
+        """#84: close refuses a stale position whichever way it went stale,
+        and says which. Bound to bytes that are exactly their text's encoding
+        -- LF lines, or a literal U+FFFD -- and then rewritten as other bytes
+        that decode to the same text (CRLF lines, or an undecodable byte in
+        that U+FFFD's place), the stored digest names the decoded text, not
+        the bytes, and close names that cause. Bound to bytes that then
+        changed their text, close keeps the moved-bytes sentence. Either way
+        `position` is the structured resolution, and once it re-binds the
+        bytes the same close closes."""
+        proposals = self._proposals()
+        revision = proposals / self.PROPOSAL_REVISION
+        items = [{"ordinal": 1, "mark": " ", "text": "Rehearse the job.",
+                  "witness": {"kind": "rehearsal", "operand": "job-none"}}]
+        literal = (self.PROPOSAL_TEXT + "\ufffd\n").encode("utf-8")
+        cases = (
+            ("line endings", self.PROPOSAL_SHA256,
+             self.PROPOSAL_TEXT.replace("\n", "\r\n").encode("utf-8"),
+             "names the decoded text of that revision, not its bytes",
+             "whose bytes no longer match"),
+            ("an undecodable byte", hashlib.sha256(literal).hexdigest(),
+             literal.replace("\ufffd".encode("utf-8"), b"\xff"),
+             "or a byte that does not decode",
+             "whose bytes no longer match"),
+            ("bytes moved", self.PROPOSAL_SHA256,
+             (self.PROPOSAL_TEXT + "more\n").encode("utf-8"),
+             "whose bytes no longer match this one",
+             "decoded text"),
+        )
+        for label, bound, data, says, never in cases:
+            with self.subTest(label):
+                box, _ = self._box()
+                header = {"revision": self.PROPOSAL_REVISION, "revisionSha256": bound,
+                          "derivedAt": "2026-08-27T00:00:00Z", "session": "s1",
+                          "target": "final"}
+                (box / "Method" / "AGREED.md").write_text(
+                    impl_position.render(header, items), encoding="utf-8")
+                revision.write_bytes(data)
+                args = ("--target", str(box), "--name", "Method",
+                        "--revision", self.PROPOSAL_REVISION, "--session", "s1")
+                proc = self.run_cli("close", *args, proposals=proposals)
+                self.assertEqual(proc.returncode, 2, proc.stdout)
+                refusal = json.loads(proc.stdout)
+                self.assertEqual(refusal["code"], "POSITION_STALE")
+                self.assertIn(says, refusal["detail"])
+                self.assertNotIn(never, refusal["detail"])
+                self.assertEqual(refusal["resolve"]["kind"], "command", refusal)
+                self.assertIn(" position ", refusal["resolve"]["command"], refusal)
+
+                proc = self.run_cli("position", *args, proposals=proposals)
+                self.assertEqual(proc.returncode, 0, proc.stdout)
+                proc = self.run_cli("close", *args, proposals=proposals)
+                self.assertEqual(proc.returncode, 0, proc.stdout)
+                self.assertEqual(json.loads(proc.stdout)["status"], "closed")
 
     # --- 6.4: a second close over the identical, unmoved position ---
 
