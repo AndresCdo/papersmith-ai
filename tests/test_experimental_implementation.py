@@ -1869,13 +1869,15 @@ class DeadImportAndStaleCallerCitationTests(unittest.TestCase):
     file does not own (`test_proposal_implementation.py`), and is only
     reported here, never edited."""
 
-    #: Five, not six. `LFS_POINTER_PREFIX` was removed with them and put back:
+    #: Four, not six. `LFS_POINTER_PREFIX` was removed with them and put back:
     #: `tests/test_proposal_implementation.py:701` reads it as
     #: `impl.LFS_POINTER_PREFIX`, so the engine re-exports it on purpose.
     #: Reaching a name through this module's namespace is a consumer, and a
     #: search for uses INSIDE the engine cannot see one -- which is exactly how
-    #: it got called dead.
-    UNUSED = ("WORKSPACE", "TEXT_EXT", "read_text", "text_files", "is_nesting")
+    #: it got called dead. `WORKSPACE` was on this list too, wrongly:
+    #: `_adopt_workspace_target` reads it, so dropping its import made every
+    #: `adopt` survey raise NameError (#52).
+    UNUSED = ("TEXT_EXT", "read_text", "text_files", "is_nesting")
     REEXPORTED = ("LFS_POINTER_PREFIX",)
 
     def test_the_engine_still_reexports_what_a_test_reads_through_it(self):
@@ -1892,7 +1894,7 @@ class DeadImportAndStaleCallerCitationTests(unittest.TestCase):
             missing, [],
             f"a test reads these through the engine and they are gone: {missing}")
 
-    def test_the_engine_imports_none_of_the_five_dead_names(self):
+    def test_the_engine_imports_none_of_the_dead_names(self):
         source = ENGINE_DIR.joinpath("implementation_engine.py").read_text(
             encoding="utf-8")
         tree = ast.parse(source)
@@ -1903,6 +1905,17 @@ class DeadImportAndStaleCallerCitationTests(unittest.TestCase):
                     imported.add(alias.asname or alias.name)
         leaked = [name for name in self.UNUSED if name in imported]
         self.assertEqual(leaked, [], f"still imported: {leaked}")
+
+    def test_no_dead_name_is_read_by_the_engine(self):
+        """A name on `UNUSED` that the engine still reads is not dead, and
+        dropping its import leaves a NameError for the first call that
+        reaches the read -- how `adopt` broke while `WORKSPACE` was listed."""
+        source = ENGINE_DIR.joinpath("implementation_engine.py").read_text(
+            encoding="utf-8")
+        read = {node.id for node in ast.walk(ast.parse(source))
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+        self.assertEqual(sorted(read & set(self.UNUSED)), [],
+                         "listed as dead, yet the engine reads them")
 
     def test_latest_revision_has_no_production_caller_left(self):
         """The engine's own production code never calls `latest_revision`
