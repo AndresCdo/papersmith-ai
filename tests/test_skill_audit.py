@@ -7594,6 +7594,22 @@ class SensitivityBoxLifecycleTests(SensitivityBoxMixin, unittest.TestCase):
             "subtree, never proven by `git status`")
         self.assertFalse(box.exists())
 
+    def test_the_payload_reports_the_box_it_removed(self):
+        """`containment` is the run's own account of its box. Read once the
+        box is erased, as `structure` reads it, it says what the disk shows.
+        """
+        surface = "containment_report"
+        box = self.sensitivity_box(surface)
+        subject = self.make_sensitivity_subject(
+            "containment_report_subject", initial_value=999,
+            data_files={"a.txt": "one\n"}, producer=COMPUTED_PRODUCER)
+        spec = self.make_recipe(subject, surface)
+        result, payload = sensitivity_json(spec, subject, repo=FORGE)
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertFalse(box.exists())
+        self.assertTrue(payload["containment"]["beforeEmpty"], payload["containment"])
+        self.assertTrue(payload["containment"]["afterRemoved"], payload["containment"])
+
     def test_a_sensitivity_run_leaves_the_subject_untouched(self):
         """The proof `SuiteIntegrityTests`'s write-verb lock cannot itself
         provide: `run_sensitivity`, `materialize_subject_copy`,

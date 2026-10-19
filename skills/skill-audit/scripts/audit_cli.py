@@ -2360,11 +2360,12 @@ def run_sensitivity(args):
         not_adjudicable = sorted(
             label for label, row in matrix.items()
             if row and all(outcome == "unchanged" for outcome in row.values()))
-
-        after_removed = box_empty_or_absent(box)
     finally:
         erase_box(box)
 
+    # Read once the box is erased, as `structure` reads it: the run's own
+    # account of whether its box is gone.
+    after_removed = box_empty_or_absent(box)
     emit({
         "containment": {"afterRemoved": after_removed, "beforeEmpty": before_empty,
                         "box": str(box)},
