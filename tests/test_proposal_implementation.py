@@ -23053,8 +23053,16 @@ class DefectCommandTests(unittest.TestCase):
     OpenTests` proves the seven diagnostic commands stay unaffected.
     """
 
+    PROFILE = FORGE / "skills" / "proposal-implementation" / "impl_profile.py"
+
+    def setUp(self):
+        # A scratch forge, never the live checkout: `init` walks the live
+        # `skills/` tree for its kit while sibling workers run, and a fixture
+        # appearing and vanishing there failed it (#89).
+        self.forge, self.cli = scratch_forge.build(self, None, CLI, prefix="defect-command-")
+
     def _box(self):
-        box = FORGE / "implementations" / f"_e2e_defect_{os.getpid()}_{id(self)}"
+        box = self.forge / "implementations" / f"_e2e_defect_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
         (box / "Method").mkdir(parents=True, exist_ok=True)
@@ -23062,15 +23070,21 @@ class DefectCommandTests(unittest.TestCase):
         return box
 
     def _forge_file(self, data=b"placeholder = True\n"):
-        path = (FORGE / "skills" / "proposal-implementation" / "scripts"
+        path = (self.forge / "skills" / "proposal-implementation" / "scripts"
                / f"_defect_fixture_{os.getpid()}_{id(self)}.py")
         path.write_bytes(data)
         self.addCleanup(path.unlink, missing_ok=True)
         return path
 
     def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE)
+        env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.PROFILE)
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge, env=env)
+
+    def test_fixtures_never_touch_the_live_forge(self):
+        for path in (self._forge_file(), self._box()):
+            self.assertFalse(path.resolve().is_relative_to(FORGE), path)
 
     def ledger_path(self, box):
         return box / "Method" / ".implementation" / "position.jsonl"
@@ -23119,7 +23133,7 @@ class DefectCommandTests(unittest.TestCase):
         """The bypass, closed (design decision 1): a declaration against an
         already-absent path is refused, never recorded with the sentinel."""
         box = self._box()
-        never = (FORGE / "skills" / "proposal-implementation" / "scripts"
+        never = (self.forge / "skills" / "proposal-implementation" / "scripts"
                 / f"_defect_never_{os.getpid()}_{id(self)}.py")
         self.assertFalse(never.exists())
         proc = self.run_cli("defect", "--target", str(box), "--name", "Method",
@@ -23176,9 +23190,15 @@ class OpenDefectLadderTests(unittest.TestCase):
 
     PROPOSAL_REVISION = "r1.md"
     PROPOSAL_TEXT = "## 1\ntexto\n"
+    PROFILE = FORGE / "skills" / "proposal-implementation" / "impl_profile.py"
 
     def setUp(self):
         self._fixtures = []
+        # A scratch forge, never the live checkout: `init` walks the live
+        # `skills/` tree for its kit while sibling workers run, and a fixture
+        # appearing and vanishing there failed it (#89).
+        self.forge, self.cli = scratch_forge.build(
+            self, None, CLI, prefix="open-defect-ladder-")
 
     def _proposals(self):
         root = Path(tempfile.mkdtemp())
@@ -23188,7 +23208,7 @@ class OpenDefectLadderTests(unittest.TestCase):
 
     def _box(self, committed=True):
         self._box_count = getattr(self, "_box_count", 0) + 1
-        box = (FORGE / "implementations"
+        box = (self.forge / "implementations"
               / f"_e2e_open_defect_ladder_{os.getpid()}_{id(self)}_{self._box_count}")
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
@@ -23218,7 +23238,7 @@ class OpenDefectLadderTests(unittest.TestCase):
         return box
 
     def _forge_file(self, data=b"placeholder = True\n"):
-        path = (FORGE / "skills" / "proposal-implementation" / "scripts"
+        path = (self.forge / "skills" / "proposal-implementation" / "scripts"
                / f"_open_defect_ladder_fixture_{os.getpid()}_{id(self)}_{len(self._fixtures)}.py")
         path.write_bytes(data)
         self.addCleanup(path.unlink, missing_ok=True)
@@ -23227,10 +23247,11 @@ class OpenDefectLadderTests(unittest.TestCase):
 
     def run_cli(self, *args, proposals=None, stdin=None):
         env = dict(os.environ)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.PROFILE)
         if proposals is not None:
             env["IMPLEMENTATION_PROPOSALS"] = str(proposals)
-        return subprocess.run([sys.executable, str(CLI), *args], input=stdin,
-                              capture_output=True, text=True, cwd=FORGE, env=env)
+        return subprocess.run([sys.executable, str(self.cli), *args], input=stdin,
+                              capture_output=True, text=True, cwd=self.forge, env=env)
 
     def _arm(self, box, *, name="Method", session="s1", fixture=None, detail="broken"):
         """Declares a real open defect through the real `defect` subcommand
@@ -23247,6 +23268,10 @@ class OpenDefectLadderTests(unittest.TestCase):
         `defect` event's recorded digest no longer matches -- clears
         without touching the ledger or source-mutating any tested code."""
         fixture.write_bytes(b"placeholder = True  # edited, a different size now\n")
+
+    def test_fixtures_never_touch_the_live_forge(self):
+        for path in (self._forge_file(), self._box()):
+            self.assertFalse(path.resolve().is_relative_to(FORGE), path)
 
     def _step(self, box, name="Method", session="s1", step="anything"):
         return self.run_cli("step", "--target", str(box), "--name", name,
@@ -23416,7 +23441,7 @@ class OpenDefectLadderTests(unittest.TestCase):
         elsewhere = self._box()
         self._arm(elsewhere)
 
-        not_a_repo = (FORGE / "implementations"
+        not_a_repo = (self.forge / "implementations"
                      / f"_e2e_not_a_repo_{os.getpid()}_{id(self)}")
         self.addCleanup(shutil.rmtree, not_a_repo, ignore_errors=True)
         (not_a_repo / "Method").mkdir(parents=True)
@@ -23496,8 +23521,15 @@ class DiagnosticsAnsweringWhileDefectOpenTests(unittest.TestCase):
     non-vacuity companion").
     """
 
+    PROFILE = FORGE / "skills" / "proposal-implementation" / "impl_profile.py"
+
     def setUp(self):
         self._fixtures = []
+        # A scratch forge, never the live checkout: `init` walks the live
+        # `skills/` tree for its kit while sibling workers run, and a fixture
+        # appearing and vanishing there failed it (#89).
+        self.forge, self.cli = scratch_forge.build(
+            self, None, CLI, prefix="open-defect-diagnostics-")
 
     def _proposals(self, revision="r1.md", text="## 1\ntexto\n"):
         root = Path(tempfile.mkdtemp())
@@ -23507,7 +23539,7 @@ class DiagnosticsAnsweringWhileDefectOpenTests(unittest.TestCase):
 
     def _box(self, committed=True):
         self._box_count = getattr(self, "_box_count", 0) + 1
-        box = (FORGE / "implementations"
+        box = (self.forge / "implementations"
               / f"_e2e_open_defect_diag_{os.getpid()}_{id(self)}_{self._box_count}")
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
@@ -23534,7 +23566,7 @@ class DiagnosticsAnsweringWhileDefectOpenTests(unittest.TestCase):
         return box
 
     def _forge_file(self, data=b"placeholder = True\n"):
-        path = (FORGE / "skills" / "proposal-implementation" / "scripts"
+        path = (self.forge / "skills" / "proposal-implementation" / "scripts"
                / f"_open_defect_diag_fixture_{os.getpid()}_{id(self)}_{len(self._fixtures)}.py")
         path.write_bytes(data)
         self.addCleanup(path.unlink, missing_ok=True)
@@ -23545,8 +23577,13 @@ class DiagnosticsAnsweringWhileDefectOpenTests(unittest.TestCase):
         env = dict(os.environ)
         if proposals is not None:
             env["IMPLEMENTATION_PROPOSALS"] = str(proposals)
-        return subprocess.run([sys.executable, str(CLI), *args], input=stdin,
-                              capture_output=True, text=True, cwd=FORGE, env=env)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.PROFILE)
+        return subprocess.run([sys.executable, str(self.cli), *args], input=stdin,
+                              capture_output=True, text=True, cwd=self.forge, env=env)
+
+    def test_fixtures_never_touch_the_live_forge(self):
+        for path in (self._forge_file(), self._box()):
+            self.assertFalse(path.resolve().is_relative_to(FORGE), path)
 
     def _arm(self, box, *, name="Method", session="s1"):
         fixture = self._forge_file()
@@ -23631,6 +23668,14 @@ class HandoffSurfacesOpenDefectsTests(unittest.TestCase):
     additive, never folding forge health into `status`, which keeps meaning
     exactly what it means today -- findings routing."""
 
+    PROFILE = FORGE / "skills" / "proposal-implementation" / "impl_profile.py"
+
+    def setUp(self):
+        # A scratch forge, never the live checkout: `init` walks the live
+        # `skills/` tree for its kit while sibling workers run, and a fixture
+        # appearing and vanishing there failed it (#89).
+        self.forge, self.cli = scratch_forge.build(self, None, CLI, prefix="handoff-defects-")
+
     def _proposals(self, revision="r1.md", text="## 1\ntexto\n"):
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
@@ -23638,7 +23683,7 @@ class HandoffSurfacesOpenDefectsTests(unittest.TestCase):
         return root
 
     def _box(self):
-        box = FORGE / "implementations" / f"_e2e_handoff_defects_{os.getpid()}_{id(self)}"
+        box = self.forge / "implementations" / f"_e2e_handoff_defects_{os.getpid()}_{id(self)}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         (box / "src" / "Method").mkdir(parents=True)
         (box / "src" / "Method" / "__init__.py").write_text("", encoding="utf-8")
@@ -23650,7 +23695,7 @@ class HandoffSurfacesOpenDefectsTests(unittest.TestCase):
         return box
 
     def _forge_file(self, data=b"placeholder = True\n"):
-        path = (FORGE / "skills" / "proposal-implementation" / "scripts"
+        path = (self.forge / "skills" / "proposal-implementation" / "scripts"
                / f"_handoff_defects_fixture_{os.getpid()}_{id(self)}.py")
         path.write_bytes(data)
         self.addCleanup(path.unlink, missing_ok=True)
@@ -23660,8 +23705,13 @@ class HandoffSurfacesOpenDefectsTests(unittest.TestCase):
         env = dict(os.environ)
         if proposals is not None:
             env["IMPLEMENTATION_PROPOSALS"] = str(proposals)
-        return subprocess.run([sys.executable, str(CLI), *args],
-                              capture_output=True, text=True, cwd=FORGE, env=env)
+        env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(self.PROFILE)
+        return subprocess.run([sys.executable, str(self.cli), *args],
+                              capture_output=True, text=True, cwd=self.forge, env=env)
+
+    def test_fixtures_never_touch_the_live_forge(self):
+        for path in (self._forge_file(), self._box()):
+            self.assertFalse(path.resolve().is_relative_to(FORGE), path)
 
     def test_handoff_reports_no_open_defects_when_none_are_declared(self):
         box = self._box()
