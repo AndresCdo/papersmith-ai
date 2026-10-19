@@ -12,7 +12,11 @@ three.js viewer (``assets/atlas3d.bundle.js``, rebuilt with
 ``npm run build:atlas-viewer``) is inlined verbatim and only draws it — no CDN,
 no network at view time. Clicking a planet shows its detail and abstract
 quote; a family filter dims what does not belong; hovering a planet
-highlights its cross-system links; drag orbits, wheel zooms.
+highlights its cross-system links; drag orbits, wheel zooms. An opt-in
+"Disposición de grupos" toggle regroups whole systems by family in the browser
+and restores this precomputed sky when pressed again; framed by the dashboard,
+the page exchanges ``atlas-command`` / ``atlas-layout`` /
+``atlas-planet-selected`` messages with its parent (see the viewer README).
 
 Exit 0 on a written file, 1 when the atlas fails this module's own shape
 read (run the checker first — it names violations, this one only refuses
@@ -234,6 +238,7 @@ h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
 .famchip.on{background:#9b7ede;color:#0a0a10}
 .dot{display:inline-block;width:16px;height:0;border-top:2px solid;margin:0 4px 3px 10px;vertical-align:middle}
 #toolbar button{font-size:13px;margin-right:6px;padding:3px 12px;cursor:pointer;background:#14172a;color:#e4e4ed;border:1px solid #2a3350;border-radius:6px}
+#toolbar button.on{background:#9b7ede;color:#0a0a10;border-color:#9b7ede}
 </style>
 </head>
 <body>
@@ -242,7 +247,7 @@ h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
 <div id="overlay"><div id="modal"><button id="modalclose">close</button><div id="modalbody"></div></div></div>
 <div id="famlegend"><em>Families:</em> <span id="famchips"></span></div>
 <div id="rellegend"><em>Links:</em> <span class="dot" style="border-color:#2ecc71"></span>extends <span class="dot" style="border-color:#5aa9e6"></span>supports <span class="dot" style="border-color:#e65a5a"></span>contradicts <span class="dot" style="border-color:#8a93ad"></span>addresses <span class="dot" style="border-color:#9b7ede;border-top-style:dashed"></span>shared family <span class="dot" style="border-color:#e8b339"></span>yields <span class="dot" style="border-color:#4a5a80"></span>about</div>
-<div id="toolbar"><button id="zoomin">zoom +</button><button id="zoomout">zoom −</button><button id="zoomreset">reset view</button></div>
+<div id="toolbar"><button id="zoomin">zoom +</button><button id="zoomout">zoom −</button><button id="zoomreset">reset view</button><button id="grouplayout">Disposición de grupos</button></div>
 <div id="sky" class="sky"></div>
 <script type="application/json" id="atlas-data">@@DATA@@</script>
 <script>
@@ -305,18 +310,61 @@ function hoverKeep(key) {
   }
   return keep;
 }
+// Framed by the dashboard, the page reports to its parent; opened alone, it
+// posts nothing. Only plain strings cross the frame.
+function tellParent(message) {
+  if (window.parent !== window) window.parent.postMessage(message, '*');
+}
+function reportPlanet(key) {
+  const entry = PLANETS.get(key);
+  if (!entry) return;
+  tellParent({
+    type: 'atlas-planet-selected',
+    key: String(key),
+    label: String(entry.planet.label || ''),
+    slot: String(entry.planet.slot || ''),
+    system: {id: String(entry.system.id), title: String(entry.system.title || '')},
+  });
+}
 const viewer = AtlasViewer.mount(document.getElementById('sky'), SCENE, {
-  onSelect: showPlanet,
+  onSelect: key => { showPlanet(key); reportPlanet(key); },
   onHover: key => { if (viewer) viewer.setDim(key ? hoverKeep(key) : familyKeep()); },
 });
-document.getElementById('zoomin').addEventListener('click', () => viewer && viewer.zoom(1.5));
-document.getElementById('zoomout').addEventListener('click', () => viewer && viewer.zoom(1 / 1.5));
-document.getElementById('zoomreset').addEventListener('click', () => {
+function resetView() {
   if (!viewer) return;
   activeFam = null;
   document.querySelectorAll('.famchip').forEach(c => c.classList.remove('on'));
   viewer.reset();
+}
+const layoutButton = document.getElementById('grouplayout');
+function applyLayout(mode) {
+  if (!viewer) return;
+  const now = viewer.setLayout(mode);
+  layoutButton.classList.toggle('on', now === 'groups');
+  tellParent({type: 'atlas-layout', mode: String(now)});
+}
+function toggleLayout() {
+  if (viewer) applyLayout(viewer.layout() === 'groups' ? 'sky' : 'groups');
+}
+document.getElementById('zoomin').addEventListener('click', () => viewer && viewer.zoom(1.5));
+document.getElementById('zoomout').addEventListener('click', () => viewer && viewer.zoom(1 / 1.5));
+document.getElementById('zoomreset').addEventListener('click', resetView);
+layoutButton.addEventListener('click', toggleLayout);
+// Dashboard commands: only from the framing parent, only the named few.
+const COMMANDS = {
+  'group-layout': () => applyLayout('groups'),
+  'sky-layout': () => applyLayout('sky'),
+  'toggle-layout': toggleLayout,
+  'reset': resetView,
+};
+window.addEventListener('message', event => {
+  if (!(event.source === window.parent) || window.parent === window) return;
+  const data = event.data;
+  if (!data || typeof data !== 'object' || data.type !== 'atlas-command') return;
+  if (typeof data.command !== 'string' || !Object.prototype.hasOwnProperty.call(COMMANDS, data.command)) return;
+  COMMANDS[data.command]();
 });
+if (viewer) tellParent({type: 'atlas-layout', mode: String(viewer.layout())});
 const chips = document.getElementById('famchips');
 const fams = {};
 ATLAS.systems.forEach(s => s.planets.forEach(p => {
