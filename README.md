@@ -664,7 +664,7 @@ to establish it. The operator opens and closes the gates.
 | `experiments-walk` | The walk of the protocol, with the same gates and the same stop at the rehearsal. | `experimental-implementation` |
 | `paper-ingestion` | Turns a paper into the form in which it can really be used: LaTeX equations, tables as tables, figures as files. Stages: `filed`, `extracted`, `readable`. It asks nobody anything. | `paper-ingestion` |
 | `contract-auditor` | Reads the `## Disqualifiers` of a contract, literally, and judges a draft block against each one: `fires`/`clear`/`undecidable`, with the passage quoted in each `fires`. | `paper-writing` |
-| `redactor` | Writes the LaTeX of a block from exactly four inputs (the contract's prose, its evidence set, its mode and its style set) and returns a binding map: where each sentence comes from. | `paper-writing` |
+| `redactor` | Writes the LaTeX of a block from exactly five inputs (the contract's prose, its evidence set, its mode, its style set and its own bound source sections) and returns a binding map: where each sentence comes from. | `paper-writing` |
 | `style-sampler` | Resolves the equivalent block, complete, in each style folder of `guidance/` and returns it verbatim, never trimmed. It is the only material an overlap check can compare. | `paper-writing` |
 | `diagram-author` | Writes a standalone TikZ diagram (`<id>.tex` + `<id>.diagram.json`) and compiles it in its own loop, up to the repair budget. It never draws a chart from measured numbers — that is the `place` verb. | `paper-writing` |
 | `figure-auditor` | Compares the components declared in the manifest against the section's prose and the pipeline steps; reports a structured verdict. | `paper-writing` |
@@ -2750,7 +2750,7 @@ nothing was asserted without a run having checked it.
   certifies that no module under `scripts/` imports `subprocess`, `os.system`,
   `os.popen`, `os.exec*` or `multiprocessing` — with one named exception, currently
   unused, reserved for `latexmk`. `write` cannot run unattended by construction: the
-  orchestrating agent assembles the redactor's four inputs, delegates, writes the
+  orchestrating agent assembles the redactor's five inputs, delegates, writes the
   JSON to a file, and only then runs `write --draft <path> --audit <path>`.
 - **A single re-draft, counted on disk.** `AUDIT_EXHAUSTED` refuses a third attempt
   under the same contract/evidence/mode — the count lives in a file ledger, not in
