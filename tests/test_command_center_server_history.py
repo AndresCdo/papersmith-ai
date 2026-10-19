@@ -52,20 +52,9 @@ class _Workspace(unittest.TestCase):
         (root / "sections").mkdir(parents=True)
         return root
 
-    @staticmethod
-    def flush(app, changed: Path) -> list[dict]:
-        async def scenario() -> list[dict]:
-            bus = app.state.bus
-            bus.bind_loop(asyncio.get_running_loop())
-            queue = bus.subscribe()
-            app.state.watcher.on_flush([changed])
-            await asyncio.sleep(0.1)
-            events = []
-            while not queue.empty():
-                events.append(await queue.get())
-            return events
-
-        return asyncio.run(scenario())
+    @classmethod
+    def flush(cls, app, changed: Path) -> list[dict]:
+        return cls.published(app, lambda: app.state.watcher.on_flush([changed]))
 
     @staticmethod
     def published(app, action) -> list[dict]:
