@@ -209,6 +209,21 @@ class HistoryRecordingTests(_Workspace):
 
         assert events == []
 
+    def test_every_new_measurement_is_broadcast_with_or_without_a_change(self) -> None:
+        """The first measurement and an unchanged re-measure are new values too:
+        each is broadcast, though only a status change goes to History."""
+        app = server.create_app(self.new_workspace(), health_ttl=0.0)
+
+        def measure_twice() -> None:
+            app.state.measure_health()
+            app.state.measure_health()
+
+        with mock.patch.object(server, "get_wiring_health",
+                               side_effect=[_health("HEALTHY"), _health("HEALTHY")]):
+            events = self.published(app, measure_twice)
+
+        assert [e["event"] for e in events] == ["health_update", "health_update"]
+
     def test_a_health_path_flush_broadcasts_its_measurement_once(self) -> None:
         root = self.new_workspace()
         (root / ".claude" / "agents").mkdir(parents=True)

@@ -253,9 +253,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     record(history.diff_health(cached, value))
                 except Exception:  # noqa: BLE001
                     _log.exception("history: recording a health change failed")
-            # Every new measurement reaches every dashboard, forced or taken by
-            # a read past the TTL, after the History entry it caused. Under the
-            # lock, two measurements' frames go out in the order they were taken.
+            # Publish every new measurement, forced or taken by a read past the
+            # TTL, to every subscriber, after the History entry it caused. Under
+            # the lock, two measurements' frames go out in the order taken.
             bus.publish("health_update", value)
             return value
 
