@@ -588,10 +588,15 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: holder's scaffold with the splice instead of first; the two copies of the
 #: comment explaining the early creation write are gone. Three SHRANK,
 #: deliberately: `before` 263->261, `empty` 132->131, `write` 156->154.
+#: #84 (a revision's identity is its bytes): `close`, like `gate`, names
+#: the cause when its stale position's stored digest names the decoded text
+#: of the revision rather than its bytes, read off its own `before` state
+#: (`before.get("textOnlyMatch")`, `before["textOnlyMatch"]`). One GREW,
+#: deliberately: `before` 261->263.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 48,
-    "audit": 19, "before": 261, "benchmark": 108, "beside": 111,
+    "audit": 19, "before": 263, "benchmark": 108, "beside": 111,
     "check": 168, "checkable": 3, "claim": 41, "command": 276,
     "commands": 18, "compares": 25, "declaration": 212,
     "destinations": 36, "empty": 131, "established": 5, "experiment": 25,

@@ -28,6 +28,7 @@ import fnmatch
 import functools
 import hashlib
 import importlib.util
+import io
 import json
 import keyword
 import os
@@ -704,11 +705,13 @@ def _bound_to(revision: str | None, source: str | None,
     second copy drifting beside it. Neither `revision` nor `source`
     resolved (the common `probe` without `--revision` shape) answers
     `unknown` rather than guessing at a hash nobody could compute.
+
+    A revision of zero bytes is resolved, never `unknown`: it has an
+    identity like any other (#84).
     """
-    if not revision or not source:
+    if not revision or source is None:
         return "unknown"
-    current_sha = hashlib.sha256(source.encode("utf-8")).hexdigest()
-    return "current" if block_sha256 == current_sha else "stale"
+    return "current" if block_sha256 == revision_identity(source) else "stale"
 
 
 def _header_document_count_detail(block: dict) -> str | None:
@@ -979,6 +982,14 @@ def position_state(target: Path, name: str, evidence: dict,
     # is bound to. Neither `revision` nor `source` resolved this invocation
     # (probe without `--revision`, most commonly) reports `unknown` rather
     # than guessing at a hash nobody could compute.
+    # #84: the documents with a stored digest that names only the decoded
+    # text of their revision, never its bytes -- `stale` either way; this says why,
+    # so a binding taken over the text never reads as bytes that moved.
+    # Present only when some document needs it: every other reading stays
+    # byte-identical.
+    text_only = ([DOCUMENTS[0]["label"]]
+                 if revision and matches_text_only(block["revisionSha256"], source)
+                 else [])
     if multi:
         # Cut 3 (D2/C1): a mapping across every declared document, keyed by
         # label. Document 0 reads `block["revisionSha256"]`, exactly as the
@@ -1013,6 +1024,8 @@ def position_state(target: Path, name: str, evidence: dict,
                 continue
             bound_to[label] = _bound_to(
                 revision, extra_source, entry.get("revisionSha256"))
+            if revision and matches_text_only(entry.get("revisionSha256"), extra_source):
+                text_only.append(label)
     else:
         bound_to = _bound_to(revision, source, block["revisionSha256"])
 
@@ -1029,6 +1042,7 @@ def position_state(target: Path, name: str, evidence: dict,
         "status": status, "holder": str(path.relative_to(target)),
         "revision": block["revision"], "revisionSha256": block["revisionSha256"],
         "boundTo": bound_to, "sequence": sequence,
+        **({"textOnlyMatch": text_only} if text_only else {}),
         "disagreements": disagreements, "unmeasured": unmeasured,
         "unbacked": unbacked,
         # Los ítems que no pueden tildarse jamás, distinguidos de los que
@@ -5947,7 +5961,95 @@ def proposals_root(index: int = 0) -> Path:
 MANAGED_ARTIFACT_MARKER = b"<!-- proposal-workspace:artifact:v1 -->\n"
 
 
-def revision_source(revision: str | None, index: int = 0) -> str | None:
+class RevisionText(str):
+    """A revision's text as the parsers read it, carrying the SHA-256 of the
+    bytes it was decoded from (#84).
+
+    The text is the tolerant reading every parser here has always had:
+    UTF-8 with undecodable bytes replaced, and universal newlines (CRLF and
+    a lone CR read as LF). That folding serves the readers -- section
+    diffs, tags, findings -- and is not the revision's identity: two files
+    that differ only in line endings, or in which byte failed to decode,
+    read as one text and are still two revisions. `sha256` names the bytes,
+    the file as it sits on disk (a checkout that rewrites line endings
+    rewrites them too).
+
+    Text and digest come from one read of one file. A caller that reads a
+    revision twice holds two carriers, so this is no snapshot spanning a
+    whole call. Any str operation (`strip`, slicing, concatenation) gives a
+    plain str and drops the digest: hash the carrier itself, through
+    `revision_identity`.
+    """
+
+    def __new__(cls, text: str, sha256: str) -> "RevisionText":
+        carrier = super().__new__(cls, text)
+        carrier._sha256 = sha256
+        return carrier
+
+    @classmethod
+    def read(cls, path: Path) -> "RevisionText":
+        data = path.read_bytes()
+        # The pipeline `Path.read_text(encoding="utf-8", errors="replace")`
+        # runs, over the bytes already in hand, so the text is unchanged.
+        text = io.TextIOWrapper(io.BytesIO(data), encoding="utf-8",
+                                errors="replace").read()
+        return cls(text, hashlib.sha256(data).hexdigest())
+
+    @property
+    def sha256(self) -> str:
+        return self._sha256
+
+
+def revision_identity(source: str) -> str:
+    """The identity a binding stores for `source` (#84): the SHA-256 of the
+    bytes it was read from. A `RevisionText` carries them. A plain str has
+    no file behind it -- an in-memory text, as tests hand `position_state`
+    -- and its one byte form is its UTF-8 encoding: a convention for such
+    texts, never proof about a file."""
+    if isinstance(source, RevisionText):
+        return source.sha256
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def matches_text_only(stored: str | None, source: str | None) -> bool:
+    """Whether a stored digest names `source`'s decoded text but not its
+    bytes (#84). Every binding held exactly that while identities were taken
+    over the decoded text, for a file with line endings or undecodable bytes
+    that decoding folds away; a byte digest becomes it too once the file's
+    bytes change in a way decoding folds away (its line endings, or a
+    literal U+FFFD turned into a byte that does not decode). The two cannot
+    be told apart and both need the same fresh binding, so this is a cause
+    to name, never a state: the freshness verdict stays `stale`."""
+    if stored is None or source is None:
+        return False
+    return (stored != revision_identity(source)
+            and stored == hashlib.sha256(source.encode("utf-8")).hexdigest())
+
+
+def _text_only_cause(labels: list[str]) -> str:
+    """Why a position binding that `matches_text_only` reads `stale`,
+    naming its documents: the sentence `POSITION_STALE` opens with instead
+    of the moved-bytes one, false for a file with bytes that never moved."""
+    return ("the position section's stored digest for "
+            f"{', '.join(repr(label) for label in labels)} names the decoded "
+            "text of that revision, not its bytes: it was taken while "
+            "bindings hashed the text, or the file's bytes changed since in "
+            "a way its decoded text does not show (line endings, or a byte "
+            "that does not decode).")
+
+
+def _ruling_text_only_detail(revision: str | None, label: str | None = None) -> str:
+    """`admissibility_record`'s `stale` detail for a ruling that
+    `matches_text_only`: the cause, then `admit`, which binds the bytes."""
+    subject = f"{revision} for {label}" if label else f"{revision}"
+    return (f"the ruling on {subject} holds a digest of its decoded text, "
+            "not its bytes: it was taken while rulings hashed the text, or "
+            "its bytes changed since in a way its decoded text does not show "
+            "(line endings, or a byte that does not decode); run `admit` "
+            "again to bind the bytes")
+
+
+def revision_source(revision: str | None, index: int = 0) -> RevisionText | None:
     """The text of the file NAMED `revision`, read from document `index`'s
     own directory (document 0 by default -- byte-identical to this
     function's pre-`each-document-names-its-own-revision` shape). A dumb
@@ -5959,13 +6061,16 @@ def revision_source(revision: str | None, index: int = 0) -> str | None:
     document's root (`a-revision-is-two-documents`, Cut 3). That claim was
     the defect: the two real publishers never share a filename convention,
     so it could never hold outside a fixture written to satisfy it.
+
+    It returns a `RevisionText`: the text every parser reads, carrying the
+    SHA-256 of the file's bytes -- the identity a binding stores (#84).
     """
     if not revision:
         return None
     path = proposals_root(index) / revision
     if not path.exists():
         return None
-    return path.read_text(encoding="utf-8", errors="replace")
+    return RevisionText.read(path)
 
 
 def _extra_document_revisions(revision: str | None) -> list[dict]:
@@ -6013,7 +6118,7 @@ def _extra_document_revisions(revision: str | None) -> list[dict]:
                 f"{proposals_root(index)}) has no readable revision: "
                 f"{cause}. Publish a revision there before this binding "
                 "can be recorded.")
-        sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+        sha256 = revision_identity(source)
         entries.append({
             "label": DOCUMENTS[index]["label"], "revision": name,
             "sha256": sha256,
@@ -10261,7 +10366,7 @@ def cmd_admit(args: argparse.Namespace) -> dict:
 
     record = {
         "revision": args.revision,
-        "revisionSha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "revisionSha256": revision_identity(source),
         "findings": verdicts,
         # Additive (Cut 3, `a-revision-is-two-documents`, D5): the scalar
         # keys above keep naming document 0, byte-identical under one
@@ -10307,7 +10412,7 @@ def _admit_no_findings(target: Path, revision: str, source: str) -> dict:
     """
     record = {
         "revision": revision,
-        "revisionSha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "revisionSha256": revision_identity(source),
         "findings": {},
         "noFindings": True,
         **({"documents": _admissibility_extra_documents(revision)}
@@ -10431,7 +10536,10 @@ def admissibility_record(target: Path, revision: str | None) -> dict:
     if "revisionSha256" in record:
         source = revision_source(revision)
         if source is not None:
-            current = hashlib.sha256(source.encode("utf-8")).hexdigest()
+            current = revision_identity(source)
+            if matches_text_only(record.get("revisionSha256"), source):
+                return {"status": "stale",
+                        "detail": _ruling_text_only_detail(record.get("revision"))}
             if record.get("revisionSha256") != current:
                 return {"status": "stale",
                         "detail": f"ruled against {record.get('revision')}, "
@@ -10466,8 +10574,11 @@ def admissibility_record(target: Path, revision: str | None) -> dict:
                                 "detail": f"{label!r}'s text could not be "
                                           "found; its freshness cannot be "
                                           "known"}
-                    extra_current = hashlib.sha256(
-                        extra_source.encode("utf-8")).hexdigest()
+                    extra_current = revision_identity(extra_source)
+                    if matches_text_only(entry.get("revisionSha256"), extra_source):
+                        return {"status": "stale",
+                                "detail": _ruling_text_only_detail(
+                                    entry.get("revision"), entry.get("label"))}
                     if entry.get("revisionSha256") != extra_current:
                         return {
                             "status": "stale",
@@ -13458,7 +13569,7 @@ def cmd_position(args: argparse.Namespace) -> dict:
             "REVISION_UNREADABLE",
             f"{args.revision!r} is not readable under {proposals_root()}; "
             "the position header cannot be bound to a revision.")
-    revision_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    revision_sha256 = revision_identity(source)
 
     # Declared-name lookup runs ahead of the by-shape glob
     # (`the-holder-each-skill-declares`, design D3, D8): the declared file
@@ -16818,7 +16929,7 @@ def cmd_gate(args: argparse.Namespace) -> dict:
             "REVISION_UNREADABLE",
             f"{args.revision!r} is not readable under {proposals_root()}; "
             "a gate cannot be recorded against a revision that cannot be read.")
-    revision_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    revision_sha256 = revision_identity(source)
 
     evidence = _position_write_evidence(target, name)
     position = position_state(target, name, evidence, args.revision, source,
@@ -16860,6 +16971,13 @@ def cmd_gate(args: argparse.Namespace) -> dict:
                 "`position` (--sequence or --reconcile) before a launch can be "
                 "gated against it.")
         if code == "POSITION_STALE":
+            if position.get("textOnlyMatch"):
+                raise Refused(
+                    "POSITION_STALE",
+                    _text_only_cause(position["textOnlyMatch"])
+                    + " Run `position` again to bind the bytes; a launch also "
+                    "needs a fresh authorization from `offer`, since a token "
+                    "taken over the text fails this re-derivation.")
             raise Refused(
                 "POSITION_STALE",
                 "the position section is bound to a revision whose bytes no "
@@ -17398,7 +17516,7 @@ def cmd_offer(args: argparse.Namespace) -> dict:
             f"{args.revision!r} is not readable under {proposals_root()}; "
             "offer cannot publish an action set against a revision that "
             "cannot be read.")
-    revision_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    revision_sha256 = revision_identity(source)
 
     ledger_path = target / name / ".implementation" / "position.jsonl"
     events = impl_position.read_events(ledger_path)
@@ -17617,7 +17735,7 @@ def cmd_close(args: argparse.Namespace) -> dict:
             f"{args.revision!r} is not readable under {proposals_root()}; "
             "close cannot require a position true against a revision that "
             "cannot be read.")
-    revision_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    revision_sha256 = revision_identity(source)
 
     evidence = _position_write_evidence(target, name)
     before = position_state(target, name, evidence, args.revision, source,
@@ -17645,6 +17763,11 @@ def cmd_close(args: argparse.Namespace) -> dict:
                 "close can require it true. A target that declares no flow "
                 "at all closes without a position.")
         if code == "POSITION_STALE":
+            if before.get("textOnlyMatch"):
+                raise Refused(
+                    "POSITION_STALE",
+                    _text_only_cause(before["textOnlyMatch"])
+                    + " Run `position` again to bind the bytes, then close.")
             raise Refused(
                 "POSITION_STALE",
                 "the position section is bound to a revision whose bytes no "

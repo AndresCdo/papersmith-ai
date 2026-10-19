@@ -1266,6 +1266,23 @@ what makes a clean `verify` mean something: a revision can be rewritten in place
 under the same filename, and only the hash catches that. `revision` names the
 file; `revisionSha256` says which bytes.
 
+Those are the bytes of the file as it sits in the working tree, hashed before
+any decoding. The parsers read a tolerant text of the same file (UTF-8 with
+undecodable bytes replaced, every line ending read as LF), but that text is not
+the identity: two files that differ only in line endings, or in an undecodable
+byte, are two revisions, and a binding to one is `stale` against the other. A
+checkout that rewrites line endings (`core.autocrlf`) rewrites the bytes too.
+Bindings taken before this rule hashed the decoded text. For a file with LF
+lines in valid UTF-8 that is the same digest, so those records hold as they
+did. For any other file the binding reads `stale`, and `probe`/`verify` add
+`textOnlyMatch`: the labels of the documents whose stored digest names the
+decoded text rather than the bytes. That has two causes the engine cannot tell
+apart: a binding taken while bindings hashed the text, or a file whose bytes
+changed since in a way its decoded text does not show (line endings, or a byte
+that does not decode). Either way, running `position` again rebinds it; `offer`
+mints the fresh authorization a launch needs, and `admit` rebinds a ruling
+whose `stale` detail says the same.
+
 `status` is `"written"` only when something actually moved — a mark flipped, or
 the header rebound to a different revision. Nothing to flip and nothing to
 rebind reports `"unchanged"` and touches neither the file nor the ledger:

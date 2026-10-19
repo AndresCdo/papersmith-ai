@@ -1656,6 +1656,41 @@ class PerDocumentCitationImpactClassTests(unittest.TestCase):
         # reads `local` instead -- red against the shipped engine.
         self.assertEqual(impact_class["experiments"], "structural")
 
+    def test_document_one_ruling_binds_its_bytes(self):
+        """#84, a document beyond the first: `admit` stores the digest of
+        document 1's bytes, never of its decoded text, and `verify` names a
+        ruling taken over that text instead of calling its bytes moved."""
+        revision_1 = self.doc1 / self.REVISION_1
+        crlf = self.REVISION_1_TEXT.replace("\n", "\r\n").encode("utf-8")
+
+        def admit():
+            proc = self.run_cli(
+                "admit", "--target", str(self.box), "--name", self.PACKAGE,
+                "--revision", self.REVISION)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            record = json.loads(
+                (self.box / "tests" / "admissibility.json").read_text(encoding="utf-8"))
+            return {entry["label"]: entry["revisionSha256"] for entry in record["documents"]}
+
+        def admissibility():
+            proc = self.run_cli(
+                "verify", "--target", str(self.box), "--name", self.PACKAGE,
+                "--revision", self.REVISION)
+            return json.loads(proc.stdout)["audit"]["admissibility"]
+
+        revision_1.write_bytes(crlf)
+        self.assertEqual(admit(), {"experiments": hashlib.sha256(crlf).hexdigest()})
+        self.assertEqual(admissibility()["status"], "present")
+
+        # Bound to LF, then turned CRLF: the stored digest is the digest of
+        # the text the CRLF bytes decode to, and the stale detail says so.
+        revision_1.write_text(self.REVISION_1_TEXT, encoding="utf-8")
+        admit()
+        revision_1.write_bytes(crlf)
+        stale = admissibility()
+        self.assertEqual(stale["status"], "stale", stale)
+        self.assertIn("for experiments holds a digest of its decoded text", stale["detail"])
+
 
 _Y9_OLD = "for match in pattern.finditer(source):"
 _Y9_MUTATED = "for match in CITATION_RE.finditer(source):"
