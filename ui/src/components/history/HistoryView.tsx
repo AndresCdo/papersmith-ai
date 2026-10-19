@@ -5,9 +5,9 @@ import HistoryList from './HistoryList';
 interface Props {
   history: HistoryState;
   error: string | null;
-  /** Element ids in the current diagram; null while the workspace state is unknown. */
+  /** Element ids either flow draws now; null while the workspace state is unknown. */
   presentIds: ReadonlySet<string> | null;
-  /** Open an element in the pipeline tab. */
+  /** Open an element in the flow that draws it. */
   onSelect: (elementId: string) => void;
 }
 

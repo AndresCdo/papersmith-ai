@@ -62,7 +62,7 @@ function Connections({ id, graph, onSelect }: { id: string; graph: GraphModel; o
 }
 
 /**
- * Drawer for the element selected in the pipeline diagram. Non-modal (the
+ * Drawer for the element selected in either flow's diagram. Non-modal (the
  * canvas stays clickable), owns the single Escape listener, moves focus into
  * itself on open and returns it to the previously focused element on close.
  */

@@ -6,7 +6,7 @@ import { useDecisions } from './hooks/useDecisions';
 import { useTheme } from './hooks/useTheme';
 import PipelineGraph from './components/dag/PipelineGraph';
 import ElementDetailPanel from './components/dag/ElementDetailPanel';
-import { buildGraph } from './components/dag/graph';
+import { buildGraph, flowOf } from './components/dag/graph';
 import HarnessStatus from './components/health/HarnessStatus';
 import WiringMatrix from './components/health/WiringMatrix';
 import DiagnosticLog from './components/health/DiagnosticLog';
@@ -108,11 +108,18 @@ export default function App() {
   // The detail panel and the deep links are shared, so the active tab decides
   // which flow an element id resolves against.
   const graph = tab === 'writing' ? writingGraph : pipelineGraph;
-  const presentIds = useMemo(() => new Set(graph.nodes.map((node) => node.id)), [graph]);
   const selectElement = useCallback(
     (id: string | null) => navigate(tab === 'writing' ? 'writing' : 'pipeline', id),
     [navigate, tab],
   );
+  // History rows name elements of both flows, and a section is drawn by the
+  // writing flow only: the History tab judges presence against both flows and
+  // opens each element in the flow that draws it.
+  const historyPresentIds = useMemo(
+    () => new Set([...pipelineGraph.nodes, ...writingGraph.nodes].map((node) => node.id)),
+    [pipelineGraph, writingGraph],
+  );
+  const openFromHistory = useCallback((id: string) => navigate(flowOf(id), id), [navigate]);
 
   const selectTab = useCallback((next: TabId) => navigate(next), [navigate]);
 
@@ -275,7 +282,7 @@ export default function App() {
         {tab === 'sections' ? <SectionMatrix sections={state?.sections ?? []} /> : null}
 
         {tab === 'history' ? (
-          <HistoryView history={history} error={historyError} presentIds={state === null ? null : presentIds} onSelect={selectElement} />
+          <HistoryView history={history} error={historyError} presentIds={state === null ? null : historyPresentIds} onSelect={openFromHistory} />
         ) : null}
 
         {tab === 'preview' ? (

@@ -4,7 +4,7 @@ interface Props {
   rows: DisplayRow[];
   /** Show the element of each row as a link; the element panel hides it. */
   showElement: boolean;
-  /** Element ids that exist in the current diagram. */
+  /** Element ids the flows draw now; a row naming any other element reads "No longer present". */
   presentIds?: ReadonlySet<string>;
   onSelect?: (elementId: string) => void;
 }

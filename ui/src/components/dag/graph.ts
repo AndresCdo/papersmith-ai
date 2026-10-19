@@ -17,6 +17,11 @@ import { formatCount } from '../../lib/format';
  */
 export type FlowId = 'pipeline' | 'writing';
 
+/** The flow that draws an element: a section is the writing flow's, any other element the pipeline's. */
+export function flowOf(elementId: string): FlowId {
+  return elementId.startsWith('section:') ? 'writing' : 'pipeline';
+}
+
 export type AnyFlowNode = Node<Record<string, unknown>>;
 
 function stageIsMutating(stage: PipelineStage): boolean {

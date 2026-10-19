@@ -245,6 +245,63 @@ describe('App', () => {
       expect(panel).toHaveTextContent('Gate writing-readiness: PASSED -> BLOCKED');
     });
 
+    // #83: a section is drawn by the writing flow only, so the History tab
+    // must not judge its presence against the pipeline flow, nor open it there.
+    const withHistory = (entries: unknown[]) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.includes('/api/health')
+            ? jsonResponse({ overall: 'WIRED' })
+            : url.startsWith('/api/history')
+              ? jsonResponse({ boot_id: 'b', entries, has_more: false, reset: false, gap: false })
+              : jsonResponse(diagramState),
+        ),
+      );
+    const sectionEntry = (elementId: string, summary: string) => ({
+      id: `b-${elementId}`, boot_id: 'b', seq: 1, ts: 1_700_000_000, kind: 'section_status',
+      element_id: elementId, summary, before: null, after: null,
+    });
+
+    it('keeps a present section row unmarked and opens it in the writing tab', async () => {
+      withHistory([sectionEntry('section:Related Work', 'Section Related Work: OUTLINED -> DRAFTING')]);
+      window.history.replaceState(null, '', '#history');
+      render(<App />);
+      const row = await screen.findByRole('button', { name: 'section:Related Work' });
+      await waitFor(() => expect(document.body.dataset.ready).toBe('1'));
+      expect(screen.queryByText('No longer present')).not.toBeInTheDocument();
+      await userEvent.click(row);
+      const panel = await screen.findByTestId('element-detail-panel');
+      expect(window.location.hash).toBe('#writing?el=section%3ARelated%20Work');
+      expect(panel).not.toHaveTextContent('No longer present');
+      expect(panel).toHaveTextContent('Section Related Work: OUTLINED -> DRAFTING');
+    });
+
+    it('marks a vanished section row, keeps what it recorded and opens it in the writing tab', async () => {
+      withHistory([sectionEntry('section:Gone', 'Section Gone: DRAFTING -> SEALED')]);
+      window.history.replaceState(null, '', '#history');
+      render(<App />);
+      const row = await screen.findByRole('button', { name: 'section:Gone' });
+      await waitFor(() => expect(document.body.dataset.ready).toBe('1'));
+      expect(screen.getByText('No longer present')).toBeInTheDocument();
+      expect(screen.getByText('Section Gone: DRAFTING -> SEALED')).toBeInTheDocument();
+      await userEvent.click(row);
+      const panel = await screen.findByTestId('element-detail-panel');
+      expect(window.location.hash).toBe('#writing?el=section%3AGone');
+      expect(panel).toHaveTextContent('No longer present in the latest state.');
+      expect(panel).toHaveTextContent('Section Gone: DRAFTING -> SEALED');
+    });
+
+    it('says a present section has no recorded history rather than inventing one', async () => {
+      withHistory([]);
+      window.history.replaceState(null, '', '#writing?el=section%3ARelated%20Work');
+      render(<App />);
+      const panel = await screen.findByTestId('element-detail-panel');
+      await waitFor(() => expect(document.body.dataset.ready).toBe('1'));
+      expect(panel).not.toHaveTextContent('No longer present');
+      expect(panel).toHaveTextContent('No changes recorded for this element since the dashboard started.');
+    });
+
     it('selecting writes the hash, closing clears it', async () => {
       withDiagram();
       window.history.replaceState(null, '', '#pipeline');
