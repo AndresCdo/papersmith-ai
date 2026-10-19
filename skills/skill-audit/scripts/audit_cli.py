@@ -2202,10 +2202,10 @@ def run_sensitivity(args):
     need a hand-written roster of documented dependencies, the exact
     second roster this skill refuses everywhere else.
 
-    Exit `0` for any verdict, a `not adjudicable` finding included, and
-    the degenerate "this subject declares no computed values" result.
-    Exit `2` only when the tool could not look: an occupied box, a
-    stalled control, a restore mismatch, or an escape.
+    Exit `0` for any verdict, a `not adjudicable` finding included.
+    Exit `2` only when the tool could not look: no declared computed
+    values, an occupied box, a stalled control, a refused baseline, a
+    restore mismatch, or an escape.
     """
     spec_path = Path(args.spec)
     if not spec_path.is_file():
