@@ -93,7 +93,11 @@ describe('useWorkspaceEvents load ordering', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) =>
-        url.includes('/api/health') ? Promise.resolve(jsonResponse({ overall: 'WIRED' })) : state.promise,
+        url === '/api/state'
+          ? state.promise
+          : url.startsWith('/api/history')
+            ? Promise.resolve(jsonResponse({ boot_id: 'b', entries: [], has_more: false, reset: false, gap: false }))
+            : Promise.resolve(jsonResponse({ overall: 'WIRED' })),
       ),
     );
     const { result } = renderHook(() => useWorkspaceEvents());
@@ -219,5 +223,156 @@ describe('useWorkspaceEvents history', () => {
     const { result } = renderHook(() => useWorkspaceEvents());
     await waitFor(() => expect(result.current.historyError).toMatch(/422/));
     expect(result.current.history.entries).toEqual([]);
+  });
+});
+
+// #83: the server sends no state on connect, so a change made while the stream
+// was down reaches the client only if the client asks for a snapshot itself.
+describe('useWorkspaceEvents reconnect', () => {
+  beforeEach(() => {
+    FakeEventSource.instances = [];
+    vi.stubGlobal('EventSource', FakeEventSource);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  type Answer = () => Response | Promise<Response>;
+
+  /** Routes `/api/state` to `answer`, the wiring health to `health`, history to an empty page; counts the state requests. */
+  function stubState(answer: Answer, health: Answer = () => jsonResponse({ overall: 'WIRED' })) {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/state') return answer();
+      if (url.startsWith('/api/history')) {
+        return jsonResponse({ boot_id: 'b', entries: [], has_more: false, reset: false, gap: false });
+      }
+      return health();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return () => fetchMock.mock.calls.filter(([url]) => url === '/api/state').length;
+  }
+
+  it('refetches the state when the stream reopens and applies it without a new event', async () => {
+    let marker = 'before';
+    const stateCalls = stubState(() => jsonResponse({ marker }));
+    const { result } = renderHook(() => useWorkspaceEvents());
+    const source = FakeEventSource.instances[0];
+    act(() => source.emit('open', {}));
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'before' }));
+    act(() => source.emit('error', {}));
+    expect(result.current.connected).toBe(false);
+    marker = 'after'; // the workspace changed while the stream was down
+    const asked = stateCalls();
+    act(() => source.emit('open', {}));
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'after' }));
+    expect(result.current.connected).toBe(true);
+    expect(stateCalls()).toBe(asked + 1);
+  });
+
+  it('keeps a state_update that lands while an open snapshot is in flight', async () => {
+    const snapshot = deferred<Response>();
+    let calls = 0;
+    stubState(() => (++calls === 1 ? jsonResponse({ marker: 'initial' }) : snapshot.promise));
+    const { result } = renderHook(() => useWorkspaceEvents());
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'initial' }));
+    const source = FakeEventSource.instances[0];
+    act(() => source.emit('open', {}));
+    act(() => source.emit('state_update', { state: { marker: 'live' }, changed: [] }));
+    expect(result.current.state).toEqual({ marker: 'live' });
+    await act(async () => {
+      snapshot.resolve(jsonResponse({ marker: 'older-snapshot' }));
+    });
+    expect(result.current.state).toEqual({ marker: 'live' });
+  });
+
+  it('lets the newest snapshot win when two answer out of order', async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    let calls = 0;
+    stubState(() => (++calls === 1 ? first.promise : second.promise));
+    const { result } = renderHook(() => useWorkspaceEvents());
+    act(() => FakeEventSource.instances[0].emit('open', {}));
+    await act(async () => {
+      second.resolve(jsonResponse({ marker: 'newer' }));
+    });
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'newer' }));
+    await act(async () => {
+      first.resolve(jsonResponse({ marker: 'older' }));
+    });
+    expect(result.current.state).toEqual({ marker: 'newer' });
+    expect(result.current.loading).toBe(false);
+  });
+
+  // The server may compute requests in any order: an older request delayed on
+  // its way in can be computed after the latest one. Applying it when it
+  // arrives first would let the latest answer move the dashboard backwards.
+  it('never applies an older request answer, even when it arrives first', async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    let calls = 0;
+    stubState(() => (++calls === 1 ? first.promise : second.promise));
+    const { result } = renderHook(() => useWorkspaceEvents());
+    act(() => FakeEventSource.instances[0].emit('open', {}));
+    await act(async () => {
+      first.resolve(jsonResponse({ marker: 'mount request' }));
+    });
+    expect(result.current.state).toBeNull();
+    expect(result.current.loading).toBe(true);
+    await act(async () => {
+      second.resolve(jsonResponse({ marker: 'open request' }));
+    });
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'open request' }));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('reports a failed reopen snapshot until the next open brings one', async () => {
+    let answer = (): Response => jsonResponse({ marker: 'before' });
+    stubState(() => answer());
+    const { result } = renderHook(() => useWorkspaceEvents());
+    const source = FakeEventSource.instances[0];
+    act(() => source.emit('open', {}));
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'before' }));
+    answer = () => new Response('boom', { status: 500 });
+    act(() => source.emit('open', {}));
+    await waitFor(() => expect(result.current.error).toMatch(/could not load \/api\/state/));
+    expect(result.current.state).toEqual({ marker: 'before' });
+    answer = () => jsonResponse({ marker: 'after' });
+    act(() => source.emit('open', {}));
+    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(result.current.state).toEqual({ marker: 'after' }));
+    expect(result.current.error).toBeNull();
+  });
+
+  it('refetches the health when the stream reopens and applies it without a new event', async () => {
+    let overall = 'WIRED';
+    stubState(() => jsonResponse({ marker: 'state' }), () => jsonResponse({ overall }));
+    const { result } = renderHook(() => useWorkspaceEvents());
+    const source = FakeEventSource.instances[0];
+    act(() => source.emit('open', {}));
+    await waitFor(() => expect(result.current.health).toEqual({ overall: 'WIRED' }));
+    act(() => source.emit('error', {}));
+    overall = 'DEGRADED'; // the wiring changed while the stream was down
+    act(() => source.emit('open', {}));
+    await waitFor(() => expect(result.current.health).toEqual({ overall: 'DEGRADED' }));
+  });
+
+  it('keeps a health_update that lands while an open health snapshot is in flight', async () => {
+    const snapshot = deferred<Response>();
+    let calls = 0;
+    stubState(
+      () => jsonResponse({ marker: 'state' }),
+      () => (++calls === 1 ? jsonResponse({ overall: 'WIRED' }) : snapshot.promise),
+    );
+    const { result } = renderHook(() => useWorkspaceEvents());
+    await waitFor(() => expect(result.current.health).toEqual({ overall: 'WIRED' }));
+    const source = FakeEventSource.instances[0];
+    act(() => source.emit('open', {}));
+    act(() => source.emit('health_update', { overall: 'DEGRADED' }));
+    expect(result.current.health).toEqual({ overall: 'DEGRADED' });
+    await act(async () => {
+      snapshot.resolve(jsonResponse({ overall: 'WIRED' }));
+    });
+    expect(result.current.health).toEqual({ overall: 'DEGRADED' });
   });
 });

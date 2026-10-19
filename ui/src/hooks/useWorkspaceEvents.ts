@@ -22,7 +22,9 @@ const HISTORY_URL = '/api/history';
  * The hook primes both payloads over HTTP on mount (so a first paint never
  * waits for an event), then keeps them current from the `/api/events` SSE
  * stream. `state_update` frames carry the whole state payload, so the retained
- * snapshot is replaced rather than patched.
+ * snapshot is replaced rather than patched. The server sends neither payload
+ * when a stream connects, so the hook asks for both again on every open: a
+ * change made while the stream was down shows at once, not with the next one.
  */
 export interface SmokeRun {
   running: boolean;
@@ -69,6 +71,41 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 /**
+ * Orders one payload's snapshot requests against each other and against its
+ * live frames, without assuming the server answers requests in the order they
+ * were sent. Only the latest request's answer is applied, and only if no live
+ * frame for the payload landed after that request was sent. The server builds
+ * an answer only after it receives the request, from data at least as new as
+ * anything it sent before (the state is computed per request; the health
+ * cache is refreshed by every measurement the server publishes). So the
+ * answer is at least as new as everything shown before the request went out:
+ * an earlier answer, or a frame that had already landed. An older request's
+ * answer is dropped even when it arrives first, since the latest answer could
+ * then move the dashboard backwards.
+ */
+function snapshotOrder() {
+  let sent = 0;
+  let frames = 0;
+  return {
+    /** Call as a request is sent. */
+    send() {
+      const ticket = ++sent;
+      const framesWhenSent = frames;
+      return {
+        /** No newer request was sent since this one. */
+        latest: () => ticket === sent,
+        /** Its answer may be applied: still the latest, and no live frame landed since it was sent. */
+        current: () => ticket === sent && frames === framesWhenSent,
+      };
+    },
+    /** Call when a live frame replaces the payload. */
+    frame() {
+      frames += 1;
+    },
+  };
+}
+
+/**
  * One SSE frame body as the backend emits it: the event name plus its
  * payload, JSON-encoded by `format_sse`. The event type is repeated in the
  * body so a client that reads only `data:` still sees it.
@@ -110,7 +147,6 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
   const historyRef = useRef<HistoryState>(emptyHistory);
 
   const smokeRequestRef = useRef(false);
-  const liveStateRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,32 +190,45 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
     };
     void catchUp();
 
+    // State and health are each asked for on mount and again on every
+    // EventSource open: the server sends neither when a stream connects, so
+    // the snapshots an open asks for are what cover a change made while the
+    // stream was down. `loading` ends when the latest state request settles.
+    const stateOrder = snapshotOrder();
+    const healthOrder = snapshotOrder();
+    const loadState = () => {
+      const request = stateOrder.send();
+      fetchJson<WorkspaceState>(STATE_URL).then(
+        (value) => {
+          if (cancelled) return;
+          if (request.current()) setState(value);
+          if (request.latest()) setLoading(false);
+        },
+        (reason) => {
+          if (cancelled) return;
+          if (request.current()) setError(`could not load ${STATE_URL}: ${String(reason)}`);
+          if (request.latest()) setLoading(false);
+        },
+      );
+    };
+    const loadHealth = () => {
+      const request = healthOrder.send();
+      fetchJson<WiringHealth>(HEALTH_URL).then(
+        (value) => {
+          if (!cancelled && request.current()) setHealth(value);
+        },
+        (reason) => {
+          if (!cancelled && request.current()) {
+            setError((previous) => previous ?? `could not load ${HEALTH_URL}: ${String(reason)}`);
+          }
+        },
+      );
+    };
+
     // State and health load independently: neither waits for the other, so a
     // slow health measurement never keeps the dashboard on "Loading".
-    fetchJson<WorkspaceState>(STATE_URL).then(
-      (value) => {
-        if (cancelled) return;
-        // A state_update that arrived first is newer than this snapshot.
-        if (!liveStateRef.current) setState(value);
-        setLoading(false);
-      },
-      (reason) => {
-        if (cancelled) return;
-        if (!liveStateRef.current) {
-          setError(`could not load ${STATE_URL}: ${String(reason)}`);
-        }
-        setLoading(false);
-      },
-    );
-    fetchJson<WiringHealth>(HEALTH_URL).then(
-      (value) => {
-        if (!cancelled) setHealth((previous) => previous ?? value);
-      },
-      (reason) => {
-        if (cancelled) return;
-        setError((previous) => previous ?? `could not load ${HEALTH_URL}: ${String(reason)}`);
-      },
-    );
+    loadState();
+    loadHealth();
 
     const source = new EventSource(EVENTS_URL);
 
@@ -187,6 +236,8 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
       setConnected(true);
       setError(null);
       void catchUp();
+      loadState();
+      loadHealth();
     });
 
     // EventSource reconnects on its own; the badge only reflects the gap.
@@ -201,7 +252,7 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
       const payload = parseFrame<StateUpdatePayload>(event as MessageEvent<string>);
       if (!payload) return;
       if (payload.state) {
-        liveStateRef.current = true;
+        stateOrder.frame();
         setState(payload.state);
       }
       if (payload.changed) setLastChanged(payload.changed);
@@ -210,7 +261,10 @@ export function useWorkspaceEvents(): WorkspaceEventsHook {
 
     source.addEventListener('health_update', (event) => {
       const payload = parseFrame<WiringHealth>(event as MessageEvent<string>);
-      if (payload) setHealth(payload);
+      if (payload) {
+        healthOrder.frame();
+        setHealth(payload);
+      }
     });
 
     source.addEventListener('history_append', (event) => {
