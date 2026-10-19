@@ -385,11 +385,14 @@ _PAPER_READONLY = (
             "Section contract", read_only=True, destructive=False, open_world=False, idempotent=True
         ),
         input_schema=_schema(
-            (Flag("sections", "--sections", path=True), Flag("file", "--file", description="one file's parsed header"))
+            (
+                Flag("sections", "--sections", path=True),
+                Flag("file", "--file", path=True, description="one file's parsed header"),
+            )
         ),
         build=_paper_builder(
             ("contract",),
-            (Flag("sections", "--sections", path=True), Flag("file", "--file")),
+            (Flag("sections", "--sections", path=True), Flag("file", "--file", path=True)),
         ),
         result_json=True,
     ),
@@ -1373,7 +1376,7 @@ _DELIBERATE_FLAGS = (
 _IMPLEMENT_FLAGS = (
     Flag("target", "--target"),
     Flag("name", "--name"),
-    Flag("plan", "--plan"),
+    Flag("plan", "--plan", path=True),
     Flag("finding", "--finding"),
     Flag("entry_text", "--entry-text"),
     Flag("python", "--python"),

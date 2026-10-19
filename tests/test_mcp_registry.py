@@ -11,7 +11,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from mcp_series import build_workspace, call_many, tool_call
 
 from papersmith.cli import build_parser, parse_argv
@@ -514,3 +513,39 @@ def test_a_well_typed_call_still_reaches_its_child(tmp_path: Path) -> None:
     assert child.call_count == 1, result
     assert child.call_args.args[0].tokens == ("run", "smoke", "--dry-run", "--shard", "0")
 
+
+# --------------------------------------------------------------------------- #
+# Path confinement (#59): a file argument never reads outside the bound root
+# --------------------------------------------------------------------------- #
+
+
+def _escapes(tmp_path: Path) -> list[str]:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret\n", encoding="utf-8")
+    (workspace / "link.md").symlink_to(outside)
+    return [str(outside), "../outside.md", "link.md"]
+
+
+@pytest.mark.parametrize("tool,argument,extra", [
+    ("papersmith.paper_contract", "file", {}),
+    ("papersmith.implement", "plan", {"action": "apply"}),
+], ids=["paper_contract-file", "implement-plan"])
+def test_paper_contract_file_is_confined(tmp_path: Path, tool, argument, extra) -> None:
+    # Given an absolute path, a parent traversal and a symlink, all leaving the root.
+    for raw in _escapes(tmp_path):
+        result, child = _executes(tool, {argument: raw, **extra}, tmp_path / "ws")
+        # Then each is refused before any child can read it.
+        assert child.call_count == 0, raw
+        assert result["structuredContent"]["code"] == "WORKSPACE_ESCAPE", raw
+
+
+def test_a_confined_file_inside_the_root_still_reaches_the_child(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    (workspace / "sections").mkdir(parents=True)
+    (workspace / "sections" / "intro.md").write_text("x\n", encoding="utf-8")
+    result, child = _executes("papersmith.paper_contract", {"file": "sections/intro.md"}, workspace)
+    assert child.call_count == 1, result
+    tokens = child.call_args.args[0].tokens
+    assert tokens[tokens.index("--file") + 1] == str((workspace / "sections" / "intro.md").resolve())
