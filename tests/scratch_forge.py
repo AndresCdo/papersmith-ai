@@ -24,9 +24,10 @@ fixture-profile tests already do.
 from __future__ import annotations
 
 import shutil
-import tempfile
 import unittest
 from pathlib import Path
+
+import orphan_sweep
 
 FORGE = Path(__file__).resolve().parents[1]
 CORE = FORGE / "skills" / "_core" / "implementation"
@@ -46,7 +47,7 @@ def build(case: unittest.TestCase, engine_source: str | None, launcher: Path,
     file to it (a dropped adapter module) without writing the shipped tree.
     Removed by a cleanup registered on `case`. The shipped tree is only
     read, never written."""
-    forge = Path(tempfile.mkdtemp(prefix=prefix))
+    forge = orphan_sweep.allocate(prefix)
     case.addCleanup(shutil.rmtree, forge, ignore_errors=True)
     core = forge / CORE.relative_to(FORGE)
     shutil.copytree(CORE, core, ignore=shutil.ignore_patterns("__pycache__"))
