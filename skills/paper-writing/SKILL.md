@@ -1199,7 +1199,10 @@ named, currently-unused exception reserved for a sibling skill's own
    block is done. On `"status": "audit-fired"`, hand the returned `fired`
    bullets and spans back to the redactor as explicit feedback and re-draft
    **exactly once** — a third submission under the same contract/evidence/
-   mode refuses `AUDIT_EXHAUSTED`.
+   mode refuses `AUDIT_EXHAUSTED`. A refusal `AUDIT_FINDING_UNVERIFIED`
+   means the auditor's `fires` quoted a span the draft does not contain:
+   delegate to the `contract-auditor` again on the same draft and rerun
+   `write`; that refusal spends no re-draft.
 
 **Measure this before delegating (redactor/contract-auditor):** confirm the
 contract's own `sections/*.md` file and its evidence set are both already

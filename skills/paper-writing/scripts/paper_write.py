@@ -14,7 +14,7 @@ Public surface:
     BlockContract                    -> the pipeline's one immutable input shape
     write_block(paper_dir, contract, draft, audit_account) -> dict
         (raises MODE_ABSENT, EVIDENCE_SET_REQUIRED, AUDIT_EXHAUSTED,
-         plus every code `paper_bindings`/`paper_audit` themselves raise)
+         AUDIT_FINDING_UNVERIFIED, plus every code `paper_bindings`/`paper_audit` themselves raise)
 """
 from __future__ import annotations
 
@@ -158,6 +158,12 @@ def write_block(
     (`Requirement: Exhaustion Leaves The Block Unwritten`) — `substitute` is
     never reached on that path, so `main.tex` stays byte-identical to its
     pre-`write` state.
+
+    A `fires` claim reconciliation could not check (no span, or one not
+    byte-present in the draft) neither passes nor spends the re-draft
+    (#72): with nothing verified firing, `write` refuses
+    `AUDIT_FINDING_UNVERIFIED` naming it, before `substitute` and without
+    touching the ledger, so the same draft can be audited again.
     """
     _stage_readiness(contract)
     bindings = _stage_evidence_audit(contract, draft)
@@ -186,6 +192,15 @@ def write_block(
             "fired": fired,
             "verdicts": audit_result["verdicts"],
         }
+
+    if audit_result["unverified"]:
+        raise Refused(
+            "AUDIT_FINDING_UNVERIFIED",
+            f"{contract.block_id}: contract-audit says "
+            f"{[entry['bullet'] for entry in audit_result['unverified']]} fire, but "
+            "quotes no span found byte for byte in this draft; audit the same draft "
+            "again rather than write past a finding nobody can check",
+        )
 
     if contract.style_set:
         # Local import, not module-level: `paper_write.py` is a Work Unit 1

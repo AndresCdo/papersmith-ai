@@ -400,6 +400,7 @@ REFUSAL_CLASSIFICATION: dict[str, str] = {
     "MODE_ABSENT": WORK_STATE,
     "EVIDENCE_SET_REQUIRED": WORK_STATE,
     "AUDIT_EXHAUSTED": WORK_STATE,
+    "AUDIT_FINDING_UNVERIFIED": WORK_STATE,
     # --- the eight-token tripwire (paper_leak.py; WU2) ---------------------
     "STYLE_OVERLAP": WORK_STATE,
     # --- a-diagram-that-compiles-or-says-why: `render`/`place`, the sole

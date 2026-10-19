@@ -78,7 +78,11 @@ def reconcile_verdicts(bullets: list[str], verdict_entries: list[dict], draft_la
     (`contract-audit` spec, `Requirement: Per-Bullet Verdict With Quoted
     Span`; `design.md`, Decision D8) — the same "checked against the
     artefact, never trusted about it" mechanism `paper_bindings.reconcile`
-    already applies to sentences.
+    already applies to sentences. A downgraded entry also carries
+    `"unverified": True` and, as `"claimed_span"`, the span the auditor
+    quoted (#72): invalid evidence is not trusted, but it is not a clear
+    verdict either, so it must not pass silently. `compute_outcome` lists
+    such entries and `paper_write.write_block` refuses on them.
     """
     by_bullet = {entry["bullet"]: entry for entry in verdict_entries}
     bullet_set = set(bullets)
@@ -98,8 +102,11 @@ def reconcile_verdicts(bullets: list[str], verdict_entries: list[dict], draft_la
         verdict = entry["verdict"]
         span = entry.get("span") or ""
         if verdict == "fires" and (not span or span not in draft_latex):
-            verdict = "undecidable"
-            span = ""
+            results.append(
+                {"bullet": bullet, "verdict": "undecidable", "span": "",
+                 "unverified": True, "claimed_span": span}
+            )
+            continue
         results.append({"bullet": bullet, "verdict": verdict, "span": span if verdict == "fires" else ""})
     return results
 
@@ -108,9 +115,14 @@ def compute_outcome(reconciled: list[dict]) -> dict:
     """`contract-audit` spec, `Requirement: Undecidable Is Reported, Not
     Blocking On Its Own`: the outcome is decided solely by `any(fires)`. An
     all-`clear`/`undecidable` audit does not block; one `fires` blocks
-    regardless of how many `undecidable` verdicts sit beside it."""
+    regardless of how many `undecidable` verdicts sit beside it.
+
+    `unverified` lists the `fires` claims reconciliation could not check
+    (#72). They leave `blocks` exactly as the spec decides it; `write`
+    refuses on them instead, so an unverifiable finding never passes."""
     fired = [entry for entry in reconciled if entry["verdict"] == "fires"]
-    return {"blocks": bool(fired), "verdicts": reconciled, "fired": fired}
+    unverified = [entry for entry in reconciled if entry.get("unverified")]
+    return {"blocks": bool(fired), "verdicts": reconciled, "fired": fired, "unverified": unverified}
 
 
 def audit(

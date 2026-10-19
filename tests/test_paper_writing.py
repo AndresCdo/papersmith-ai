@@ -5794,6 +5794,42 @@ class ContractAuditTests(unittest.TestCase):
         self.assertFalse(result["blocks"])
         self.assertEqual(result["verdicts"][0]["verdict"], "undecidable")
 
+    def test_an_unverifiable_fires_claim_is_marked_unverified_never_clear(self) -> None:
+        """#72: a `fires` whose quotation the draft does not hold byte for
+        byte is not trusted, but it is not a clear verdict either."""
+        body = _contract_body([_SAMPLE_DISQUALIFIER])
+        draft = "A symbol X appears with no declaration."
+        for name, span in (
+            ("paraphrased", "symbol X shows up undeclared"),
+            ("nonexistent", "a sentence this draft never had"),
+            ("near miss", "Symbol X appears with no declaration"),
+            ("absent", ""),
+        ):
+            with self.subTest(name):
+                verdicts = [{"bullet": _SAMPLE_DISQUALIFIER, "verdict": "fires", "span": span}]
+                result = paper_audit.audit(body, draft, verdicts)
+                self.assertFalse(result["blocks"])
+                [entry] = result["verdicts"]
+                self.assertEqual(entry["verdict"], "undecidable")
+                self.assertIs(entry["unverified"], True)
+                self.assertEqual(entry["claimed_span"], span)
+                self.assertEqual(result["unverified"], [entry])
+
+    def test_a_verified_quotation_and_a_plain_undecidable_are_never_unverified(self) -> None:
+        second = "A dataset described here and left unreferenced."
+        body = _contract_body([_SAMPLE_DISQUALIFIER, second])
+        draft = "A symbol X appears with no declaration."
+        verdicts = [
+            {"bullet": _SAMPLE_DISQUALIFIER, "verdict": "fires",
+             "span": "symbol X appears with no declaration"},
+            {"bullet": second, "verdict": "undecidable"},
+        ]
+        result = paper_audit.audit(body, draft, verdicts)
+        self.assertTrue(result["blocks"])
+        self.assertEqual(result["unverified"], [])
+        for entry in result["verdicts"]:
+            self.assertNotIn("unverified", entry)
+
     def test_a_contract_missing_the_heading_refuses(self) -> None:
         with self.assertRaises(Refused) as ctx:
             paper_audit.extract_disqualifiers(
@@ -6066,6 +6102,52 @@ class WritingPipelineTests(unittest.TestCase):
         result = paper_write.write_block(self.paper_dir, different_contract, _CLEAN_DRAFT, _FIRING_AUDIT)
         self.assertEqual(result["status"], "audit-fired")
         self.assertEqual(result["attempt"], 1)
+
+    @staticmethod
+    def _unverifiable(span: str) -> dict:
+        return {"verdicts": [{"bullet": _SAMPLE_DISQUALIFIER, "verdict": "fires", "span": span}]}
+
+    def test_an_unverifiable_finding_refuses_and_never_reaches_main_tex(self) -> None:
+        """#72: this used to write the block, the claimed violation reported
+        only as a non-blocking `undecidable`."""
+        contract = _write_contract(citations_regime="none", evidence_set=())
+        pre = (self.paper_dir / "main.tex").read_bytes()
+        for name, span in (
+            ("paraphrased", "This paragraph ends the section"),
+            ("nonexistent", "a sentence this draft never had"),
+            ("absent", ""),
+        ):
+            with self.subTest(name):
+                with self.assertRaises(Refused) as ctx:
+                    paper_write.write_block(
+                        self.paper_dir, contract, _CLEAN_DRAFT, self._unverifiable(span))
+                self.assertEqual(ctx.exception.code, "AUDIT_FINDING_UNVERIFIED")
+                self.assertIn(_SAMPLE_DISQUALIFIER, ctx.exception.detail)
+                self.assertEqual((self.paper_dir / "main.tex").read_bytes(), pre)
+                self.assertIsNone(paper_write._read_ledger(self.paper_dir, "mm-proposal"))
+
+    def test_an_unverifiable_finding_spends_no_redraft_and_never_passes_on_retry(self) -> None:
+        contract = _write_contract(citations_regime="none", evidence_set=())
+        paper_write.write_block(self.paper_dir, contract, _CLEAN_DRAFT, _FIRING_AUDIT)
+        pre = (self.paper_dir / "main.tex").read_bytes()
+        for _ in range(2):
+            with self.assertRaises(Refused) as ctx:
+                paper_write.write_block(
+                    self.paper_dir, contract, _CLEAN_DRAFT, self._unverifiable("not in the draft"))
+            self.assertEqual(ctx.exception.code, "AUDIT_FINDING_UNVERIFIED")
+        self.assertEqual((self.paper_dir / "main.tex").read_bytes(), pre)
+        self.assertEqual(paper_write._read_ledger(self.paper_dir, "mm-proposal")["attempts"], 1)
+
+        result = paper_write.write_block(self.paper_dir, contract, _CLEAN_DRAFT, _CLEAN_AUDIT)
+        self.assertEqual(result["status"], "written")
+
+    def test_a_persistently_undecidable_audit_still_writes(self) -> None:
+        """The spec's own rule holds: uncertainty about the check, with
+        nothing claimed to fire, does not block."""
+        contract = _write_contract(citations_regime="none", evidence_set=())
+        undecidable = {"verdicts": [{"bullet": _SAMPLE_DISQUALIFIER, "verdict": "undecidable"}]}
+        result = paper_write.write_block(self.paper_dir, contract, _CLEAN_DRAFT, undecidable)
+        self.assertEqual(result["status"], "written")
 
     def test_a_real_write_with_no_style_set_reports_the_style_channel_unmeasured(self) -> None:
         """Ruling 2's own guarantee ('never a silent pass') has no real
@@ -8821,8 +8903,16 @@ class RefusalRosterTests(unittest.TestCase):
         wiring reaches the same module through `write_block`, contributing
         no code of its own. Measured directly against `reachable_paper_
         refusal_codes()`, EXECUTED after all of this change's engine code
-        landed, never forecast."""
-        self.assertEqual(len(reachable_paper_refusal_codes()), 165)
+        landed, never forecast.
+
+        Moved from 165 to 166 for #72: `paper_write.py` (already imported)
+        gains one raise site, `write_block`'s own `AUDIT_FINDING_UNVERIFIED`
+        -- a `fires` claim whose quoted span reconciliation could not find
+        in the draft, which used to pass as a non-blocking `undecidable`.
+        Reachable the moment the raise site lands; no new import needed.
+        Measured directly against `reachable_paper_refusal_codes()`, never
+        forecast."""
+        self.assertEqual(len(reachable_paper_refusal_codes()), 166)
 
 
 class ObjectiveNorthTests(unittest.TestCase):

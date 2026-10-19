@@ -2754,7 +2754,10 @@ nothing was asserted without a run having checked it.
   JSON to a file, and only then runs `write --draft <path> --audit <path>`.
 - **A single re-draft, counted on disk.** `AUDIT_EXHAUSTED` refuses a third attempt
   under the same contract/evidence/mode — the count lives in a file ledger, not in
-  the memory of a process that might restart.
+  the memory of a process that might restart. A finding nobody can check spends
+  none of it: a `fires` whose quoted span is not in the draft byte for byte refuses
+  `AUDIT_FINDING_UNVERIFIED`, leaves the block unwritten, and asks for the same
+  draft to be audited again.
 - **The style test and its tripwire are separated by signature on purpose**
   (`paper_leak.py`, Decision D6): adjusting the eight-token tripwire can never move
   the three-draft test. An all-`noEquivalent` style channel reports `unmeasured`,
