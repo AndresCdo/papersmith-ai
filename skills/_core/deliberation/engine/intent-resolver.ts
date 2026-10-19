@@ -22,15 +22,22 @@ export function extractWithdrawalOperationId(instruction:string) { return instru
 
 const CLOSE_DELIBERATION=/(?:cierra|finaliza|termina)\s+(?:la\s+|el\s+)?(?:deliberaci[oó]n|conversaci[oó]n|chat)|close\s+(?:the\s+)?(?:deliberation|chat|conversation)|end\s+(?:the\s+)?deliberation/i;
 
+// Verbs are matched as whole words of the accent-folded instruction, never as substrings:
+// "borrador" holds "borra", "preliminares" holds "elimina", "remueve" holds "mueve",
+// "trasladado" holds "traslada". A MOVE removes its source, so it is matched the same way.
+const fold=(t:string)=>t.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+const DESTRUCTIVE_WORD=/^(?:(?:elimin|borr|quit)(?:a|ar|en)|(?:suprim|remuev)(?:e|en)|suprimir|remover)(?:lo|la|los|las)?$/;
+const MOVE_WORD=/^(?:mueve|traslada|trasladar)(?:lo|la|los|las)?$/;
 export function resolveIntent(instruction:string):ResolvedIntent {
  const s=instruction.toLowerCase(),has=(...x:string[])=>x.some(v=>s.includes(v));
- const destructive=has('elimina','borra','quita','suprime','remueve');
+ const words=fold(instruction).split(/[^\p{L}]+/u).filter(Boolean);
+ const destructive=words.some(w=>DESTRUCTIVE_WORD.test(w));
  // Explicit natural-language CLOSE (task 2.3): recognized before any other keyword, never ambiguous.
  const closeDeliberation=CLOSE_DELIBERATION.test(instruction);
  const lifecycleSelection=lifecycleIntent(instruction);
  let intent:ResolvedIntent['intent']=closeDeliberation?'CLOSE_DELIBERATION':(lifecycleSelection??'AMBIGUOUS');
  if(intent==='AMBIGUOUS'&&lifecycleSelection===undefined) {
-  if(has('mueve','traslada','pasa este contenido a'))intent='MOVE';
+  if(words.some(w=>MOVE_WORD.test(w))||has('pasa este contenido a'))intent='MOVE';
   else if(has('copia','duplica en')||(has('incluye también en')&&has('conserva','mantén','preserva')))intent='COPY';
   else if(destructive)intent='DELETE';
   else if(has('agrega','inserta','añade'))intent='INSERT';
