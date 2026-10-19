@@ -186,14 +186,68 @@ class Server:
         sink.flush()
 
 
+#: The JSON type of a decoded argument, for the refusal's wording.
+_JSON_TYPE_NAMES = ((bool, "boolean"), (int, "integer"), (float, "number"),
+                    (str, "string"), (list, "array"), (dict, "object"))
+
+
+def _json_type(value: Any) -> str:
+    return next((name for kind, name in _JSON_TYPE_NAMES if isinstance(value, kind)), "null")
+
+
+def _matches(declared: dict[str, Any], value: Any) -> bool:
+    """Whether ``value`` has the JSON type its schema declares.
+
+    Fail-closed: a type the registry never publishes matches nothing, so a
+    new one is refused until it is handled here. ``bool`` is not an
+    integer here, whatever Python says: JSON ``true`` is not ``1``.
+    """
+    kind = declared.get("type")
+    if kind == "boolean":
+        return isinstance(value, bool)
+    if kind == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "string":
+        return isinstance(value, str)
+    if kind == "array":
+        items = declared.get("items", {})
+        return isinstance(value, list) and all(_matches(items, item) for item in value)
+    return False
+
+
 def _validate_arguments(spec: ToolSpec, arguments: dict[str, Any]) -> None:
+    """Refuse an argument the tool does not declare, or of the wrong type or
+    value, before any child is built: ``"false"`` must never reach a
+    builder that would read it as true. An explicit ``null`` is an omission.
+    """
     properties = spec.input_schema.get("properties", {})
-    for key in arguments:
+    for key, value in arguments.items():
         if key not in properties:
             raise ToolRefusal("UNKNOWN_ARGUMENT", f"{spec.name} has no argument {key!r}")
+        declared = properties[key]
+        if value is None:
+            continue
+        if not _matches(declared, value):
+            raise ToolRefusal(
+                "INVALID_ARGUMENT",
+                f"{spec.name} argument {key!r} must be {_describe(declared)}, "
+                f"not {_json_type(value)}",
+            )
+        if "enum" in declared and value not in declared["enum"]:
+            raise ToolRefusal(
+                "INVALID_ARGUMENT",
+                f"{spec.name} argument {key!r} must be one of {declared['enum']}, not {value!r}",
+            )
     for key in spec.input_schema.get("required", []):
         if arguments.get(key) is None:
             raise ToolRefusal("MISSING_ARGUMENT", f"{spec.name} requires {key!r}")
+
+
+def _describe(declared: dict[str, Any]) -> str:
+    kind = declared.get("type", "untyped")
+    if kind == "array":
+        return f"an array of {declared.get('items', {}).get('type', 'untyped')}"
+    return f"an {kind}" if kind[:1] in ("a", "e", "i", "o", "u") else f"a {kind}"
 
 
 def execute_tool(

@@ -166,6 +166,13 @@ records a remote dispatch command verbatim, including its `--consent` operand.
 - **Consent is never implied.** A non-dry `papersmith.run` and a
   `papersmith.remote` push are refused `CONSENT_REQUIRED` without an explicit
   consent token. Planning (`--dry-run`) is the default.
+- **Arguments are typed at the boundary.** Each argument must have the JSON type
+  its schema declares (and an `enum` value one of its choices) before any child
+  is built; anything else is refused `INVALID_ARGUMENT` and launches nothing, so
+  the string `"false"` never becomes `--force`. A positional value (`run`'s
+  profile, `remote`'s operation, an `extra` item) never starts with `-`: an
+  option is always a declared argument, so a pass-through item can never
+  override a confined one.
 - **No network listener.** stdio only. There is no HTTP transport and no auth
   layer, because there is no socket to reach.
 - **Fail-closed refusals keep their own name.** A skill script's refusal code

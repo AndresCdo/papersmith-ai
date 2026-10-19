@@ -84,7 +84,16 @@ class ToolRefusal(Exception):
 
 @dataclass(frozen=True)
 class Flag:
-    """One argument a tool accepts, and how it becomes child argv."""
+    """One argument a tool accepts, and how it becomes child argv.
+
+    ``flag`` is the child's option string (``--target``). For a generic tool
+    (``CliBuilder``) a ``flag`` spelled without a leading dash names one of
+    the child's positionals instead (``profile``, ``operation``), and a
+    ``list`` positional is its verbatim pass-through (``extra``); a custom
+    builder spells its own argv. ``default`` is the value an omitted
+    argument takes: the one declaration the published schema, the
+    preconditions and the argv all read.
+    """
 
     name: str
     flag: str
@@ -93,6 +102,16 @@ class Flag:
     choices: tuple[str, ...] | None = None
     path: bool = False
     description: str = ""
+    default: Any = None
+
+    @property
+    def positional(self) -> bool:
+        return not self.flag.startswith("-")
+
+    def value(self, arguments: dict[str, Any]) -> Any:
+        """The caller's value, or the declared default when it is omitted."""
+        given = arguments.get(self.name)
+        return self.default if given is None else given
 
 
 @dataclass(frozen=True)
@@ -285,6 +304,8 @@ def _schema(flags: tuple[Flag, ...]) -> dict[str, Any]:
             properties[spec.name] = {"type": "string"}
         if spec.choices:
             properties[spec.name]["enum"] = list(spec.choices)
+        if spec.default is not None:
+            properties[spec.name]["default"] = spec.default
         if spec.description:
             properties[spec.name]["description"] = spec.description
         if spec.required:
@@ -364,11 +385,14 @@ _PAPER_READONLY = (
             "Section contract", read_only=True, destructive=False, open_world=False, idempotent=True
         ),
         input_schema=_schema(
-            (Flag("sections", "--sections", path=True), Flag("file", "--file", description="one file's parsed header"))
+            (
+                Flag("sections", "--sections", path=True),
+                Flag("file", "--file", path=True, description="one file's parsed header"),
+            )
         ),
         build=_paper_builder(
             ("contract",),
-            (Flag("sections", "--sections", path=True), Flag("file", "--file")),
+            (Flag("sections", "--sections", path=True), Flag("file", "--file", path=True)),
         ),
         result_json=True,
     ),
@@ -743,6 +767,13 @@ _WORKSPACE_TOOLS = (
     ),
 )
 
+#: The ``[<dir>]`` positional every pass-through command declares before its
+#: ``extra`` items. The child runs with the bound workspace as its cwd, so
+#: ``.`` is that workspace; naming it keeps the first pass-through item from
+#: being taken for the directory.
+_WORKSPACE_DIR = "."
+
+
 def _cli_child(
     tokens: tuple[str, ...],
     flags: tuple[Flag, ...],
@@ -751,33 +782,70 @@ def _cli_child(
     *,
     timeout: float | None = None,
 ) -> ChildPlan:
-    argv = list(tokens)
+    """The argv of a generic CLI tool.
+
+    Positionals follow the command in declaration order, then the options;
+    a pass-through list goes last, after the workspace positional and
+    ``--``. No positional value may start with ``-``: a scalar one would be
+    parsed as an option, and a pass-through one would reach the skill's own
+    CLI as an option -- overriding a declared, confined argument (a second
+    ``--plan`` wins) or naming a path nothing here confined. An option is
+    always a declared argument.
+    """
+    positionals: list[str] = []
+    options: list[str] = []
+    passthrough: list[str] = []
     for spec in flags:
-        value = arguments.get(spec.name)
+        value = spec.value(arguments)
         if value is None:
+            continue
+        if spec.positional:
+            items = [str(item) for item in value] if spec.kind == "list" else [str(value)]
+            for text in items:
+                if text.startswith("-"):
+                    raise ToolRefusal(
+                        "INVALID_ARGUMENT",
+                        f"{spec.name} {text!r} would reach the child as an option; "
+                        "a positional value never starts with '-', and an option "
+                        "must be one of the tool's declared arguments",
+                    )
+            (passthrough if spec.kind == "list" else positionals).extend(items)
             continue
         if spec.kind == "bool":
             if value:
-                argv.append(spec.flag)
+                options.append(spec.flag)
             continue
         if spec.kind == "list":
             for item in value:
-                argv.extend([spec.flag, str(item)])
+                options.extend([spec.flag, str(item)])
             continue
         text = str(value)
         if spec.path:
             text = str(resolve_under(workspace, text))
-        argv.extend([spec.flag, text])
+        options.extend([spec.flag, text])
+    argv = [*tokens, *positionals, *options]
+    if passthrough:
+        argv.extend([_WORKSPACE_DIR, "--", *passthrough])
     return ChildPlan("cli", tuple(argv), timeout=timeout)
+
+
+@dataclass(frozen=True)
+class CliBuilder:
+    """A generic CLI tool's builder, its command and flags kept readable so
+    the suite can parse every generic tool's argv with the real CLI."""
+
+    tokens: tuple[str, ...]
+    flags: tuple[Flag, ...]
+    timeout: float | None = None
+
+    def __call__(self, arguments: dict[str, Any], workspace: Path) -> ChildPlan:
+        return _cli_child(self.tokens, self.flags, arguments, workspace, timeout=self.timeout)
 
 
 def _cli_builder(
     tokens: tuple[str, ...], flags: tuple[Flag, ...], *, timeout: float | None = None
 ) -> Callable[[dict[str, Any], Path], ChildPlan]:
-    def build(arguments: dict[str, Any], workspace: Path) -> ChildPlan:
-        return _cli_child(tokens, flags, arguments, workspace, timeout=timeout)
-
-    return build
+    return CliBuilder(tokens, flags, timeout)
 
 
 def _refuse_stdin_body(arguments: dict[str, Any], workspace: Path) -> None:
@@ -800,7 +868,7 @@ def _refuse_stdin_file(arguments: dict[str, Any], workspace: Path) -> None:
 
 def _refuse_run_without_consent(arguments: dict[str, Any], workspace: Path) -> None:
     """A real dispatch spends quota; MCP defaults to planning only."""
-    if not arguments.get("dry_run", True) and not arguments.get("consent"):
+    if not _RUN_DRY_RUN.value(arguments) and not arguments.get("consent"):
         raise ToolRefusal(
             "CONSENT_REQUIRED",
             "a non-dry run dispatches real work; pass an explicit consent token",
@@ -1308,21 +1376,27 @@ _DELIBERATE_FLAGS = (
 _IMPLEMENT_FLAGS = (
     Flag("target", "--target"),
     Flag("name", "--name"),
-    Flag("plan", "--plan"),
+    Flag("plan", "--plan", path=True),
     Flag("finding", "--finding"),
     Flag("entry_text", "--entry-text"),
     Flag("python", "--python"),
     Flag("shards", "--shards"),
     Flag("revision", "--revision"),
-    Flag("extra", "extra", kind="list", description="additional implementation_cli arguments, verbatim"),
+    Flag("extra", "extra", kind="list",
+         description="additional implementation_cli positional tokens, verbatim; never an option"),
+)
+
+_RUN_DRY_RUN = Flag(
+    "dry_run", "--dry-run", kind="bool", default=True, description="plan only; the MCP default"
 )
 
 _RUN_FLAGS = (
     Flag("target", "--target"),
-    Flag("dry_run", "--dry-run", kind="bool", description="plan only; the MCP default"),
+    _RUN_DRY_RUN,
     Flag("shard", "--shard", kind="int"),
     Flag("consent", "--consent", description="required for a non-dry dispatch"),
 )
+
 
 _REMOTE_FLAGS = (
     Flag("target", "--target"),
@@ -1347,7 +1421,8 @@ _REMOTE_FLAGS = (
     Flag("run_function", "--run-function"),
     Flag("clone_path", "--clone-path", kind="list"),
     Flag("regenerate", "--regenerate", kind="bool"),
-    Flag("extra", "extra", kind="list", description="additional remote_cli arguments, verbatim"),
+    Flag("extra", "extra", kind="list",
+         description="additional remote_cli positional tokens, verbatim; never an option"),
 )
 
 _ORCHESTRATION = (
@@ -1370,8 +1445,9 @@ _ORCHESTRATION = (
         name="papersmith.implement",
         title="Proposal implementation",
         description=(
-            "Bridge to the proposal-implementation harness. Action is required; tokens after the "
-            "known flags are forwarded verbatim to implementation_cli."
+            "Bridge to the proposal-implementation harness. Action is required; extra positional "
+            "tokens are forwarded verbatim to implementation_cli, and an option is always one "
+            "of the declared arguments."
         ),
         verb="implement",
         surface="cli",
@@ -1398,7 +1474,9 @@ _ORCHESTRATION = (
             "Run a compute profile", read_only=False, destructive=False, open_world=True
         ),
         input_schema=_schema((Flag("profile", "profile", required=True), *_RUN_FLAGS)),
-        build=_cli_builder(("run",), (Flag("profile", "profile", required=True), *_RUN_FLAGS), timeout=1800.0),
+        build=_cli_builder(
+            ("run",), (Flag("profile", "profile", required=True), *_RUN_FLAGS), timeout=1800.0
+        ),
         precondition=_refuse_run_without_consent,
     ),
     ToolSpec(
