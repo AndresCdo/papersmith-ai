@@ -9289,6 +9289,23 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                     "minifier cannot rename because it is an object key; "
                     "generated third-party code, named by no target",
     },
+    "_core/command_center/static/vendor/pdf.min.js": {
+        "transfer": "the vendored pdf.js build (pdfjs-dist 3.11.174) posting "
+                    "buffers to its worker with a transfer list -- a web "
+                    "platform API name in generated third-party code, named "
+                    "by no target",
+    },
+    "_core/command_center/static/vendor/pdf.worker.min.js": {
+        "ceiling": "the vendored pdf.js worker's math (Math.ceil and the PDF "
+                   "function-type operator `ceiling`) -- a PostScript "
+                   "calculator keyword in generated third-party code, named by "
+                   "no target",
+    },
+    "_core/command_center/static/vendor/pdfjs-LICENSE": {
+        "transfer": "the Apache-2.0 license text shipped with the vendored "
+                    "pdf.js (\"transfer\" of rights in its definitions), "
+                    "kept verbatim as the license requires",
+    },
 }
 
 
@@ -15784,6 +15801,27 @@ FORGE_LEXICON: dict[str, str] = {
 #: declaration already uses (`assets/kit/src_benchmark/__init__.py:55-57`).
 EXAMPLE_MODULE_NAMES = frozenset({"tables", "figures"})
 
+#: Rule A's per-file admissions, held to the same standard as
+#: `FORGE_FLOOR_SURFACE_ADMISSIONS`: a dotted name a shipped file may carry on
+#: a line rule A reads, each with the reason it is not a worked example, and
+#: each re-earned on every run (`test_every_example_admission_still_fires`).
+EXAMPLE_NAME_ADMISSIONS: dict[str, tuple[frozenset[str], str]] = {
+    "_core/command_center/static/vendor/pdf.worker.min.js": (
+        frozenset({
+            "app.launchURL", "window.open",
+            "FoxitDingbats.pfb", "FoxitFixed.pfb", "FoxitFixedBold.pfb",
+            "FoxitFixedBoldItalic.pfb", "FoxitFixedItalic.pfb", "FoxitSerif.pfb",
+            "FoxitSerifBold.pfb", "FoxitSerifBoldItalic.pfb", "FoxitSerifItalic.pfb",
+            "FoxitSymbol.pfb",
+        }),
+        "the vendored pdf.js worker (pdfjs-dist 3.11.174): the Acrobat "
+        "JavaScript API names it recognises inside PDF actions and the "
+        "standard-font file names it can load. The minified build is one long "
+        "line, so they share it with a `\"record\"` key. Generated third-party "
+        "code, not a worked report example",
+    ),
+}
+
 
 class RehearsalAuthorityTests(unittest.TestCase):
     """A rehearsal is not a campaign, and this flow only ever declined the
@@ -16318,7 +16356,16 @@ class ForgeVocabularyDerivedGuardTests(unittest.TestCase):
 
     def example_violations(self, root=None):
         return [place for place in self.example_names(root)
-                if place[2].split(".")[0] not in EXAMPLE_MODULE_NAMES]
+                if place[2].split(".")[0] not in EXAMPLE_MODULE_NAMES
+                and place[2] not in EXAMPLE_NAME_ADMISSIONS.get(place[0], ((), ""))[0]]
+
+    def test_every_example_admission_still_fires(self):
+        """An admission nobody needs any more is a stale sentence: each one has
+        to name a dotted name its file still carries on a line rule A reads."""
+        seen = {(place, name) for place, _line, name in self.example_names()}
+        stale = [(place, name) for place, (names, _reason) in EXAMPLE_NAME_ADMISSIONS.items()
+                 for name in sorted(names) if (place, name) not in seen]
+        self.assertEqual(stale, [], "these rule A admissions no longer fire")
 
     def scratch_forge(self):
         """The forge's shape, built for the purpose rather than borrowed.
