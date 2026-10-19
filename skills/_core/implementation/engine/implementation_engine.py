@@ -19029,6 +19029,15 @@ def _record_engine_defect(args: argparse.Namespace, exc: BaseException) -> None:
     take none), the key is OMITTED from the event, never written as `null`
     -- the identical discipline `cmd_defect`'s own `detail` already keeps.
 
+    The ledger is found through the three guards `cmd_defect` runs --
+    `resolve_target`, `validate_name`, `require_named_product_dir` -- so a
+    crash lands only in a ledger `defect` itself could append to, the one
+    the gates read. A target outside the workspace or not a git repository
+    (one `adopt` has yet to create, say), a name that is not one plain path
+    segment, or a name that would open a second product tree is not logged
+    at all: appending there would create folders no gate reads, outside the
+    workspace, or the very target `adopt` is about to create.
+
     Called only from `main()`'s own guard, itself wrapped in its own
     `try/except Exception: pass` -- a failure in here must never replace
     the original traceback with one about this function instead.
@@ -19039,6 +19048,12 @@ def _record_engine_defect(args: argparse.Namespace, exc: BaseException) -> None:
         return
     crashing_file = _crashing_forge_file(exc)
     if crashing_file is None:
+        return
+    try:
+        target = resolve_target(target_raw)
+        name = validate_name(name_raw)
+        require_named_product_dir(target, name)
+    except Refused:
         return
 
     forge_relative = crashing_file.relative_to(FORGE_ROOT.resolve()).as_posix()
@@ -19052,8 +19067,7 @@ def _record_engine_defect(args: argparse.Namespace, exc: BaseException) -> None:
     if session is not None:
         event["session"] = session
 
-    ledger_path = (Path(target_raw).expanduser().resolve() / name_raw
-                   / ".implementation" / "position.jsonl")
+    ledger_path = target / name / ".implementation" / "position.jsonl"
     impl_position.append_event(ledger_path, event)
 def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> dict:
     """The exact pattern `cmd_apply` runs: `PLAN_MISMATCH` when the approved
