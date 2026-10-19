@@ -75,13 +75,15 @@ def figure_paths(paper_dir: Path, figure_id: str) -> dict:
     """Every path one figure id resolves to (`authored-diagram` spec,
     `Requirement: Source Layout`).
 
-    A figure id is a NAME, never a path: an empty id, one containing `/`,
-    `\\` or a NUL, or the ids `.`/`..` refuses `DIAGRAM_SOURCE_ABSENT` —
+    A figure id is a NAME, never a path or compiler option: an empty id,
+    one starting with `-`, containing `/`, `\\` or a NUL, or the ids
+    `.`/`..` refuses `DIAGRAM_SOURCE_ABSENT` —
     the code this module already uses for "this call cannot address a
     diagram source" (same as `read_manifest`) — so nothing interpolates
     out of `Figures/` or `.paper-writing/figures/`."""
     if (
         not figure_id
+        or figure_id.startswith("-")
         or "/" in figure_id
         or "\\" in figure_id
         or "\x00" in figure_id
@@ -89,7 +91,8 @@ def figure_paths(paper_dir: Path, figure_id: str) -> dict:
     ):
         raise Refused(
             "DIAGRAM_SOURCE_ABSENT",
-            f"{figure_id!r} is not a single path segment; a figure id is a name, never a path",
+            f"{figure_id!r} must be a single path segment not starting with '-'; "
+            "a figure id is a name, never a path or compiler option",
         )
     figures_dir = paper_dir / "Figures"
     scratch_dir = paper_dir / ".paper-writing" / "figures" / figure_id
