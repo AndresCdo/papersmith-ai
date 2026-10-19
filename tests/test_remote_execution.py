@@ -11585,6 +11585,7 @@ class CommitReachabilityTests(unittest.TestCase):
                         "--dry-run",
                         "--depth",
                         "1",
+                        "--",
                         "https://example.invalid/repo.git",
                         "c" * 40,
                     ],
@@ -14875,11 +14876,13 @@ class StalenessTests(unittest.TestCase):
             for name in intruders:
                 with self.subTest(name=name):
                     self.assertNotIn(name, recorded_env)
-            # `GIT_TERMINAL_PROMPT` is set by `_run_git` itself rather
-            # than forwarded from the parent, so it is the one key here
-            # that is not an allowlist entry.
+            # `GIT_TERMINAL_PROMPT` and `GIT_ALLOW_PROTOCOL` are set by
+            # `_run_git` itself rather than forwarded from the parent, so
+            # they are the keys here that are not allowlist entries.
             self.assertEqual(
-                set(recorded_env) - {"GIT_TERMINAL_PROMPT"} - set(JOBFOLDER.GIT_ENV_ALLOWLIST),
+                set(recorded_env)
+                - {"GIT_TERMINAL_PROMPT", "GIT_ALLOW_PROTOCOL"}
+                - set(JOBFOLDER.GIT_ENV_ALLOWLIST),
                 set(),
             )
 
