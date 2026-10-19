@@ -67,6 +67,22 @@ class _Workspace(unittest.TestCase):
 
         return asyncio.run(scenario())
 
+    @staticmethod
+    def published(app, action) -> list[dict]:
+        """Run `action` with a live bus subscriber; return what it published."""
+        async def scenario() -> list[dict]:
+            bus = app.state.bus
+            bus.bind_loop(asyncio.get_running_loop())
+            queue = bus.subscribe()
+            action()
+            await asyncio.sleep(0.1)
+            events = []
+            while not queue.empty():
+                events.append(await queue.get())
+            return events
+
+        return asyncio.run(scenario())
+
 
 class HistoryEndpointTests(_Workspace):
     def test_create_app_owns_a_history_store_unless_one_is_given(self) -> None:
@@ -182,6 +198,39 @@ class HistoryRecordingTests(_Workspace):
 
         assert measured.call_count == 1
         assert app.state.history.page()["entries"] == []
+
+    def test_a_ttl_health_change_is_broadcast_after_its_history_entry(self) -> None:
+        """A change only a TTL re-measure finds reaches every dashboard: the
+        History entry alone would leave their Health tabs on the old value."""
+        app = server.create_app(self.new_workspace(), health_ttl=0.0)
+        with mock.patch.object(server, "get_wiring_health",
+                               side_effect=[_health("HEALTHY"), _health("DEGRADED")]):
+            app.state.measure_health()
+            events = self.published(app, app.state.measure_health)
+
+        assert [e["event"] for e in events] == ["history_append", "health_update"]
+        assert events[1]["data"] == _health("DEGRADED")
+
+    def test_a_cached_health_read_broadcasts_nothing(self) -> None:
+        app = server.create_app(self.new_workspace(), health_ttl=600.0)
+        with mock.patch.object(server, "get_wiring_health",
+                               side_effect=[_health("HEALTHY")]):
+            app.state.measure_health()
+            events = self.published(app, app.state.measure_health)
+
+        assert events == []
+
+    def test_a_health_path_flush_broadcasts_its_measurement_once(self) -> None:
+        root = self.new_workspace()
+        (root / ".claude" / "agents").mkdir(parents=True)
+        app = server.create_app(root, health_ttl=600.0)
+        with mock.patch.object(server, "get_wiring_health",
+                               side_effect=[_health("HEALTHY"), _health("BLOCKED")]):
+            app.state.measure_health()
+            events = self.flush(app, root / ".claude" / "agents" / "redactor.md")
+
+        updates = [e["data"] for e in events if e["event"] == "health_update"]
+        assert updates == [_health("BLOCKED")]
 
     def test_smoke_start_and_done_are_recorded_with_the_exit_code(self) -> None:
         root = self.new_workspace()

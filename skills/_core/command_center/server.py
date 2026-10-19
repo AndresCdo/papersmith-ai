@@ -253,6 +253,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     record(history.diff_health(cached, value))
                 except Exception:  # noqa: BLE001
                     _log.exception("history: recording a health change failed")
+            # Every new measurement reaches every dashboard, forced or taken by
+            # a read past the TTL, after the History entry it caused. Under the
+            # lock, two measurements' frames go out in the order they were taken.
+            bus.publish("health_update", value)
             return value
 
     def on_flush(paths: list[Path]) -> None:
@@ -278,8 +282,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         except Exception:  # noqa: BLE001 - history never blocks the live channel
             _log.exception("history: recording a state change failed")
         if any(is_health_path(path, root_path) for path in paths):
-            health = measure_health(force=True)
-            bus.publish("health_update", health)
+            measure_health(force=True)  # publishes its own health_update
 
     watcher = WorkspaceWatcher(root_path, on_flush, debounce_ms=debounce_ms)
     smoke_lock = threading.Lock()
