@@ -2296,6 +2296,15 @@ def run_sensitivity(args):
         # --- Baseline: every declared input present. ---
         baseline_completed = run_sensitivity_drive(
             recipe, subject, copy_root, box, repo, args.timeout)
+        if baseline_completed.returncode != 0:
+            raise Unprobeable(
+                "kind=sensitivity-baseline-refused: with every declared "
+                "input present, the producer exited "
+                f"{baseline_completed.returncode}. A refusal once one input "
+                "is removed means nothing from a producer that refuses with "
+                "none removed, and the declared values were never this "
+                "drive's product. Every pair is unreached until the "
+                "baseline drive exits 0")
         baseline_text = read_site(declared_path)
         baseline_pairs = dict(declared_value_pairs(baseline_text, declared_site))
 

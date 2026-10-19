@@ -7399,6 +7399,59 @@ class SensitivityControlGateTests(SensitivityBoxMixin, unittest.TestCase):
         self.assertEqual(payload["control"], "passed")
 
 
+
+#: A producer that refuses whatever its box holds: it exits 1 with every
+#: declared input present, so no declared value is ever its product.
+REFUSING_PRODUCER = "import sys\nsys.exit(1)\n"
+
+#: A producer that refuses only once `data/a.txt` is gone, and otherwise
+#: counts its lines: a refusal that does trace back to the removed input.
+REFUSES_WITHOUT_INPUT_PRODUCER = (
+    "import pathlib, sys\n"
+    "source = pathlib.Path('data/a.txt')\n"
+    "if not source.is_file():\n"
+    "    sys.exit(3)\n"
+    "total = len(source.read_text(encoding='utf-8').splitlines())\n"
+    "pathlib.Path('RESULTS.md').write_text(\n"
+    "    f'| Metric | Value |\\n| --- | --- |\\n| rows | {total} |\\n',\n"
+    "    encoding='utf-8')\n")
+
+
+class SensitivityBaselineTests(SensitivityBoxMixin, unittest.TestCase):
+    """The baseline drive, with every declared input present, must exit 0
+    before a refusal with one input removed can mean anything.
+    """
+
+    def test_a_producer_that_refuses_with_every_input_present_stalls(self):
+        surface = "baseline_refused"
+        self.sensitivity_box(surface)
+        subject = self.make_sensitivity_subject(
+            "baseline_refused_subject", initial_value=7,
+            data_files={"a.txt": "one\n"}, producer=REFUSING_PRODUCER)
+        spec = self.make_recipe(subject, surface)
+        result, payload = sensitivity_json(spec, subject, repo=FORGE)
+        self.assertEqual(result.returncode, 2, payload)
+        self.assertIn("sensitivity-baseline-refused", payload["error"])
+        self.assertIn("exited 1", payload["error"])
+
+    def test_a_producer_that_refuses_only_without_an_input_is_tracked(self):
+        """Proof the stall above is not asserting a constant: a refusal
+        that follows the removed input still reads `producer-refused`.
+        """
+        surface = "refuses_without_input"
+        self.sensitivity_box(surface)
+        subject = self.make_sensitivity_subject(
+            "refuses_without_input_subject", initial_value=999,
+            data_files={"a.txt": "one\ntwo\n"},
+            producer=REFUSES_WITHOUT_INPUT_PRODUCER)
+        spec = self.make_recipe(subject, surface)
+        result, payload = sensitivity_json(spec, subject, repo=FORGE)
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual(payload["control"], "passed")
+        self.assertEqual(payload["matrix"],
+                         {"rows": {"data/a.txt": "producer-refused"}})
+        self.assertEqual(payload["notAdjudicable"], [])
+
 class SensitivityDeclarationTests(SensitivityBoxMixin, unittest.TestCase):
     """Candidate pairs derive from the subject's own declaration alone."""
 
