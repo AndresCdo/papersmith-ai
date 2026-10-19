@@ -79,7 +79,9 @@ def parse_binding(raw: str) -> tuple[str, str | None]:
     `structural`") — raised as a plain `ValueError`, never a `Refused`: a
     binding map entry this malformed is not one this reconciliation was
     ever asked to judge, the redactor's contract having already promised
-    only these three shapes.
+    only these three shapes. `write` holds the draft to that promise before
+    reconciliation runs (`paper_write.draft_problem`, #71), so through
+    `write` a malformed entry refuses `DRAFT_UNREADABLE` instead.
     """
     if raw == "structural":
         return "structural", None

@@ -401,6 +401,9 @@ REFUSAL_CLASSIFICATION: dict[str, str] = {
     "EVIDENCE_SET_REQUIRED": WORK_STATE,
     "AUDIT_EXHAUSTED": WORK_STATE,
     "AUDIT_FINDING_UNVERIFIED": WORK_STATE,
+    "DRAFT_UNREADABLE": WORK_STATE,
+    "AUDIT_ACCOUNT_UNREADABLE": WORK_STATE,
+    "GROUNDING_ACCOUNT_UNREADABLE": WORK_STATE,
     # --- the eight-token tripwire (paper_leak.py; WU2) ---------------------
     "STYLE_OVERLAP": WORK_STATE,
     # --- a-diagram-that-compiles-or-says-why: `render`/`place`, the sole
@@ -2414,6 +2417,30 @@ def _guard_section_citations_ready(guidance_dir: Path, section_id: str, regime: 
         )
 
 
+def _read_draft(path: Path) -> dict:
+    """`--draft`'s JSON object, or `DRAFT_UNREADABLE` saying why not (#71)."""
+    try:
+        return paper_write.read_envelope(path)
+    except paper_write.EnvelopeUnreadable as exc:
+        raise Refused("DRAFT_UNREADABLE", str(exc)) from None
+
+
+def _read_audit_account(path: Path) -> dict:
+    """`--audit`'s JSON object, or `AUDIT_ACCOUNT_UNREADABLE` saying why not."""
+    try:
+        return paper_write.read_envelope(path)
+    except paper_write.EnvelopeUnreadable as exc:
+        raise Refused("AUDIT_ACCOUNT_UNREADABLE", str(exc)) from None
+
+
+def _read_grounding_account(path: Path) -> dict:
+    """`--grounding`'s JSON object, or `GROUNDING_ACCOUNT_UNREADABLE` saying why not."""
+    try:
+        return paper_write.read_envelope(path)
+    except paper_write.EnvelopeUnreadable as exc:
+        raise Refused("GROUNDING_ACCOUNT_UNREADABLE", str(exc)) from None
+
+
 def cmd_write(args: argparse.Namespace) -> dict:
     """`write`: reconciles an already-shuttled redactor draft and
     contract-auditor account against one block's real contract, evidence
@@ -2484,8 +2511,8 @@ def cmd_write(args: argparse.Namespace) -> dict:
     if args.transcript:
         _resolve_repo_path(args.transcript)
 
-    draft = json.loads(draft_path.read_text(encoding="utf-8"))
-    audit_account = json.loads(audit_path.read_text(encoding="utf-8"))
+    draft = _read_draft(draft_path)
+    audit_account = _read_audit_account(audit_path)
 
     # `the-block-asserts-only-what-its-section-carries`, design.md D7:
     # `--grounding` stays `default=None` -- requiring it would break every
@@ -2495,7 +2522,7 @@ def cmd_write(args: argparse.Namespace) -> dict:
     grounding_account = None
     if args.grounding:
         grounding_path = _resolve_repo_path(args.grounding)
-        grounding_account = json.loads(grounding_path.read_text(encoding="utf-8"))
+        grounding_account = _read_grounding_account(grounding_path)
 
     mode_obj = paper_contract.resolve_mode(header, block)
     mode = mode_obj["value"] if mode_obj is not None else None
