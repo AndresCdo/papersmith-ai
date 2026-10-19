@@ -446,6 +446,8 @@ FETCH_TIMEOUT = (10, 60)
 #: Kaggle notebook's output directory holds, so only a runaway answer
 #: reaches it.
 FETCH_MAX_BYTES = 20 * 1024**3
+#: Pages of one output listing a fetch may read before it is refused.
+FETCH_MAX_PAGES = 1000
 
 
 def _is_kaggle_origin(url: str) -> bool:
@@ -538,6 +540,46 @@ def _fetch_file(session, url: str, destination: Path, budget: int) -> int:
     raise DriverError(f"refusing to download {url!r}: more than {FETCH_MAX_REDIRECTS} redirects")
 
 
+def _list_output_page(client: "KernelsApiClient", submission_id: str, token: str):
+    """One page of `submission_id`'s output listing; `token` is empty for the first."""
+    worker, slug = submission_id.split("/", 1)
+    request = ApiListKernelSessionOutputRequest()
+    request.user_name = worker
+    request.kernel_slug = slug
+    if token:
+        request.page_token = token
+    return client.list_kernel_session_output(request)
+
+
+def _every_listed_file(client: "KernelsApiClient", submission_id: str, first) -> list:
+    """The files on every page of the listing that `first` begins (#93).
+
+    Each page's `next_page_token` names the next one and is empty on the
+    last, the way `kaggle kernels output` reads it too. Every page is listed
+    before any file is downloaded, so a listing that cannot be read to its
+    end downloads nothing. A repeated token, or more than `FETCH_MAX_PAGES`
+    pages, refuses instead of looping forever.
+    """
+    files = list(first.files or [])
+    seen: set[str] = set()
+    token, pages = first.next_page_token, 1
+    while token:
+        if token in seen:
+            raise DriverError(
+                f"list_kernel_session_output for {submission_id} repeated the page token {token!r}"
+            )
+        if pages >= FETCH_MAX_PAGES:
+            raise DriverError(
+                f"list_kernel_session_output for {submission_id} has more than "
+                f"{FETCH_MAX_PAGES} pages"
+            )
+        seen.add(token)
+        page = _list_output_page(client, submission_id, token)
+        files.extend(page.files or [])
+        token, pages = page.next_page_token, pages + 1
+    return files
+
+
 def cmd_fetch(client: "KernelsApiClient", submission_id: str, into: Path) -> dict:
     """Materialize one kernel session's output under `into`, file by file.
 
@@ -551,7 +593,9 @@ def cmd_fetch(client: "KernelsApiClient", submission_id: str, into: Path) -> dic
     `list_kernel_session_output` instead: it takes a `user_name`/
     `kernel_slug` pair (this function already has both, from `submission_id`
     alone) and answers with a `files` list — each entry a `(url, fileName)`
-    pair — plus the session's own `log`, with no session id required on
+    pair — plus the session's own `log`, with no session id required. The
+    listing is paged: each answer also carries a `next_page_token`, and
+    `_every_listed_file` reads every page before any file is downloaded (#93).
 
     Also MEASURED, and worth stating because it looks like a plausible
     alternative route: `download_kernel_output` (a THIRD download RPC,
@@ -598,11 +642,7 @@ def cmd_fetch(client: "KernelsApiClient", submission_id: str, into: Path) -> dic
     what to write to disk; a file entry missing a name or url refuses
     rather than guessing at either.
     """
-    worker, slug = submission_id.split("/", 1)
-    request = ApiListKernelSessionOutputRequest()
-    request.user_name = worker
-    request.kernel_slug = slug
-    response = client.list_kernel_session_output(request)
+    response = _list_output_page(client, submission_id, "")
 
     into.mkdir(parents=True, exist_ok=True)
     session = client._client._session
@@ -612,14 +652,16 @@ def cmd_fetch(client: "KernelsApiClient", submission_id: str, into: Path) -> dic
     # to be written after the loop, which meant any file that failed took the
     # log down with it -- and the log is the only artifact that says why a
     # remote run failed. A log that arrives only when everything else already
-    # worked is a log nobody will ever have at the moment they need it.
+    # worked is a log nobody will ever have at the moment they need it. It
+    # comes with the listing's first page, so it is on disk before the rest
+    # of the listing is even read.
     if response.log:
         (into / "log.txt").write_text(response.log, encoding="utf-8")
         written.append("log.txt")
 
     root = into.resolve()
     budget = FETCH_MAX_BYTES
-    for output_file in response.files or []:
+    for output_file in _every_listed_file(client, submission_id, response):
         name = output_file.file_name
         url = output_file.url
         if not name or not url:
