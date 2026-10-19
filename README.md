@@ -3580,6 +3580,19 @@ module accepts the same flag):
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
 
+**Graph toolbar and cross-panel links.** The *Atlas* tab keeps its three graph
+switches and adds **⚡ Regenerar grafo** (the SOTA atlas through
+`POST /api/atlas/build`, same as `smith atlas build`; on the novelty graph it
+rebuilds the view) and **🧩 Disposición de grupos**, which asks the atlas frame to
+rearrange its systems by family cluster and back. The dashboard and the
+sandboxed atlas frame talk through `postMessage`: the dashboard sends
+`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset'}`
+and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
+`{type: 'atlas-planet-selected', key, label, slot, system: {id, title}}`. A
+selected node shows **📄 Ver en PDF** (finds the node's label, or its system's
+title, in the compiled PDF's text and jumps to that page) and **🗂️ Ver
+artefacto** (opens `sota-pool/atlas.json` in the artifact viewer).
+
 **Support terminal ("CLI de apoyo").** The **⌨️ CLI** button opens a floating
 xterm.js console bound to a pseudo-terminal in the workspace root: a login shell,
 or `claude`, `opencode` or `pi` when they are on `PATH`. Quick buttons type

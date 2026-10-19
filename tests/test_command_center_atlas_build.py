@@ -27,7 +27,8 @@ from tests.test_command_center_atlas import valid_atlas  # noqa: E402
 
 
 class _Request:
-    """The one thing the route reads from a request: nothing."""
+    def __init__(self, headers: dict[str, str] | None = None) -> None:
+        self.headers = {k.lower(): v for k, v in (headers or {}).items()}
 
 
 def _routes(app) -> dict:
@@ -114,10 +115,11 @@ class BuildTests(_Workspace):
 
 
 class RouteTests(_Workspace):
-    def call(self, root: Path):
+    def call(self, root: Path, headers: dict[str, str] | None = None):
         app = server.create_app(root, history_store=None)
         endpoint = _route(app, "/api/atlas/build", "POST")
-        response = endpoint()
+        response = endpoint(_Request(headers or {"Host": "127.0.0.1:8080",
+                                                 "Origin": "http://127.0.0.1:8080"}))
         if asyncio.iscoroutine(response):
             response = asyncio.run(response)
         return response.status_code, json.loads(bytes(response.body).decode("utf-8"))
@@ -146,6 +148,13 @@ class RouteTests(_Workspace):
         status, body = self.call(root)
         self.assertEqual(status, 422)
         self.assertFalse(body["ok"])
+
+    def test_a_cross_origin_page_cannot_trigger_a_rebuild(self) -> None:
+        root = self.new_workspace()
+        self.write_atlas(root, valid_atlas())
+        status, body = self.call(root, {"Host": "127.0.0.1:8080", "Origin": "http://evil.example"})
+        self.assertEqual(status, 403)
+        self.assertFalse((root / "sota-pool" / "atlas.html").exists())
 
     def test_the_view_route_still_serves_the_page(self) -> None:
         root = self.new_workspace()

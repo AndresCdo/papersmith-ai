@@ -1717,9 +1717,14 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                         headers=dict(_ATLAS_VIEW_HEADERS))
 
     @app.post("/api/atlas/build")
-    def api_atlas_build() -> JSONResponse:
+    def api_atlas_build(request: Request) -> JSONResponse:
         # "Regenerar grafo": the workspace's own checker, then its renderer.
         # Writes only sota-pool/atlas.html, and only when the checker is green.
+        # A bodyless POST is a simple request, so refuse other origins here too.
+        if not origin_is_same(request):
+            return JSONResponse({"ok": False, "stage": "origin",
+                                 "detail": "cross-origin request rejected"},
+                                status_code=403, headers=dict(_PAPER_HEADERS))
         result = atlas_build.build(root_path)
         if result["ok"]:
             status_code = 200

@@ -3277,8 +3277,22 @@
             <button id="btnGraphAtlas" class="btn btn--primary" onclick="switchGraph('atlas')">🌌 Constelación 3D (Solar Atlas)</button>
             <button id="btnGraphNovelty" class="btn" onclick="switchGraph('novelty')">🕸️ Grafo 3D de Novedad del Manuscrito</button>
             <button id="btnGraphPapers" class="btn" onclick="switchGraph('papers')">📊 Matriz de Candidatos</button>
+            <button id="btnBuildGraph" class="btn" onclick="triggerBuildAtlas()" title="Regenera la constelación SOTA desde sota-pool/atlas.json (checker + renderer; también: smith atlas build)">⚡ Regenerar grafo</button>
+            <button id="btnGroupLayout" class="btn" onclick="toggleAtlasGroupLayout()" title="Reordena los sistemas por clusters (familias); púlsalo de nuevo para volver a la disposición original">🧩 Disposición de grupos</button>
             <a id="linkOpenGraph" href="/api/atlas/view" target="_blank" class="btn">Abrir en pestaña nueva ↗</a>
           </div>
+        </div>
+        <div id="graphBuildBadge" style="display: none; padding: 0.35rem 0.8rem; font-size: 0.76rem; border-bottom: 1px solid var(--border-subtle);"></div>
+
+        <!-- Selección en el grafo: enlaza el nodo con el PDF y con su artefacto -->
+        <div id="atlasSelectionCard" style="display: none; padding: 0.5rem 0.8rem; background: var(--surface-2); border-bottom: 1px solid var(--border-subtle); font-size: 0.8rem; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+          <span>🪐 <strong id="atlasSelLabel"></strong> <span id="atlasSelMeta" style="color: var(--text-muted);"></span></span>
+          <span style="display: inline-flex; gap: 0.4rem; margin-left: auto;">
+            <button class="btn btn--sm" onclick="atlasSelectionToPdf()" title="Busca el nodo (o su sistema) en el PDF compilado y salta a esa página">📄 Ver en PDF</button>
+            <button class="btn btn--sm" onclick="jumpToArtifact('sota-pool/atlas.json')" title="Abre el artefacto fuente del grafo">🗂️ Ver artefacto</button>
+            <button class="btn btn--sm" onclick="clearAtlasSelection()">✕</button>
+          </span>
+          <span id="atlasSelResult" style="flex-basis: 100%; color: var(--text-muted); font-size: 0.74rem;"></span>
         </div>
 
         <!-- Barra de Ayuda y Sensibilidad de Interacción del Ratón -->
@@ -3928,7 +3942,151 @@
     let candidatesFamilies = [];
     let candidatesLoaded = false;
 
+    // ---- Graph toolbar: regenerate, cluster layout and node selection ----
+    let currentGraphKind = 'atlas';
+    let atlasLayoutMode = 'sky';
+    let atlasSelection = null;
+
+    function graphFramePath() {
+      const iframe = document.getElementById('graphIframe');
+      try { return iframe ? new URL(iframe.src, window.location.href).pathname : ''; } catch (_) { return ''; }
+    }
+
+    function postToGraph(message) {
+      const iframe = document.getElementById('graphIframe');
+      if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage(message, '*');
+    }
+
+    function renderGraphToolbar() {
+      const groupBtn = document.getElementById('btnGroupLayout');
+      if (groupBtn) {
+        groupBtn.disabled = currentGraphKind !== 'atlas';
+        groupBtn.className = (currentGraphKind === 'atlas' && atlasLayoutMode === 'groups') ? 'btn btn--primary' : 'btn';
+      }
+      const buildBtn = document.getElementById('btnBuildGraph');
+      if (buildBtn) buildBtn.disabled = currentGraphKind === 'papers';
+    }
+
+    function toggleAtlasGroupLayout() {
+      if (currentGraphKind !== 'atlas') return;
+      postToGraph({ type: 'atlas-command', command: 'toggle-layout' });
+    }
+
+    function showGraphBadge(text, tone) {
+      const badge = document.getElementById('graphBuildBadge');
+      if (!badge) return;
+      badge.style.display = 'block';
+      badge.style.color = tone === 'ok' ? 'var(--ok)' : (tone === 'bad' ? 'var(--bad)' : 'var(--text-muted)');
+      badge.textContent = text;
+    }
+
+    async function triggerBuildAtlas() {
+      const btn = document.getElementById('btnBuildGraph');
+      const iframe = document.getElementById('graphIframe');
+      if (!btn || !iframe) return;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Regenerando…';
+      const stamp = () => new Date().toLocaleTimeString();
+      try {
+        if (currentGraphKind === 'novelty') {
+          // The novelty graph is built on every request: a reload regenerates it.
+          iframe.src = `/api/atlas/novelty/view?v=${Date.now()}`;
+          showGraphBadge(`✓ Grafo de novedad regenerado (${stamp()})`, 'ok');
+          return;
+        }
+        const res = await fetch('/api/atlas/build', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          atlasLayoutMode = 'sky';
+          clearAtlasSelection();
+          iframe.src = `/api/atlas/view?v=${Date.now()}`;
+          showGraphBadge(`✓ Grafo regenerado (${stamp()}): ${data.systems} sistemas · ${data.planets} planetas · ${data.links} enlaces`, 'ok');
+          if (typeof loadStatus === 'function') loadStatus();
+        } else {
+          showGraphBadge(`✕ No se regeneró (${data.stage}): ${data.detail || 'error desconocido'}`, 'bad');
+        }
+      } catch (err) {
+        showGraphBadge(`✕ Error de conexión al regenerar: ${err.message}`, 'bad');
+      } finally {
+        btn.textContent = original;
+        renderGraphToolbar();
+      }
+    }
+
+    function showAtlasSelection(data) {
+      atlasSelection = {
+        key: String(data.key || ''), label: String(data.label || ''), slot: String(data.slot || ''),
+        systemId: String((data.system && data.system.id) || ''), systemTitle: String((data.system && data.system.title) || ''),
+      };
+      const card = document.getElementById('atlasSelectionCard');
+      if (!card) return;
+      document.getElementById('atlasSelLabel').textContent = atlasSelection.label || atlasSelection.key;
+      document.getElementById('atlasSelMeta').textContent = `· ${atlasSelection.slot} · ${atlasSelection.systemTitle || atlasSelection.systemId}`;
+      document.getElementById('atlasSelResult').textContent = '';
+      card.style.display = 'flex';
+    }
+
+    function clearAtlasSelection() {
+      atlasSelection = null;
+      const card = document.getElementById('atlasSelectionCard');
+      if (card) card.style.display = 'none';
+    }
+
+    // Plain-text search over the compiled PDF's text layer; first page wins.
+    async function findTextInPdf(needles) {
+      await ensurePdfLoaded();
+      if (!pdfDoc) return null;
+      const norm = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      const wanted = needles.map(norm).filter((n) => n.length >= 4);
+      for (let p = 1; p <= pdfTotalPages; p++) {
+        let content = pdfTextContentCache.get(p);
+        if (!content) {
+          const page = await pdfDoc.getPage(p);
+          content = await page.getTextContent();
+          pdfTextContentCache.set(p, content);
+        }
+        const text = norm(content.items.map((item) => item.str).join(' '));
+        for (const needle of wanted) {
+          if (text.includes(needle)) return { page: p, needle };
+        }
+      }
+      return null;
+    }
+
+    async function atlasSelectionToPdf() {
+      if (!atlasSelection) return;
+      const result = document.getElementById('atlasSelResult');
+      if (result) result.textContent = '🔎 Buscando en el PDF compilado…';
+      try {
+        const hit = await findTextInPdf([atlasSelection.label, atlasSelection.systemTitle]);
+        if (hit) {
+          if (result) result.textContent = `Encontrado en la página ${hit.page}: “${hit.needle}”`;
+          jumpToPdfPage(hit.page);
+        } else if (result) {
+          result.textContent = 'Este nodo no aparece en el PDF compilado (ni su sistema).';
+        }
+      } catch (err) {
+        if (result) result.textContent = `No se pudo buscar en el PDF: ${err.message}`;
+      }
+    }
+
+    window.addEventListener('message', (e) => {
+      const iframe = document.getElementById('graphIframe');
+      if (!iframe || e.source !== iframe.contentWindow) return;
+      const data = e.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'atlas-layout') {
+        atlasLayoutMode = data.mode === 'groups' ? 'groups' : 'sky';
+        renderGraphToolbar();
+      } else if (data.type === 'atlas-planet-selected') {
+        showAtlasSelection(data);
+      }
+    });
+
     function switchGraph(kind) {
+      currentGraphKind = kind;
+      clearAtlasSelection();
       const btnAtlas = document.getElementById('btnGraphAtlas');
       const btnNovelty = document.getElementById('btnGraphNovelty');
       const btnPapers = document.getElementById('btnGraphPapers');
@@ -3945,7 +4103,8 @@
       if (kind === 'atlas') {
         if (atlas3d) atlas3d.style.display = 'block';
         if (matrixCont) matrixCont.style.display = 'none';
-        if (iframe && !iframe.src.endsWith('/api/atlas/view')) {
+        if (iframe && graphFramePath() !== '/api/atlas/view') {
+          atlasLayoutMode = 'sky';
           iframe.src = '/api/atlas/view';
         }
         if (titleEl) titleEl.textContent = '🌌 Constelación SOTA 3D — Atlas de Literatura y Plausibilidad';
@@ -3953,7 +4112,7 @@
       } else if (kind === 'novelty') {
         if (atlas3d) atlas3d.style.display = 'block';
         if (matrixCont) matrixCont.style.display = 'none';
-        if (iframe && !iframe.src.endsWith('/api/atlas/novelty/view')) {
+        if (iframe && graphFramePath() !== '/api/atlas/novelty/view') {
           iframe.src = '/api/atlas/novelty/view';
         }
         if (titleEl) titleEl.textContent = '🕸️ Grafo 3D de Novedad e Ideas del Manuscrito (Propuesta vs. SOTA)';
@@ -3965,6 +4124,7 @@
         if (openLink) openLink.href = '/api/atlas/candidates/view';
         loadCandidatesMatrix();
       }
+      renderGraphToolbar();
     }
 
     function getFamilyBadgeClass(family) {
