@@ -354,6 +354,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # Dynamic PDF page count
         pdf_pages = 0
         pdf_size = pdf_file.stat().st_size if pdf_exists else 0
+        # Change token the dashboard polls to reload an open preview.
+        pdf_mtime = int(pdf_file.stat().st_mtime * 1000) if pdf_exists else 0
         if pdf_exists:
             try:
                 res = subprocess.run(["pdfinfo", str(pdf_file)], capture_output=True, text=True, check=True)
@@ -994,6 +996,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             "title": target_title,
             "pdf_ready": pdf_exists,
             "pdf_size": pdf_size,
+            "pdf_mtime": pdf_mtime,
             "docx_ready": False,
             "docx_size": 0
         }
@@ -1121,12 +1124,19 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             **_PAPER_HEADERS, "Content-Disposition": "inline"})
 
     @app.get("/api/pdf")
-    def api_pdf_direct() -> Response:
+    def api_pdf_direct(request: Request) -> Response:
         pdf_path = root_path / "paper" / "main.pdf"
         if not pdf_path.is_file():
             return JSONResponse({"detail": "main.pdf not found in paper/"}, status_code=404)
-        return Response(pdf_path.read_bytes(), media_type="application/pdf", headers={
-            **_PAPER_HEADERS, "Content-Disposition": "inline"})
+        # Revalidatable rather than no-store: the live preview re-requests the
+        # PDF whenever the status token moves, and an unchanged build answers 304.
+        info = pdf_path.stat()
+        etag = f'"{info.st_mtime_ns:x}-{info.st_size:x}"'
+        headers = {**_PAPER_HEADERS, "Cache-Control": "no-cache", "ETag": etag,
+                   "Content-Disposition": "inline"}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(pdf_path.read_bytes(), media_type="application/pdf", headers=headers)
 
     @app.get("/api/pdf/annotations")
     def api_pdf_annotations() -> JSONResponse:

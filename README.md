@@ -3579,6 +3579,13 @@ module accepts the same flag):
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
 
+**Live PDF preview.** The *Previsualización PDF* tab renders `paper/main.pdf`
+with pdf.js 3.11.174, vendored in `skills/_core/command_center/static/vendor/`
+(no network). `GET /api/pdf` answers with an `ETag` and `Cache-Control: no-cache`
+(`304` when `If-None-Match` matches), and `/api/status` reports
+`run_details.pdf_mtime`; when a recompile moves that token the open preview
+reloads in place and keeps the page you were reading.
+
 **Paper preview (read-only).** Two GET routes, no writes:
 `GET /api/paper/preview` returns the sections in the same order and with the same
 ids as `/api/state`, with the plain text of each block of `paper/main.tex`

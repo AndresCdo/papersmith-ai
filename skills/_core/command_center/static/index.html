@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" sizes="256x256" href="./favicon.png?v=2">
   <link rel="shortcut icon" href="./favicon.ico?v=2">
   <link rel="apple-touch-icon" href="./favicon.png?v=2">
-  <link rel="stylesheet" href="./vendor/pdf_viewer.min.css">
+  <link rel="stylesheet" href="./vendor/pdf_viewer.css">
   <script src="./vendor/pdf.min.js"></script>
   <script src="./vendor/marked.min.js"></script>
   <style>
@@ -3769,7 +3769,7 @@
       if (targetPane) targetPane.classList.add('active');
 
       if (tabId === 'preview') {
-        initPdfViewer();
+        ensurePdfLoaded();
       }
       if (tabId === 'modelo') {
         refreshModelData();
@@ -4162,9 +4162,10 @@
       }
     }
 
-    function jumpToPdfPage(pageNum) {
+    async function jumpToPdfPage(pageNum) {
       closeDrawer();
       navigateTab('preview');
+      await ensurePdfLoaded();
       setTimeout(() => {
         scrollToPdfPage(pageNum || 1);
       }, 120);
@@ -4869,6 +4870,8 @@
         currentStatus = data;
 
         // Carga el artefacto inicial únicamente una vez al arrancar
+        syncPdfPreview((data.run_details || {}).pdf_mtime || 0);
+
         if (!initialArtifactLoaded && data.artifacts && data.artifacts.length > 0) {
           initialArtifactLoaded = true;
           loadArtifact(data.artifacts[0].rel_path);
@@ -5164,6 +5167,39 @@
     let selectionDebounceTimer = null;
     let zoomDebounceTimer = null;
 
+    // One load in flight at a time: tab switches and cross-panel jumps share it.
+    let pdfLoadPromise = null;
+    function ensurePdfLoaded() {
+      if (pdfDoc) return Promise.resolve();
+      if (!pdfLoadPromise) {
+        pdfLoadPromise = initPdfViewer().finally(() => { pdfLoadPromise = null; });
+      }
+      return pdfLoadPromise;
+    }
+
+    // Live preview: /api/status carries run_details.pdf_mtime; when a new build
+    // lands, an open preview reloads in place and keeps the page being read.
+    let lastPdfToken = null;
+    let pdfReloadInFlight = false;
+    async function syncPdfPreview(token) {
+      const previous = lastPdfToken;
+      lastPdfToken = token;
+      if (previous === null || previous === token || !token) return;
+      const native = document.getElementById('pdfNativeIframe');
+      if (native && isNativePdfViewer) native.src = `/api/pdf?v=${token}`;
+      if (!pdfDoc || pdfReloadInFlight) return;
+      pdfReloadInFlight = true;
+      const page = pdfCurrentPage;
+      try {
+        await initPdfViewer(true);
+        scrollToPdfPage(Math.min(page, pdfTotalPages || 1));
+        const badge = document.getElementById('pdfInfoBadge');
+        if (badge) badge.textContent = `${pdfTotalPages} páginas · actualizado ${new Date(token).toLocaleTimeString()}`;
+      } finally {
+        pdfReloadInFlight = false;
+      }
+    }
+
     async function initPdfViewer(forceReload = false) {
       if (pdfDoc && !forceReload) return;
       const spinner = document.getElementById('pdfLoadingSpinner');
@@ -5177,7 +5213,7 @@
       }
 
       try {
-        const url = `/api/pdf?t=${forceReload ? Date.now() : 'doc'}`;
+        const url = `/api/pdf?v=${forceReload ? (lastPdfToken || Date.now()) : 'doc'}`;
         const loadingTask = pdfjsLib.getDocument({
           url: url,
           cMapUrl: './vendor/cmaps/',
@@ -5185,7 +5221,9 @@
           enableXfa: false,
           disableFontFace: false
         });
+        const previousDoc = pdfDoc;
         pdfDoc = await loadingTask.promise;
+        if (previousDoc && previousDoc !== pdfDoc) previousDoc.destroy();
         pdfTotalPages = pdfDoc.numPages;
 
         const totalEl = document.getElementById('pdfTotalPages');
