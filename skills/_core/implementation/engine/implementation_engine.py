@@ -62,7 +62,9 @@ from impl_layout import FORGE_ROOT, IGNORED_DIRS, LFS_POINTER_PREFIX  # noqa: E4
 from impl_refusals import NameRefused, Refused  # noqa: E402
 from impl_gitops import (git, lfs_state, present_files,  # noqa: E402
                          repository_ignored, tracked_files)
-from impl_guards import require_clean_worktree, require_non_forge_interpreter, resolve_target  # noqa: E402
+from impl_guards import (own_bookkeeping_snapshot, require_clean_worktree,  # noqa: E402
+                         require_non_forge_interpreter, resolve_target,
+                         restore_starting_point)
 from impl_naming import normalize_name, package_name, validate_name  # noqa: E402
 from impl_references import (prefix_mappings, reference_pattern,  # noqa: E402
                              scan_reference_updates, scan_stale_references)
@@ -9502,13 +9504,14 @@ def cmd_apply(args: argparse.Namespace) -> dict:
             f"No rule covers: {current['unclassified']}. Ask where they belong; never guess.",
         )
 
+    ledger = own_bookkeeping_snapshot(target)
     try:
         migrate(target, current)
     except Exception as failure:  # noqa: BLE001 - the repository must not stay half-migrated
-        # The tree was verified clean before any mutation, so discarding the
-        # partial work restores exactly the reviewed starting point.
-        git(target, "reset", "-q", "--hard", check=False)
-        git(target, "clean", "-qfd", check=False)
+        # The tree was verified clean before any mutation, apart from the
+        # skill's own ledger, so discarding the partial work and putting the
+        # ledger back restores exactly the reviewed starting point (#80).
+        restore_starting_point(target, ledger)
         raise Refused(
             "APPLY_ABORTED",
             f"{failure}. Nothing was committed and the working tree was restored "
@@ -19125,6 +19128,7 @@ def _stage_scaffold(target: Path, name: str, seed: str,
             "would overwrite. Resolve with the user first.",
         )
 
+    ledger = own_bookkeeping_snapshot(target)
     written: list[str] = []
     try:
         for destination in destinations:
@@ -19137,10 +19141,10 @@ def _stage_scaffold(target: Path, name: str, seed: str,
 
         anchors = _materialize_scaffold_anchors(target, name)
     except Exception as failure:  # noqa: BLE001 - the tree must not stay half-written
-        # `require_clean_worktree` proved the tree clean before this ran, so
-        # discarding everything just written restores exactly that state.
-        git(target, "reset", "-q", "--hard", check=False)
-        git(target, "clean", "-qfd", check=False)
+        # `require_clean_worktree` proved the tree clean before this ran,
+        # apart from the skill's own ledger, so discarding everything just
+        # written and putting the ledger back restores exactly that state (#80).
+        restore_starting_point(target, ledger)
         raise Refused(
             "APPLY_ABORTED",
             f"{failure}. Nothing was recorded; the working tree was restored "
@@ -19299,6 +19303,7 @@ def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str
             "would overwrite. Resolve with the user first.",
         )
 
+    ledger = own_bookkeeping_snapshot(target)
     written: list[str] = []
     try:
         for destination in destinations:
@@ -19307,10 +19312,10 @@ def _write_kit_stage(target: Path, name: str, stage: str, destinations: list[str
             full.write_text(bodies[destination], encoding="utf-8")
             written.append(destination)
     except Exception as failure:  # noqa: BLE001 - the tree must not stay half-written
-        # `require_clean_worktree` proved the tree clean before this ran, so
-        # discarding everything just written restores exactly that state.
-        git(target, "reset", "-q", "--hard", check=False)
-        git(target, "clean", "-qfd", check=False)
+        # `require_clean_worktree` proved the tree clean before this ran,
+        # apart from the skill's own ledger, so discarding everything just
+        # written and putting the ledger back restores exactly that state (#80).
+        restore_starting_point(target, ledger)
         raise Refused(
             "APPLY_ABORTED",
             f"{failure}. Nothing was recorded; the working tree was restored "
@@ -20191,11 +20196,12 @@ def _adopt_apply(args: argparse.Namespace) -> dict:
             "UNCLASSIFIED_FILES",
             f"No rule covers: {current['unclassified']}. Ask where they belong; never guess.",
         )
+    ledger = own_bookkeeping_snapshot(target)
     try:
         migrate(target, current)
     except Exception as failure:  # noqa: BLE001 - the repository must not stay half-migrated
-        git(target, "reset", "-q", "--hard", check=False)
-        git(target, "clean", "-qfd", check=False)
+        # As in `cmd_apply`: the ledger goes back as it was (#80).
+        restore_starting_point(target, ledger)
         raise Refused(
             "APPLY_ABORTED",
             f"{failure}. Nothing was committed and the working tree was restored "

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 from impl_gitops import git
@@ -50,6 +51,71 @@ def require_clean_worktree(target: Path) -> None:
             "The target working tree has uncommitted or untracked changes. "
             "Commit or stash them first; this skill never mutates a dirty repository.",
         )
+
+
+def own_bookkeeping_snapshot(target: Path) -> dict[str, bytes | Path | None]:
+    """The ledger files `require_clean_worktree` let through, as they are now.
+
+    The guard excuses this skill's ledger, so a mutation can begin with it
+    modified, deleted or untracked, and the rollback that resets and cleans
+    the tree after a failed mutation would revert or delete exactly that
+    (#80). Take this before the mutation and hand it to
+    `restore_starting_point`. Keyed by repository-relative path: a file's
+    bytes, a symlink's target (a `Path`), or None where the tree holds
+    nothing (a deletion, the old side of a rename). A ledger the repository
+    ignores is not listed, because neither reset nor clean touches it.
+    """
+    fields = iter(git(target, "status", "--porcelain", "-z", "--untracked-files=all").split("\0"))
+    snapshot: dict[str, bytes | Path | None] = {}
+    for entry in fields:
+        if len(entry) < 4:
+            continue
+        # `-z` prints a rename or copy as `XY new\0old\0`, unquoted.
+        paths = [entry[3:]]
+        if "R" in entry[:2] or "C" in entry[:2]:
+            paths.append(next(fields, ""))
+        if all(LEDGER_DIRECTORY in Path(path).parts for path in paths):
+            for path in paths:
+                file = target / path
+                if file.is_symlink():
+                    snapshot[path] = file.readlink()
+                elif file.is_file():
+                    snapshot[path] = file.read_bytes()
+                else:
+                    snapshot[path] = None
+    return snapshot
+
+
+def restore_starting_point(target: Path, ledger: dict[str, bytes | Path | None]) -> None:
+    """Throw away what a failed mutation wrote, keeping the ledger (#80).
+
+    The tree was clean apart from the ledger when the mutation began, so
+    resetting and cleaning it removes what the mutation wrote. The ledger
+    files in `ledger`, from `own_bookkeeping_snapshot`, are then put back as
+    they were: a file's bytes or a symlink's target, not whether they were
+    staged.
+    """
+    git(target, "reset", "-q", "--hard", check=False)
+    git(target, "clean", "-qfd", check=False)
+    # Clear every ledger path of what the reset left there before writing any
+    # back, parents first. The reset can rebuild a committed directory where
+    # a file stood, or put a committed symlink back over a directory; clearing
+    # a path beneath that symlink first would delete through it.
+    for path in sorted(ledger, key=lambda name: len(Path(name).parts)):
+        file = target / path
+        if file.is_symlink() or file.is_file():
+            file.unlink()
+        elif file.is_dir():
+            shutil.rmtree(file)
+    for path, kept in ledger.items():
+        if kept is None:
+            continue
+        file = target / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(kept, Path):
+            file.symlink_to(kept)
+        else:
+            file.write_bytes(kept)
 
 
 def resolve_target(raw: str) -> Path:

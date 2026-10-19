@@ -14511,6 +14511,149 @@ class MaterializeStageScaffoldWriterTests(MaterializeCommandFixture, unittest.Te
         status = self._git(box, "status", "--porcelain").stdout
         self.assertEqual(status.strip(), "", "the tree was not restored: " + status)
 
+    # #80: `require_clean_worktree` lets the skill's own ledger through
+    # untracked or modified, and the abort above used to reset and clean it
+    # away with the partial work.
+
+    def _ledger_holding_one_event(self, box):
+        """The position ledger where the engine keeps it, holding one event."""
+        ledger = box / self.NAME / ".implementation" / "position.jsonl"
+        impl_position.append_event(ledger, {"kind": "note", "at": "2026-10-19T00:00:00Z"})
+        return ledger
+
+    def _abort_mid_write(self, box):
+        """`--stage scaffold` with its third file write failing, the I/O
+        failure the test above simulates; returns the refusal."""
+        plan_path = self._approved_plan_path(box)
+        real_write_text = Path.write_text
+        calls = {"n": 0}
+
+        def flaky_write_text(self_path, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise OSError("simulated disk failure")
+            return real_write_text(self_path, *args, **kwargs)
+
+        args = self._materialize_args(box, stage="scaffold", plan=plan_path, seed=self.SEED)
+        with unittest.mock.patch.object(Path, "write_text", flaky_write_text):
+            with self.assertRaises(impl.Refused) as ctx:
+                impl.cmd_materialize(args)
+        return ctx.exception
+
+    def _leftovers(self, box):
+        return self._git(box, "status", "--porcelain", "--untracked-files=all").stdout.splitlines()
+
+    def test_a_mid_write_failure_keeps_an_untracked_ledger(self):
+        box = self._compliant_repo("_abort_untracked_ledger")
+        ledger = self._ledger_holding_one_event(box)
+        before = ledger.read_bytes()
+
+        self.assertEqual(self._abort_mid_write(box).code, "APPLY_ABORTED")
+
+        self.assertEqual(ledger.read_bytes(), before, "the abort deleted the ledger")
+        self.assertEqual(self._leftovers(box),
+                         [f"?? {self.NAME}/.implementation/position.jsonl"])
+
+    def test_a_mid_write_failure_keeps_ledger_lines_appended_since_its_commit(self):
+        box = self._compliant_repo("_abort_tracked_ledger")
+        ledger = self._ledger_holding_one_event(box)
+        self._git(box, "add", "-A")
+        self._git(box, "commit", "-q", "-m", "the ledger, committed")
+        impl_position.append_event(ledger, {"kind": "note", "at": "2026-10-19T00:01:00Z"})
+        before = ledger.read_bytes()
+
+        self.assertEqual(self._abort_mid_write(box).code, "APPLY_ABORTED")
+
+        self.assertEqual(ledger.read_bytes(), before, "the abort reverted the newest line")
+        self.assertEqual(self._leftovers(box),
+                         [f" M {self.NAME}/.implementation/position.jsonl"])
+
+    def test_a_failed_migration_keeps_the_ledger_and_discards_its_partial_work(self):
+        """`apply`'s own abort, the same reset and clean around `migrate`."""
+        box = self._compliant_repo("_apply_abort_ledger")
+        ledger = self._ledger_holding_one_event(box)
+        before = ledger.read_bytes()
+        plan_path = self._approved_plan_path(box)
+
+        def half_migrate(target, plan):
+            (target / "half-moved.txt").write_text("partial\n", encoding="utf-8")
+            raise OSError("simulated failure mid-migration")
+
+        args = argparse.Namespace(target=str(box), name=self.NAME, plan=plan_path)
+        with unittest.mock.patch.object(impl, "migrate", half_migrate):
+            with self.assertRaises(impl.Refused) as ctx:
+                impl.cmd_apply(args)
+
+        self.assertEqual(ctx.exception.code, "APPLY_ABORTED")
+        self.assertFalse((box / "half-moved.txt").exists(), "the partial work was kept")
+        self.assertEqual(ledger.read_bytes(), before, "the abort deleted the ledger")
+
+    def test_every_rollback_snapshots_the_ledger_and_puts_it_back(self):
+        """Each mutation that resets and cleans on failure takes the ledger
+        snapshot right before the block whose failure it restores, and
+        restores through it. A bare `reset --hard` anywhere in the engine
+        would drop the ledger again.
+
+        "Right before" is read from the code, not from a list. Only a
+        call-free assignment may stand between the snapshot and that `try:`,
+        and no call the guarded block makes -- the writes the rollback
+        undoes -- may run earlier in the function: a snapshot taken after one
+        would keep its effect on the ledger as if it had been there before the
+        command.
+        """
+        self.assertNotIn("--hard", inspect.getsource(impl))
+        for function in (impl.cmd_apply, impl._stage_scaffold,
+                         impl._write_kit_stage, impl._adopt_apply):
+            name = function.__name__
+            body = ast.parse(textwrap.dedent(inspect.getsource(function))).body[0].body
+            snapshots = [index for index, node in enumerate(body)
+                         if self._is_ledger_snapshot(node)]
+            self.assertEqual(len(snapshots), 1, f"{name} takes exactly one ledger snapshot")
+            start = snapshots[0]
+            guarded = next((index for index in range(start + 1, len(body))
+                            if isinstance(body[index], ast.Try)
+                            and self._restores_the_ledger(body[index])), None)
+            self.assertIsNotNone(
+                guarded, f"{name} restores through the snapshot in a later `try:`")
+            for node in body[start + 1:guarded]:
+                self.assertTrue(
+                    isinstance(node, (ast.Assign, ast.AnnAssign))
+                    and not any(isinstance(inner, ast.Call) for inner in ast.walk(node)),
+                    f"{name}: `{ast.unparse(node)}` stands between the snapshot and "
+                    "the block it guards")
+            early = self._call_names(body[:start]) & self._call_names(body[guarded].body)
+            self.assertEqual(sorted(early), [],
+                             f"{name} runs part of its guarded block before the snapshot")
+
+    @staticmethod
+    def _is_ledger_snapshot(node):
+        return (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "ledger"
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "own_bookkeeping_snapshot")
+
+    @staticmethod
+    def _restores_the_ledger(node):
+        return any(isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                   and call.func.id == "restore_starting_point"
+                   and [ast.unparse(arg) for arg in call.args] == ["target", "ledger"]
+                   for handler in node.handlers for call in ast.walk(handler))
+
+    @staticmethod
+    def _call_names(statements):
+        """The name each call in `statements` invokes: `f` for `f(...)` and
+        `m` for `x.m(...)`."""
+        names = set()
+        for statement in statements:
+            for node in ast.walk(statement):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    names.add(func.attr if isinstance(func, ast.Attribute)
+                              else getattr(func, "id", ""))
+        return names - {""}
+
     def test_stage_cannot_answer_on_an_unresolved_token(self):
         """M8: a scaffold template that still fails to parse after
         substitution -> STAGE_CANNOT_ANSWER, naming the file."""

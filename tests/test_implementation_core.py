@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import os
 import re
 import shutil
 import subprocess
@@ -188,6 +189,172 @@ class DirtyWorktreeGuardTests(unittest.TestCase):
         with self.assertRaises(impl_refusals.Refused) as caught:
             impl_guards.require_clean_worktree(self.repo)
         self.assertEqual(caught.exception.code, "DIRTY_WORKTREE")
+
+
+class LedgerSurvivesRollbackTests(unittest.TestCase):
+    """#80: `require_clean_worktree` lets the skill's own ledger through
+    modified, deleted or untracked, and the rollback after a failed mutation
+    (`git reset -q --hard` + `git clean -qfd`) reverted or deleted exactly
+    that. `own_bookkeeping_snapshot`, taken before the mutation, and
+    `restore_starting_point` after it, discard what the mutation wrote and
+    put the ledger back as it was.
+
+    The repository lives outside the forge on purpose: these helpers take
+    any repository, and nothing here needs the workspace guard.
+    """
+
+    def setUp(self) -> None:
+        self.repo = Path(tempfile.mkdtemp(prefix="_core_rollback_"))
+        self.addCleanup(shutil.rmtree, self.repo, True)
+        _git(self.repo, "init", "-q")
+        _git(self.repo, "config", "user.email", "t@t")
+        _git(self.repo, "config", "user.name", "t")
+        (self.repo / "Prod").mkdir()
+        (self.repo / "Prod" / "kept.txt").write_text("real\n")
+        self.ledger = self.repo / "Prod" / ".implementation" / "position.jsonl"
+        self.ledger.parent.mkdir()
+        self.ledger.write_text('{"kind": "step"}\n')
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "product and ledger")
+
+    def _status(self) -> list[str]:
+        return subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"], cwd=self.repo,
+            check=True, capture_output=True, text=True).stdout.splitlines()
+
+    def _fail_a_mutation(self) -> None:
+        """The guard passes, the snapshot is taken, the mutation changes a
+        tracked file and writes new ones, then it fails and rolls back."""
+        impl_guards.require_clean_worktree(self.repo)
+        ledger = impl_guards.own_bookkeeping_snapshot(self.repo)
+        (self.repo / "Prod" / "kept.txt").write_text("half-migrated\n")
+        (self.repo / "Prod" / "new_dir").mkdir()
+        (self.repo / "Prod" / "new_dir" / "written.py").write_text("x = 1\n")
+        inside = self.repo / "Prod" / ".implementation" / "written-by-the-mutation.jsonl"
+        inside.write_text('{"kind": "partial"}\n')
+        impl_guards.restore_starting_point(self.repo, ledger)
+        self.assertEqual((self.repo / "Prod" / "kept.txt").read_text(), "real\n")
+        self.assertFalse((self.repo / "Prod" / "new_dir").exists(),
+                         "what the mutation wrote must still be discarded")
+        self.assertFalse(inside.exists(),
+                         "a file the mutation wrote is discarded even inside the ledger")
+
+    def test_with_no_ledger_change_the_tree_ends_clean(self):
+        self._fail_a_mutation()
+        self.assertEqual(self._status(), [])
+
+    def test_ledger_lines_appended_since_the_last_commit_survive(self):
+        self.ledger.write_text('{"kind": "step"}\n{"kind": "gate"}\n')
+        self._fail_a_mutation()
+        self.assertEqual(self.ledger.read_text(), '{"kind": "step"}\n{"kind": "gate"}\n')
+        self.assertEqual(self._status(), [" M Prod/.implementation/position.jsonl"])
+
+    def test_an_untracked_ledger_file_survives(self):
+        defects = self.ledger.parent / "defects.jsonl"
+        defects.write_bytes(b'{"kind": "defect"}\n')
+        self._fail_a_mutation()
+        self.assertEqual(defects.read_bytes(), b'{"kind": "defect"}\n')
+        self.assertEqual(self._status(), ["?? Prod/.implementation/defects.jsonl"])
+
+    def test_a_ledger_name_git_would_quote_survives_byte_for_byte(self):
+        """`-z` porcelain is unquoted; the plain form would print this name
+        escaped, and restoring the escaped name would write the wrong file."""
+        odd = self.ledger.parent / 'notes \u00fc "x".jsonl'
+        odd.write_bytes(b"\x00\xff raw bytes\n")
+        self._fail_a_mutation()
+        self.assertEqual(odd.read_bytes(), b"\x00\xff raw bytes\n")
+
+    def test_a_symlink_in_the_ledger_stays_a_symlink(self):
+        """Read through, it would come back as a copy of its target's bytes."""
+        link = self.ledger.parent / "latest.jsonl"
+        link.symlink_to("position.jsonl")
+        self._fail_a_mutation()
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(os.readlink(link), "position.jsonl")
+
+    def test_a_ledger_directory_replaced_by_a_file_comes_back_as_the_file(self):
+        """The reset rebuilds the committed directory where the file stood.
+        Writing the kept bytes onto that directory raised inside the rollback,
+        losing the ledger and masking the failure that started it."""
+        runs = self.ledger.parent / "runs"
+        runs.mkdir()
+        (runs / "item.jsonl").write_text("committed\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "a ledger directory")
+        shutil.rmtree(runs)
+        runs.write_bytes(b"now a file\n")
+        self._fail_a_mutation()
+        self.assertTrue(runs.is_file())
+        self.assertEqual(runs.read_bytes(), b"now a file\n")
+
+    def test_a_ledger_file_replaced_by_a_directory_comes_back_as_the_directory(self):
+        runs = self.ledger.parent / "runs"
+        runs.write_text("committed\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "a ledger file")
+        runs.unlink()
+        runs.mkdir()
+        (runs / "item.jsonl").write_bytes(b"inside\n")
+        self._fail_a_mutation()
+        self.assertTrue(runs.is_dir())
+        self.assertEqual((runs / "item.jsonl").read_bytes(), b"inside\n")
+
+    def test_a_committed_symlink_the_reset_puts_back_is_never_followed(self):
+        """A committed link to a directory outside the repository, replaced by
+        a real directory before the command: the reset puts the link back, and
+        clearing the path beneath it through the link would delete a file the
+        repository does not own."""
+        outside = Path(tempfile.mkdtemp(prefix="_core_rollback_outside_"))
+        self.addCleanup(shutil.rmtree, outside, True)
+        (outside / "item.jsonl").write_bytes(b"not the repository's\n")
+        runs = self.ledger.parent / "runs"
+        runs.symlink_to(outside, target_is_directory=True)
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "a ledger link")
+        runs.unlink()
+        runs.mkdir()
+        (runs / "item.jsonl").write_bytes(b"inside\n")
+        self._fail_a_mutation()
+        self.assertEqual((outside / "item.jsonl").read_bytes(), b"not the repository's\n")
+        self.assertFalse(runs.is_symlink())
+        self.assertEqual((runs / "item.jsonl").read_bytes(), b"inside\n")
+
+    def test_a_ledger_file_deleted_since_the_last_commit_stays_deleted(self):
+        self.ledger.unlink()
+        self._fail_a_mutation()
+        self.assertFalse(self.ledger.exists(), "the reset brought back a deleted ledger")
+        self.assertEqual(self._status(), [" D Prod/.implementation/position.jsonl"])
+
+    def test_a_ledger_file_renamed_in_the_index_keeps_its_new_name(self):
+        older = self.ledger.parent / "older.jsonl"
+        _git(self.repo, "mv", str(self.ledger), str(older))
+        self._fail_a_mutation()
+        self.assertFalse(self.ledger.exists())
+        self.assertEqual(older.read_text(), '{"kind": "step"}\n')
+
+    def test_an_ignored_ledger_is_never_listed_and_never_touched(self):
+        """Neither reset nor a clean without `-x` touches an ignored file, so
+        there is nothing to keep."""
+        (self.repo / ".gitignore").write_text("scratch/\n")
+        _git(self.repo, "add", ".gitignore")
+        _git(self.repo, "commit", "-qm", "ignore scratch")
+        ignored = self.repo / "scratch" / ".implementation" / "position.jsonl"
+        ignored.parent.mkdir(parents=True)
+        ignored.write_text('{"kind": "step"}\n')
+        self.assertEqual(impl_guards.own_bookkeeping_snapshot(self.repo), {})
+        self._fail_a_mutation()
+        self.assertEqual(ignored.read_text(), '{"kind": "step"}\n')
+
+    def test_the_snapshot_holds_the_ledger_and_nothing_else(self):
+        """The same component match as the guard: a dirty file elsewhere, or
+        in a directory that only starts with the ledger's name, is not the
+        skill's to keep."""
+        self.ledger.write_text("appended\n")
+        (self.repo / "Prod" / "kept.txt").write_text("somebody's edit\n")
+        (self.repo / ".implementationX").mkdir()
+        (self.repo / ".implementationX" / "note.txt").write_text("mine\n")
+        self.assertEqual(impl_guards.own_bookkeeping_snapshot(self.repo),
+                         {"Prod/.implementation/position.jsonl": b"appended\n"})
 
 
 class NonForgeInterpreterGuardTests(unittest.TestCase):

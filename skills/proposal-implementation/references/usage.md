@@ -2844,7 +2844,7 @@ state, alongside the scenarios — not verified by hand once.
 | `FINDINGS_DECLARED` | `admit --no-findings` was run while `tests/findings.py` declares findings. The flag records an empty audit only; drop it to rule on the findings. |
 | `DESTINATION_CONFLICT` | A destination is taken, or two sources target one path. For `materialize --stage`, a destination appeared between the destination set's computation and the write; the whole stage refuses before any byte lands. |
 | `UNCLASSIFIED_FILES` | No rule covers some files. Ask where they belong. |
-| `APPLY_ABORTED` | Something failed mid-migration, or mid-`materialize`. Nothing was committed/written and the tree was restored; re-run `plan`. |
+| `APPLY_ABORTED` | Something failed mid-migration, or mid-`materialize`. Nothing was committed/written and the tree was restored, with the skill's own `.implementation/` ledger exactly as it was before the command; re-run `plan`. |
 | `MATERIALIZE_MODE_REQUIRED` | `materialize` needs exactly one of `--stage`/`--authored`/`--adopt`; none was given. |
 | `MATERIALIZE_MODE_CONFLICT` | Two or more of `--stage`/`--authored`/`--adopt` were given together; the three modes are mutually exclusive. |
 | `PLAN_REQUIRED` | `materialize --stage` needs `--plan <approved plan JSON>`. |
