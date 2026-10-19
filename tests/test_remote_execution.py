@@ -7340,7 +7340,8 @@ class PollFetchDriverTests(unittest.TestCase):
                             url="https://files.example.invalid/boom",
                             file_name="second.csv"),
                     ],
-                    log="why the run failed\n")
+                    log="why the run failed\n",
+                    next_page_token="")
 
         with tempfile.TemporaryDirectory() as tmp:
             into = Path(tmp) / "out"
@@ -7382,7 +7383,8 @@ class PollFetchDriverTests(unittest.TestCase):
                     files=[SimpleNamespace(
                         url="https://files.example.invalid/escape",
                         file_name="../../escaped.txt")],
-                    log="")
+                    log="",
+                    next_page_token="")
 
         with tempfile.TemporaryDirectory() as tmp:
             into = Path(tmp) / "out"
@@ -7623,6 +7625,108 @@ class PollFetchDriverTests(unittest.TestCase):
                 self.assertEqual(self._leftovers(into), [])
         self.assertEqual((into / "f").read_bytes(), b"x" * 6)
 
+    @staticmethod
+    def _paged_client(pages: dict):
+        """A kernels client whose listing answers `pages[page_token]`, each a
+        `(file names, log, next_page_token)` or an exception to raise, and
+        records every token asked for; each file downloads as its own URL's
+        bytes, and `downloaded` records every URL fetched."""
+        asked: list = []
+
+        class _PagedClient:
+            def __init__(self) -> None:
+                self.downloaded: list = []
+                self._client = SimpleNamespace(_session=_session_answering(self._answer))
+
+            def _answer(self, request):
+                self.downloaded.append(request.url)
+                return _streamed(request.url.encode())
+
+            def list_kernel_session_output(self, request):
+                asked.append(request.page_token)
+                page = pages[request.page_token]
+                if isinstance(page, Exception):
+                    raise page
+                names, log, token = page
+                return SimpleNamespace(
+                    files=[SimpleNamespace(url=f"https://files.example.invalid/{name}", file_name=name)
+                           for name in names],
+                    log=log, next_page_token=token)
+
+        return _PagedClient(), asked
+
+    def test_fetch_follows_every_page_of_the_output_listing(self) -> None:
+        """The listing is paged, and `kaggle kernels output` reads every page;
+        a fetch that stopped at the first one came back short and said ok."""
+        driver = _load_kaggle_driver_module()
+        client, asked = self._paged_client({
+            "": (["a.csv", "b.csv"], "kernel log\n", "page-2"),
+            "page-2": (["c.csv"], None, "page-3"),
+            "page-3": (["nested/d.csv"], None, ""),
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            into = Path(tmp) / "out"
+            result = driver.cmd_fetch(client, "w1/papersmith-job", into)
+
+            self.assertEqual(asked, ["", "page-2", "page-3"])
+            self.assertEqual(
+                result["files"], ["a.csv", "b.csv", "c.csv", "log.txt", "nested/d.csv"])
+            self.assertEqual(
+                (into / "nested/d.csv").read_bytes(), b"https://files.example.invalid/nested/d.csv")
+            self.assertEqual((into / "log.txt").read_text(encoding="utf-8"), "kernel log\n")
+
+    def test_fetch_refuses_a_listing_that_repeats_a_page_token(self) -> None:
+        driver = _load_kaggle_driver_module()
+        client, asked = self._paged_client({
+            "": (["a.csv"], "kernel log\n", "page-2"),
+            "page-2": (["b.csv"], None, "page-2"),
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            into = Path(tmp) / "out"
+            with self.assertRaises(driver.DriverError) as caught:
+                driver.cmd_fetch(client, "w1/papersmith-job", into)
+
+            self.assertIn("'page-2'", str(caught.exception))
+            self.assertEqual(asked, ["", "page-2"])
+            self.assertTrue((into / "log.txt").is_file(), "the log still lands first")
+            self.assertEqual(client.downloaded, [], "nothing downloads from a listing that never ends")
+
+    def test_a_later_page_that_fails_to_list_keeps_the_log_and_downloads_nothing(self) -> None:
+        """Every page is listed before any file is downloaded, and the log
+        comes with page one: a listing that breaks on page two leaves that
+        log, exactly as sent, and no file at all. The failure itself reaches
+        `main()` unchanged, which reports it."""
+        driver = _load_kaggle_driver_module()
+        broken = requests.HTTPError("503 Server Error: page two never answered")
+        client, asked = self._paged_client({
+            "": (["a.csv"], "kernel log\n", "page-2"),
+            "page-2": broken,
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            into = Path(tmp) / "out"
+            with self.assertRaises(requests.HTTPError) as caught:
+                driver.cmd_fetch(client, "w1/papersmith-job", into)
+
+            self.assertIs(caught.exception, broken)
+            self.assertEqual(asked, ["", "page-2"])
+            self.assertEqual(client.downloaded, [])
+            self.assertEqual(sorted(path.name for path in into.iterdir()), ["log.txt"])
+            self.assertEqual((into / "log.txt").read_text(encoding="utf-8"), "kernel log\n")
+
+    def test_fetch_refuses_past_its_page_ceiling(self) -> None:
+        driver = _load_kaggle_driver_module()
+        client, asked = self._paged_client({
+            "": ([], None, "t1"), "t1": ([], None, "t2"), "t2": ([], None, "t3"),
+            "t3": ([], None, ""),
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch.object(driver, "FETCH_MAX_PAGES", 3):
+                with self.assertRaises(driver.DriverError) as caught:
+                    driver.cmd_fetch(client, "w1/papersmith-job", Path(tmp) / "out")
+
+        self.assertIn("more than 3 pages", str(caught.exception))
+        self.assertEqual(asked, ["", "t1", "t2"])
+
     def test_fetch_never_relies_on_kernel_session_id_from_status_response(self) -> None:
         """Task 3.4 / the design's own measured fact:
         `ApiGetKernelSessionStatusResponse` carries only `status` and
@@ -7648,6 +7752,7 @@ class PollFetchDriverTests(unittest.TestCase):
                 )
             ],
             log="kernel log\n",
+            next_page_token="",
         )
 
         class _RefusingKernelsClient:
@@ -7716,11 +7821,17 @@ class PollFetchDriverTests(unittest.TestCase):
         self.assertTrue(hasattr(download_request, "owner_slug"))
 
         driver = _load_kaggle_driver_module()
-        source = inspect.getsource(driver.cmd_fetch)
-        self.assertIn("request = ApiListKernelSessionOutputRequest()", source)
-        self.assertIn("request.user_name", source)
+        # Since #93 the listing request is built in one place, for every
+        # page, so the lock reads that builder and the whole fetch path.
+        builder = inspect.getsource(driver._list_output_page)
+        self.assertIn("request = ApiListKernelSessionOutputRequest()", builder)
+        self.assertIn("request.user_name", builder)
+        self.assertIn("_list_output_page(", inspect.getsource(driver.cmd_fetch))
+        source = "".join(
+            inspect.getsource(function)
+            for function in (driver.cmd_fetch, driver._list_output_page, driver._every_listed_file))
         # `ApiDownloadKernelOutputRequest`/`owner_slug` may appear only in
-        # this function's own docstring, documenting why they are NOT used
+        # `cmd_fetch`'s own docstring, documenting why they are NOT used
         # (see the module doc above) -- never as constructed code.
         self.assertNotIn("ApiDownloadKernelOutputRequest()", source)
         self.assertNotIn(".owner_slug", source)
