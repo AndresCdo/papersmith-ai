@@ -23836,6 +23836,57 @@ class CrashCaptureTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "env boom")
         self.assertFalse(self.ledger_path(box).exists())
 
+    def _crash_step(self, target, name):
+        """`step` crashing with a plain `RuntimeError` at `target`/`name`
+        exactly as typed, constructed the way the reachability test above
+        constructs one."""
+        boom = unittest.mock.Mock(side_effect=RuntimeError("boom"))
+        with unittest.mock.patch.dict(impl.COMMANDS, {"step": boom}):
+            with self.assertRaises(RuntimeError):
+                impl.main(["step", "--target", str(target), "--name", name,
+                          "--session", "s1", "--step", "whatever"])
+
+    def test_a_crash_outside_the_workspace_logs_nothing_there(self):
+        """A crash is logged only where `defect` could log one. A repository
+        outside the workspace has no ledger any gate reads, and the recorder
+        used to create one wherever `--target` pointed."""
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        (outside / "Method").mkdir()
+        subprocess.run(["git", "init", "-q", str(outside)], check=True, capture_output=True)
+        self._crash_step(outside, "Method")
+        self.assertFalse(self.ledger_path(outside).exists())
+
+    def test_a_crash_never_creates_an_absent_target(self):
+        """`adopt` surveys a target that does not exist yet. Creating it to
+        hold a ledger would make the next `adopt` refuse
+        DESTINATION_CONFLICT over a folder holding nothing but that ledger."""
+        absent = FORGE / "implementations" / f"_e2e_crash_absent_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, absent, ignore_errors=True)
+        self._crash_step(absent, "Method")
+        self.assertFalse(absent.exists())
+
+    def test_a_crash_name_never_reaches_outside_its_target(self):
+        box = self._box()
+        escaped = f"_e2e_crash_escaped_{os.getpid()}_{id(self)}"
+        self.addCleanup(shutil.rmtree, box.parent / escaped, ignore_errors=True)
+        self._crash_step(box, f"../{escaped}")
+        self.assertFalse((box.parent / escaped).exists())
+
+    def test_a_crash_never_opens_a_second_product_tree(self):
+        """`defect` refuses PRODUCT_DIR_MISNAMED rather than opening a
+        phantom `<name>/` beside the real product folder; a crash under the
+        same name must not open it either."""
+        box = self._box()
+        (box / "Real" / "Notebooks").mkdir(parents=True)
+        (box / "Real" / "Notebooks" / "kept.txt").write_text("", encoding="utf-8")
+        git = ["git", "-c", "user.email=forge@example.invalid",
+               "-c", "user.name=forge", "-C", str(box)]
+        subprocess.run(git + ["add", "-A"], check=True, capture_output=True)
+        subprocess.run(git + ["commit", "-qm", "toy"], check=True, capture_output=True)
+        self._crash_step(box, "Method")
+        self.assertFalse(self.ledger_path(box).exists())
+
 
 class CommandRosterTests(unittest.TestCase):
     """`COMMANDS` binds every subcommand `main()` accepts; a table in
