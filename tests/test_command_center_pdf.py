@@ -100,6 +100,11 @@ class VendoredViewerTests(unittest.TestCase):
         page = (STATIC / "index.html").read_text(encoding="utf-8")
         self.assertIn("syncPdfPreview((data.run_details || {}).pdf_mtime || 0)", page)
         self.assertIn("scrollToPdfPage(Math.min(page, pdfTotalPages || 1))", page)
+        # A failed automatic reload keeps the document and is retried; a good
+        # load always brings the continuous viewer back from the native fallback.
+        self.assertIn("if (forceReload && pdfDoc) {", page)
+        self.assertIn("if (stack) stack.style.display = 'flex';\n          document.getElementById('pdfNativeIframe').style.display = 'none';", page)
+        self.assertIn("while (lastPdfToken && lastPdfToken !== loadedPdfToken)", page)
         # The editorial execute path still forces its own reload.
         self.assertIn("await initPdfViewer(true);\n        loadExecutionHistory();", page)
 

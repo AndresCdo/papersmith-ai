@@ -1749,12 +1749,16 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                                 headers=dict(_PAPER_HEADERS))
         return None
 
-    async def _terminal_body(request: Request) -> dict[str, Any]:
+    async def _terminal_body(request: Request) -> dict[str, Any] | None:
         try:
             body = await request.json()
         except Exception:  # noqa: BLE001 - a bad body is a 422, not a crash
-            return {}
-        return body if isinstance(body, dict) else {}
+            return None
+        return body if isinstance(body, dict) else None
+
+    def _bad_body() -> JSONResponse:
+        return JSONResponse({"detail": "the body must be a JSON object"}, status_code=422,
+                            headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/terminal/agents")
     def api_terminal_agents(request: Request) -> JSONResponse:
@@ -1772,6 +1776,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if refusal is not None:
             return refusal
         body = await _terminal_body(request)
+        if body is None:
+            return _bad_body()
         try:
             session = terminals.create(str(body.get("agent", "shell")),
                                        body.get("cols", 100), body.get("rows", 30))
@@ -1787,6 +1793,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if refusal is not None:
             return refusal
         body = await _terminal_body(request)
+        if body is None:
+            return _bad_body()
         try:
             if "cols" in body or "rows" in body:
                 terminals.resize(sid, body.get("cols"), body.get("rows"))

@@ -162,6 +162,11 @@ class RouteTests(unittest.TestCase):
                          "nope", _Request(SAME, {"data": "x"}))
         self.assertEqual(response.status_code, 404)
 
+    def test_a_malformed_body_is_422_and_opens_nothing(self) -> None:
+        response = self.create(SAME, ValueError("not json"))
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.app.state.terminal.count(), 0)
+
     def test_an_unknown_agent_is_422(self) -> None:
         self.assertEqual(self.create(SAME, {"agent": "rm -rf"}).status_code, 422)
 
