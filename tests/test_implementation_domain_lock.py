@@ -10,6 +10,7 @@ this lock itself would then have to scan and clear.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -27,6 +28,7 @@ SKILLS_DIR = FORGE / "skills"
 ENGINE_DIR = SKILLS_DIR / "_core" / "implementation" / "engine"
 ENGINE_FILE = ENGINE_DIR / "implementation_engine.py"
 
+import scratch_forge  # noqa: E402  (tests/ on path)
 from domain_profile import seeded_profile  # noqa: E402  (tests/ on path)
 
 
@@ -997,15 +999,17 @@ class CampaignProposalExclusionTests(unittest.TestCase):
 
 SHIPPED_LAUNCHER = (
     SKILLS_DIR / "experimental-implementation" / "scripts" / "implementation_cli.py")
+SHIPPED_PROFILE = SKILLS_DIR / "experimental-implementation" / "impl_profile.py"
 
 
 class TwoDocumentReadProvenTests(unittest.TestCase):
     """Real subprocesses against the SHIPPED `experimental-implementation`
     launcher and its own profile (never a synthetic fixture profile, and
-    never the shipped file mutated on disk) -- proves `documents[1]`'s own
-    text genuinely drives its own `fidelityByDocument` entry, and that a
-    documents-count check alone could not have told a correct fold from a
-    reverted one."""
+    never the shipped file mutated on disk: the mutation test runs its
+    reverted engine from a scratch forge, still with the shipped profile)
+    -- proves `documents[1]`'s own text genuinely drives its own
+    `fidelityByDocument` entry, and that a documents-count check alone
+    could not have told a correct fold from a reverted one."""
 
     PACKAGE = "TwoDocumentRead"
     DOC0_REVISION = "lock-doc0-r01.md"
@@ -1025,8 +1029,8 @@ class TwoDocumentReadProvenTests(unittest.TestCase):
         (self.doc1 / self.DOC1_NEW_REVISION).write_text(
             "the mathematical proposal, the current version.\n", encoding="utf-8")
 
-    def _build_box(self, *, doc1_revision: str, suffix: str = ""):
-        box = FORGE / "implementations" / f"_lock_read_{os.getpid()}_{id(self)}{suffix}"
+    def _build_box(self, *, doc1_revision: str, suffix: str = "", forge: Path = FORGE):
+        box = forge / "implementations" / f"_lock_read_{os.getpid()}_{id(self)}{suffix}"
         self.addCleanup(shutil.rmtree, box, ignore_errors=True)
         box.mkdir(parents=True)
         env = dict(os.environ)
@@ -1056,15 +1060,19 @@ class TwoDocumentReadProvenTests(unittest.TestCase):
                        check=True, capture_output=True)
         return box
 
-    def _verify(self, box: Path) -> dict:
+    def _verify(self, box: Path, *, forge: Path = FORGE,
+                launcher: Path = SHIPPED_LAUNCHER) -> dict:
         env = dict(os.environ)
         env.pop("IMPLEMENTATION_DOMAIN_PROFILE", None)
+        if launcher != SHIPPED_LAUNCHER:
+            # A scratch launcher has no profile beside it (`scratch_forge`).
+            env["IMPLEMENTATION_DOMAIN_PROFILE"] = str(SHIPPED_PROFILE)
         env["IMPLEMENTATION_PROPOSALS"] = str(self.doc0)
         env["IMPLEMENTATION_PROPOSALS_1"] = str(self.doc1)
         proc = subprocess.run(
-            [sys.executable, str(SHIPPED_LAUNCHER), "verify", "--target", str(box),
+            [sys.executable, str(launcher), "verify", "--target", str(box),
              "--name", self.PACKAGE, "--revision", self.DOC0_REVISION],
-            capture_output=True, text=True, cwd=FORGE, env=env)
+            capture_output=True, text=True, cwd=forge, env=env)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         return json.loads(proc.stdout)
 
@@ -1088,29 +1096,32 @@ class TwoDocumentReadProvenTests(unittest.TestCase):
             "document 1's own status did not change when its own text did, "
             "with document 0 held constant -- the fold did not read the index")
 
+    @staticmethod
+    def _shipped_engine_state() -> tuple[int, str]:
+        return (ENGINE_FILE.stat().st_mtime_ns,
+                hashlib.sha256(ENGINE_FILE.read_bytes()).hexdigest())
+
     def test_a_reverted_fold_is_caught_even_with_two_documents_declared(self):
         """The count-only failure mode this lock replaces: revert the
         per-document derivation on the REAL engine (Y5's own mutation) --
         `documents` still has two entries, but this lock still catches the
-        reversion, because it demonstrates the READ, not the count."""
-        engine = (SKILLS_DIR / "_core" / "implementation" / "engine"
-                 / "implementation_engine.py")
+        reversion, because it demonstrates the READ, not the count.
+
+        The reverted source runs in a scratch forge. Written over the shipped
+        engine, it was read -- once even as an empty file -- by any test
+        running beside this one (#92)."""
         old = "doc_revision_n = document_names[index]"
         new = "doc_revision_n = revision"
-        original = engine.read_text(encoding="utf-8")
+        shipped = self._shipped_engine_state()
+        original = ENGINE_FILE.read_text(encoding="utf-8")
         self.assertEqual(original.count(old), 1)
         self.assertEqual(original.count(new), 0)
-        mutated = original.replace(old, new, 1)
-        engine.write_text(mutated, encoding="utf-8")
-
-        def restore():
-            engine.write_text(original, encoding="utf-8")
-            self.assertEqual(engine.read_text(encoding="utf-8"), original)
-        self.addCleanup(restore)
+        forge, launcher = scratch_forge.build(
+            self, original.replace(old, new, 1), SHIPPED_LAUNCHER, prefix="reverted-fold-")
 
         clean_box = self._build_box(
-            doc1_revision=self.DOC1_NEW_REVISION, suffix="_mutated")
-        clean = self._verify(clean_box)
+            doc1_revision=self.DOC1_NEW_REVISION, suffix="_mutated", forge=forge)
+        clean = self._verify(clean_box, forge=forge, launcher=launcher)
         clean_by_doc = {e["label"]: e for e in clean["fidelity"]["fidelityByDocument"]}
         # Under the mutation, document 1's own current revision is
         # compared against document 0's `revision` instead of its own
@@ -1122,6 +1133,8 @@ class TwoDocumentReadProvenTests(unittest.TestCase):
             clean_by_doc["proposal"]["status"], "drift",
             "the reverted fold should have reported document 1 as drift "
             "under this mutation, even with two documents still declared")
+        self.assertEqual(self._shipped_engine_state(), shipped,
+                         "the mutation reached the shipped engine on disk")
 
 
 if __name__ == "__main__":
