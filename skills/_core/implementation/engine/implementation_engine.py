@@ -9461,13 +9461,33 @@ def cmd_plan(args: argparse.Namespace) -> dict:
     return build_plan(target, name, args.revision)
 
 
+def _read_approved_plan(plan_path: str) -> dict:
+    """The signed-off plan `apply` and `materialize --stage` gate on, or
+    `PLAN_STALE` when it cannot be read as one (#67). An unreadable path is
+    the operator's input, not a forge fault: left to raise, `main()` logs it
+    as a forge defect and every gating call then refuses `FORGE_DEFECT_OPEN`.
+    Same code and wording shape as `adopt --apply`.
+    """
+    try:
+        plan = json.loads(Path(plan_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        plan = None
+    if not isinstance(plan, dict):
+        raise Refused(
+            "PLAN_STALE",
+            f"The plan {plan_path} cannot be read as a plan; the binding to "
+            "the repository's structure is unestablished. Re-run `plan` and "
+            "get approval again.")
+    return plan
+
+
 def cmd_apply(args: argparse.Namespace) -> dict:
     target = resolve_target(args.target)
     name = validate_name(args.name)
     _require_no_open_defect(target, name)
     require_clean_worktree(target)
 
-    approved = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+    approved = _read_approved_plan(args.plan)
     if approved.get("target") != str(target) or approved.get("name") != name:
         raise Refused("PLAN_MISMATCH", "The approved plan was produced for a different target or name.")
 
@@ -19061,7 +19081,7 @@ def _materialize_plan_gate(target: Path, name: str, plan_path: str) -> dict:
     repository's structure has moved since approval. `materialize --stage`
     reuses it rather than minting a second gate over the same fact.
     """
-    approved = json.loads(Path(plan_path).read_text(encoding="utf-8"))
+    approved = _read_approved_plan(plan_path)
     if approved.get("target") != str(target) or approved.get("name") != name:
         raise Refused("PLAN_MISMATCH",
                       "The approved plan was produced for a different target or name.")
@@ -21689,6 +21709,27 @@ COMMANDS = {"walk": cmd_walk,
             **({"agree": cmd_agree} if len(DOCUMENTS) > 1 else {})}
 
 
+#: HTML comment delimiters. The position header is one `<!-- ... -->`
+#: comment, so none of these may appear inside an id it carries.
+_COMMENT_DELIMITERS = ("<!--", "-->", "--!>")
+
+
+def _session_identity(raw: str) -> str:
+    """`--session` as it may be persisted. The position header carries it as
+    `session=<id>` and parses it back with `\\S+` over ASCII bytes, so an id
+    with whitespace, a control or a non-ASCII character yields a header
+    no later call can parse (#67), and one holding a comment delimiter opens
+    a second block or ends the header's comment early. Argparse rejects
+    either up front: nothing is touched on disk and no defect is logged.
+    """
+    if (not raw or not all(0x21 <= ord(ch) <= 0x7E for ch in raw)
+            or any(mark in raw for mark in _COMMENT_DELIMITERS)):
+        raise argparse.ArgumentTypeError(
+            f"invalid session {raw!r}: use printable ASCII with no whitespace "
+            f"and none of {' '.join(_COMMENT_DELIMITERS)}")
+    return raw
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="implementation_cli",
                                      description=front_door_description())
@@ -21767,7 +21808,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "own directory; this flag never names it")
         if name in {"position", "propose", "gate", "offer", "close", "step",
                    "settle", "defect"}:
-            p.add_argument("--session", required=True,
+            p.add_argument("--session", required=True, type=_session_identity,
                            help="identity stamped into the ledger event(s) "
                                 "this call appends, and into the block's "
                                 "header for position")
@@ -21983,7 +22024,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "clears nothing; omitting the flag entirely "
                                 "clears nothing")
         if name == "walk":
-            p.add_argument("--session", required=True,
+            p.add_argument("--session", required=True, type=_session_identity,
                            help="the session driving this walk, stamped on "
                                 "every position write it triggers")
             p.add_argument("--revision", default=None,
@@ -22323,7 +22364,7 @@ def main(argv: list[str] | None = None) -> int:
                 help="the suite's fixed seed, substituted into {{SEED}} by "
                      "the scaffold stage of the apply's code leg.")
             p.add_argument(
-                "--session", default=None,
+                "--session", default=None, type=_session_identity,
                 help="identity carried in the apply report; the paper leg "
                      "and STATUS calls it gates are keyless.")
 
