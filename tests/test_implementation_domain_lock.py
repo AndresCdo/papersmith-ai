@@ -588,11 +588,16 @@ def build_denylist(profiles: list[dict[str, Any]]) -> dict[str, str]:
 #: holder's scaffold with the splice instead of first; the two copies of the
 #: comment explaining the early creation write are gone. Three SHRANK,
 #: deliberately: `before` 263->261, `empty` 132->131, `write` 156->154.
+#: #80 (a rollback keeps the skill's own ledger): the four rollbacks call
+#: `impl_guards.restore_starting_point` instead of spelling the reset and the
+#: clean themselves, so the eight `check=False` arguments those two calls
+#: passed at each site leave the engine. One SHRANK, deliberately: `check`
+#: 168->160.
 M5_PINNED_RESIDUE: dict[str, int] = {
     "actually": 83, "admissible": 3, "after": 93, "against": 196,
     "agreed": 16, "answered": 97, "answers": 107, "approved": 48,
     "audit": 19, "before": 261, "benchmark": 108, "beside": 111,
-    "check": 168, "checkable": 3, "claim": 41, "command": 276,
+    "check": 160, "checkable": 3, "claim": 41, "command": 276,
     "commands": 18, "compares": 25, "declaration": 212,
     "destinations": 36, "empty": 131, "established": 5, "experiment": 25,
     "experiments": 6, "implementations": 4, "incomplete": 29,
