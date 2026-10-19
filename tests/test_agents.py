@@ -23,6 +23,7 @@ survive an environment missing everything else.
 """
 
 import ast
+import functools
 import re
 import unittest
 from pathlib import Path
@@ -748,3 +749,270 @@ class AgentBindingTests(unittest.TestCase):
             f"backtick-quoted id -- classify each one, either among the "
             f"rules that confirm the `validated` stage closed, or in an "
             f"explicit sentence naming it as not this stretch's concern")
+
+
+# What an agent tells its reader to run, held to what the code accepts (#70).
+#
+# A flag as code defines it, matched whole.
+FLAG = re.compile(r"--[a-z][a-z0-9-]*")
+# A flag as documentation cites it: never the tail of a longer word or flag.
+CITED_FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
+# A flag JavaScript or TypeScript spells as a whole quoted literal.
+QUOTED_FLAG = re.compile(r"""['"`](--[a-z][a-z0-9-]*)['"`]""")
+# A fenced block (group 1) or an inline code span (group 2).
+CODE_SPAN = re.compile(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", re.DOTALL)
+# A skill directory a command names by path, `.claude/skills/<name>/` too.
+NAMED_SKILL = re.compile(r"skills/([\w-]+)/")
+# A shared-core directory code names: `_core/<name>` or `"_core", "<name>"`.
+CORE_REFERENCE = re.compile(r"""_core[/"', ]+([\w-]+)""")
+# A schema or format version as prose writes one: `v1`, `v1.1`.
+VERSION = re.compile(r"(?<![\w.])v\d+(?:\.\d+)*\b")
+CODE_SUFFIXES = (".py", ".mjs", ".cjs", ".js", ".ts")
+NUMBER_WORDS = {
+    word: value for value, word in enumerate(
+        "zero one two three four five six seven eight nine ten eleven "
+        "twelve thirteen fourteen fifteen sixteen seventeen eighteen "
+        "nineteen twenty".split())}
+# A count of inputs, spelled either way: "five inputs", "4 redactor inputs".
+INPUT_COUNT = re.compile(
+    r"\b({}|\d+)\s+(?:redactor\s+)?inputs\b".format(
+        "|".join(sorted(NUMBER_WORDS, key=len, reverse=True))),
+    re.IGNORECASE)
+
+
+def count_value(token: str) -> int:
+    return int(token) if token.isdigit() else NUMBER_WORDS[token.lower()]
+
+
+def code_files(tree: Path, suffixes: tuple = CODE_SUFFIXES):
+    """Every file under `tree` with one of `suffixes`, never one inside a
+    hidden directory, a dependency tree or a cache: a virtualenv an operator
+    made inside a skill would otherwise lend it every flag its packages
+    define."""
+    for path in sorted(tree.rglob("*")):
+        if path.suffix in suffixes and path.is_file() and not any(
+                part.startswith(".") or part in ("node_modules", "__pycache__")
+                for part in path.relative_to(tree).parts):
+            yield path
+
+
+def code_trees(skill: str) -> list:
+    """The skill's own directory, then each `skills/_core/<name>` its own code
+    names. Derived, so a skill that starts delegating to the shared core
+    brings that core's flags with it, and one that names none -- as
+    `paper-ingestion` names none -- is held to its own scripts alone."""
+    trees = [SKILLS / skill]
+    for path in code_files(SKILLS / skill):
+        source = path.read_text(encoding="utf-8", errors="replace")
+        for name in CORE_REFERENCE.findall(source):
+            core = SKILLS / "_core" / name
+            if core.is_dir() and core not in trees:
+                trees.append(core)
+    return trees
+
+
+@functools.lru_cache(maxsize=None)
+def defined_flags(skill: str) -> frozenset:
+    """Every flag the skill's code defines.
+
+    In Python, a string constant that is exactly one flag: what `add_argument`
+    declares, and what a hand-written parser compares against
+    (`check_atlas.py` reads `--pool` that way). In JavaScript and TypeScript,
+    a quoted literal that is exactly one. Never a flag inside a docstring, a
+    usage line or a message: that is prose about the CLI, and prose is what
+    drifted.
+    """
+    flags = set()
+    for tree in code_trees(skill):
+        for path in code_files(tree):
+            source = path.read_text(encoding="utf-8")
+            if path.suffix != ".py":
+                flags.update(QUOTED_FLAG.findall(source))
+                continue
+            try:
+                nodes = ast.walk(ast.parse(source))
+            except SyntaxError:
+                continue  # a template with `{{PLACEHOLDERS}}`, not code yet
+            flags.update(
+                node.value for node in nodes
+                if isinstance(node, ast.Constant)
+                and isinstance(node.value, str) and FLAG.fullmatch(node.value))
+    return frozenset(flags)
+
+
+def cited_commands(body: str) -> list:
+    """Every code span in `body`: an inline span whole, a fenced block line by
+    line, with a line that a trailing backslash continues joined to it."""
+    commands = []
+    for fenced, inline in CODE_SPAN.findall(body):
+        if fenced:
+            commands.extend(
+                line for line in fenced.replace("\\\n", " ").splitlines()
+                if line.strip())
+        else:
+            commands.append(inline)
+    return commands
+
+
+def undefined_flags(body: str, bound: str) -> tuple:
+    """`(checked, undefined)` for the flags `body` cites: how many there are,
+    and each one no code of its owner defines, as `(flag, owner, command)`.
+    A command that names a skill's path is that skill's to answer for; any
+    other span is `bound`'s."""
+    checked, undefined = 0, []
+    for command in cited_commands(body):
+        named = NAMED_SKILL.findall(command)
+        owner = named[0] if named else bound
+        for flag in CITED_FLAG.findall(command):
+            checked += 1
+            if flag not in defined_flags(owner):
+                undefined.append((flag, owner, command))
+    return checked, undefined
+
+
+@functools.lru_cache(maxsize=None)
+def known_versions(skill: str) -> frozenset:
+    """Every version token the skill's own doctrine and code name."""
+    known = set()
+    for tree in code_trees(skill):
+        for path in code_files(tree, CODE_SUFFIXES + (".md",)):
+            known.update(VERSION.findall(path.read_text(encoding="utf-8")))
+    return frozenset(known)
+
+
+def unknown_versions(body: str, skill: str) -> list:
+    """Each version `body` names that `skill` never names itself."""
+    return [version for version in VERSION.findall(body)
+            if version not in known_versions(skill)]
+
+
+#: The three paragraphs of `paper-ingestion.md` on a4ab4c82 that cite a flag
+#: or a schema version, verbatim. The controls below must refuse them, or a
+#: matcher that stopped matching would pass the agents by finding nothing.
+STALE_INGESTION_CONTRACT = (
+    "Before extraction, discover the document-named Markdown for every "
+    "requested PDF. If any exists without exact parent-approved `--force` "
+    "authorization, do not start that document and return machine-readable "
+    "`interaction_required`. Never modify a source PDF.\n\n"
+    "Run `python3 skills/paper-ingestion/scripts/extract_pdf.py <pdf> "
+    "--output-dir <source-root-parent>/normalized` only when its effective "
+    "behavior satisfies this contract. A forced run must stage Markdown, "
+    "manifest, and the complete asset directory separately, then replace "
+    "the prior set as one transaction. Any failure must leave the prior "
+    "complete set unchanged. A successful shorter rerun must remove "
+    "obsolete page assets. If transactional replacement is unavailable, "
+    "stop before `--force`.\n\n"
+    "This is lite evidence retention, not structured table extraction. "
+    "`extract.tables: true` means preserve possible table evidence only in "
+    "exact raw page text and rendered page images. Markdown must state this "
+    "limitation. Manifest v1.1 must expose a machine-readable "
+    "`lite_evidence_only` table mode and must not emit rows, columns, "
+    "cells, inferred values, or structured-table claims.")
+
+
+def claims(text: str) -> list:
+    """`text` cut into the units one claim lives in, whitespace-flattened: a
+    paragraph, or a single table row -- a table holds rows about different
+    agents, and a count in one row is not a claim about the next."""
+    found = []
+    for paragraph in re.split(r"\n\s*\n", text):
+        lines = paragraph.splitlines()
+        rows = [line for line in lines if line.lstrip().startswith("|")]
+        prose = [line for line in lines if not line.lstrip().startswith("|")]
+        found.extend(flat(row) for row in rows)
+        if prose:
+            found.append(flat("\n".join(prose)))
+    return found
+
+
+class AgentCliContractTests(unittest.TestCase):
+    """What an agent tells its reader to run is what the code accepts (#70).
+
+    `paper-ingestion.md` told its agent to run `extract_pdf.py` with
+    `--output-dir` and `--force` and to write a `Manifest v1.1`; the script
+    has neither flag and writes no manifest. The file was corrected once, and
+    the restated contract came back with a later refactor, reading exactly as
+    authoritative as the skill it contradicted. A review catches that once;
+    only a check catches it the second time.
+    """
+
+    def test_every_flag_an_agent_cites_is_one_its_skill_defines(self) -> None:
+        """A command that names a skill's path is that skill's to answer for
+        (`figure-auditor` runs `figure-review`'s `review_cli.py`); any other
+        span is the agent's own skill's."""
+        checked, undefined = 0, []
+        for path in sorted(AGENTS.glob("*.md")):
+            count, missing = undefined_flags(
+                path.read_text(encoding="utf-8"), bound_skill(path))
+            checked += count
+            undefined.extend(
+                f"{path.name}: {flag}, which no code of `{owner}` defines, "
+                f"in `{flat(command)}`" for flag, owner, command in missing)
+        self.assertGreaterEqual(
+            checked, 10,
+            f"the agents cite only {checked} flags: the span or flag pattern "
+            f"has stopped matching, and this check has stopped with it")
+        self.assertEqual(undefined, [])
+
+    def test_the_flag_check_refuses_the_flags_issue_70_found(self) -> None:
+        """The control: the stale contract is refused flag by flag, and a flag
+        the script does define passes."""
+        _, undefined = undefined_flags(STALE_INGESTION_CONTRACT, "paper-ingestion")
+        self.assertEqual([flag for flag, _, _ in undefined],
+                         ["--force", "--output-dir", "--force"])
+        self.assertEqual(
+            undefined_flags("`extract_pdf.py --list`", "paper-ingestion"), (1, []))
+
+    def test_every_schema_version_an_agent_cites_is_one_its_skill_knows(
+            self) -> None:
+        """`Manifest v1.1` named a schema the skill had already given up: its
+        output contract writes no manifest at all. A version an agent names is
+        one its skill's own doctrine or code names too."""
+        unknown = [
+            f"{path.name}: {version}, which `{bound_skill(path)}` never names"
+            for path in sorted(AGENTS.glob("*.md"))
+            for version in unknown_versions(
+                path.read_text(encoding="utf-8"), bound_skill(path))]
+        self.assertEqual(unknown, [])
+
+    def test_the_version_check_refuses_the_schema_issue_70_found(self) -> None:
+        """The control. No agent names a version today, so the check above
+        passes on nothing; this is what shows it would still refuse one."""
+        self.assertEqual(
+            unknown_versions(STALE_INGESTION_CONTRACT, "paper-ingestion"), ["v1.1"])
+        self.assertEqual(unknown_versions("hand-adopted v1", "proposal-deliberation"), [])
+
+    def test_redactor_packet_contract_matches_agent_inputs(self) -> None:
+        """Every count of the redactor's inputs is the one its description
+        declares.
+
+        `packet` came to hand a `transposition`-mode block its own bound
+        source sections (`the-redactor-receives-the-section-it-must-
+        transpose`) and the redactor's description gained a fifth input,
+        while the skill's own delegation step and the manual kept counting
+        four.
+        """
+        agent = AGENTS / "redactor.md"
+        declared = re.search(r"\bexactly (\w+) inputs\b",
+                             frontmatter(agent).get("description", ""))
+        self.assertIsNotNone(
+            declared, "the redactor's description no longer counts its inputs")
+        expected = count_value(declared.group(1))
+        documents = [*code_files(SKILLS, (".md",)),
+                     *sorted(AGENTS.glob("*.md")), ROOT / "README.md"]
+        stated, wrong = 0, []
+        for path in documents:
+            for claim in claims(path.read_text(encoding="utf-8")):
+                if path != agent and "redactor" not in claim.lower():
+                    continue
+                for count in INPUT_COUNT.findall(claim):
+                    stated += 1
+                    if count_value(count) != expected:
+                        wrong.append(
+                            f"{path.relative_to(ROOT)} counts {count} where the "
+                            f"redactor declares {declared.group(1)}: {claim[:120]}")
+        self.assertGreaterEqual(
+            stated, 3,
+            f"only {stated} counts of the redactor's inputs found: the pattern "
+            f"has stopped matching, and this check has stopped with it")
+        self.assertEqual(wrong, [])
