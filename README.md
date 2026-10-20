@@ -3605,9 +3605,14 @@ waits for your Enter; **▶ Ejecutar** keeps its own path. Routes:
 `DELETE /api/terminal/sessions/<id>` and `GET /api/terminal/sessions/<id>/stream`
 (SSE, base64 `output` frames then `exit`). At most four sessions; they close
 with the server. The console is a shell with your privileges, so it is only
-offered on a loopback bind (`smith ui --no-terminal` turns it off) and every
-call must be same-origin: a foreign `Origin` or `Sec-Fetch-Site`, a missing
-`X-Papersmith-Terminal: 1` header or a non-JSON body answers `403`.
+offered on a loopback bind (`smith ui --no-terminal` turns it off). Each server
+start creates a secret: the browser it opens (or the `dashboard login URL` it
+prints, for `--no-browser`) goes through `GET /api/terminal/login?token=…`, which
+sets an HttpOnly, SameSite=Strict cookie, and every terminal route requires it,
+so another local user or a `curl` without the token gets `403`. Every call must
+also be same-origin: a foreign `Origin` or `Sec-Fetch-Site`, a missing
+`X-Papersmith-Terminal: 1` header or a non-JSON body answers `403`. Sessions that
+end on their own are released and stop counting toward the cap.
 
 **Live PDF preview.** The *Previsualización PDF* tab renders `paper/main.pdf`
 with pdf.js 3.11.174, vendored in `skills/_core/command_center/static/vendor/`
