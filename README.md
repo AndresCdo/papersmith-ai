@@ -3580,6 +3580,18 @@ module accepts the same flag):
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
 
+**A new workspace starts clean.** `smith init` copies only the framework (the
+kit's skills, section contracts, agents and setup scripts) into an empty folder
+and seeds `papersmith.yaml`; it never copies artifacts, graphs or data from
+another project. The dashboard draws every part of the *Mapa Conceptual &
+Modelo* tab — novelty pillars, hypotheses, concept-map layers, proof-of-concept
+experiments, equations — from the workspace itself, and shows a neutral "pending
+deliberation" state until its own proposal and experiments exist. A workspace may
+provide `.papersmith/model_spec.json` and `.papersmith/novelty_graph.json` to
+draw its own model and novelty graph; nothing project-specific ships with the
+framework (`tests/test_clean_init.py` scans the kit and a fresh workspace's
+dashboard for traces of earlier projects).
+
 **Math panel and Socratic tutor.** *Mapa Conceptual & Modelo → Matemática &
 Tutor* shows the paper's own mathematics as LaTeX rendered by KaTeX 0.16.22
 (vendored, offline): a lema, then one card per equation (heading, display
