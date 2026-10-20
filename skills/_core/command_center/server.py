@@ -32,7 +32,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, atlas_build, decisions, terminal, history, paper_preview, novelty_graph, model_spec
+from . import atlas, atlas_build, decisions, math_view, terminal, tutor, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -1120,6 +1120,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         return JSONResponse(paper_preview.build_preview(root_path),
                             headers=dict(_PAPER_HEADERS))
 
+    @app.get("/api/model/math")
+    def api_model_math() -> JSONResponse:
+        # The math panel: the paper's own LaTeX and its novelty card (read-only).
+        return JSONResponse(math_view.build(root_path), headers=dict(_PAPER_HEADERS))
+
     @app.get("/api/model")
     def api_model() -> JSONResponse:
         """Return conceptual architecture, formal mathematical model, and PoC deliberation plan."""
@@ -1803,6 +1808,72 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             "default": next((a["id"] for a in agents if a["available"]), "shell"),
             "quick": {"shell": list(terminal.SHELL_QUICK), "agent": slash[:24]},
         }, headers=dict(_PAPER_HEADERS))
+
+    # ------------------------------------------------------------ math tutor
+    # The Socratic tutor runs the reader's own agent CLI, so it lives behind the
+    # same secret cookie and origin guards as the terminal (and under its path,
+    # where that cookie is sent).
+    def _tutor_error(error: Exception, status: int = 422) -> JSONResponse:
+        return JSONResponse({"detail": str(error)}, status_code=status, headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/terminal/tutor/thread")
+    def api_tutor_thread(request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=False)
+        if refusal is not None:
+            return refusal
+        return JSONResponse(tutor.load_thread(root_path), headers=dict(_PAPER_HEADERS))
+
+    @app.delete("/api/terminal/tutor/thread")
+    def api_tutor_reset(request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        tutor.reset_thread(root_path)
+        return JSONResponse({"ok": True}, headers=dict(_PAPER_HEADERS))
+
+    @app.post("/api/terminal/tutor/images")
+    async def api_tutor_upload(request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        body = await _terminal_body(request)
+        if body is None:
+            return _bad_body()
+        try:
+            saved = await asyncio.to_thread(tutor.save_image, root_path, body.get("data_url"))
+        except tutor.TutorError as error:
+            return _tutor_error(error)
+        return JSONResponse(saved, headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/terminal/tutor/images/{image_id}")
+    def api_tutor_image(image_id: str, request: Request) -> Response:
+        refusal = _terminal_refusal(request, mutating=False)
+        if refusal is not None:
+            return refusal
+        try:
+            path = tutor.image_path(root_path, image_id)
+        except tutor.TutorError as error:
+            return _tutor_error(error, 404)
+        return Response(path.read_bytes(), media_type=tutor.image_type(path),
+                        headers={**_PAPER_HEADERS, "Cache-Control": "private, max-age=86400"})
+
+    @app.post("/api/terminal/tutor/turn")
+    async def api_tutor_turn(request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        body = await _terminal_body(request)
+        if body is None:
+            return _bad_body()
+        try:
+            turn = await asyncio.to_thread(tutor.run_turn, root_path, body.get("message", ""),
+                                           body.get("images", []), body.get("mode", "ask"),
+                                           runner=lambda *args: tutor.run_agent(*args))
+        except tutor.TutorError as error:
+            return _tutor_error(error)
+        except subprocess.TimeoutExpired:
+            return _tutor_error(RuntimeError("the tutor took too long to answer"), 504)
+        return JSONResponse(turn, headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/terminal/tools")
     def api_terminal_tools(request: Request) -> JSONResponse:

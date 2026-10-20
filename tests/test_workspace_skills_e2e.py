@@ -33,6 +33,7 @@ SKILL_NAMES = (
     "experimental-implementation",
     "figure-review",
     "kaggle-accounts",
+    "math-tutor",
     "paper-ingestion",
     "paper-writing",
     "plausibility",

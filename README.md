@@ -3580,6 +3580,29 @@ module accepts the same flag):
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
 
+**Math panel and Socratic tutor.** *Mapa Conceptual & Modelo → Matemática &
+Tutor* shows the paper's own mathematics as LaTeX rendered by KaTeX 0.16.22
+(vendored, offline): a lema, then one card per equation (heading, display
+equation, a one-line *Conexión*, variables), beside a compact *Idea y novedad*
+card (central idea, novelty, problem, contributions, key equation).
+`GET /api/model/math` builds it from the latest
+`proposals/research-concept-<slug>-rNN.md` (every `$$`-fenced block with its
+`\tag{N}`, the heading above it and the first sentence after it) and its
+`.sky.json` overlay, else from `.papersmith/model_spec.json`; an empty
+workspace says so instead of inventing equations. The **tutor** beside it is
+the `math-tutor` skill: drop, paste or pick photos of your hand-written pages
+(PNG/JPEG/WebP, up to 8 MiB, at most 6 per turn), write, choose *Preguntar*,
+*Explícame* or *Evalúame*, and each turn runs the `math-tutor` agent headless
+with your own agent CLI — `claude -p` with only the `Read` tool, the turn's JSON
+schema, no MCP and only local settings, or `pi -p` as a fallback — so no API key
+lives in the dashboard. The tutor reads the image back as LaTeX and parts, asks
+one question at a time, rates understanding 0–4 (*reconoce*, *explica*,
+*deriva*, *justifica*) with evidence quoted from you, and ties every step to the
+paper's novelty. Uploads and the thread live in `.papersmith/math-tutor/`. Routes
+(behind the terminal's secret cookie and origin guards):
+`GET|DELETE /api/terminal/tutor/thread`, `POST /api/terminal/tutor/images`,
+`GET /api/terminal/tutor/images/<id>` and `POST /api/terminal/tutor/turn`.
+
 **Graph toolbar and cross-panel links.** The *Atlas* tab keeps its three graph
 switches and adds **⚡ Regenerar grafo** (the SOTA atlas through
 `POST /api/atlas/build`, same as `smith atlas build`; on the novelty graph it
