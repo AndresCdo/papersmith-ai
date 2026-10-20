@@ -1,0 +1,476 @@
+{
+ "title": "MONEEG: Embedded 32-Channel EEG Acquisition Framework with Deterministic Hardware Synchronization for Pediatric ADHD Brain-Computer Interfaces",
+ "target_journal": "Elsevier — Biomedical Signal Processing and Control / Computers in Biology and Medicine",
+ "authors": "Julián David Parias Osorio (Primer Autor) & Andrés Álvarez (Supervisor) — LabIA UNAL",
+ "trl": "TRL 6 / TRL 7 (Entorno Operacional y Validación con Pacientes)",
+ "executive_summary": "El proyecto MONEEG introduce una plataforma embebida de adquisición bioeléctrica de 32 canales diseñada específicamente para superar las barreras de usabilidad clínica, intolerancia sensorial y dispersión temporal en intervenciones BCI para niños con TDAH. La plataforma resuelve la disyuntiva entre amplificadores clínicos costosos (>15.000 USD) e intrusivos y cascos de consumo de bajo costo con elevado piso de ruido y jitter inaceptable. Integra un casco pediátrico ergonómico 3D con monitoreo en tiempo real de impedancia, un núcleo embebido heterogéneo (ARM Cortex-M4F + Linux PREEMPT_RT) con piso de ruido submicrovoltio (<1.1 µVpp), y sincronización determinista de marcas a nivel de interrupción de hardware con el videojuego serio Eagle Eye, acotando el jitter por debajo de 5 µs para análisis exacto de ERPs.",
+ "novelty": {
+  "problem_statement": "La investigación y traslación clínica de interfaces cerebro-computador en población pediátrica con TDAH se encuentra estancada debido a dos extremos inviables: equipos clínicos voluminosos con cableado rígido que generan fatiga y estrés en niños, y wearables comerciales con jitter temporal descontrolado (>25 ms) y pérdida de paquetes sobre Bluetooth/WiFi que destruyen la fase de potenciales evocados cognitivos (P300, N200).",
+  "pillars": [
+   {
+    "id": "pillar-1",
+    "name": "Capa Física Pediátrica & Ergonomía Activa",
+    "badge": "HARDWARE FÍSICO",
+    "color": "#38bdf8",
+    "summary": "Casco modular impreso en 3D ajustado a biometría craneal infantil con portaelectrodos de rápido cebado.",
+    "details": "Integración del circuito de inyección de corriente de prueba del ADS1299 para verificación continua de la impedancia electrodo-piel en tiempo real sin desconectar al paciente (media 9.45 kΩ, desviación 0.15 kΩ)."
+   },
+   {
+    "id": "pillar-2",
+    "name": "Arquitectura Embebida Heterogénea Co-Diseñada",
+    "badge": "ELECTRÓNICA & FIRMWARE",
+    "color": "#10b981",
+    "summary": "Desacoplamiento estricto entre adquisición dura bare-metal y procesamiento de red con Linux PREEMPT_RT.",
+    "details": "Cadena de cuatro AFEs ADS1299 en cascada daisy-chain comunicados por SPI síncrono con microcontrolador TM4C1294 (ARM Cortex-M4F @ 120 MHz), logrando un piso de ruido analógico submicrovoltio (<1.1 µVpp) y 0% de pérdida de paquetes en streaming UDP de 400 min."
+   },
+   {
+    "id": "pillar-3",
+    "name": "Sincronización Hardware Determinista (<5 µs)",
+    "badge": "METROLOGÍA TEMPORAL",
+    "color": "#f59e0b",
+    "summary": "Inyección directa de banderas de estímulo del videojuego serio en la cabecera de la trama SPI a nivel de interrupción.",
+    "details": "Eliminación total del retardo y dispersión del sistema operativo (OS scheduling jitter). El jitter temporal extremo se acota a 2.4 µs (<5 µs garantizado), preservando la morfología y fase de potenciales evocados ERP."
+   }
+  ],
+  "hypotheses": [
+   {
+    "id": "H1",
+    "title": "Fidelidad Analógica Submicrovoltio",
+    "statement": "Una topología en cascada de cuatro ADS1299 acoplada a un MCU bare-metal con planos analógico y digital galvánicamente desacoplados mantiene un piso de ruido peak-to-peak inferior a 1.1 µV en los 32 canales simultáneos.",
+    "status": "VALIDADA (PASS)",
+    "evidence": "Vpp medido = 0.94 µV, sigma = 0.14 µV (Sección 4, Fig. 3)"
+   },
+   {
+    "id": "H2",
+    "title": "Sincronización Determinista de Eventos",
+    "statement": "La inserción síncrona de banderas de evento dentro de la cabecera SPI en el microcontrolador acota el jitter temporal por debajo de 5 µs, evitando la atenuación de fase en ERPs cognitivos.",
+    "status": "VALIDADA (PASS)",
+    "evidence": "Jitter medido = 2.4 µs en banco de pruebas con analizador lógico (Sección 4, Fig. 5)"
+   },
+   {
+    "id": "H3",
+    "title": "Estabilidad Pediátrica en Streaming Continuo",
+    "statement": "La arquitectura co-diseñada permite sesiones in-vivo prolongadas de más de 400 minutos continuos sin pérdida de tramas UDP ni degradación de impedancia en tareas lúdicas infantiles.",
+    "status": "VALIDADA (PASS)",
+    "evidence": "0% de paquetes perdidos en 400 min; reactividad alfa comprobada en electrodo O2 con delta de 3.8 dB (Sección 4, Fig. 6)"
+   }
+  ]
+ },
+ "concept_map": {
+  "layers": [
+   {
+    "level": 1,
+    "name": "Capa 1: Transducción Bioeléctrica & Sujeto Infantil",
+    "tag": "BIOMÉDICA & ERGONOMÍA",
+    "color": "#38bdf8",
+    "description": "Captación superficial de biopotenciales sobre el cuero cabelludo mediante 32 electrodos Ag/AgCl y supresión de modo común.",
+    "nodes": [
+     {
+      "name": "Sujeto Infantil (TDAH)",
+      "type": "subject",
+      "desc": "Población pediátrica en protocolo lúdico no invasivo"
+     },
+     {
+      "name": "Casco Impreso 3D",
+      "type": "physical",
+      "desc": "Estructura flexible ultraligera con fijación de electrodos 10-20"
+     },
+     {
+      "name": "Monitoreo de Impedancia",
+      "type": "circuit",
+      "desc": "Detección lead-off ADS1299 (Z = 9.45 ± 0.15 kΩ)"
+     },
+     {
+      "name": "Electrodo RLD Activo",
+      "type": "feedback",
+      "desc": "Inyección de contratensión para anular interferencia de red de 60 Hz"
+     }
+    ]
+   },
+   {
+    "level": 2,
+    "name": "Capa 2: Acondicionamiento & Conversión Analógica Σ-Δ",
+    "tag": "FRONT-END ANALÓGICO",
+    "color": "#10b981",
+    "description": "Amplificación diferencial de bajo ruido, filtrado antialiasing y cuantización sincrónica de 24 bits.",
+    "nodes": [
+     {
+      "name": "4x ADS1299 en Cascada",
+      "type": "afe",
+      "desc": "Daisy-chain de 32 canales diferenciales simultáneos"
+     },
+     {
+      "name": "Amplificador PGA (Gain = 24)",
+      "type": "analog",
+      "desc": "Rango dinámico de entrada ±187.5 mV, CMRR > 110 dB"
+     },
+     {
+      "name": "Conversión Σ-Δ 24 bits",
+      "type": "adc",
+      "desc": "Muestreo a fs = 250 Hz (Ts = 4 ms), resolución 0.02235 µV/LSB"
+     },
+     {
+      "name": "Aislamiento de Masa",
+      "type": "power",
+      "desc": "Reguladores LDO ultra-low-noise (TPS7A49/30) y plano desacoplado"
+     }
+    ]
+   },
+   {
+    "level": 3,
+    "name": "Capa 3: Núcleo Embebido & Sincronización Hardware",
+    "tag": "FIRMWARE DETERMINISTA",
+    "color": "#f59e0b",
+    "description": "Gestión determinista de lectura SPI por DMA y acoplamiento instantáneo de marcas de estímulo en la cabecera.",
+    "nodes": [
+     {
+      "name": "TM4C1294 ARM Cortex-M4F",
+      "type": "mcu",
+      "desc": "Ejecución bare-metal a 120 MHz sin sistema operativo"
+     },
+     {
+      "name": "Bus SPI Síncrono (SSI)",
+      "type": "bus",
+      "desc": "Lectura DMA de 102 bytes por muestra a reloj de 10 MHz"
+     },
+     {
+      "name": "Interrupción de Hardware",
+      "type": "sync",
+      "desc": "Recepción de disparo de estímulo externo con latencia <5 µs"
+     },
+     {
+      "name": "Ensamblado de Trama",
+      "type": "framing",
+      "desc": "Inyección de flags de evento directamente en el encabezado SPI"
+     }
+    ]
+   },
+   {
+    "level": 4,
+    "name": "Capa 4: Cómputo en Tiempo Real & Streaming UDP",
+    "tag": "COMPUTACIÓN EMBEBIDA",
+    "color": "#818cf8",
+    "description": "Recepción de tramas, verificación de integridad y transmisión inalámbrica hacia la estación de monitoreo.",
+    "nodes": [
+     {
+      "name": "Raspberry Pi CM4",
+      "type": "processor",
+      "desc": "Kernel Linux parcheado con PREEMPT_RT para tiempo real"
+     },
+     {
+      "name": "Videojuego Eagle Eye (Unity)",
+      "type": "game",
+      "desc": "Paradigma de atención sostenida para evaluación de TDAH"
+     },
+     {
+      "name": "Socket UDP Multicast",
+      "type": "network",
+      "desc": "Streaming de 250 tramas/s sobre Wi-Fi sin retransmisiones"
+     },
+     {
+      "name": "Buffer Circular Zero-Copy",
+      "type": "memory",
+      "desc": "Protección contra sobrecargas y garantía de 0% packet drop"
+     }
+    ]
+   },
+   {
+    "level": 5,
+    "name": "Capa 5: Prueba de Concepto (PoC) & Validación Neurofisiológica",
+    "tag": "VALIDACIÓN CLÍNICA & MÉTRICAS",
+    "color": "#ec4899",
+    "description": "Verificación empírica de compuertas metrológicas en banco y respuestas biológicas en voluntarios.",
+    "nodes": [
+     {
+      "name": "PoC-1: Piso de Ruido",
+      "type": "poc",
+      "desc": "Vpp < 1.1 µV en 32 canales corto-circuitados (medido 0.94 µV)"
+     },
+     {
+      "name": "PoC-2: Jitter Determinista",
+      "type": "poc",
+      "desc": "Variación temporal de disparo < 5 µs (medido 2.4 µs)"
+     },
+     {
+      "name": "PoC-3: Resistencia 400 Min",
+      "type": "poc",
+      "desc": "Cero pérdida de paquetes y estabilidad térmica prolongada"
+     },
+     {
+      "name": "PoC-4 & 5: Berger & ERPs",
+      "type": "poc",
+      "desc": "Incremento de 3.8 dB en banda alfa (O2) y detección P300"
+     }
+    ]
+   }
+  ]
+ },
+ "mathematical_model": {
+  "domains": {
+   "input_domain": {
+    "symbol": "X",
+    "name": "Dominio de Entrada Analógico Continuo",
+    "definition": "X ⊂ R^(32 × [0, T])",
+    "description": "Espacio continuo de las señales bioeléctricas de potencial diferencial captadas en el cuero cabelludo por los 32 electrodos respecto al electrodo de referencia común.",
+    "parameters": [
+     {
+      "name": "Rango de Voltaje Analógico",
+      "symbol": "v_in,i(t)",
+      "val": "[-187.5 mV, +187.5 mV]",
+      "rule": "|v_in,i(t)| <= V_ref / Gain"
+     },
+     {
+      "name": "Tensión de Referencia del ADC",
+      "symbol": "V_ref",
+      "val": "4.500 V",
+      "rule": "Generada por referencia de precisión interna"
+     },
+     {
+      "name": "Ganancia del PGA",
+      "symbol": "Gain",
+      "val": "24",
+      "rule": "Configurable en registros de ADS1299"
+     },
+     {
+      "name": "Impedancia de Entrada Diferencial",
+      "symbol": "Z_in",
+      "val": "> 1 GΩ || 10 pF",
+      "rule": "Minimiza la atenuación por contacto piel-electrodo"
+     },
+     {
+      "name": "Ancho de Banda Analógico",
+      "symbol": "B",
+      "val": "[0.1 Hz, 70.0 Hz]",
+      "rule": "Banda de interés para ritmos EEG y ERPs"
+     },
+     {
+      "name": "Voltaje de Modo Común",
+      "symbol": "v_CM(t)",
+      "val": "[-1.5 V, +1.5 V]",
+      "rule": "Interferencia acoplada capacitivamente por red 60 Hz"
+     }
+    ]
+   },
+   "output_range": {
+    "symbol": "Y",
+    "name": "Rango de Salida Digital Sincronizado",
+    "definition": "Y ⊂ {-2^23, ..., 2^23 - 1}^(32 × N) × {0, 1}^(8 × N) × R^N",
+    "description": "Espacio discreto de las tramas de datos digitales sincronizadas, donde cada muestra n combina la lectura cuantizada de 32 canales, banderas de evento del estímulo y estampa de tiempo.",
+    "parameters": [
+     {
+      "name": "Palabra de Cuantización (24 bits)",
+      "symbol": "D_i[n]",
+      "val": "[-8.388.608, +8.388.607]",
+      "rule": "Entero con signo en complemento a dos"
+     },
+     {
+      "name": "Resolución / Peso LSB",
+      "symbol": "Delta V_LSB",
+      "val": "0.0223517 µV / LSB",
+      "rule": "Delta V_LSB = V_ref / (Gain * (2^23 - 1))"
+     },
+     {
+      "name": "Vector de Banderas de Estímulo",
+      "symbol": "e[n]",
+      "val": "{0, 1}^8 (1 Byte)",
+      "rule": "Código numérico del evento del juego serio"
+     },
+     {
+      "name": "Tasa de Muestreo",
+      "symbol": "f_s",
+      "val": "250 Hz (Ts = 4.000 ms)",
+      "rule": "Generada por oscilador de cristal de 2.048 MHz"
+     },
+     {
+      "name": "Estampa Temporal Determinista",
+      "symbol": "t_n",
+      "val": "n * Ts + Delta_tau",
+      "rule": "|Delta_tau| < 5 µs (acotamiento determinista)"
+     }
+    ]
+   },
+   "conversion_mapping": {
+    "title": "Mapeo de Reconstrucción Físico-Digital",
+    "equation": "v_hat_i[n] = D_i[n] * Delta V_LSB = D_i[n] * ( V_ref / ( Gain * (2^23 - 1) ) )",
+    "unit": "Voltios [V] o microvoltios [µV]",
+    "notes": "Cada incremento discreto de 1 LSB corresponde a 22.35 nanovoltios en el cuero cabelludo."
+   }
+  },
+  "core_equations": [
+   {
+    "id": "eq-superposition",
+    "number": "(1)",
+    "name": "Modelo de Superposición y Descomposición de Ruido Bioeléctrico",
+    "latex": "v_{\\text{meas}, i}(t) = v_{\\text{EEG}, i}(t) + v_{\\text{artifact}, i}(t) + \\frac{v_{\\text{CM}}(t)}{\\text{CMRR}_{\\text{eff}, i}} + v_{\\text{thermal}, i}(t) + v_{1/f, i}(t)",
+    "description": "Modela el potencial medido en el electrodo i como la suma del biopotencial cerebral real, artefactos fisiológicos (parpadeo, miograma), interferencia de modo común atenuada por el CMRR efectivo, y ruido instrumental intrínseco (ruido Johnson-Nyquist térmico y ruido parpadeo 1/f del silicio).",
+    "variables": [
+     {
+      "sym": "v_EEG,i(t)",
+      "desc": "Potencial neurogénico cerebral genuino (1–50 µV)"
+     },
+     {
+      "sym": "v_artifact,i(t)",
+      "desc": "Artefactos electromiográficos (EMG) y electrooculográficos (EOG)"
+     },
+     {
+      "sym": "CMRR_eff,i",
+      "desc": "Rechazo en modo común efectivo del front-end (>110 dB)"
+     },
+     {
+      "sym": "v_thermal,i(t)",
+      "desc": "Ruido térmico Johnson-Nyquist: v_n = sqrt(4 * k_B * T * R_eq * Delta_f)"
+     },
+     {
+      "sym": "v_1/f,i(t)",
+      "desc": "Ruido rosa del transistor de entrada del ADS1299 en f < 10 Hz"
+     }
+    ]
+   },
+   {
+    "id": "eq-rld",
+    "number": "(2)",
+    "name": "Bucle Activo de Supresión de Modo Común (Right Leg Drive)",
+    "latex": "v_{\\text{RLD}}(t) = - A_{\\text{RLD}} \\cdot \\bar{v}_{\\text{CM}}(t) = - A_{\\text{RLD}} \\cdot \\left( \\frac{1}{|\\mathcal{S}_{\\text{RLD}}|} \\sum_{i \\in \\mathcal{S}_{\\text{RLD}}} v_{\\text{in}, i}(t) \\right)",
+    "description": "Calcula el promedio de modo común de un subconjunto de electrodos y lo retroalimenta invertido con ganancia A_RLD a través del electrodo de pierna derecha para neutralizar el desplazamiento de tensión corporal inducido por la red eléctrica.",
+    "variables": [
+     {
+      "sym": "A_RLD",
+      "desc": "Ganancia de lazo abierto del amplificador operacional inversor RLD"
+     },
+     {
+      "sym": "S_RLD",
+      "desc": "Conjunto de canales seleccionados para detección de modo común (ej. 8 canales centrales)"
+     },
+     {
+      "sym": "T_loop(s)",
+      "desc": "Función de lazo con compensación de fase: T_loop(s) = (A_RLD * R_RLD) / ( (R_body + R_elec + 1/(s*C_body)) * (1 + s*R_f*C_f) )"
+     }
+    ]
+   },
+   {
+    "id": "eq-spi-timing",
+    "number": "(3)",
+    "name": "Estructura de Trama Determinista & Sincronización Temporal",
+    "latex": "\\text{Frame}[n] = \\Big[ \\underbrace{\\text{SYNC}(3\\text{B})}_{\\text{0xC00000}} \\;\\Big|\\; \\underbrace{\\text{TRIG}(1\\text{B})}_{\\mathbf{e}[n]} \\;\\Big|\\; \\underbrace{D_1[n], \\ldots, D_{32}[n]}_{32 \\times 3\\text{B} = 96\\text{B}} \\;\\Big|\\; \\underbrace{\\text{CRC}(2\\text{B})}_{\\text{0x1021}} \\Big] \\implies 102\\text{ Bytes}",
+    "description": "Estructura formal de la trama transmitida síncronamente en cada periodo Ts = 4 ms desde los AFEs hacia el microcontrolador. Al insertar la marca de evento directamente en el byte TRIG mediante interrupción hardware, el retardo se reduce a Delta_tau <= 2.4 µs, erradicando el jitter de capas de software.",
+    "variables": [
+     {
+      "sym": "SYNC",
+      "desc": "Cabecera fija de sincronismo de 24 bits (0xC00000) para alineación de trama"
+     },
+     {
+      "sym": "TRIG",
+      "desc": "Byte de bandera inyectado por hardware desde el videojuego Eagle Eye"
+     },
+     {
+      "sym": "D_1...D_32",
+      "desc": "96 bytes con las muestras de 24 bits de los 32 canales EEG"
+     },
+     {
+      "sym": "CRC-16",
+      "desc": "Código de redundancia cíclica con polinomio 0x1021 para integridad"
+     }
+    ]
+   }
+  ],
+  "optimization_problems": [
+   {
+    "id": "opt-rld",
+    "name": "Problema 1: Minimización de Voltaje Residual de Modo Común (Sintonización RLD)",
+    "type": "Optimización Analógica / Control de Bucle",
+    "latex": "\\min_{A_{\\text{RLD}}, R_f, C_f} \\mathcal{J}_{\\text{CM}} = \\int_{2\\pi \\cdot 45\\,\\text{Hz}}^{2\\pi \\cdot 65\\,\\text{Hz}} \\left| \\frac{v_{\\text{CM}}(j\\omega)}{1 + T_{\\text{loop}}(j\\omega)} \\right|^2 d\\omega",
+    "constraints": [
+     "Margen de Fase: PM(T_loop) >= 45° (Garantía de estabilidad incondicional y ausencia de oscilación)",
+     "Seguridad Eléctrica Pediátrica: |i_RLD(t)| <= 10 µA (Conformidad con norma médica IEC 60601-1)",
+     "Impedancia de salida de seguridad: R_limit >= 100 kΩ en serie con el electrodo de pierna derecha"
+    ],
+    "description": "Sintoniza los parámetros de la red de compensación polo-cero (Rf, Cf) y la ganancia del amplificador RLD para maximizar la atenuación del zumbido de 60 Hz en el cuerpo del paciente sin comprometer la estabilidad del sistema ni la seguridad bioeléctrica."
+   },
+   {
+    "id": "opt-erp-snr",
+    "name": "Problema 2: Maximización de Relación Señal a Ruido (SNR) en Potenciales Evocados (ERP)",
+    "type": "Filtrado Espacial Óptimo / Haz de Matrices Generalizado",
+    "latex": "\\max_{\\mathbf{w} \\in \\mathbb{R}^{32}} \\text{SNR}_{\\text{ERP}}(\\mathbf{w}) = \\frac{\\mathbf{w}^T \\mathbf{\\Sigma}_{\\text{ERP}} \\mathbf{w}}{\\mathbf{w}^T \\mathbf{\\Sigma}_{\\text{noise}} \\mathbf{w}} \\quad \\text{sujeto a} \\quad \\|\\mathbf{w}\\|_2 = 1",
+    "constraints": [
+     "Vector de ponderación normalizado: w^T w = 1",
+     "Matriz de covarianza de ruido Sigma_noise definida positiva en ventanas pre-estímulo [-200 ms, 0 ms]",
+     "Matriz Sigma_ERP calculada en ventana post-estímulo [250 ms, 450 ms] correspondiente a componentes P300/N200"
+    ],
+    "description": "Encuentra el filtro espacial óptimo w que maximiza la discriminabilidad del potencial evocado respecto al ruido de fondo de EEG. La solución analítica corresponde al autovector principal de la ecuación matricial generalizada Sigma_ERP * w = lambda * Sigma_noise * w, cuya estimación es exacta gracias al jitter de hardware inferior a 5 µs."
+   },
+   {
+    "id": "opt-berger",
+    "name": "Problema 3: Criterio Espectral y Verificación de Hipótesis para Prueba de Concepto (Efecto Berger)",
+    "type": "Estimación Espectral Paramétrica & Test de Hipótesis",
+    "latex": "\\max \\Delta\\text{PSD}_{\\alpha} = 10 \\log_{10} \\left( \\frac{\\int_{8\\,\\text{Hz}}^{13\\,\\text{Hz}} S_{O2, \\text{cerrados}}(f) df}{\\int_{8\\,\\text{Hz}}^{13\\,\\text{Hz}} S_{O2, \\text{abiertos}}(f) df} \\right) \\ge 3.0\\,\\text{dB}",
+    "constraints": [
+     "Electrodo Occipital O2 referenciado a mastoides izquierda",
+     "Estimación de densidad espectral mediante método de Welch con ventana Hann de 2 segundos (500 muestras) y 50% de solapamiento",
+     "Condición de prueba: 60 s reposo ojos abiertos vs 60 s reposo ojos cerrados"
+    ],
+    "description": "Valida la reactividad neurofisiológica del sistema comprobando que el bloqueo alfa inducido por la apertura ocular produce una caída estadísticamente significativa en la potencia espectral integrada en la banda 8–13 Hz superior a 3.0 dB (medido experimentalmente 3.8 dB)."
+   }
+  ]
+ },
+ "poc_deliberation": {
+  "title": "Deliberación y Protocolos de la Prueba de Concepto (PoC)",
+  "framework": "Experimental Deliberation & Proof-of-Concept Suite (5 Experimentos Clave)",
+  "experiments": [
+   {
+    "id": "PoC-1",
+    "name": "Caracterización Instrumental del Piso de Ruido",
+    "stage": "Banco de Pruebas",
+    "objective": "Verificar que el piso de ruido térmico y de cuantización de los 32 canales no supere 1.1 µVpp.",
+    "method": "Entradas de los 4 ADS1299 en cortocircuito interno (configuración MUX a corto analógico). Registro continuo de 10 min a 250 Hz.",
+    "target_metric": "Vpp < 1.1 µV across all 32 channels, sigma < 0.20 µV",
+    "observed_metric": "Vpp = 0.94 µV (máx 1.08 µV, mín 0.81 µV), sigma = 0.14 µV",
+    "verdict": "PASS",
+    "status_badge": "ok"
+   },
+   {
+    "id": "PoC-2",
+    "name": "Metrología de Jitter Temporal y Sincronización SPI",
+    "stage": "Banco de Pruebas",
+    "objective": "Demostrar que la inyección de marcas en la cabecera SPI mantiene un jitter temporal determinista < 5 µs.",
+    "method": "Generación de 10.000 pulsos periódicos externos de disparo analizados con osciloscopio digital y analizador lógico de 100 MHz.",
+    "target_metric": "Delta_tau <= 5.0 µs, dispersión estándar < 1.0 µs",
+    "observed_metric": "Delta_tau = 2.4 µs (dispersión máxima 3.1 µs, desviación 0.38 µs)",
+    "verdict": "PASS",
+    "status_badge": "ok"
+   },
+   {
+    "id": "PoC-3",
+    "name": "Prueba de Estrés Continuo de Streaming UDP (400 min)",
+    "stage": "Banco & Red",
+    "objective": "Garantizar cero pérdida de paquetes y estabilidad térmica durante sesiones prolongadas.",
+    "method": "Transmisión continua ininterrumpida de 32 canales a 250 Hz sobre socket UDP Wi-Fi durante 6 horas y 40 minutos.",
+    "target_metric": "Packet drop = 0.0%, elevación térmica del microcontrolador < 5.0 °C",
+    "observed_metric": "0% paquetes perdidos (6.000.000 tramas transmitidas, 0 errores CRC), delta térmico = 1.2 °C",
+    "verdict": "PASS",
+    "status_badge": "ok"
+   },
+   {
+    "id": "PoC-4",
+    "name": "Ground Truth Fisiológico: Reactividad Alfa (Efecto Berger)",
+    "stage": "In-Vivo (Voluntario Sano)",
+    "objective": "Confirmar la sensibilidad bioeléctrica mediante detección del ritmo occipital alfa y su atenuación por apertura ocular.",
+    "method": "Registro de 120 s en electrodo O2 alternando bloques de 60 s ojos cerrados y 60 s ojos abiertos.",
+    "target_metric": "Separación espectral en banda 8–13 Hz >= 3.0 dB",
+    "observed_metric": "Delta PSD = 3.8 dB de incremento claro en ojos cerrados con pico definido a 10.2 Hz",
+    "verdict": "PASS",
+    "status_badge": "ok"
+   },
+   {
+    "id": "PoC-5",
+    "name": "Ensayo In-Vivo Pediátrico con Videojuego Eagle Eye",
+    "stage": "Clínico Pediátrico (TDAH)",
+    "objective": "Validar la usabilidad ergonómica y extracción de potenciales evocados durante la interacción lúdica en niño con TDAH.",
+    "method": "Sesión de 30 min con el videojuego de atención sostenida Eagle Eye, con electrodos en casco 3D y marcas síncronas.",
+    "target_metric": "Impedancia estable < 15 kΩ, tolerancia del paciente > 20 min, extracción de ERP P300",
+    "observed_metric": "Impedancia media 9.45 kΩ, sesión completada sin quejas de dolor ni desconexiones, pico P300 identificado a 320 ms",
+    "verdict": "PASS",
+    "status_badge": "ok"
+   }
+  ]
+ }
+}

@@ -14,6 +14,7 @@ from skills._core.command_center import math_view, server
 
 STATIC = Path(server.__file__).resolve().parent / "static"
 KATEX = STATIC / "vendor" / "katex" / "katex.min.js"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 PROPOSAL_R01 = """# Research concept r01
 
@@ -168,14 +169,20 @@ class ModelSpecTests(_Workspace):
 
 
 class FallbackTests(_Workspace):
-    def test_moneeg_shows_its_real_latex_and_every_equation_compiles(self) -> None:
+    def test_a_project_spec_supplies_its_latex_and_every_equation_compiles(self) -> None:
+        (self.root / ".papersmith").mkdir()
+        shutil.copy(FIXTURES / "moneeg" / "model_spec.json", self.root / ".papersmith" / "model_spec.json")
+        view = math_view.build(self.root)
+        self.assertEqual(view["source"], "model_spec:.papersmith/model_spec.json")
+        self.assertGreaterEqual(len(view["equations"]), 6)
+        self.assertEqual(compile_with_katex([e["latex"] for e in view["equations"]]), [])
+
+    def test_a_folder_named_like_an_old_project_gets_nothing_from_it(self) -> None:
         target = self.root.parent / f"{self.root.name}-moneeg"
         shutil.copytree(self.root, target)
         self.addCleanup(shutil.rmtree, target, True)
         view = math_view.build(target)
-        self.assertEqual(view["source"], "builtin:moneeg")
-        self.assertGreaterEqual(len(view["equations"]), 6)
-        self.assertEqual(compile_with_katex([e["latex"] for e in view["equations"]]), [])
+        self.assertEqual((view["source"], view["equations"]), ("none", []))
 
     def test_an_empty_workspace_says_so(self) -> None:
         view = math_view.build(self.root)

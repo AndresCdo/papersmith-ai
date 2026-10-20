@@ -8,8 +8,7 @@ Read-only. Sources, first match wins:
    of the paragraph after it as its "connection"; the matching
    ``proposals/research-concept-<slug>-rNN.sky.json`` overlay fills the novelty
    card (``sun``, ``novelty``, ``problem``, ``contribution`` planets);
-2. ``.papersmith/model_spec.json`` (and the built-in MONEEG specification the
-   model module already serves), normalised from its ``core_equations`` /
+2. ``.papersmith/model_spec.json``, normalised from its ``core_equations`` /
    ``optimization_problems`` / ``equations``;
 3. nothing: an empty panel that says so, named after ``papersmith.yaml``.
 
@@ -244,8 +243,6 @@ def build(root: Path | str) -> dict[str, Any]:
         novelty = _novelty_from_spec(spec, title)
         if _valid_spec_file(spec_file):
             source = "model_spec:.papersmith/model_spec.json"
-        elif equations:
-            source = "builtin:moneeg"
         else:
             source = "none"
             novelty = {"central_idea": title, "novelty": "", "novelty_detail": "", "problem": "",
