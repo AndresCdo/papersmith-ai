@@ -110,7 +110,9 @@ class ManagerTests(unittest.TestCase):
         self.assertGreaterEqual(len(self.manager.token), 40)
         self.assertTrue(self.manager.authorized(self.manager.token))
         self.assertFalse(self.manager.authorized(None))
-        self.assertFalse(self.manager.authorized("x" + self.manager.token[1:]))
+        token = self.manager.token
+        altered = ("A" if token[0] != "A" else "B") + token[1:]
+        self.assertFalse(self.manager.authorized(altered))
 
     def test_close_ends_the_process(self) -> None:
         session = self.manager.create("shell", cols=80, rows=24)
@@ -123,6 +125,14 @@ class ManagerTests(unittest.TestCase):
             self.manager.create("nope", cols=80, rows=24)
         with self.assertRaises(terminal.TerminalError):
             self.manager.create("missing", cols=80, rows=24)
+
+    def test_herdr_variables_do_not_leak_into_the_session(self) -> None:
+        os.environ["HERDR_PANE_ID"] = "pane-from-outside"
+        self.addCleanup(os.environ.pop, "HERDR_PANE_ID", None)
+        session = self.manager.create("shell", cols=100, rows=30)
+        self.manager.write(session.id, "echo pane=[$HERDR_PANE_ID] ws=[$PAPERSMITH_WORKSPACE]\n")
+        out = self.read_until(session.id, b"ws=[")
+        self.assertIn(b"pane=[]", out)
 
     def test_the_session_cap_holds(self) -> None:
         for _ in range(terminal.MAX_SESSIONS):
@@ -148,6 +158,21 @@ class RouteTests(unittest.TestCase):
     def create(self, headers: dict[str, str], body: object = None, *, cookie: bool = True):
         return _call(_route(self.app, "/api/terminal/sessions", "POST"),
                      self.req(headers, body if body is not None else {"agent": "shell"}, cookie=cookie))
+
+    def test_herdr_is_the_default_agent_when_installed(self) -> None:
+        manager = terminal.TerminalManager(self.root)
+        listed = [a["id"] for a in manager.agents()]
+        self.assertEqual(listed[0], "herdr")
+        self.assertEqual(listed, ["herdr", "claude", "opencode", "pi", "shell"])
+
+    def test_tools_and_external_launch_require_the_token_and_same_origin(self) -> None:
+        tools = _route(self.app, "/api/terminal/tools", "GET")
+        self.assertEqual(_call(tools, self.req(SAME, cookie=False)).status_code, 403)
+        body = _body(_call(tools, self.req(SAME)))
+        self.assertIn("preferred_terminal", body["tools"])
+        launch = _route(self.app, "/api/terminal/launch-external", "POST")
+        self.assertEqual(_call(launch, self.req({**SAME, "Origin": "http://evil.example"}, {})).status_code, 403)
+        self.assertEqual(_call(launch, self.req(SAME, {}, cookie=False)).status_code, 403)
 
     def test_a_local_client_without_the_token_is_refused(self) -> None:
         self.assertEqual(self.create(SAME, cookie=False).status_code, 403)
@@ -241,24 +266,71 @@ class DisabledTests(unittest.TestCase):
 class DashboardWiringTests(unittest.TestCase):
     STATIC = Path(server.__file__).resolve().parent / "static"
 
-    def test_the_console_ships_with_xterm(self) -> None:
+    def page(self) -> str:
+        return (self.STATIC / "index.html").read_text(encoding="utf-8")
+
+    def test_the_console_ships_with_xterm_and_the_smith_face(self) -> None:
         for name in ("vendor/xterm.js", "vendor/xterm-addon-fit.js", "vendor/xterm.css",
-                     "vendor/xterm-LICENSE", "cli-console.js"):
+                     "vendor/xterm-LICENSE", "cli-console.js", "smith-face.png"):
             self.assertTrue((self.STATIC / name).is_file(), name)
 
-    def test_the_page_mounts_the_console_and_phase_cards_reach_it(self) -> None:
-        page = (self.STATIC / "index.html").read_text(encoding="utf-8")
-        self.assertIn('<script src="./cli-console.js"></script>', page)
-        self.assertIn('id="cliFab"', page)
-        self.assertIn('id="cliTerm"', page)
+    def test_the_fab_sits_bottom_right_with_the_smith_face(self) -> None:
+        page = self.page()
+        self.assertIn('<script src="./cli-console.js?v=', page)
+        self.assertIn('id="smithAssistantFab" class="smith-fab"', page)
+        self.assertIn('<img src="./smith-face.png" alt="Smith" class="smith-fab__logo">', page)
+        self.assertIn("position: fixed; right: var(--fab-offset); bottom: var(--fab-offset);", page)
+        for control in ("terminalAgentSelect", "btnLaunchExternalTerm", "btnTerminalRestart",
+                        "btnTerminalMaximize", "btnTerminalClose", "terminalContainer",
+                        "terminalFooterAgent", "terminalFooterRun", "terminalQuickSelect",
+                        "btnTerminalClear", "terminalStatusDot", "smithFabBadge"):
+            self.assertIn(f'id="{control}"', page)
+
+    def test_phase_cards_still_reach_the_console_and_keep_their_run_button(self) -> None:
+        page = self.page()
         self.assertIn('onclick="sendToCli(this.dataset.cli, false)"', page)
-        # The phase run button is untouched: the smith flow keeps its own path.
         self.assertIn("onclick=\"triggerRunPhase('${escapeHtml(p.id)}', this)\"", page)
 
-    def test_the_console_sends_the_guard_header(self) -> None:
+    def test_the_console_sends_the_guard_header_and_remembers_the_agent(self) -> None:
         script = (self.STATIC / "cli-console.js").read_text(encoding="utf-8")
         self.assertIn("'X-Papersmith-Terminal': '1'", script)
         self.assertIn("'Content-Type': 'application/json'", script)
+        self.assertIn("const AGENT_KEY = 'smith_terminal_agent';", script)
+        self.assertIn("api(`/api/terminal/sessions/${sessionId}`, 'DELETE', {})", script)
+
+
+class BrandingTests(unittest.TestCase):
+    STATIC = Path(server.__file__).resolve().parent / "static"
+
+    def test_the_lab_logo_is_only_in_the_bottom_center_footer(self) -> None:
+        page = (self.STATIC / "index.html").read_text(encoding="utf-8")
+        body = page[page.index("<body"):]
+        self.assertTrue((self.STATIC / "logo_labIA.png").is_file())
+        self.assertEqual(body.count('src="./logo_labIA.png"'), 1)
+        footer = body[body.index('<footer class="dashboard-footer">'):body.index("</footer>")]
+        self.assertIn('class="footer__col footer__col--center"', footer)
+        self.assertIn('src="./logo_labIA.png"', footer)
+        self.assertNotIn('class="topbar__lab-badge"', body)
+
+    def test_the_footer_version_follows_the_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as holder:
+            root = Path(holder)
+            (root / ".papersmith").mkdir()
+            (root / ".papersmith" / "version").write_text("0.16.0\n", encoding="utf-8")
+            app = server.create_app(root, history_store=None)
+            status = _body(_route(app, "/api/status", "GET")())
+            self.assertEqual(status["framework_version"], "0.16.0")
+
+
+class CapabilityQueryTests(unittest.TestCase):
+    def test_queries_are_answered_and_stripped(self) -> None:
+        clean, replies = terminal.answer_queries(b"a\x1b[cb\x1b]11;?\x07c\x1b[?uD")
+        self.assertEqual(clean, b"abcD")
+        self.assertEqual(replies, [b"\x1b[?62;22c", b"\x1b]11;rgb:0808/0c0c/1414\x1b\\",
+                                   b"\x1b[?0u"])
+
+    def test_plain_output_passes_untouched(self) -> None:
+        self.assertEqual(terminal.answer_queries(b"\x1b[31mred\x1b[0m"), (b"\x1b[31mred\x1b[0m", []))
 
 
 if __name__ == "__main__":

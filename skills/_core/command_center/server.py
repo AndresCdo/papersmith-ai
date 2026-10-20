@@ -214,6 +214,14 @@ class HostAllowListMiddleware:
 TERMINAL_COOKIE = "papersmith_terminal"
 
 
+def _framework_version(root: Path) -> str:
+    """The papersmith release this workspace was last initialized or upgraded to."""
+    try:
+        return (root / ".papersmith" / "version").read_text(encoding="utf-8").strip()[:32]
+    except OSError:
+        return ""
+
+
 def terminal_allowed(host: str) -> bool:
     """The support terminal is a shell: offer it only on a loopback bind."""
     return host.strip("[]").lower() in _LOOPBACK_HOSTS
@@ -1015,6 +1023,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
         return JSONResponse({
             "project_name": project_name,
+            "framework_version": _framework_version(root_path),
             "target_title": target_title,
             "topic": topic,
             "authors": authors,
@@ -1784,14 +1793,34 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     @app.get("/api/terminal/agents")
     def api_terminal_agents(request: Request) -> JSONResponse:
         authorized = terminals.authorized(request.cookies.get(TERMINAL_COOKIE))
+        agents = terminals.agents() if enable_terminal and authorized else []
         commands_dir = root_path / ".claude" / "commands"
         slash = sorted(f"/{p.stem}" for p in commands_dir.glob("*.md")) if commands_dir.is_dir() else []
         return JSONResponse({
             "enabled": enable_terminal and terminal.fcntl is not None,
             "authorized": enable_terminal and authorized,
-            "agents": terminals.agents() if enable_terminal and authorized else [],
+            "agents": agents,
+            "default": next((a["id"] for a in agents if a["available"]), "shell"),
             "quick": {"shell": list(terminal.SHELL_QUICK), "agent": slash[:24]},
         }, headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/terminal/tools")
+    def api_terminal_tools(request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=False)
+        if refusal is not None:
+            return refusal
+        return JSONResponse({"ok": True, "tools": terminal.detect_tools(root_path)},
+                            headers=dict(_PAPER_HEADERS))
+
+    @app.post("/api/terminal/launch-external")
+    async def api_terminal_launch_external(request: Request) -> JSONResponse:
+        # Opens herdr on this project in Ghostty or WezTerm on the user's desktop.
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        result = await asyncio.to_thread(terminal.launch_external, root_path)
+        return JSONResponse(result, status_code=200 if result["ok"] else 400,
+                            headers=dict(_PAPER_HEADERS))
 
     @app.post("/api/terminal/sessions")
     async def api_terminal_create(request: Request) -> JSONResponse:
@@ -1929,11 +1958,11 @@ async def _terminal_stream(request: Request, terminals: "terminal.TerminalManage
         if not alive:
             yield format_sse("exit", {"reason": "ended"})
             break
-        idle += 0.03
+        idle += 0.012
         if idle >= 15.0:
             idle = 0.0
             yield ": ping\n\n"
-        await asyncio.sleep(0.03)
+        await asyncio.sleep(0.012)
 
 
 async def _event_stream(request: Request, bus: EventBus, root: Path) -> AsyncIterator[str]:
