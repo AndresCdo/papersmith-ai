@@ -2484,8 +2484,8 @@
 
   <!-- Navigation tabs -->
   <nav class="tabs-nav" aria-label="Navegación del tablero">
-    <button class="tab-nav__btn active" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
-    <button class="tab-nav__btn" onclick="navigateTab('flow')">Flujo Archify</button>
+    <button class="tab-nav__btn active" onclick="navigateTab('flow')">Flujo Archify</button>
+    <button class="tab-nav__btn" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
     <button class="tab-nav__btn" onclick="navigateTab('modelo')">🧠 Mapa Conceptual &amp; Modelo</button>
     <button class="tab-nav__btn" onclick="navigateTab('sections')">Secciones del Paper</button>
     <button class="tab-nav__btn" onclick="navigateTab('gates')">Compuertas (Gates)</button>
@@ -2498,7 +2498,7 @@
   <!-- Main content area -->
   <main>
     <!-- TAB 1: PIPELINE -->
-    <div id="pane-pipeline" class="tab-pane active">
+    <div id="pane-pipeline" class="tab-pane">
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-card__label">Corrida Activa</div>
@@ -2553,7 +2553,7 @@
     </div>
 
     <!-- TAB 2: ARCHIFY FLOW -->
-    <div id="pane-flow" class="tab-pane">
+    <div id="pane-flow" class="tab-pane active">
       <div class="panel">
         <div class="panel__header">
           <div class="panel__title">Diagrama Interactivo de Arquitectura y Flujo (Archify)</div>
@@ -3347,7 +3347,7 @@
     ];
 
     let currentStatus = null;
-    let activeTab = 'pipeline';
+    let activeTab = 'flow';
 
     function toggleTheme() {
       const html = document.documentElement;
