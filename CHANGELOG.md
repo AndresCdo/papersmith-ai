@@ -11,6 +11,30 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.17.0
+
+### Added
+
+- **Math panel in LaTeX.** *Mapa Conceptual & Modelo → Matemática & Tutor* shows
+  the paper's own equations rendered by KaTeX 0.16.22 (vendored, offline) as
+  minimalist cards — heading, display equation, one-line *Conexión*, variables —
+  under a lema, built by `GET /api/model/math` from the latest
+  `proposals/research-concept-<slug>-rNN.md` (`$$`-fenced blocks with
+  `\tag{N}`, outside code fences) and its `.sky.json`, else
+  `.papersmith/model_spec.json`. Every equation the panel can show is compiled
+  by KaTeX in strict mode in the test suite. The old hand-typed Unicode
+  pseudo-math is gone.
+- **Idea y novedad card**: central idea, novelty, problem, contributions and the
+  key equation, beside the equations.
+- **`math-tutor` skill and agent (Socratic tutor).** Drop, paste or pick photos
+  of hand-written pages in the panel; each turn runs the agent headless with the
+  user's own `claude -p` (only `Read`, JSON schema, no MCP, local settings only,
+  stdin closed) or `pi -p`, reads the page back as LaTeX, asks one question,
+  rates understanding 0–4 with quoted evidence and ties every step to the
+  paper's novelty. Uploads and the thread live in `.papersmith/math-tutor/`;
+  routes under `/api/terminal/tutor/` behind the terminal secret. Also
+  available as `/math-tutor` in every harness.
+
 ## 0.16.1
 
 ### Changed
