@@ -126,13 +126,29 @@ class ManagerTests(unittest.TestCase):
         with self.assertRaises(terminal.TerminalError):
             self.manager.create("missing", cols=80, rows=24)
 
-    def test_herdr_variables_do_not_leak_into_the_session(self) -> None:
-        os.environ["HERDR_PANE_ID"] = "pane-from-outside"
-        self.addCleanup(os.environ.pop, "HERDR_PANE_ID", None)
+    def test_a_shell_keeps_the_herdr_variables_it_inherits(self) -> None:
+        os.environ["HERDR_ENV"] = "from-outside"
+        self.addCleanup(os.environ.pop, "HERDR_ENV", None)
         session = self.manager.create("shell", cols=100, rows=30)
-        self.manager.write(session.id, "echo pane=[$HERDR_PANE_ID] ws=[$PAPERSMITH_WORKSPACE]\n")
-        out = self.read_until(session.id, b"ws=[")
-        self.assertIn(b"pane=[]", out)
+        self.manager.write(session.id, "echo env=[$HERDR_ENV] ws=[$PAPERSMITH_WORKSPACE]\n")
+        self.assertIn(b"env=[from-outside]", self.read_until(session.id, b"ws=[/"))
+
+    def test_only_the_herdr_agent_drops_the_herdr_variables(self) -> None:
+        os.environ.update({"HERDR_ENV": "x", "HERDR_PANE_ID": "p", "TERM_PROGRAM": "herdr"})
+        for key in ("HERDR_ENV", "HERDR_PANE_ID", "TERM_PROGRAM"):
+            self.addCleanup(os.environ.pop, key, None)
+        herdr = terminal.session_env("herdr", self.root)
+        self.assertFalse({"HERDR_ENV", "HERDR_PANE_ID", "TERM_PROGRAM"} & set(herdr))
+        shell = terminal.session_env("shell", self.root)
+        self.assertEqual((shell["HERDR_ENV"], shell["TERM_PROGRAM"]), ("x", "herdr"))
+
+    def test_tool_dirs_are_appended_and_an_empty_path_adds_no_cwd(self) -> None:
+        self.addCleanup(os.environ.__setitem__, "PATH", os.environ["PATH"])
+        os.environ["PATH"] = "/usr/bin"
+        parts = terminal.session_env("shell", self.root)["PATH"].split(os.pathsep)
+        self.assertEqual(parts[0], "/usr/bin")
+        os.environ["PATH"] = ""
+        self.assertNotIn("", terminal.session_env("shell", self.root)["PATH"].split(os.pathsep))
 
     def test_the_session_cap_holds(self) -> None:
         for _ in range(terminal.MAX_SESSIONS):

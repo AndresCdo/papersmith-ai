@@ -246,6 +246,24 @@ def _make_controlling_tty() -> None:  # runs in the child, after setsid
     fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
 
+def session_env(agent_id: str, root: Path) -> dict[str, str]:
+    """The environment of one session. Only the herdr agent drops the HERDR*
+    variables and TERM_PROGRAM a server started inside herdr inherits, so it
+    starts a client of its own; every other agent keeps them, because a login
+    shell may decide from them whether to start herdr itself."""
+    env = dict(os.environ)
+    if agent_id == "herdr":
+        env = {key: value for key, value in env.items()
+               if "HERDR" not in key and key != "TERM_PROGRAM"}
+    # Appended, never prepended: the tool directories only fill in what the
+    # server's PATH lacks and cannot shadow the user's own commands.
+    path = [part for part in env.get("PATH", "").split(os.pathsep) if part]
+    env.update({"TERM": "xterm-256color", "COLORTERM": "truecolor",
+                "PAPERSMITH_WORKSPACE": str(root),
+                "PATH": os.pathsep.join([*path, *map(str, TOOL_DIRS)])})
+    return env
+
+
 class TerminalManager:
     def __init__(self, root: Path, agents: dict[str, Agent] | None = None) -> None:
         self.root = Path(root)
@@ -297,13 +315,7 @@ class TerminalManager:
                 raise TerminalError(f"at most {MAX_SESSIONS} terminal sessions")
             master, slave = os.openpty()
             _set_size(master, cols, rows)
-            env = {key: value for key, value in os.environ.items()
-                   if "HERDR" not in key and key != "TERM_PROGRAM"}
-            env.update({"TERM": "xterm-256color", "COLORTERM": "truecolor",
-                        "PAPERSMITH_WORKSPACE": str(self.root),
-                        # Appended, never prepended: they only fill in tools the
-                        # server's PATH lacks and cannot shadow the user's own.
-                        "PATH": os.pathsep.join([env.get("PATH", ""), *map(str, TOOL_DIRS)])})
+            env = session_env(agent.id, self.root)
             try:
                 process = subprocess.Popen(
                     [agent.resolved() or agent.argv[0], *agent.argv[1:]], cwd=str(self.root), env=env,
