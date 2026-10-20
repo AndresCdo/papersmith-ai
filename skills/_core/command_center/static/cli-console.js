@@ -29,6 +29,8 @@
     exited: false,
     pendingInput: '',
     flushTimer: null,
+    lastOutputAt: 0,
+    startedAt: 0,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -221,6 +223,7 @@
     if (state.source) state.source.close();
     const source = new EventSource(`/api/terminal/sessions/${sessionId}/stream`);
     source.addEventListener('output', (event) => {
+      state.lastOutputAt = Date.now();
       state.term.write(decode(JSON.parse(event.data).payload.data));
     });
     source.addEventListener('exit', () => {
@@ -250,6 +253,8 @@
       if (!term) throw new Error('xterm.js no disponible');
       refit(false);
       setStatus(`Abriendo ${agentLabel(state.agent)}…`, 'warn');
+      state.startedAt = Date.now();
+      state.lastOutputAt = 0;
       const created = await api('/api/terminal/sessions', 'POST', {
         agent: state.agent, cols: term.cols, rows: term.rows,
       });
@@ -339,12 +344,81 @@
     }
   }
 
+  // Agents that understand a harness slash command; herdr and the plain shell
+  // do not, so a slash command switches the console to the first of these.
+  const SLASH_AGENTS = ['claude', 'opencode', 'pi'];
+
+  async function useAgent(kind) {
+    const info = await loadInfo();
+    const available = (info.agents || []).filter((a) => a.available).map((a) => a.id);
+    let wanted = state.agent;
+    if (kind === 'shell') wanted = 'shell';
+    if (kind === 'slash' && !SLASH_AGENTS.includes(state.agent)) {
+      wanted = SLASH_AGENTS.find((id) => available.includes(id)) || null;
+      if (!wanted) throw new Error('no hay un agente (claude, opencode, pi) instalado');
+    }
+    if (wanted === state.agent) return false;
+    // Switching ends the live session: never without the operator's say-so.
+    if (state.sessionId && !window.confirm(
+      `Esto cierra la sesión de ${agentLabel(state.agent)} y abre ${agentLabel(wanted)}. ¿Continuar?`)) {
+      throw new Error(`se mantuvo la sesión de ${agentLabel(state.agent)}`);
+    }
+    state.agent = wanted;
+    const select = $('terminalAgentSelect');
+    if (select) select.value = wanted;
+    renderQuick();
+    renderFooter();
+    await stop();
+    if (state.term) state.term.reset();
+    return true;
+  }
+
+  // A freshly started agent paints its prompt before it reads input: wait for
+  // its first output and then a short quiet spell (bounded), so the text is
+  // typed into the agent rather than lost while it boots.
+  // Output that arrived since the session started counts, even if it came
+  // before this wait began.
+  async function settle(maxMs) {
+    const began = Date.now();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    while (Date.now() - began < maxMs) {
+      await sleep(250);
+      if (state.lastOutputAt >= state.startedAt && state.lastOutputAt > 0
+          && Date.now() - state.lastOutputAt > 900) return;
+    }
+  }
+
+  // The visible screen, as text, so a startup question is never answered by
+  // the Enter meant for the command.
+  function screenText() {
+    const buffer = state.term && state.term.buffer && state.term.buffer.active;
+    if (!buffer) return '';
+    const lines = [];
+    for (let y = 0; y < state.term.rows; y++) {
+      const line = buffer.getLine(buffer.viewportY + y);
+      if (line) lines.push(line.translateToString(true));
+    }
+    return lines.join('\n');
+  }
+  const STARTUP_QUESTIONS = /trust this folder|Do you trust|Enter to confirm/i;
+
   // Types `text` into the session (opening one if needed). run=true also sends
   // Enter, as a separate write so an agent does not read it as a paste.
-  async function sendToCli(text, run) {
-    openCliConsole();
+  // options.kind: 'slash' runs it in an agent, 'shell' in the plain shell.
+  async function sendToCli(text, run, options) {
     try {
+      const kind = options && options.kind;
+      // Choose the agent before opening the window, which starts a session.
+      const switched = kind ? await useAgent(kind) : false;
+      openCliConsole();
+      const fresh = switched || !state.sessionId;
       const sid = await start();
+      if (fresh && state.agent !== 'shell') await settle(12000);
+      if (kind === 'slash' && STARTUP_QUESTIONS.test(screenText())) {
+        setStatus('El agente espera una confirmación: respóndela en la terminal y vuelve a pulsar Ejecutar', 'warn');
+        state.term.focus();
+        return;
+      }
       await api(`/api/terminal/sessions/${sid}/input`, 'POST', { data: text });
       if (run) {
         setTimeout(() => {
@@ -352,7 +426,10 @@
         }, 200);
       }
       state.term.focus();
-    } catch (_) { /* the status line explains */ }
+    } catch (err) {
+      if (!isOpen()) openCliConsole();
+      setStatus(`No se pudo enviar: ${err.message}`, 'bad');
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {

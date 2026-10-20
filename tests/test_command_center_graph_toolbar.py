@@ -48,12 +48,15 @@ class PreservedPanelsTests(unittest.TestCase):
         self.assertIn("fetch('/api/phase/run', {", PAGE)
         self.assertIn("onclick=\"triggerRunPhase('${escapeHtml(p.id)}', this)\"", PAGE)
 
-    def test_the_tab_order_is_unchanged(self) -> None:
-        order = ["pane-pipeline", "pane-flow", "pane-modelo", "pane-sections", "pane-gates",
-                 "pane-telemetria", "pane-atlas", "pane-preview", "pane-artifacts"]
-        positions = [PAGE.index(f'id="{pane}"') for pane in order]
+    def test_the_archify_flow_tab_comes_first_and_opens_by_default(self) -> None:
+        order = ["flow", "pipeline", "modelo", "sections", "gates",
+                 "telemetria", "atlas", "preview", "artifacts"]
+        positions = [PAGE.index(f"onclick=\"navigateTab('{tab}')\">") for tab in order]
         self.assertEqual(positions, sorted(positions))
-
+        self.assertIn('<button class="tab-nav__btn active" onclick="navigateTab(\'flow\')">', PAGE)
+        self.assertIn('id="pane-flow" class="tab-pane active"', PAGE)
+        self.assertIn('id="pane-pipeline" class="tab-pane"', PAGE)
+        self.assertIn("let activeTab = 'flow';", PAGE)
 
 if __name__ == "__main__":
     unittest.main()

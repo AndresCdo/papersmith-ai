@@ -32,3 +32,5 @@ service is covered by that service's own adapter. It refuses — with a thrown e
 naming the matched surface — a command that names a service's push surface without
 also invoking `remote_cli.py`, and it degrades loudly rather than silently
 allowing when the guard cannot be loaded. It is a tripwire, not a gate.
+
+{{paper_flow}}

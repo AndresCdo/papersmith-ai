@@ -79,7 +79,7 @@ class ServerNeutralTests(unittest.TestCase):
                 return self.body
 
         endpoint = self.route("/api/phase/run", "POST")
-        for phase in ("Fase 2", "Fase 3", "Fase 4", "Fase 5", "Fase 7", "Fase 10"):
+        for phase in ("Fase 2", "Fase 3", "Fase 4", "Fase 6", "Fase 7", "Fase 10", "Fase 11"):
             with self.subTest(phase=phase):
                 response = self.asyncio.run(endpoint(Req({"phase_id": phase})))
                 text = bytes(response.body).decode("utf-8")

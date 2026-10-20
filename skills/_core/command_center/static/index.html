@@ -13,11 +13,12 @@
   <link rel="stylesheet" href="./vendor/xterm.css">
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
-  <script src="./cli-console.js?v=0.16.1"></script>
+  <script src="./cli-console.js?v=0.17.2"></script>
   <link rel="stylesheet" href="./vendor/katex/katex.min.css">
   <script src="./vendor/katex/katex.min.js"></script>
   <script src="./math-panel.js?v=0.17.0"></script>
   <script src="./model-panel.js?v=0.17.1"></script>
+  <script src="./phase-console.js?v=0.17.2"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2444,6 +2445,22 @@
     .smith-term__footer-actions { margin-left: auto; display: flex; gap: 0.35rem; }
     @media (max-width: 600px) { :root { --fab-size: 48px; --fab-offset: 16px; } }
     @media (max-width: 900px) { footer.dashboard-footer { padding-right: 2rem; padding-bottom: calc(var(--fab-size) + var(--fab-offset) + 0.5rem); } }
+    /* Phase console: the actions inside a pipeline phase drawer */
+    .phase-actions { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.25rem; }
+    .phase-actions__title { font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin: 0; }
+    .phase-action { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; text-align: left; color: var(--text); font: inherit; }
+    .phase-action__head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; font-size: 0.86rem; }
+    .phase-action__head code, .phase-action__cmd { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); }
+    .phase-action__guide { margin: 0; padding-left: 1.1rem; font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
+    .phase-action__input { width: 100%; box-sizing: border-box; resize: vertical; min-height: 5rem; background: rgba(0,0,0,0.25); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 0.55rem 0.65rem; font: 0.85rem/1.45 var(--font-sans, inherit); }
+    .phase-action__input:focus { outline: none; border-color: var(--accent); }
+    .phase-action__foot { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .phase-action__hint { font-size: 0.74rem; color: var(--text-dim); }
+    .phase-action__hint.is-error { color: var(--bad); }
+    .phase-action__desc { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
+    .phase-action--redirect { cursor: pointer; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 0.75rem; }
+    .phase-action--redirect span { font-size: 0.76rem; color: var(--text-dim); }
+    .phase-action--redirect:hover { border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -2484,8 +2501,8 @@
 
   <!-- Navigation tabs -->
   <nav class="tabs-nav" aria-label="Navegación del tablero">
-    <button class="tab-nav__btn active" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
-    <button class="tab-nav__btn" onclick="navigateTab('flow')">Flujo Archify</button>
+    <button class="tab-nav__btn active" onclick="navigateTab('flow')">Flujo Archify</button>
+    <button class="tab-nav__btn" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
     <button class="tab-nav__btn" onclick="navigateTab('modelo')">🧠 Mapa Conceptual &amp; Modelo</button>
     <button class="tab-nav__btn" onclick="navigateTab('sections')">Secciones del Paper</button>
     <button class="tab-nav__btn" onclick="navigateTab('gates')">Compuertas (Gates)</button>
@@ -2498,7 +2515,7 @@
   <!-- Main content area -->
   <main>
     <!-- TAB 1: PIPELINE -->
-    <div id="pane-pipeline" class="tab-pane active">
+    <div id="pane-pipeline" class="tab-pane">
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-card__label">Corrida Activa</div>
@@ -2553,7 +2570,7 @@
     </div>
 
     <!-- TAB 2: ARCHIFY FLOW -->
-    <div id="pane-flow" class="tab-pane">
+    <div id="pane-flow" class="tab-pane active">
       <div class="panel">
         <div class="panel__header">
           <div class="panel__title">Diagrama Interactivo de Arquitectura y Flujo (Archify)</div>
@@ -3347,7 +3364,7 @@
     ];
 
     let currentStatus = null;
-    let activeTab = 'pipeline';
+    let activeTab = 'flow';
 
     function toggleTheme() {
       const html = document.documentElement;
@@ -3862,6 +3879,7 @@
     }
 
     async function triggerRunPhase(phaseId, btnEl) {
+      const btnLabel = btnEl ? btnEl.innerHTML : '';
       if (btnEl) {
         btnEl.disabled = true;
         btnEl.innerHTML = '⏳ Ejecutando en pipeline...';
@@ -3893,7 +3911,7 @@
       } finally {
         if (btnEl) {
           btnEl.disabled = false;
-          btnEl.innerHTML = '▶ Re-ejecutar Fase';
+          btnEl.innerHTML = btnLabel;
         }
       }
     }
@@ -3938,7 +3956,8 @@
         </div>
       `;
 
-      const cliCmd = p.cli_command || `papersmith run --stage ${p.id.toLowerCase()}`;
+      const cliCmd = p.cli_command || '';
+      const actionsHtml = window.renderPhaseActions ? window.renderPhaseActions(p) : '';
       const subfases = p.subfases || [
         { id: `${p.id}.1`, name: 'Verificación de entradas e insumos', desc: 'Validación de requisitos previos y fuentes base', status: isLit ? 'PASS' : 'PENDING' },
         { id: `${p.id}.2`, name: 'Ejecución del agente especializado', desc: 'Transformación y síntesis de evidencia científica', status: isLit ? 'PASS' : (isActive ? 'IN_PROGRESS' : 'PENDING') },
@@ -3958,26 +3977,28 @@
             <span class="badge badge--info" style="font-size: 0.72rem;">🤖 Agente: ${escapeHtml(p.agent || 'papersmith-worker')}</span>
           </div>
 
-          <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.85rem;">
+          ${cliCmd && !actionsHtml ? `<div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.85rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.03em;">Comando CLI Terminal:</span>
+              <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.03em;">Comando principal:</span>
               <span style="display: inline-flex; gap: 0.35rem;">
                 <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="copyCliCommand('${escapeHtml(cliCmd)}', this)">📋 Copiar Comando</button>
                 <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" data-cli="${escapeHtml(cliCmd)}" onclick="sendToCli(this.dataset.cli, false)" title="Escribe el comando en la terminal de apoyo; pulsa Enter allí para ejecutarlo">⌨️ Enviar a CLI</button>
               </span>
             </div>
             <div style="background: rgba(0,0,0,0.45); border: 1px solid var(--border); border-radius: 4px; padding: 0.55rem 0.75rem; font-family: var(--font-mono); font-size: 0.82rem; color: #38bdf8; overflow-x: auto;">
-              <code>$ ${escapeHtml(cliCmd)}</code>
+              <code>${cliCmd.startsWith('/') ? '' : '$ '}${escapeHtml(cliCmd)}</code>
             </div>
-          </div>
+          </div>` : ''}
 
           <div style="display: flex; gap: 0.6rem; align-items: center;">
             <button class="btn btn--primary" style="flex: 1; justify-content: center; font-size: 0.82rem; padding: 0.5rem 0.75rem;" onclick="triggerRunPhase('${escapeHtml(p.id)}', this)">
-              ▶ Ejecutar / Re-verificar desde Tablero
+              ${p.stage_id === 'paper' ? '▶ Compilar PDF desde el tablero' : '⟳ Verificar estado de la fase'}
             </button>
           </div>
           <div id="drawerPhaseActionFeedback" style="display: none; margin-top: 0.6rem; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 0.5rem 0.75rem; border-radius: 4px;"></div>
         </div>
+
+        ${actionsHtml}
 
         <!-- 2. Objetivo y Misión -->
         <div style="margin-bottom: 1.25rem;">

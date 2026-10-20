@@ -70,6 +70,12 @@ const nodes=[
  n('delibPub','delib',3,'backend','deliberation-publish',agentMeta('deliberation-publish').sub,{...(agentMeta('deliberation-publish').tag?{tag:agentMeta('deliberation-publish').tag}:{}),sources:A('deliberation-publish')}),
  n('proposals','delib',4,'database','proposals/','rNN.md · rNN.graph.html',{sources:[{path:'README.md',line:75},{path:'skills/proposal-deliberation/SKILL.md',line:71,end_line:129}]}),
 
+ n('tutor','dash',0,'frontend','/math-tutor','socratic · hand-written pages',{tag:'.pi/prompts',sources:K('math-tutor',54,74)}),
+ n('tutorAgent','dash',1,'backend','math-tutor',agentMeta('math-tutor').sub,{...(agentMeta('math-tutor').tag?{tag:agentMeta('math-tutor').tag}:{}),sources:A('math-tutor')}),
+ n('ui','dash',2,'external','smith ui','phase drawer → /<skill>',{tag:'command center',sources:S('skills/_core/command_center/phase_actions.py',1,15)}),
+ n('mathApi','dash',3,'messagebus','/api/model/math','concept map · KaTeX cards',{sources:S('skills/_core/command_center/math_view.py',1,16)}),
+ n('tutorStore','dash',4,'database','.papersmith/math-tutor/','thread + uploaded pages',{sources:S('skills/_core/command_center/tutor.py',1,12)}),
+
  n('expDelib','expdelib',0,'frontend','/experimental-deliberation','requires data-paper/',{tag:'.pi/prompts',sources:K('experimental-deliberation',34,38)}),
  n('expVal','expdelib',1,'backend','experimental-validation',agentMeta('experimental-validation').sub,{...(agentMeta('experimental-validation').tag?{tag:agentMeta('experimental-validation').tag}:{}),sources:A('experimental-validation')}),
  n('expGate','expdelib',2,'security','Human acceptance','deliberated = operator',{sources:S('skills/experimental-deliberation/SKILL.md',35,65)}),
@@ -132,6 +138,10 @@ const edges=[
  e('ingest','ingestAgent'), e('ingestAgent','guidance'),
  e('delib','delibCli'), e('delibCli','delibGate'), e('delibGate','delibPub',null,{variant:'security'}), e('delibPub','proposals'),
  e('grapher','delibPub','atlas.json',{variant:'dashed'}),
+ e('delib','tutor','concept + math',{variant:'dashed'}),
+ e('tutor','tutorAgent'), e('ui','mathApi'), e('tutorAgent','tutorStore'),
+ e('ui','tutorAgent','headless turn',{variant:'dashed'}),
+ e('proposals','mathApi','$$ \\tag{N}',{variant:'dashed'}),
  e('expDelib','expVal'), e('expVal','expGate'), e('expGate','expPub',null,{variant:'security'}), e('expPub','experiments'),
  e('impl','implBuild'), e('implBuild','implWalk'), e('implWalk','implGate'), e('implGate','repo',null,{variant:'security'}),
  e('expImpl','expBuild'), e('expBuild','expWalk'), e('expWalk','expImplGate'),
@@ -145,7 +155,7 @@ const edges=[
  e('audit','auditRep'), e('auditRep','report'),
 ];
 const lanes=[
- ['pi','0 · Pi harness'], ['plaus','1 · Plausibility'],['ingest','2 · Ingestion'],['delib','3 · Proposal deliberation'],
+ ['pi','0 · Pi harness'], ['plaus','1 · Plausibility'],['ingest','2 · Ingestion'],['delib','3 · Proposal deliberation'],['dash','3b · Concept map and math (dashboard)'],
  ['impl','4 · Implementation (proof of concept)'],['expdelib','5 · Experimental deliberation'],['expimpl','6 · Experimental implementation'],
  ['creds','7 · Credentials'],['remote','8 · Remote execution'],['write','9 · Writing'],['figs','10 · Figures and grounding'],['out','11 · Paper'],
  ['audit','Transversal · Audit']].map(([id,label])=>({id,label}));
@@ -158,7 +168,7 @@ const doc={schema_version:1,diagram_type:'architecture',meta:{
   title:'Papersmith AI in Pi — commands, skills and agents',
   quality_profile:'showcase',
   output:'docs/diagrams/papersmith-pi-flow.html',
-  repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'1cf76a0dc810e162fa70c6726990f87d63fc56db'},
+  repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'1c3f78c9faa4452fadecf240caf4a1e91a73b3e7'},
   legend:{mode:'auto',entries:{frontend:{label:'Pi command /skill'},backend:{label:'Pi subagent'},messagebus:{label:'CLI'},security:{label:'Gate (human)'},database:{label:'Artifact on disk'},external:{label:'Pi harness'}}}
  },
  layout:{mode:'grid',origin:[30,48],cols:5,cellW:182,cellH:58,gapX:24,gapY:62},
@@ -167,7 +177,7 @@ const doc={schema_version:1,diagram_type:'architecture',meta:{
   {dot:'cyan',title:'How Pi sees it',items:['.pi/APPEND_SYSTEM.md is the system prompt: Pi appends it to the project one','/<skill> = .pi/prompts/<skill>.md: it loads the SKILL.md and passes $ARGUMENTS','The 19 .pi/agents/ are projected from .claude/agents/; Pi core has no subagents, so they need pi-subagents','Each agent declares tools (read, find, grep, write, edit, bash, mcp) and its stretch','refuse-offpath-push.js intercepts bash tool_call; it is a warning that fails open, not a gate']},
   {dot:'emerald',title:'Harness commands',items:['npm run setup:harnesses — links .pi/skills -> ../skills','python scripts/sync-repo-harness.py — regenerates .pi/prompts, .pi/agents, .pi/extensions (--check detects drift)','papersmith init · status · ingest · deliberate · implement · run · remote · audit · ui','npm run test:all — the quality gate']},
   {dot:'violet',title:'Per-skill CLIs',items:['paper-ingestion: python scripts/setup_env.py install','deliberation: node skills/<skill>/cli.mjs --serve','the proposal graph: merge_proposal_sky.py → check_atlas.py → render_atlas.py','implementation: implementation_cli.py materialize · verify · fidelity · audit · step','kaggle-accounts: accounts_cli.py list · discover · validate · remove · materialize','remote-execution: remote_cli.py submit · status · poll · fetch · readiness …','paper-writing: paper_cli.py status · plan · write · verify … (28 verbs)','figure-review: review_cli.py probe · raster · skill-audit: audit_cli.py']},
-  {dot:'amber',title:'Flow rules',items:['The order is optional: each skill refuses with a code when its input is missing','Starting with /plausibility, before ingestion, is the recommendation','No walk can launch a campaign: the operator authorizes it','contract-auditor, redactor and style-sampler have no code path: the orchestrator launches them and write judges','/figure-review and /skill-audit only report; they never repair']}
+  {dot:'amber',title:'Flow rules',items:['The order is optional: each skill refuses with a code when its input is missing','Starting with /plausibility, before ingestion, is the recommendation','After a proposal revision, discuss its concept map and mathematics (dashboard Mapa Conceptual tab, /math-tutor) before implementing it','No walk can launch a campaign: the operator authorizes it','contract-auditor, redactor and style-sampler have no code path: the orchestrator launches them and write judges','/figure-review and /skill-audit only report; they never repair','smith ui: each pipeline phase card sends its /<skill> with the rules as a guide, or opens the panel that owns the work']}
  ]};
 const out = path.resolve(process.argv[2] || fileURLToPath(new URL('./candidate.json', import.meta.url)));
 fs.mkdirSync(path.dirname(out), { recursive: true });

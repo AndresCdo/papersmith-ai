@@ -24,3 +24,5 @@ Every top-level skill under `skills/` is also generated as a slash command in
 loads that skill's `SKILL.md` and passes your text through as `$ARGUMENTS`. The
 directory is a framework artifact: `papersmith audit --check-drift` reports drift
 and `papersmith upgrade` restores it, so do not edit it by hand.
+
+{{paper_flow}}
