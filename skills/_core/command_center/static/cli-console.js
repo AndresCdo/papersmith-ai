@@ -30,6 +30,7 @@
     pendingInput: '',
     flushTimer: null,
     lastOutputAt: 0,
+    startedAt: 0,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -252,6 +253,7 @@
       if (!term) throw new Error('xterm.js no disponible');
       refit(false);
       setStatus(`Abriendo ${agentLabel(state.agent)}…`, 'warn');
+      state.startedAt = Date.now();
       const created = await api('/api/terminal/sessions', 'POST', {
         agent: state.agent, cols: term.cols, rows: term.rows,
       });
@@ -355,6 +357,11 @@
       if (!wanted) throw new Error('no hay un agente (claude, opencode, pi) instalado');
     }
     if (wanted === state.agent) return false;
+    // Switching ends the live session: never without the operator's say-so.
+    if (state.sessionId && !window.confirm(
+      `Esto cierra la sesión de ${agentLabel(state.agent)} y abre ${agentLabel(wanted)}. ¿Continuar?`)) {
+      throw new Error(`se mantuvo la sesión de ${agentLabel(state.agent)}`);
+    }
     state.agent = wanted;
     const select = $('terminalAgentSelect');
     if (select) select.value = wanted;
@@ -368,12 +375,15 @@
   // A freshly started agent paints its prompt before it reads input: wait for
   // its first output and then a short quiet spell (bounded), so the text is
   // typed into the agent rather than lost while it boots.
+  // Output that arrived since the session started counts, even if it came
+  // before this wait began.
   async function settle(maxMs) {
     const began = Date.now();
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     while (Date.now() - began < maxMs) {
       await sleep(250);
-      if (state.lastOutputAt > began && Date.now() - state.lastOutputAt > 900) return;
+      if (state.lastOutputAt >= state.startedAt && state.lastOutputAt > 0
+          && Date.now() - state.lastOutputAt > 900) return;
     }
   }
 
@@ -395,10 +405,11 @@
   // Enter, as a separate write so an agent does not read it as a paste.
   // options.kind: 'slash' runs it in an agent, 'shell' in the plain shell.
   async function sendToCli(text, run, options) {
-    openCliConsole();
     try {
       const kind = options && options.kind;
+      // Choose the agent before opening the window, which starts a session.
       const switched = kind ? await useAgent(kind) : false;
+      openCliConsole();
       const fresh = switched || !state.sessionId;
       const sid = await start();
       if (fresh && state.agent !== 'shell') await settle(12000);
@@ -415,6 +426,7 @@
       }
       state.term.focus();
     } catch (err) {
+      if (!isOpen()) openCliConsole();
       setStatus(`No se pudo enviar: ${err.message}`, 'bad');
     }
   }

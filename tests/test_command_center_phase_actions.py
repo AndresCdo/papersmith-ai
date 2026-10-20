@@ -80,6 +80,10 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         self.assertEqual(phase_actions.stage_for("plausibility"), "plausibility")
         self.assertIsNone(phase_actions.stage_for("Fase 12"))
         self.assertIsNone(phase_actions.stage_for("nonsense"))
+        # Keywords earlier releases accepted still route.
+        self.assertEqual(phase_actions.stage_for("compile"), "paper")
+        self.assertEqual(phase_actions.stage_for("figure"), "figures")
+        self.assertEqual(phase_actions.stage_for("sota"), "plausibility")
 
 
 class Req:

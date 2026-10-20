@@ -198,11 +198,23 @@ ACTIONS: dict[str, dict[str, Any]] = {
 }
 
 
+# Keywords earlier releases routed by substring; kept so scripted callers of
+# /api/phase/run keep working.
+LEGACY_IDS: dict[str, str] = {
+    "pdf": "paper", "compile": "paper", "figure": "figures", "sota": "plausibility",
+    "ingest": "ingestion", "prop": "proposal", "scaffold": "scaffolding",
+    "declaration": "declarations",
+}
+
+
 def stage_for(phase_id: str) -> str | None:
-    """The stage a ``/api/phase/run`` id names: a stage id, or ``Fase N``."""
+    """The stage a ``/api/phase/run`` id names: a stage id, ``Fase N``, or a
+    legacy keyword."""
     text = str(phase_id or "").strip()
     if text in STAGES:
         return text
+    if text.lower() in LEGACY_IDS:
+        return LEGACY_IDS[text.lower()]
     parts = text.split()
     if len(parts) == 2 and parts[0].lower() == "fase" and parts[1].isdigit():
         index = int(parts[1]) - 1
