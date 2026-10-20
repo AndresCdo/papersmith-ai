@@ -11,7 +11,7 @@
 </p>
 
 This README is the **complete manual, in English**: installation, the workspace from the
-inside, the twelve CLI commands, the twelve skills, the nineteen agents,
+inside, the thirteen CLI commands, the thirteen skills, the twenty agents,
 remote compute, development and troubleshooting.
 
 ## Contents
@@ -61,7 +61,7 @@ agent is used as a copilot, the ones already defined are in
 
 ## Use flow — the short path
 
-Twelve skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
+Thirteen skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
 Spanish (*"ingiere los papers"*). **Not all of them have to be used, or in this order**: each
 one declares what it needs first and refuses if it's missing, so an invocation from the middle
 of the flow reports which input is missing.
@@ -73,6 +73,7 @@ The full path, from a PDF to a compiled paper:
 | 1 | `/plausibility` | Explores the idea before any ingestion, in three stretches: it tracks ~25 references through their abstracts, maps the constellation in a single HTML and discusses the plausibility of the hypothesis against that SOTA | `sota-pool/` (ignored, like `guidance/`) |
 | 2 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
 | 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
+| 3b | `/math-tutor` | Before implementing a revision: a Socratic tutor that discusses its concept map and mathematics with you, reads the pages you draw by hand, and checks your understanding of why the novelty holds | nothing on disk but its thread (`.papersmith/math-tutor/`); used from the dashboard's Mapa Conceptual & Modelo tab |
 | 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
 | 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
 | 6 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
@@ -98,6 +99,16 @@ the source of each node, is in
 (opens in the browser; generated with [Archify](https://github.com/tt-a1i/archify),
 and its source and its recipe are versioned in
 [`docs/diagrams/`](docs/diagrams/README.md)).
+
+The dashboard (`papersmith ui`) opens on this flow and shows the same order as
+eleven phases under **Pipeline y Avance**. Clicking a phase opens its console:
+a text box with the stage's rules as a guide that sends `/<skill> <text>` to an
+agent in the support terminal (for `/plausibility`, the idea in at least two
+sentences), the real `papersmith` command for the phase, or a link to the panel
+that owns the work: the concept map, the math tutor, the PoC board, the
+sections, the PDF preview or the gates. The same eleven phases are written into
+every harness entrypoint (`CLAUDE.md`, `OPENCODE.md`, `.pi/APPEND_SYSTEM.md`,
+`.agents/AGENTS.md`) under "Paper construction flow".
 
 [![papersmith-ai flow in Pi: commands, skills and agents](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 

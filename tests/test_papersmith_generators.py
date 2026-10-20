@@ -497,7 +497,8 @@ class GeneratorsTests(unittest.TestCase):
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert '"mode": "gentleman"' in (workspace / ".pi/gentle-ai/persona.json").read_text()
-        assert "drift" not in (workspace / ".pi/APPEND_SYSTEM.md").read_text()
+        # The tampered body is replaced (the flow section itself mentions --check-drift).
+        assert (workspace / ".pi/APPEND_SYSTEM.md").read_text().startswith("# ")
 
     def test_antigravity_check_is_exit_three_on_missing_output(self) -> None:
         workspace = _workspace(self.new_tmp())

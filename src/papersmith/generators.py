@@ -774,6 +774,8 @@ def _context_with_defaults(context: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("version", "0.1.0")
     result.setdefault("tools", ", ".join(ALL_TOOLS))
     result.setdefault("agents", "- No specialized agents have been installed yet.")
+    # One statement of the paper-construction flow, shared by every harness.
+    result.setdefault("paper_flow", render_package_template("paper-flow.md.tpl", {}).strip())
     return result
 
 

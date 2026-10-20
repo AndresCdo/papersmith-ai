@@ -11,6 +11,42 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **Runnable pipeline phases.** Each card of *Fases del Pipeline Metodológico
+  de Redacción* opens a console. A guided text box shows the stage's rules and
+  sends its slash command to an agent of the support terminal: for example
+  `/plausibility <idea>`, which needs at least two sentences. The console also
+  offers the phase's real `papersmith` command (run in the shell) and links to
+  the panel that owns the work (concept map, math tutor, PoC board, sections,
+  PDF preview, gates).
+  - A slash command switches the terminal from herdr or shell to claude,
+    opencode or pi.
+  - The console never answers an agent's startup question (folder trust) with
+    the command's Enter.
+- **Paper construction flow in every harness.** The eleven phases, including the
+  concept-map and mathematics discussion with `/math-tutor` and the
+  proof-of-concept and experiment stages, are written into `CLAUDE.md`,
+  `OPENCODE.md`, `.pi/APPEND_SYSTEM.md` and `.agents/AGENTS.md` from one
+  template.
+- **The archify flow draws the dashboard.** A new lane covers `/math-tutor`,
+  `smith ui`'s phase console, `/api/model/math` and the tutor's thread.
+
+### Changed
+
+- The dashboard opens on *Flujo Archify*; *Pipeline y Avance* follows.
+- Phase commands shown in the dashboard are commands that exist. `papersmith
+  run --stage …`, `papersmith audit --figures` and `papersmith init
+  --harness-only` never did.
+
+### Fixed
+
+- `POST /api/phase/run` routes by stage. It used to send *Fase 8* (writing) to the
+  figures check, and *Fase 10* to the audit message. *Fase 10* now compiles the
+  PDF only when `paper/main.tex` exists, and an unknown phase gets a 422.
+
 ## 0.17.1
 
 ### Fixed
