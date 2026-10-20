@@ -7,6 +7,7 @@ a stub DOM, xterm, fetch and EventSource."""
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -87,6 +88,7 @@ def events(log: list, kind: str) -> list:
     return [entry[1:] for entry in log if entry[0] == kind]
 
 
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
 class CliRoutingTests(unittest.TestCase):
     def test_a_slash_command_moves_herdr_to_the_first_installed_agent(self) -> None:
         log = run(agent="herdr", available=["herdr", "opencode", "pi", "shell"],

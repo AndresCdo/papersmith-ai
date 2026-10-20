@@ -4,6 +4,7 @@ command to an agent, real shell commands, and redirects to the owning panel."""
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -58,6 +59,7 @@ def phase(stage: str) -> dict:
     return {"stage_id": stage, "actions": phase_actions.ACTIONS[stage]["actions"]}
 
 
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
 class PhaseConsoleTests(unittest.TestCase):
     def test_plausibility_shows_its_rules_and_refuses_a_one_sentence_idea(self) -> None:
         result = run(phase("plausibility"), [{"i": 0, "type": "Una sola idea."}])

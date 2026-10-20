@@ -198,8 +198,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
 }
 
 
-# Keywords earlier releases routed by substring; kept so scripted callers of
-# /api/phase/run keep working.
+# Bare keywords earlier releases accepted as a phase id. They match only as
+# the whole id (case-insensitive); an id that merely contains one, which the
+# old substring routing also took, is refused.
 LEGACY_IDS: dict[str, str] = {
     "pdf": "paper", "compile": "paper", "figure": "figures", "sota": "plausibility",
     "ingest": "ingestion", "prop": "proposal", "scaffold": "scaffolding",

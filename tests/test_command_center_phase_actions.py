@@ -84,6 +84,10 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         self.assertEqual(phase_actions.stage_for("compile"), "paper")
         self.assertEqual(phase_actions.stage_for("figure"), "figures")
         self.assertEqual(phase_actions.stage_for("sota"), "plausibility")
+        for keyword, stage in phase_actions.LEGACY_IDS.items():
+            self.assertEqual(phase_actions.stage_for(keyword.upper()), stage)
+            self.assertIn(stage, phase_actions.STAGES)
+        self.assertIsNone(phase_actions.stage_for("compile pdf"))
 
 
 class Req:

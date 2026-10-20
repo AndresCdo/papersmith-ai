@@ -254,6 +254,7 @@
       refit(false);
       setStatus(`Abriendo ${agentLabel(state.agent)}…`, 'warn');
       state.startedAt = Date.now();
+      state.lastOutputAt = 0;
       const created = await api('/api/terminal/sessions', 'POST', {
         agent: state.agent, cols: term.cols, rows: term.rows,
       });

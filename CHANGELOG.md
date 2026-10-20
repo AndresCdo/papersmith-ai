@@ -32,7 +32,7 @@ number is `0`, breaking changes can still arrive without a major bump.
   `OPENCODE.md`, `.pi/APPEND_SYSTEM.md` and `.agents/AGENTS.md` from one
   template.
 - **The archify flow draws the dashboard.** A new lane covers `/math-tutor`,
-  `smith ui`'s phase console, `/api/model/math` and the tutor's thread.
+  `papersmith ui`'s phase console, `/api/model/math` and the tutor's thread.
 
 ### Changed
 
