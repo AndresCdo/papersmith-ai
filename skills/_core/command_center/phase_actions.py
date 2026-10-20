@@ -74,7 +74,7 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Luego divide la hipótesis en afirmaciones y califica cada una (novel / known / tension / contradicted) con citas literales.",
                 "Nada se ingiere ni se archiva: el informe espera tu aceptación antes de pasar el top 5 a ingestión.",
                 "Puedes ajustar la idea y pedir un nuevo screening; cada pasada es un informe nuevo.",
-            ], "Ej.: Los modelos de EEG pierden precisión entre sujetos. Propongo un kernel cuántico que …",
+            ], "Ej.: Los modelos actuales pierden precisión fuera de su dominio de entrenamiento. Propongo …",
                 min_sentences=2),
             _redirect("Ver la constelación SOTA", "atlas", "Atlas 3D del pool de candidatos."),
         ],
@@ -118,11 +118,11 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Pregunta que gobierna cada turno: ¿qué experimento pondría a prueba esta afirmación de la propuesta?",
                 "Cada experimento declara la afirmación que prueba, su métrica y su baseline SOTA.",
                 "Pide la primera versión, un cambio o una operación de revisión; nada se aplica sin tu aprobación.",
-            ], "Ej.: diseña el experimento que prueba la afirmación C1 contra el baseline EEGNet."),
+            ], "Ej.: diseña el experimento que prueba la afirmación C1 contra el baseline más fuerte del SOTA."),
             _prompt("/proposal-implementation", "Implementar la prueba de concepto", [
                 "Convierte la última propuesta en Python contra un repositorio objetivo, o verifica una implementación existente.",
                 "Indica el repositorio objetivo y si es primera pasada o una pasada posterior.",
-            ], "Ej.: implementa la PoC de la propuesta r03 en ../qmleeg-poc", optional=True),
+            ], "Ej.: implementa la PoC de la propuesta r03 en ../mi-poc", optional=True),
             _prompt("/experimental-implementation", "Implementar y medir los experimentos", [
                 "Convierte el protocolo experimental vigente en Python y corre sus mediciones declaradas.",
                 "Indica el repositorio objetivo; la verificación compara contra el protocolo y la propuesta.",
