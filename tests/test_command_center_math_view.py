@@ -104,6 +104,7 @@ class ProposalTests(_Workspace):
                          "\\lvert \\psi(x) \\rangle = U_{\\phi}(x) \\lvert 0 \\rangle^{\\otimes n}")
         self.assertEqual(first["connection"], "The feature map embeds the signal in Hilbert space.")
         self.assertEqual(second["heading"], "2.1 Kernel")
+        self.assertEqual(second["connection"], "The fidelity kernel compares two epochs (Ec. 1).")
         self.assertEqual(compile_with_katex([e["latex"] for e in view["equations"]]), [])
 
     def test_the_sky_overlay_fills_the_novelty_card(self) -> None:

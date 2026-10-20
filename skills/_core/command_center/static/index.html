@@ -14,6 +14,9 @@
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
   <script src="./cli-console.js?v=0.16.1"></script>
+  <link rel="stylesheet" href="./vendor/katex/katex.min.css">
+  <script src="./vendor/katex/katex.min.js"></script>
+  <script src="./math-panel.js?v=0.17.0"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2299,6 +2302,78 @@
     }
 
 
+    /* ---- Math panel + Socratic tutor (math-panel.js) ---- */
+    .math-panel { --eq-radius: 14px; }
+    .math-lema {
+      margin: 0.25rem 0 1.1rem; padding: 0.7rem 0.2rem; border-top: 1px dashed var(--border);
+      border-bottom: 1px dashed var(--border); font-size: 1rem; line-height: 1.55; color: var(--text);
+    }
+    .math-lema p { margin: 0; }
+    .math-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 1.25rem; align-items: start; }
+    @media (max-width: 1100px) { .math-layout { grid-template-columns: 1fr; } }
+    .math-stack { display: flex; flex-direction: column; gap: 0.75rem; }
+    .eq-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--eq-radius); padding: 0.9rem 1.1rem; }
+    .eq-card--empty { color: var(--text-muted); font-size: 0.86rem; }
+    .eq-card__head { display: flex; gap: 0.55rem; align-items: baseline; font-size: 0.86rem; font-weight: 700; color: var(--text); }
+    .eq-card__tag { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); }
+    .eq-card__display { overflow-x: auto; padding: 0.35rem 0; font-size: 1.15rem; }
+    .eq-card__conn { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; }
+    .eq-card__vars { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.75rem; margin: 0.55rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
+    .eq-card__vars dt code { color: var(--text); }
+    .eq-card__vars dd { margin: 0; }
+    .math-side { display: flex; flex-direction: column; gap: 0.9rem; position: sticky; top: 0.75rem; }
+    .math-novelty { background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--eq-radius); padding: 0.9rem 1rem; font-size: 0.84rem; line-height: 1.5; }
+    /* Labels by class only: a descendant selector would also upper-case KaTeX's own spans. */
+    .math-label {
+      display: block; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
+    }
+    .math-novelty__idea { font-size: 1.02rem; font-weight: 700; color: var(--text); margin: 0.15rem 0 0.55rem; }
+    .math-novelty__row { margin: 0.45rem 0; }
+    .math-novelty__row p, .math-novelty__row ul { margin: 0.1rem 0; }
+    .math-novelty__row ul { padding-left: 1.1rem; }
+    .math-novelty__detail { color: var(--text-muted); }
+    .math-novelty__key { margin-top: 0.6rem; padding-top: 0.55rem; border-top: 1px dashed var(--border); overflow-x: auto; }
+    .math-muted { color: var(--text-muted); font-size: 0.82rem; }
+    .math-error { color: var(--bad); }
+    .tutor { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--eq-radius); padding: 0.8rem; outline: none; }
+    .tutor.is-drop { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25); }
+    .tutor__head { display: flex; justify-content: space-between; align-items: center; }
+    .tutor__sub { display: block; font-size: 0.72rem; color: var(--text-muted); }
+    .tutor-meter { display: flex; align-items: center; gap: 0.3rem; margin: 0.55rem 0; }
+    .tutor-meter__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+    .tutor-meter__dot.is-on { background: var(--ok); }
+    .tutor-meter__label { margin-left: 0.4rem; font-size: 0.74rem; color: var(--text-muted); }
+    .tutor__thread { max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; padding-right: 0.2rem; font-size: 0.84rem; line-height: 1.55; }
+    .tutor-msg { border-radius: 12px; padding: 0.6rem 0.75rem; }
+    .tutor-msg p { margin: 0.25rem 0; }
+    .tutor-msg--reader { background: var(--surface-2); align-self: flex-end; max-width: 92%; }
+    .tutor-msg--tutor { border: 1px solid var(--border-subtle); }
+    .tutor-msg__meta { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .tutor-msg__imgs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.35rem 0; }
+    .tutor-msg__imgs img { max-width: 180px; max-height: 140px; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
+    .tutor-reading { margin: 0.3rem 0; font-size: 0.8rem; color: var(--text-muted); }
+    .tutor-reading summary { cursor: pointer; }
+    .tutor-latex-list, .math-inline-display { overflow-x: auto; }
+    .tutor-question { margin: 0.5rem 0; padding: 0.55rem 0.7rem; border-left: 3px solid var(--accent); background: rgba(56, 189, 248, 0.08); border-radius: 0 8px 8px 0; font-weight: 600; }
+    .tutor-novelty, .tutor-next { margin: 0.35rem 0; }
+    .tutor-assess { margin-top: 0.4rem; font-size: 0.78rem; color: var(--text-muted); }
+    .tutor-assess > span { font-weight: 700; color: var(--ok); }
+    .tutor-assess ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+    .tutor__pending { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+    .tutor-thumb { position: relative; margin: 0; }
+    .tutor-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+    .tutor-thumb button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: none; background: var(--bad); color: #fff; font-size: 0.6rem; cursor: pointer; }
+    .tutor__composer { margin-top: 0.55rem; display: flex; flex-direction: column; gap: 0.45rem; }
+    .tutor__modes { display: flex; gap: 0.3rem; }
+    .tutor__modes button { flex: 1; font-size: 0.74rem; padding: 0.3rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
+    .tutor__modes button.is-on { background: var(--accent); border-color: var(--accent); color: #0b0f19; font-weight: 700; }
+    .tutor__composer textarea { width: 100%; box-sizing: border-box; resize: vertical; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); padding: 0.55rem 0.65rem; font: inherit; font-size: 0.84rem; }
+    .tutor__actions { display: flex; align-items: center; gap: 0.45rem; }
+    .tutor__status { flex: 1; font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tutor__status[data-tone="ok"] { color: var(--ok); }
+    .tutor__status[data-tone="warn"] { color: var(--warn); }
+    .tutor__status[data-tone="bad"] { color: var(--bad); }
+
     /* ---- Smith CLI assistant (FAB + floating terminal) ---- */
     :root { --fab-size: 58px; --fab-offset: 24px; }
     footer.dashboard-footer { padding-right: calc(2rem + var(--fab-size) + var(--fab-offset)); }
@@ -2536,7 +2611,7 @@
           🗺️ 2. Mapa Conceptual (5 Capas)
         </button>
         <button class="model-subnav-btn" onclick="filterModelView('matematico', this)">
-          📐 3. Modelo Matemático Formal
+          📐 3. Matemática &amp; Tutor
         </button>
         <button class="model-subnav-btn" onclick="filterModelView('poc', this)">
           🧪 4. Plan de Prueba de Concepto (PoC)
@@ -2829,219 +2904,42 @@
         </div>
       </div>
 
-      <!-- MODULO 3: MODELO MATEMATICO FORMAL -->
+      <!-- MODULO 3: MATEMATICA DEL PAPER + TUTOR SOCRATICO (math-panel.js) -->
       <div id="modelSecMatematico" class="model-section">
-        <div class="panel">
+        <div class="panel math-panel">
           <div class="panel__header">
-            <div class="panel__title">
-              <span>📐 3. Modelo Matemático Formal del Framework Bioeléctrico</span>
-            </div>
-            <span class="badge badge--info">FORMAL SPECIFICATION · TRANSDUCTION &amp; OPTIMIZATION</span>
+            <div class="panel__title"><span>📐 3. Matemática del paper</span></div>
+            <span id="mathSourceBadge" class="badge badge--info">cargando…</span>
           </div>
-
-          <!-- Dominios de Entrada y Salida -->
-          <div style="margin-bottom: 1.5rem;">
-            <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.6rem;">
-              🌐 Dominio de Entrada (𝒳) y Rango de Salida (𝒴)
-            </h4>
-
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
-              <!-- Dominio Entrada -->
-              <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                  <strong style="color: #38bdf8; font-size: 0.88rem;">Dominio de Entrada Analógico Continuo (𝒳)</strong>
-                  <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">ESPACIO CONTINUO</span>
-                </div>
-                <div class="math-formula-box" style="margin: 0.5rem 0 0.8rem 0; padding: 0.75rem 1rem;">
-                  <div class="math-formula-body" style="font-size: 1.05rem;">
-                    𝒳 ⊂ ℝ^(32 × [0, T])
+          <div id="mathLema" class="math-lema"></div>
+          <div class="math-layout">
+            <section id="mathStack" class="math-stack" aria-label="Ecuaciones del paper"></section>
+            <aside class="math-side">
+              <div id="mathNoveltyCard" class="math-novelty" aria-label="Idea y novedad"></div>
+              <section id="tutorPanel" class="tutor" tabindex="0" aria-label="Tutor socrático de matemática">
+                <header class="tutor__head">
+                  <div><strong>Tutor socrático</strong><span class="tutor__sub">math-tutor · dibuja, sube y razona</span></div>
+                  <button id="tutorReset" class="btn btn--sm" type="button" title="Nueva conversación">↺</button>
+                </header>
+                <div id="tutorMeter" class="tutor-meter" title="Nivel de comprensión que el tutor ha evaluado"></div>
+                <div id="tutorThread" class="tutor__thread"></div>
+                <div id="tutorPending" class="tutor__pending"></div>
+                <div class="tutor__composer">
+                  <div class="tutor__modes" role="group" aria-label="Modo">
+                    <button type="button" class="is-on" data-tutor-mode="ask">Preguntar</button>
+                    <button type="button" data-tutor-mode="explain">Explícame</button>
+                    <button type="button" data-tutor-mode="evaluate">Evalúame</button>
                   </div>
-                  <span class="math-formula-tag">v_in(t) ∈ 𝒳</span>
-                </div>
-                <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 0.6rem;">
-                  Espacio continuo de las señales bioeléctricas de potencial diferencial captadas por los 32 electrodos respecto a la referencia común en el cuero cabelludo.
-                </p>
-                <table class="param-spec-table">
-                  <thead>
-                    <tr><th>Parámetro Físico</th><th>Símbolo</th><th>Especificación</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>Rango de Tensión</td><td><code>v_in,i(t)</code></td><td><code>[-187.5 mV, +187.5 mV]</code></td></tr>
-                    <tr><td>Tensión de Referencia ADC</td><td><code>V_ref</code></td><td><code>4.500 V (precisión interna)</code></td></tr>
-                    <tr><td>Ganancia PGA Front-End</td><td><code>Gain</code></td><td><code>24 (configuración analógica)</code></td></tr>
-                    <tr><td>Impedancia Diferencial</td><td><code>Z_in</code></td><td><code>&gt; 1 GΩ || 10 pF</code></td></tr>
-                    <tr><td>Ancho de Banda Analógico</td><td><code>B</code></td><td><code>0.1 Hz – 70.0 Hz</code></td></tr>
-                    <tr><td>Voltaje de Modo Común</td><td><code>v_CM(t)</code></td><td><code>[-1.5 V, +1.5 V] (60 Hz acoplado)</code></td></tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Rango Salida -->
-              <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                  <strong style="color: #10b981; font-size: 0.88rem;">Rango de Salida Digital Sincronizado (𝒴)</strong>
-                  <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">ESPACIO DISCRETO</span>
-                </div>
-                <div class="math-formula-box" style="margin: 0.5rem 0 0.8rem 0; padding: 0.75rem 1rem;">
-                  <div class="math-formula-body" style="font-size: 1.05rem;">
-                    𝒴 ⊂ {-2^23, ..., 2^23 - 1}^(32 × N) × {0, 1}^(8 × N) × ℝ^N
-                  </div>
-                  <span class="math-formula-tag">y[n] ∈ 𝒴</span>
-                </div>
-                <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 0.6rem;">
-                  Secuencia discreta de tramas empaquetadas, donde cada muestra n asocia la lectura cuantizada de 32 canales, banderas de estímulo y estampa temporal.
-                </p>
-                <table class="param-spec-table">
-                  <thead>
-                    <tr><th>Parámetro Digital</th><th>Símbolo</th><th>Especificación</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>Palabra Cuantizada (24b)</td><td><code>D_i[n]</code></td><td><code>[-8.388.608, +8.388.607]</code></td></tr>
-                    <tr><td>Resolución LSB</td><td><code>ΔV_LSB</code></td><td><code>0.0223517 µV / LSB</code></td></tr>
-                    <tr><td>Banderas de Estímulo</td><td><code>e[n]</code></td><td><code>{0, 1}^8 (1 Byte inyectado)</code></td></tr>
-                    <tr><td>Tasa de Muestreo</td><td><code>f_s</code></td><td><code>250 Hz (T_s = 4.000 ms)</code></td></tr>
-                    <tr><td>Jitter Temporal Determinista</td><td><code>Δτ_jitter</code></td><td><code>&lt; 5 µs (medido 2.4 µs)</code></td></tr>
-                    <tr><td>Tamaño de Trama</td><td><code>Frame</code></td><td><code>102 Bytes / muestra (25.5 kB/s)</code></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Ecuación de Calibración Físico-Digital -->
-            <div style="margin-top: 1rem; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius); padding: 0.85rem 1.15rem;">
-              <div style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin-bottom: 0.3rem;">
-                🔄 Ecuación de Reconstrucción y Conversión Físico-Digital
-              </div>
-              <div style="font-family: var(--font-mono); font-size: 0.95rem; color: var(--text); overflow-x: auto; padding: 0.2rem 0;">
-                v̂_i[n] = D_i[n] · ΔV_LSB = D_i[n] · [ V_ref / ( Gain · (2^23 - 1) ) ] = D_i[n] · 0.02235174 µV
-              </div>
-              <div style="font-size: 0.74rem; color: var(--text-dim); margin-top: 0.25rem;">
-                Permite la conversión directa y calibrada de las lecturas digitales crudas a microvoltios con resolución nanométrica.
-              </div>
-            </div>
-          </div>
-
-          <!-- Ecuaciones Principales del Modelo -->
-          <div style="margin-bottom: 1.5rem;">
-            <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.6rem;">
-              📜 Ecuaciones Principales del Modelo
-            </h4>
-
-            <!-- Ecuacion 1 -->
-            <div class="opt-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                <strong style="color: var(--text); font-size: 0.9rem;">Ecuación (1): Superposición y Descomposición de Ruido Bioeléctrico</strong>
-                <span class="math-formula-tag">(1)</span>
-              </div>
-              <div class="math-formula-box">
-                <div class="math-formula-body">
-                  v_meas,i(t) = v_EEG,i(t) + v_artifact,i(t) + [ v_CM(t) / CMRR_eff,i ] + v_thermal,i(t) + v_1/f,i(t)
-                </div>
-                <span class="math-formula-tag">SEÑAL &amp; RUIDO</span>
-              </div>
-              <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45;">
-                Modela el potencial analógico medido en el electrodo <em>i</em> como la superposición lineal del biopotencial neurogénico cerebral genuino (1–50 µV), artefactos fisiológicos (miográficos EMG, oculares EOG), interferencia de modo común de red atenuada por el CMRR efectivo (&gt;110 dB), ruido térmico Johnson-Nyquist del front-end analógico (v_n ≈ 0.14 µVrms) y ruido rosa 1/f en bajas frecuencias.
-              </p>
-            </div>
-
-            <!-- Ecuacion 2 -->
-            <div class="opt-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                <strong style="color: var(--text); font-size: 0.9rem;">Ecuación (2): Bucle Activo de Supresión de Modo Común (Right Leg Drive)</strong>
-                <span class="math-formula-tag">(2)</span>
-              </div>
-              <div class="math-formula-box">
-                <div class="math-formula-body">
-                  v_RLD(t) = - A_RLD · v̄_CM(t) = - A_RLD · [ (1 / |S_RLD|) · ∑_{i ∈ S_RLD} v_in,i(t) ]
-                </div>
-                <span class="math-formula-tag">BUCLE RLD</span>
-              </div>
-              <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45;">
-                El circuito Right Leg Drive calcula el promedio instantáneo del voltaje de modo común en los electrodos seleccionados S_RLD y lo retroalimenta invertido con ganancia A_RLD a través del electrodo de referencia activo. La función de lazo cancela la corriente de desplazamiento acoplada por la red eléctrica domiciliaria de 60 Hz.
-              </p>
-            </div>
-
-            <!-- Ecuacion 3 -->
-            <div class="opt-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                <strong style="color: var(--text); font-size: 0.9rem;">Ecuación (3): Estructura de Trama Determinista &amp; Sincronización SPI</strong>
-                <span class="math-formula-tag">(3)</span>
-              </div>
-              <div class="math-formula-box">
-                <div class="math-formula-body">
-                  Frame[n] = [ SYNC (3B: 0xC00000) | TRIG (1B: e[n]) | D_1[n] ... D_32[n] (96B) | CRC-16 (2B: 0x1021) ]
-                </div>
-                <span class="math-formula-tag">SPI FRAME (102B)</span>
-              </div>
-              <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45;">
-                Estructura de la trama binaria síncrona enviada en cada periodo T_s = 4.0 ms desde los AFEs hacia el TM4C1294 por DMA. Al inyectar la bandera de evento TRIG directamente en la cabecera mediante interrupción de hardware, el retraso de sincronización se acota a Δτ ≤ 2.4 µs (&lt; 5 µs), erradicando el jitter de capas de software.
-              </p>
-            </div>
-          </div>
-
-          <!-- Funciones de Costo y Problemas de Optimizacion -->
-          <div>
-            <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 0.6rem;">
-              🎯 Funciones de Costo &amp; Problemas de Optimización Asociados
-            </h4>
-
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-              <!-- Problema 1: RLD -->
-              <div class="opt-card" style="border-left: 4px solid #38bdf8;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                  <strong style="color: #38bdf8; font-size: 0.88rem;">Problema de Optimización 1: Minimización de Voltaje Residual de Modo Común (Sintonización RLD)</strong>
-                  <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">CONTROL ANALÓGICO</span>
-                </div>
-                <div class="math-formula-box" style="margin: 0.5rem 0;">
-                  <div class="math-formula-body" style="font-size: 1.0rem;">
-                    min_{A_RLD, R_f, C_f}  J_CM = ∫_{2π·45 Hz}^{2π·65 Hz} | v_CM(jω) / (1 + T_loop(jω)) |^2 dω
+                  <textarea id="tutorInput" rows="3" placeholder="Escribe tu idea, tu duda o tu derivación (usa $…$ para LaTeX). Arrastra o pega aquí fotos de tus hojas."></textarea>
+                  <div class="tutor__actions">
+                    <button id="tutorAttach" type="button" class="btn btn--sm">🖼️ Adjuntar</button>
+                    <input id="tutorFile" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+                    <span id="tutorStatus" class="tutor__status" data-tone="muted"></span>
+                    <button id="tutorSend" type="button" class="btn btn--primary btn--sm">Enviar ⌘↵</button>
                   </div>
                 </div>
-                <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 0.5rem;">
-                  <strong>Restricciones de Diseño &amp; Seguridad Pediátrica:</strong>
-                  <ul style="margin: 0.3rem 0 0 1.25rem;">
-                    <li>Margen de Fase: <code>PM(T_loop) ≥ 45°</code> (estabilidad incondicional y ausencia de sobrepico).</li>
-                    <li>Seguridad Eléctrica Pediátrica: <code>|i_RLD(t)| ≤ 10 µA</code> (Conformidad con norma médica IEC 60601-1).</li>
-                    <li>Resistencia limitadora de salida: <code>R_limit ≥ 100 kΩ</code> en serie con el electrodo de pierna derecha.</li>
-                  </ul>
-                </div>
-              </div>
-
-              <!-- Problema 2: ERP SNR -->
-              <div class="opt-card" style="border-left: 4px solid #10b981;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                  <strong style="color: #10b981; font-size: 0.88rem;">Problema de Optimización 2: Maximización de Relación Señal a Ruido (SNR) en Potenciales Evocados</strong>
-                  <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">FILTRADO ESPACIAL ÓPTIMO</span>
-                </div>
-                <div class="math-formula-box" style="margin: 0.5rem 0;">
-                  <div class="math-formula-body" style="font-size: 1.0rem;">
-                    max_{w ∈ ℝ^32}  SNR_ERP(w) = ( w^T Σ_ERP w ) / ( w^T Σ_noise w )     sujeto a: ||w||_2 = 1
-                  </div>
-                </div>
-                <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 0.5rem;">
-                  <strong>Solución Analítica &amp; Relevancia Metrológica:</strong>
-                  <p style="margin: 0.3rem 0 0 0;">
-                    La solución analítica corresponde al autovector principal de la ecuación generalizada de valores propios <code>Σ_ERP · w = λ_max · Σ_noise · w</code>. Dado que el jitter de hardware de MONEEG es inferior a 5 µs, la matriz de covarianza de la señal ERP no sufre atenuación por promediado asincrónico (asynchronous smearing), maximizando el SNR final más de un 40% frente a sistemas convencionales.
-                  </p>
-                </div>
-              </div>
-
-              <!-- Problema 3: Berger PSD -->
-              <div class="opt-card" style="border-left: 4px solid #f59e0b;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                  <strong style="color: #f59e0b; font-size: 0.88rem;">Problema de Optimización 3: Test Espectral para Prueba de Concepto (Efecto Berger en O2)</strong>
-                  <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">VERIFICACIÓN EXPERIMENTAL</span>
-                </div>
-                <div class="math-formula-box" style="margin: 0.5rem 0;">
-                  <div class="math-formula-body" style="font-size: 1.0rem;">
-                    max  ΔPSD_α = 10 · log10 [ ( ∫_{8 Hz}^{13 Hz} S_O2,cerrados(f) df ) / ( ∫_{8 Hz}^{13 Hz} S_O2,abiertos(f) df ) ] ≥ 3.0 dB
-                  </div>
-                </div>
-                <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.45;">
-                  <strong>Criterio de Aceptación:</strong> Se evalúa la densidad espectral de potencia (PSD) mediante el método de Welch en el electrodo occipital O2 referenciado a mastoides. La prueba de concepto se declara superada (PASS) cuando el incremento de potencia alfa supera los 3.0 dB (medido experimentalmente 3.8 dB con pico a 10.2 Hz).
-                </div>
-              </div>
-            </div>
+              </section>
+            </aside>
           </div>
         </div>
       </div>
@@ -3813,6 +3711,7 @@
       }
       if (tabId === 'modelo') {
         refreshModelData();
+        if (window.refreshMathPanel) window.refreshMathPanel();
       }
     }
 

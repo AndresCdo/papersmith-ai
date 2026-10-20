@@ -32,13 +32,18 @@ TEXT_MAX = 600
 _REVISION = re.compile(r"^research-concept-.+-r(\d+)\.md$")
 _TAG = re.compile(r"\\tag\{([^{}]*)\}")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
-_SENTENCE = re.compile(r"^(.+?[.!?])(?:\s|$)", re.S)
 
 
 def _first_sentence(text: str) -> str:
+    """Up to the first sentence end that is not inside parentheses, so a
+    citation like "(Ec. 1)" never cuts a sentence in two."""
     text = " ".join(str(text or "").split())
-    match = _SENTENCE.match(text)
-    return (match.group(1) if match else text)[:TEXT_MAX]
+    depth = 0
+    for index, char in enumerate(text):
+        depth += {"(": 1, ")": -1}.get(char, 0)
+        if char in ".!?" and depth <= 0 and (index + 1 == len(text) or text[index + 1] == " "):
+            return text[:index + 1][:TEXT_MAX]
+    return text[:TEXT_MAX]
 
 
 def _read(path: Path) -> str | None:
