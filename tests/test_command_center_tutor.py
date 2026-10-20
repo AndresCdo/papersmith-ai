@@ -81,6 +81,21 @@ class StoreTests(_Root):
                 with self.assertRaises(tutor.TutorError):
                     tutor.save_image(self.root, bad)
 
+    def test_a_polyglot_image_is_refused(self) -> None:
+        jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 16 + b"\xff\xd9"
+        webp = b"RIFF" + (len(b"WEBPVP8 ") + 4).to_bytes(4, "little") + b"WEBPVP8 " + b"\x00" * 4
+        self.assertEqual(tutor.save_image(self.root, "data:image/jpeg;base64,"
+                                          + base64.b64encode(jpeg).decode())["type"], "image/jpeg")
+        self.assertEqual(tutor.save_image(self.root, "data:image/webp;base64,"
+                                          + base64.b64encode(webp).decode())["type"], "image/webp")
+        for name, data in (("png+html", PNG + b"<html><script>alert(1)</script></html>"),
+                           ("jpeg+html", jpeg + b"<script>"),
+                           ("webp wrong size", webp + b"<script>")):
+            with self.subTest(name):
+                url = "data:image/png;base64," + base64.b64encode(data).decode()
+                with self.assertRaises(tutor.TutorError):
+                    tutor.save_image(self.root, url)
+
     def test_an_image_id_never_escapes_the_folder(self) -> None:
         for bad in ("../../etc/passwd", "a/b", "", "x" * 200):
             with self.assertRaises(tutor.TutorError):

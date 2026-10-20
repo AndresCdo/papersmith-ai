@@ -76,7 +76,8 @@ def _latest_proposal(root: Path) -> Path | None:
     ranked = []
     for path in folder.iterdir():
         match = _REVISION.match(path.name)
-        if match and path.is_file():
+        # A revision resolving outside the workspace is not this paper's.
+        if match and path.is_file() and path.resolve().is_relative_to(root):
             ranked.append((int(match.group(1)), path.name, path))
     return max(ranked)[2] if ranked else None
 
@@ -208,6 +209,13 @@ def _novelty_from_spec(spec: dict[str, Any], fallback_title: str) -> dict[str, A
     }
 
 
+def _valid_spec_file(path: Path) -> bool:
+    try:
+        return isinstance(json.loads(_read(path) or ""), dict)
+    except ValueError:
+        return False
+
+
 # --------------------------------------------------------------------------
 # the view
 # --------------------------------------------------------------------------
@@ -234,7 +242,7 @@ def build(root: Path | str) -> dict[str, Any]:
         spec = spec if isinstance(spec, dict) else {}
         equations = equations_from_spec(spec)
         novelty = _novelty_from_spec(spec, title)
-        if spec_file.is_file():
+        if _valid_spec_file(spec_file):
             source = "model_spec:.papersmith/model_spec.json"
         elif equations:
             source = "builtin:moneeg"

@@ -133,6 +133,13 @@ class ProposalTests(_Workspace):
         (self.root / "proposals" / "research-concept-x-r09.md").symlink_to(secret)
         self.assertEqual(math_view.build(self.root)["equations"], [])
 
+        self.assertEqual(math_view.build(self.root)["source"], "none")
+
+    def test_an_invalid_model_spec_is_not_named_as_the_source(self) -> None:
+        (self.root / ".papersmith").mkdir()
+        (self.root / ".papersmith" / "model_spec.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(math_view.build(self.root)["source"], "none")
+
     def test_a_display_block_without_a_closing_fence_is_skipped(self) -> None:
         (self.root / "proposals").mkdir()
         (self.root / "proposals" / "research-concept-x-r01.md").write_text(

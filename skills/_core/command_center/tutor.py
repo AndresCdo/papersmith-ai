@@ -117,12 +117,24 @@ def save_image(root: Path, data_url: Any) -> dict[str, str]:
     if kind is None:
         raise TutorError("only PNG, JPEG and WebP images are accepted")
     ext, mime = kind
+    if not _well_formed(ext, data):
+        raise TutorError("the image is malformed or carries trailing data")
     image_id = hashlib.sha256(data).hexdigest()[:16]
     target = folder(root) / "images" / f"{image_id}.{ext}"
     target.parent.mkdir(parents=True, exist_ok=True)
     if not target.exists():
         target.write_bytes(data)
     return {"id": image_id, "type": mime}
+
+
+def _well_formed(ext: str, data: bytes) -> bool:
+    """The whole file is the image: it ends where its format says it ends, so
+    a valid header followed by HTML or script (a polyglot) is refused."""
+    if ext == "png":
+        return data.endswith(b"\x00\x00\x00\x00IEND\xaeB`\x82")
+    if ext == "jpg":
+        return data.endswith(b"\xff\xd9")
+    return len(data) >= 12 and int.from_bytes(data[4:8], "little") + 8 == len(data)
 
 
 def image_path(root: Path, image_id: Any) -> Path:
