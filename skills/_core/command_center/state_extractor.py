@@ -146,6 +146,8 @@ AGENT_STAGES = {
     "novelty-screener": "plausibility",
     "paper-ingestion": "ingestion",
     "deliberation-publish": "proposal",
+    # Tutors the proposal's own mathematics and novelty from the math panel.
+    "math-tutor": "proposal",
     "experimental-publish": "experimental-deliberation",
     "experimental-validation": "experimental-deliberation",
     "experiments-build": "experimental-implementation",
