@@ -210,6 +210,10 @@ class HostAllowListMiddleware:
 # --------------------------------------------------------------------------
 # application
 # --------------------------------------------------------------------------
+#: Cookie holding the support terminal's per-server secret.
+TERMINAL_COOKIE = "papersmith_terminal"
+
+
 def terminal_allowed(host: str) -> bool:
     """The support terminal is a shell: offer it only on a loopback bind."""
     return host.strip("[]").lower() in _LOOPBACK_HOSTS
@@ -1738,11 +1742,18 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
     # ---------------------------------------------------------------- terminal
     app.state.terminal = terminals
+    app.state.terminal_enabled = enable_terminal
 
     def _terminal_refusal(request: Request, *, mutating: bool) -> JSONResponse | None:
         if not enable_terminal:
             return JSONResponse({"detail": "the support terminal is disabled on this bind"},
                                 status_code=404, headers=dict(_PAPER_HEADERS))
+        # A secret, not just headers: any local client (another OS user, curl)
+        # can send the right headers, but only this server's browser holds it.
+        if not terminals.authorized(request.cookies.get(TERMINAL_COOKIE)):
+            return JSONResponse({"detail": "refused: open the dashboard from the login URL "
+                                 "the server printed"}, status_code=403,
+                                headers=dict(_PAPER_HEADERS))
         reason = terminal.guard(request.headers, mutating=mutating)
         if reason is not None:
             return JSONResponse({"detail": f"refused: {reason}"}, status_code=403,
@@ -1760,13 +1771,25 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         return JSONResponse({"detail": "the body must be a JSON object"}, status_code=422,
                             headers=dict(_PAPER_HEADERS))
 
+    @app.get("/api/terminal/login")
+    def api_terminal_login(token: str = "") -> Response:
+        if not enable_terminal or not terminals.authorized(token):
+            return JSONResponse({"detail": "invalid terminal token"}, status_code=403,
+                                headers=dict(_PAPER_HEADERS))
+        response = Response(status_code=303, headers={"Location": "/", "Cache-Control": "no-store"})
+        response.set_cookie(TERMINAL_COOKIE, terminals.token, httponly=True,
+                            samesite="strict", path="/api/terminal")
+        return response
+
     @app.get("/api/terminal/agents")
     def api_terminal_agents(request: Request) -> JSONResponse:
+        authorized = terminals.authorized(request.cookies.get(TERMINAL_COOKIE))
         commands_dir = root_path / ".claude" / "commands"
         slash = sorted(f"/{p.stem}" for p in commands_dir.glob("*.md")) if commands_dir.is_dir() else []
         return JSONResponse({
             "enabled": enable_terminal and terminal.fcntl is not None,
-            "agents": terminals.agents() if enable_terminal else [],
+            "authorized": enable_terminal and authorized,
+            "agents": terminals.agents() if enable_terminal and authorized else [],
             "quick": {"shell": list(terminal.SHELL_QUICK), "agent": slash[:24]},
         }, headers=dict(_PAPER_HEADERS))
 
@@ -1799,7 +1822,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             if "cols" in body or "rows" in body:
                 terminals.resize(sid, body.get("cols"), body.get("rows"))
             if isinstance(body.get("data"), str):
-                terminals.write(sid, body["data"])
+                # Off the event loop: a full PTY input queue blocks the write.
+                await asyncio.to_thread(terminals.write, sid, body["data"])
         except KeyError:
             return JSONResponse({"detail": "no such session"}, status_code=404,
                                 headers=dict(_PAPER_HEADERS))
@@ -2049,6 +2073,11 @@ def main(argv: list[str] | None = None) -> int:
         enable_terminal=terminal_allowed(args.host) and not args.no_terminal,
     )
     url = f"http://{args.host}:{args.port}/"
+    if app.state.terminal_enabled:
+        # The terminal's secret travels only in this URL; opening it once sets
+        # the cookie. Printed so --no-browser users can open it themselves.
+        url = f"{url}api/terminal/login?token={app.state.terminal.token}"
+        print(f"support terminal enabled; dashboard login URL: {url}", flush=True)
     if not args.no_browser:
         threading.Timer(1.0, open_browser, args=(url,)).start()
     uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)

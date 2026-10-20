@@ -59,6 +59,8 @@
     renderQuick();
     if (!state.info.enabled) {
       setStatus('Terminal deshabilitada (solo se ofrece en 127.0.0.1)', 'bad');
+    } else if (!state.info.authorized) {
+      setStatus('Abre el tablero desde el enlace de acceso que imprime smith ui', 'bad');
     }
     return state.info;
   }
@@ -122,6 +124,8 @@
     });
     source.addEventListener('exit', () => {
       source.close();
+      // Release the ended session so it stops counting toward the cap.
+      api(`/api/terminal/sessions/${sessionId}`, 'DELETE', {}).catch(() => {});
       if (state.sessionId === sessionId) {
         state.sessionId = null;
         state.term.write('\r\n\x1b[90m[sesión terminada — pulsa Conectar para abrir otra]\x1b[0m\r\n');
@@ -139,6 +143,7 @@
     state.starting = (async () => {
       const info = await loadInfo();
       if (!info.enabled) throw new Error('terminal deshabilitada');
+      if (!info.authorized) throw new Error('sin acceso: usa el enlace de acceso de smith ui');
       const term = ensureTerm();
       if (!term) throw new Error('xterm.js no disponible');
       try { state.fit && state.fit.fit(); } catch (_) {}

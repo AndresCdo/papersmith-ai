@@ -18,7 +18,9 @@ server never approves, so a cross-origin page cannot open or drive a session.
 
 from __future__ import annotations
 
+import hmac
 import os
+import secrets
 import shutil
 import signal
 import struct
@@ -115,6 +117,12 @@ class TerminalManager:
         self.agents_by_id = dict(agents) if agents is not None else default_agents()
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
+        #: Per-server secret: the browser receives it once, through the login
+        #: URL the server prints and opens, and then only as an HttpOnly cookie.
+        self.token = secrets.token_urlsafe(32)
+
+    def authorized(self, presented: str | None) -> bool:
+        return bool(presented) and hmac.compare_digest(presented, self.token)
 
     # -- queries ---------------------------------------------------------
     def agents(self) -> list[dict[str, Any]]:
@@ -146,6 +154,7 @@ class TerminalManager:
         if fcntl is None:
             raise TerminalError("the support terminal needs a POSIX pty")
         cols, rows = _clamp(cols, rows)
+        self._reap()
         with self._lock:
             if len(self._sessions) >= MAX_SESSIONS:
                 raise TerminalError(f"at most {MAX_SESSIONS} terminal sessions")
@@ -223,6 +232,17 @@ class TerminalManager:
         except OSError:
             pass
         session.alive = False
+
+    def _reap(self) -> None:
+        """Close sessions whose process ended on its own: the cap counts live
+        sessions, and an ended one must not keep its PTY fd."""
+        with self._lock:
+            dead = [sid for sid, s in self._sessions.items() if not s.alive]
+        for sid in dead:
+            try:
+                self.close(sid)
+            except KeyError:
+                pass
 
     def close_all(self) -> None:
         with self._lock:

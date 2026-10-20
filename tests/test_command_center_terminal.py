@@ -18,9 +18,11 @@ POSIX = os.name == "posix"
 
 
 class _Request:
-    def __init__(self, headers: dict[str, str] | None = None, body: object = None) -> None:
+    def __init__(self, headers: dict[str, str] | None = None, body: object = None,
+                 cookies: dict[str, str] | None = None) -> None:
         self.headers = {k.lower(): v for k, v in (headers or {}).items()}
         self._body = body
+        self.cookies = dict(cookies or {})
 
     async def json(self) -> object:
         if isinstance(self._body, Exception):
@@ -92,6 +94,24 @@ class ManagerTests(unittest.TestCase):
         self.manager.write(session.id, "stty size\n")
         self.read_until(session.id, b"45 123")
 
+    def test_sessions_that_ended_on_their_own_free_the_cap(self) -> None:
+        for _ in range(terminal.MAX_SESSIONS):
+            session = self.manager.create("shell", cols=80, rows=24)
+            self.manager.write(session.id, "exit\n")
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and any(
+                s.alive for s in list(self.manager._sessions.values())):
+            time.sleep(0.05)
+        fresh = self.manager.create("shell", cols=80, rows=24)
+        self.assertEqual(self.manager.count(), 1)
+        self.assertEqual(self.manager.get(fresh.id).agent, "shell")
+
+    def test_the_token_is_secret_and_checked_in_constant_time(self) -> None:
+        self.assertGreaterEqual(len(self.manager.token), 40)
+        self.assertTrue(self.manager.authorized(self.manager.token))
+        self.assertFalse(self.manager.authorized(None))
+        self.assertFalse(self.manager.authorized("x" + self.manager.token[1:]))
+
     def test_close_ends_the_process(self) -> None:
         session = self.manager.create("shell", cols=80, rows=24)
         self.manager.close(session.id)
@@ -121,12 +141,33 @@ class RouteTests(unittest.TestCase):
         self.addCleanup(self.app.state.terminal.close_all)
         self.app.state.terminal.agents_by_id["shell"] = terminal.Agent("shell", "Shell", ["/bin/sh"])
 
-    def create(self, headers: dict[str, str], body: object = None):
+    def req(self, headers: dict[str, str], body: object = None, *, cookie: bool = True) -> _Request:
+        token = self.app.state.terminal.token
+        return _Request(headers, body, {server.TERMINAL_COOKIE: token} if cookie else None)
+
+    def create(self, headers: dict[str, str], body: object = None, *, cookie: bool = True):
         return _call(_route(self.app, "/api/terminal/sessions", "POST"),
-                     _Request(headers, body if body is not None else {"agent": "shell"}))
+                     self.req(headers, body if body is not None else {"agent": "shell"}, cookie=cookie))
+
+    def test_a_local_client_without_the_token_is_refused(self) -> None:
+        self.assertEqual(self.create(SAME, cookie=False).status_code, 403)
+        agents = _body(_call(_route(self.app, "/api/terminal/agents", "GET"), self.req(SAME, cookie=False)))
+        self.assertFalse(agents["authorized"])
+        self.assertEqual(agents["agents"], [])
+        self.assertEqual(self.app.state.terminal.count(), 0)
+
+    def test_the_login_url_sets_the_cookie_only_for_the_right_token(self) -> None:
+        login = _route(self.app, "/api/terminal/login", "GET")
+        self.assertEqual(login("wrong").status_code, 403)
+        ok = login(self.app.state.terminal.token)
+        self.assertEqual(ok.status_code, 303)
+        cookie = ok.headers["set-cookie"]
+        self.assertIn(f"{server.TERMINAL_COOKIE}=", cookie)
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=strict", cookie)
 
     def test_agents_are_listed_with_quick_commands(self) -> None:
-        body = _body(_call(_route(self.app, "/api/terminal/agents", "GET"), _Request(SAME)))
+        body = _body(_call(_route(self.app, "/api/terminal/agents", "GET"), self.req(SAME)))
         self.assertTrue(body["enabled"])
         self.assertIn("shell", {a["id"] for a in body["agents"]})
         self.assertIn("smith status", body["quick"]["shell"])
@@ -136,9 +177,9 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         sid = _body(response)["id"]
         write = _call(_route(self.app, "/api/terminal/sessions/{sid}/input", "POST"),
-                      sid, _Request(SAME, {"data": "echo via-route\n"}))
+                      sid, self.req(SAME, {"data": "echo via-route\n"}))
         self.assertEqual(write.status_code, 200)
-        closed = _call(_route(self.app, "/api/terminal/sessions/{sid}", "DELETE"), sid, _Request(SAME))
+        closed = _call(_route(self.app, "/api/terminal/sessions/{sid}", "DELETE"), sid, self.req(SAME))
         self.assertEqual(closed.status_code, 200)
 
     def test_a_cross_origin_page_is_refused(self) -> None:
@@ -154,12 +195,12 @@ class RouteTests(unittest.TestCase):
 
     def test_the_stream_is_refused_cross_site(self) -> None:
         response = _call(_route(self.app, "/api/terminal/sessions/{sid}/stream", "GET"),
-                         "x", _Request({**SAME, "Sec-Fetch-Site": "cross-site"}))
+                         "x", self.req({**SAME, "Sec-Fetch-Site": "cross-site"}))
         self.assertEqual(response.status_code, 403)
 
     def test_an_unknown_session_is_404(self) -> None:
         response = _call(_route(self.app, "/api/terminal/sessions/{sid}/input", "POST"),
-                         "nope", _Request(SAME, {"data": "x"}))
+                         "nope", self.req(SAME, {"data": "x"}))
         self.assertEqual(response.status_code, 404)
 
     def test_a_malformed_body_is_422_and_opens_nothing(self) -> None:
