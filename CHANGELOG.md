@@ -11,6 +11,24 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.17.1
+
+### Fixed
+
+- **A new workspace inherits nothing from older projects.** The dashboard no
+  longer ships another project's specification, novelty graph, hypotheses,
+  concept map, proof-of-concept results, candidate counts, phase messages,
+  titles or an absolute flow-diagram path. The *Mapa Conceptual & Modelo* tab is
+  drawn from the workspace's own `.papersmith/model_spec.json` (and, new,
+  `.papersmith/novelty_graph.json`) or shows neutral pending states; phase
+  actions report what is on disk; the framework's flow diagram ships with the
+  dashboard. A guard test scans every shipped kit file and a fresh workspace's
+  dashboard for traces of earlier projects.
+- **Math tutor uploads and sources.** A polyglot image (a valid header followed
+  by HTML or script) is refused; a proposal revision resolving outside the
+  workspace is ignored; an invalid `model_spec.json` is not named as the math
+  panel's source.
+
 ## 0.17.0
 
 ### Added
