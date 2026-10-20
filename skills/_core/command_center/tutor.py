@@ -46,7 +46,7 @@ _IMAGE_TYPES = (
     (b"\xff\xd8\xff", "jpg", "image/jpeg"),
     (b"RIFF", "webp", "image/webp"),
 )
-_ID = re.compile(r"^[0-9a-f]{16}\.(png|jpg|webp)$|^[0-9a-f]{16}$")
+_ID = re.compile(r"[0-9a-f]{16}(?:\.(?:png|jpg|webp))?")
 
 LEVELS = ("sin-evidencia", "reconoce", "explica", "deriva", "justifica")
 
@@ -126,7 +126,7 @@ def save_image(root: Path, data_url: Any) -> dict[str, str]:
 
 
 def image_path(root: Path, image_id: Any) -> Path:
-    if not isinstance(image_id, str) or not _ID.match(image_id):
+    if not isinstance(image_id, str) or not _ID.fullmatch(image_id):
         raise TutorError("unknown image")
     stem = image_id.split(".")[0]
     for _, ext, _ in _IMAGE_TYPES:
@@ -167,7 +167,9 @@ def _save_thread(root: Path, thread: dict[str, Any]) -> None:
 
 
 def reset_thread(root: Path) -> None:
-    _save_thread(root, {"turns": []})
+    # Under the turn lock, so a reset during a running turn is not undone by it.
+    with _lock:
+        _save_thread(root, {"turns": []})
 
 
 # --------------------------------------------------------------------------
@@ -236,6 +238,13 @@ def extract_turn(text: str) -> dict[str, Any] | None:
 
 
 def run_agent(root: Path, system: str, prompt: str, images: list[Path]) -> tuple[dict[str, Any], str]:
+    try:
+        return _run_agent(root, system, prompt, images)
+    except OSError as error:
+        raise TutorError(f"could not start the agent CLI: {error}") from error
+
+
+def _run_agent(root: Path, system: str, prompt: str, images: list[Path]) -> tuple[dict[str, Any], str]:
     claude = find_executable("claude")
     if claude:
         # stdin closed: `claude -p` appends whatever it can read there to the prompt.
@@ -247,6 +256,8 @@ def run_agent(root: Path, system: str, prompt: str, images: list[Path]) -> tuple
         except ValueError as error:
             raise TutorError(f"claude answered no JSON (exit {done.returncode}): "
                              f"{(done.stderr or done.stdout)[:300]}") from error
+        if not isinstance(payload, dict):
+            raise TutorError("claude answered JSON that is not a result object")
         if payload.get("is_error"):
             raise TutorError(f"claude refused: {str(payload.get('result'))[:300]}")
         turn = payload.get("structured_output") or extract_turn(str(payload.get("result") or ""))
@@ -272,8 +283,9 @@ def _valid(turn: Any) -> dict[str, Any]:
     if not isinstance(latex, list) or not all(isinstance(item, str) for item in latex):
         raise TutorError("the tutor's answer has no `latex` list")
     a = turn.get("assessment")
-    if not (isinstance(a, dict) and isinstance(a.get("level"), int) and 0 <= a["level"] <= 4
-            and isinstance(a.get("evidence"), str) and isinstance(a.get("gaps"), list)):
+    if not (isinstance(a, dict) and type(a.get("level")) is int and 0 <= a["level"] <= 4
+            and isinstance(a.get("evidence"), str) and isinstance(a.get("gaps"), list)
+            and all(isinstance(gap, str) for gap in a["gaps"])):
         raise TutorError("the tutor's answer has no usable `assessment`")
     a["label"] = LEVELS[a["level"]]
     return {key: turn[key] for key in TURN_SCHEMA["required"]}
@@ -286,7 +298,9 @@ def run_turn(root: Path, message: Any, image_ids: Any, mode: Any, *,
         raise TutorError(f"mode must be one of {', '.join(MODES)}")
     if not isinstance(message, str) or not message.strip() and not image_ids:
         raise TutorError("write a message or attach an image")
-    if not isinstance(image_ids, list) or len(image_ids) > MAX_IMAGES_PER_TURN:
+    if not isinstance(image_ids, list):
+        raise TutorError("`images` must be a list of image ids")
+    if len(image_ids) > MAX_IMAGES_PER_TURN:
         raise TutorError(f"attach at most {MAX_IMAGES_PER_TURN} images per turn")
     paths = [image_path(root, image_id) for image_id in image_ids]
     stems = [path.stem for path in paths]

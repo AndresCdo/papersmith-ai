@@ -119,6 +119,20 @@ class ProposalTests(_Workspace):
                                                  "Benchmark on BCI-IV 2a"])
         self.assertEqual(card["key_equation"]["tag"], "1")
 
+    def test_maths_inside_a_code_block_is_not_an_equation(self) -> None:
+        text = "## A\n\n```latex\n$$\n\\begin{bad\n$$\n```\n\n$$\ny = 2 \\tag{3}\n$$\n"
+        found = math_view.equations_from_markdown(text)
+        self.assertEqual([(e["latex"], e["tag"]) for e in found], [("y = 2", "3")])
+
+    def test_a_proposal_symlinked_outside_the_workspace_is_not_read(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        secret = Path(outside.name) / "research-concept-x-r09.md"
+        secret.write_text("## S\n\n$$\nsecret = 1\n$$\n", encoding="utf-8")
+        (self.root / "proposals").mkdir()
+        (self.root / "proposals" / "research-concept-x-r09.md").symlink_to(secret)
+        self.assertEqual(math_view.build(self.root)["equations"], [])
+
     def test_a_display_block_without_a_closing_fence_is_skipped(self) -> None:
         (self.root / "proposals").mkdir()
         (self.root / "proposals" / "research-concept-x-r01.md").write_text(

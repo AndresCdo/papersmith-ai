@@ -32,6 +32,7 @@ TEXT_MAX = 600
 _REVISION = re.compile(r"^research-concept-.+-r(\d+)\.md$")
 _TAG = re.compile(r"\\tag\{([^{}]*)\}")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+_FENCE = re.compile(r"^(```|~~~)")
 
 
 def _first_sentence(text: str) -> str:
@@ -46,8 +47,12 @@ def _first_sentence(text: str) -> str:
     return text[:TEXT_MAX]
 
 
-def _read(path: Path) -> str | None:
+def _read(path: Path, root: Path | None = None) -> str | None:
+    """Bounded read; with ``root``, only a file that resolves inside it, so a
+    symlinked proposal never serves bytes from outside the workspace."""
     try:
+        if root is not None and not path.resolve().is_relative_to(root):
+            return None
         if not path.is_file() or path.stat().st_size > MAX_BYTES:
             return None
         return path.read_text(encoding="utf-8")
@@ -66,7 +71,7 @@ def _yaml_field(root: Path, key: str) -> str:
 # --------------------------------------------------------------------------
 def _latest_proposal(root: Path) -> Path | None:
     folder = root / "proposals"
-    if not folder.is_dir():
+    if not folder.is_dir() or not folder.resolve().is_relative_to(root):
         return None
     ranked = []
     for path in folder.iterdir():
@@ -96,8 +101,18 @@ def equations_from_markdown(text: str) -> list[dict[str, Any]]:
     heading = ""
     found: list[dict[str, Any]] = []
     index = 0
+    fence: str | None = None
     while index < len(lines) and len(found) < MAX_EQUATIONS:
         line = lines[index].strip()
+        fence_match = _FENCE.match(line)
+        if fence_match and (fence is None or fence_match.group(1) == fence):
+            # A code block shows LaTeX, it does not state the paper's maths.
+            fence = None if fence else fence_match.group(1)
+            index += 1
+            continue
+        if fence:
+            index += 1
+            continue
         heading_match = _HEADING.match(line)
         if heading_match:
             heading = heading_match.group(2)
@@ -203,10 +218,10 @@ def build(root: Path | str) -> dict[str, Any]:
 
     proposal = _latest_proposal(root)
     if proposal is not None:
-        text = _read(proposal) or ""
+        text = _read(proposal, root) or ""
         sky_path = proposal.with_suffix(".sky.json")
         try:
-            sky = json.loads(_read(sky_path) or "null")
+            sky = json.loads(_read(sky_path, root) or "null")
         except ValueError:
             sky = None
         equations = equations_from_markdown(text)

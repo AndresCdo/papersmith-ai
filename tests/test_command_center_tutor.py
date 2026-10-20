@@ -115,6 +115,16 @@ class TurnTests(_Root):
             tutor.run_turn(self.root, "hi", [], "ask", runner=broken)
         self.assertEqual(tutor.load_thread(self.root)["turns"], [])
 
+    def test_a_boolean_level_or_non_text_gaps_are_refused(self) -> None:
+        for assessment in ({**TURN["assessment"], "level": True}, {**TURN["assessment"], "gaps": [3]}):
+            with self.assertRaises(tutor.TutorError):
+                tutor.run_turn(self.root, "hi", [], "ask", runner=lambda *a, x=assessment: ({**TURN, "assessment": x}, "f"))
+
+    def test_an_image_id_with_a_trailing_newline_is_refused(self) -> None:
+        image = tutor.save_image(self.root, DATA_URL)["id"]
+        with self.assertRaises(tutor.TutorError):
+            tutor.image_path(self.root, image + "\n")
+
     def test_unknown_modes_and_images_are_refused(self) -> None:
         with self.assertRaises(tutor.TutorError):
             tutor.run_turn(self.root, "hi", [], "grade-me", runner=lambda *a: (TURN, "x"))

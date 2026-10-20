@@ -39,6 +39,18 @@ no source is a tutor inventing mathematics:
 The command center delegates to the `math-tutor` agent for every turn; this
 skill's doctrine is the only place its rules live.
 
+## When a delegated agent cannot be spawned
+
+Each tutoring turn this skill delegates is defined in full by its own agent
+file: `.claude/agents/math-tutor.md`. When the agent cannot be spawned — the
+harness has no sub-agent mechanism, the agent is not registered in this
+session, or the spawn itself fails — perform the turn inline: read that agent's
+definition file and follow it as written, from the beginning it states to the
+end it states, holding any gate this skill sets before the turn, and returning
+the report shape it specifies. Its `tools:` line still bounds the turn: an act
+that would need a tool outside that list is a stop, not a workaround. Say in
+the reply that the turn ran inline and why the agent could not be spawned.
+
 ## The Socratic method, as this tutor practises it
 
 1. **Read before you teach.** Transcribe what the reader drew or wrote — the
