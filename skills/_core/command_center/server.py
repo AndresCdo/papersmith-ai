@@ -32,7 +32,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, atlas_build, decisions, terminal, history, paper_preview, novelty_graph, model_spec
+from . import atlas, atlas_build, decisions, math_view, terminal, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -1119,6 +1119,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # Read-only: bounded, containment-checked reads (see paper_preview).
         return JSONResponse(paper_preview.build_preview(root_path),
                             headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/model/math")
+    def api_model_math() -> JSONResponse:
+        # The math panel: the paper's own LaTeX and its novelty card (read-only).
+        return JSONResponse(math_view.build(root_path), headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/model")
     def api_model() -> JSONResponse:
