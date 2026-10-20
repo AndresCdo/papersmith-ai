@@ -9289,6 +9289,12 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                     "minifier cannot rename because it is an object key; "
                     "generated third-party code, named by no target",
     },
+    "_core/command_center/static/papersmith-flow.html": {
+        "kaggle": "the framework's own architecture diagram, shipped with the "
+                  "dashboard for the Flujo tab: it draws the kaggle-accounts "
+                  "skill and the hosted backend by name, the same subject the "
+                  "admissions above record, not a loan from any research project",
+    },
     "_core/command_center/static/vendor/pdf.min.js": {
         "transfer": "the vendored pdf.js build (pdfjs-dist 3.11.174) posting "
                     "buffers to its worker with a transfer list -- a web "

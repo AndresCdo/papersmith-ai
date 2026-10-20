@@ -19,7 +19,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import html
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -220,6 +222,38 @@ def _framework_version(root: Path) -> str:
         return (root / ".papersmith" / "version").read_text(encoding="utf-8").strip()[:32]
     except OSError:
         return ""
+
+
+# --------------------------------------------------------------------------
+# facts the phase actions report, measured on disk
+# --------------------------------------------------------------------------
+def _children(folder: Path) -> list[str]:
+    return sorted(p.name for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []
+
+
+def _block_count(root: Path) -> int:
+    try:
+        text = (root / "paper" / "main.tex").read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return 0
+    return len(re.findall(r"%% paper-writing block [\w.-]+ begin", text))
+
+
+def _candidate_count(root: Path) -> int:
+    try:
+        data = json.loads((root / "sota-pool" / "candidates.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if isinstance(data, dict):
+        data = data.get("candidates", [])
+    return len(data) if isinstance(data, list) else 0
+
+
+def _pdf_page_count(pdf: Path) -> int:
+    try:
+        return len(re.findall(rb"/Type\s*/Page[^s]", pdf.read_bytes()))
+    except OSError:
+        return 0
 
 
 def terminal_allowed(host: str) -> bool:
@@ -1071,9 +1105,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
     @app.get("/api/flow")
     def api_flow() -> Response:
+        # A workspace's own flow wins; otherwise the framework's, shipped with
+        # the dashboard (a copy of docs/diagrams/papersmith-pi-flow.html).
         flow_path = root_path / "docs" / "papersmith-flow.html"
         if not flow_path.is_file():
-            flow_path = Path("/Users/andresalvarez/Documents/papers_smith/papersmith-ai/docs/diagrams/papersmith-pi-flow.html")
+            flow_path = Path(__file__).resolve().parent / "static" / "papersmith-flow.html"
         if flow_path.is_file():
             return HTMLResponse(flow_path.read_text(encoding="utf-8"))
         return JSONResponse({"detail": "flow diagram not found"}, status_code=404)
@@ -1201,7 +1237,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "strikethrough_applied": len(strikes),
                 "comments_applied": len(comments),
                 "humanize_applied": len(humanizes),
-                "files_modified": ["proposals/research-concept-moneeg-embedded-32-channel-eeg-acquisition-framework-with-de-r01.md"],
+                # Nothing is applied to a source file here: the annotations are recorded.
+                "files_modified": [],
                 "pdf_recompiled": True
             }
         }
@@ -1244,7 +1281,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 return JSONResponse({
                     "ok": True,
                     "phase_id": phase_id,
-                    "message": "Manuscrito Elsevier compilado exitosamente. Archivo paper/main.pdf actualizado (10 páginas).",
+                    "message": (f"paper/main.pdf compilado ({_pdf_page_count(root_path / 'paper' / 'main.pdf')} páginas)."
+                                if res.returncode == 0 else
+                                f"pdflatex terminó con código {res.returncode}; revisa el registro."),
                     "outputs": ["paper/main.pdf"],
                     "log_tail": res.stdout[-300:] if res.stdout else ""
                 })
@@ -1256,9 +1295,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 b_script = root_path / "scripts" / "build_manuscript.py"
                 if b_script.is_file():
                     res = subprocess.run([sys.executable, str(b_script)], cwd=str(root_path), capture_output=True, text=True, timeout=20)
-                    msg = "Transposición técnica ejecutada: 46 bloques canónicos ensamblados en paper/main.tex."
+                    msg = (f"Transposición ejecutada: {_block_count(root_path)} bloques en paper/main.tex "
+                           f"(build_manuscript.py terminó con código {res.returncode}).")
                 else:
-                    msg = "Verificación de redacción completada: 46 bloques verificados."
+                    msg = f"Redacción: {_block_count(root_path)} bloques en paper/main.tex."
                 return JSONResponse({
                     "ok": True,
                     "phase_id": phase_id,
@@ -1282,7 +1322,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": "Fase 2 verificada: 18 candidatos SOTA analizados y constelación 3D compilada.",
+                "message": f"Fase 2: {_candidate_count(root_path)} candidatos en sota-pool/candidates.json; "
+                           f"atlas {'presente' if (root_path / 'sota-pool' / 'atlas.html').is_file() else 'pendiente'}.",
                 "outputs": ["sota-pool/atlas.json", "sota-pool/atlas.html", "sota-pool/candidates.json"]
             })
             
@@ -1290,15 +1331,15 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": "Fase 3 verificada: Tesis de Julián Parias y 9 referencias primarias ingeridas.",
-                "outputs": ["guidance/reference-papers/thesis_parias2023_moneeg/"]
+                "message": f"Fase 3: {len(_children(root_path / 'guidance' / 'reference-papers'))} referencias ingeridas en guidance/reference-papers/.",
+                "outputs": [f"guidance/reference-papers/{name}/" for name in _children(root_path / 'guidance' / 'reference-papers')]
             })
             
         elif "4" in phase_id or "prop" in phase_id.lower():
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": "Fase 4 verificada: Propuesta científica r02 deliberada con coautoría.",
+                "message": f"Fase 4: {len(list((root_path / 'proposals').glob('research-concept-*.md')))} revisiones de propuesta en proposals/.",
                 "outputs": ["proposals/"]
             })
             
@@ -1306,7 +1347,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": "Fase 5 verificada: 46 bloques canónicos y contratos abiertos.",
+                "message": f"Fase 5: {_block_count(root_path)} bloques canónicos en paper/main.tex.",
                 "outputs": ["paper/main.tex", "sections/"]
             })
             
@@ -1322,7 +1363,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": "Fase 10 verificada: 4/4 compuertas de calidad superadas al 100%.",
+                "message": ("Fase 10: auditoría registrada en .papersmith/audit.json."
+                            if (root_path / ".papersmith" / "audit.json").is_file()
+                            else "Fase 10: aún no hay auditoría registrada (.papersmith/audit.json)."),
                 "outputs": [".papersmith/audit.json"]
             })
             
@@ -1379,7 +1422,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Matriz de Candidatos SOTA — MONEEG</title>
+  <title>Matriz de Candidatos SOTA — {html.escape(root_path.name)}</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <style>
     :root {{
@@ -1580,7 +1623,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         <img src="/smith-logo.png" alt="Smith">
         <div>
           <h1>Matriz de Candidatos del Estado del Arte (SOTA)</h1>
-          <p>Proyecto MONEEG · Mapeo de Literatura y Plausibilidad Metodológica</p>
+          <p>{html.escape(root_path.name)} · Mapeo de Literatura y Plausibilidad Metodológica</p>
         </div>
       </div>
       <div>
