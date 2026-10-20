@@ -1600,10 +1600,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     }}
     .badge--ok {{ background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; }}
     .badge--info {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; text-decoration: none; }}
-    .badge-family--hardware {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }}
-    .badge-family--adhd {{ background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.4); }}
-    .badge-family--games {{ background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); }}
-    .badge-family--sync {{ background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); }}
+    .badge-family--c0 {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }}
+    .badge-family--c1 {{ background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.4); }}
+    .badge-family--c2 {{ background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); }}
+    .badge-family--c3 {{ background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); }}
+    .badge-family--c4 {{ background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.4); }}
     .abstract-box {{
       background: var(--surface-2);
       border-left: 3px solid var(--accent);
@@ -1686,12 +1687,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
   <script>
     const CANDIDATES = {candidates_json};
     function getFamilyBadgeClass(family) {{
-      if (!family) return 'badge-family--hardware';
-      if (family.includes('hardware')) return 'badge-family--hardware';
-      if (family.includes('adhd')) return 'badge-family--adhd';
-      if (family.includes('game')) return 'badge-family--games';
-      if (family.includes('sync') || family.includes('temporal')) return 'badge-family--sync';
-      return 'badge-family--hardware';
+      if (!family) return 'badge-family--c4';
+      let h = 0;
+      for (const ch of String(family).toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      return `badge-family--c${{h % 5}}`;
     }}
 
     function renderTable() {{
