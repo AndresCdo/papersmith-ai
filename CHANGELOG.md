@@ -11,6 +11,34 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.16.0
+
+### Added
+
+- **Graph toolbar: "⚡ Regenerar grafo" and "🧩 Disposición de grupos".**
+  The dashboard's *Atlas* tab regenerates the SOTA atlas from
+  `sota-pool/atlas.json` through `POST /api/atlas/build` (the workspace's own
+  `check_atlas.py`, then `render_atlas.py`; a failing atlas never replaces a good
+  page), and asks the atlas frame to regroup its systems by family cluster and
+  back. The atlas page carries the same toggle; its default sky is unchanged.
+- **`smith atlas build [<dir>] [--json]`.** The same rebuild from a terminal.
+- **Cross-panel links.** Clicking a planet reports it to the dashboard, which
+  offers *Ver en PDF* (finds the node in the compiled PDF and jumps to the page)
+  and *Ver artefacto* (opens `sota-pool/atlas.json`).
+- **Live PDF preview.** pdf.js 3.11.174 now ships with the dashboard;
+  `/api/pdf` revalidates with an `ETag`, `/api/status` reports
+  `run_details.pdf_mtime`, and an open preview reloads on recompile keeping the
+  page being read (a reload that catches `main.pdf` mid-write keeps the current
+  document and retries).
+- **Support terminal ("CLI de apoyo").** A floating xterm.js console on a PTY in
+  the workspace root (shell, `claude`, `opencode`, `pi`), with quick commands and
+  *Enviar a CLI* on every phase card. Loopback only, a per-server secret set by
+  the printed login URL as an HttpOnly SameSite=Strict cookie, same-origin
+  guards, at most four live sessions; `smith ui --no-terminal` turns it off.
+- **`smith` alias and dynamic dashboard state.** `smith` is installed next to
+  `papersmith`, and the command center reads the project's model and novelty
+  data from the workspace instead of hardcoded values.
+
 ## 0.15.0
 
 ### Added
