@@ -377,6 +377,20 @@
     }
   }
 
+  // The visible screen, as text, so a startup question is never answered by
+  // the Enter meant for the command.
+  function screenText() {
+    const buffer = state.term && state.term.buffer && state.term.buffer.active;
+    if (!buffer) return '';
+    const lines = [];
+    for (let y = 0; y < state.term.rows; y++) {
+      const line = buffer.getLine(buffer.viewportY + y);
+      if (line) lines.push(line.translateToString(true));
+    }
+    return lines.join('\n');
+  }
+  const STARTUP_QUESTIONS = /trust this folder|Do you trust|Enter to confirm/i;
+
   // Types `text` into the session (opening one if needed). run=true also sends
   // Enter, as a separate write so an agent does not read it as a paste.
   // options.kind: 'slash' runs it in an agent, 'shell' in the plain shell.
@@ -388,6 +402,11 @@
       const fresh = switched || !state.sessionId;
       const sid = await start();
       if (fresh && state.agent !== 'shell') await settle(12000);
+      if (kind === 'slash' && STARTUP_QUESTIONS.test(screenText())) {
+        setStatus('El agente espera una confirmación: respóndela en la terminal y vuelve a pulsar Ejecutar', 'warn');
+        state.term.focus();
+        return;
+      }
       await api(`/api/terminal/sessions/${sid}/input`, 'POST', { data: text });
       if (run) {
         setTimeout(() => {

@@ -114,6 +114,9 @@ class PageWiringTests(unittest.TestCase):
         script = (STATIC / "cli-console.js").read_text(encoding="utf-8")
         self.assertIn("const SLASH_AGENTS = ['claude', 'opencode', 'pi'];", script)
         self.assertIn("async function sendToCli(text, run, options)", script)
+        # A startup question (folder trust) is never answered by the command's Enter.
+        self.assertIn("const STARTUP_QUESTIONS = /trust this folder|Do you trust|Enter to confirm/i;", script)
+        self.assertIn("if (kind === 'slash' && STARTUP_QUESTIONS.test(screenText()))", script)
 
 
 if __name__ == "__main__":
