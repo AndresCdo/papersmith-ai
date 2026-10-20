@@ -3513,6 +3513,7 @@ smith ui --export-static ./dashboard-static
 | `--no-browser` | Does not open the browser |
 | `--export-static <dir>` | Copies the dashboard build to `<dir>` and exits |
 | `--allowed-host HOST:PORT` | Also accepts that `Host` header (repeatable); only forwarded to the backend when supplied |
+| `--no-terminal` | Does not offer the dashboard's support terminal (it is only ever offered on a loopback bind) |
 
 Serves the **Paper Command Center**: a local dashboard inside the workspace with
 its two flows, the four quality gates, the ten-section matrix and the health of
@@ -3578,6 +3579,47 @@ module accepts the same flag):
 ```bash
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
+
+**Graph toolbar and cross-panel links.** The *Atlas* tab keeps its three graph
+switches and adds **⚡ Regenerar grafo** (the SOTA atlas through
+`POST /api/atlas/build`, same as `smith atlas build`; on the novelty graph it
+rebuilds the view) and **🧩 Disposición de grupos**, which asks the atlas frame to
+rearrange its systems by family cluster and back. The dashboard and the
+sandboxed atlas frame talk through `postMessage`: the dashboard sends
+`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset'}`
+and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
+`{type: 'atlas-planet-selected', key, label, slot, system: {id, title}}`. A
+selected node shows **📄 Ver en PDF** (finds the node's label, or its system's
+title, in the compiled PDF's text and jumps to that page) and **🗂️ Ver
+artefacto** (opens `sota-pool/atlas.json` in the artifact viewer).
+
+**Support terminal ("CLI de apoyo").** The **⌨️ CLI** button opens a floating
+xterm.js console bound to a pseudo-terminal in the workspace root: a login shell,
+or `claude`, `opencode` or `pi` when they are on `PATH`. Quick buttons type
+`smith status`, `smith atlas build` and `smith audit` in the shell, or the
+projected slash commands (`.claude/commands/`) inside an agent. Each phase card
+has **⌨️ Enviar a CLI**, which types that phase's command into the console and
+waits for your Enter; **▶ Ejecutar** keeps its own path. Routes:
+`GET /api/terminal/agents`, `POST /api/terminal/sessions`,
+`POST /api/terminal/sessions/<id>/input` (`data`, or `cols`/`rows` to resize),
+`DELETE /api/terminal/sessions/<id>` and `GET /api/terminal/sessions/<id>/stream`
+(SSE, base64 `output` frames then `exit`). At most four sessions; they close
+with the server. The console is a shell with your privileges, so it is only
+offered on a loopback bind (`smith ui --no-terminal` turns it off). Each server
+start creates a secret: the browser it opens (or the `dashboard login URL` it
+prints, for `--no-browser`) goes through `GET /api/terminal/login?token=…`, which
+sets an HttpOnly, SameSite=Strict cookie, and every terminal route requires it,
+so another local user or a `curl` without the token gets `403`. Every call must
+also be same-origin: a foreign `Origin` or `Sec-Fetch-Site`, a missing
+`X-Papersmith-Terminal: 1` header or a non-JSON body answers `403`. Sessions that
+end on their own are released and stop counting toward the cap.
+
+**Live PDF preview.** The *Previsualización PDF* tab renders `paper/main.pdf`
+with pdf.js 3.11.174, vendored in `skills/_core/command_center/static/vendor/`
+(no network). `GET /api/pdf` answers with an `ETag` and `Cache-Control: no-cache`
+(`304` when `If-None-Match` matches), and `/api/status` reports
+`run_details.pdf_mtime`; when a recompile moves that token the open preview
+reloads in place and keeps the page you were reading.
 
 **Paper preview (read-only).** Two GET routes, no writes:
 `GET /api/paper/preview` returns the sections in the same order and with the same
@@ -3735,6 +3777,27 @@ node scripts/command-center-visual-check.mjs --out /tmp/shots --full-page --clic
 
 It is a development tool (it needs Chromium); it does not run in CI. The UI tests
 (`npm --prefix ui test`) do run in CI.
+
+### `smith atlas build [<dir>]`
+
+```bash
+smith atlas build
+smith atlas build ~/papers/sparse-ae --json
+```
+
+| Flag | Effect |
+|------|--------|
+| `--json` | Prints the result object instead of one line |
+
+Regenerates the SOTA atlas page, the same action as the dashboard's
+**⚡ Regenerar grafo** button (`POST /api/atlas/build`). It runs the workspace's
+own `skills/plausibility/scripts/check_atlas.py` on `sota-pool/atlas.json` (with
+`--pool sota-pool/candidates.json` when the pool exists) and, only when the
+checker is green, `render_atlas.py` to `sota-pool/atlas.html`. A failing atlas
+never replaces a good page. Exit `0` when the page was written, `1` otherwise.
+The route answers `200`, `404` (no `atlas.json` or no scripts), `422` (the
+checker or renderer refused) or `504` (timeout), always with
+`{ok, stage, detail}` plus the system, planet and link counts on success.
 
 ### `papersmith mcp {serve,inspect,print-config}`
 

@@ -7,9 +7,13 @@
   <link rel="icon" type="image/png" sizes="256x256" href="./favicon.png?v=2">
   <link rel="shortcut icon" href="./favicon.ico?v=2">
   <link rel="apple-touch-icon" href="./favicon.png?v=2">
-  <link rel="stylesheet" href="./vendor/pdf_viewer.min.css">
+  <link rel="stylesheet" href="./vendor/pdf_viewer.css">
   <script src="./vendor/pdf.min.js"></script>
   <script src="./vendor/marked.min.js"></script>
+  <link rel="stylesheet" href="./vendor/xterm.css">
+  <script src="./vendor/xterm.js"></script>
+  <script src="./vendor/xterm-addon-fit.js"></script>
+  <script src="./cli-console.js"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2333,6 +2337,46 @@
       gap: 0.65rem;
     }
 
+
+    /* ---- Support terminal ("CLI de apoyo") ---- */
+    .cli-fab {
+      position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 900;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.6rem 0.95rem; border-radius: 999px; cursor: pointer;
+      background: var(--surface-2); color: var(--text, #e5e7eb);
+      border: 1px solid var(--accent); font: 600 0.82rem var(--font-mono);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+    .cli-fab:hover { background: var(--surface); }
+    .cli-window {
+      position: fixed; right: 1.25rem; bottom: 4.6rem; z-index: 901;
+      width: min(760px, calc(100vw - 2.5rem)); height: min(460px, calc(100vh - 7rem));
+      display: none; flex-direction: column; overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+    .cli-window.open { display: flex; }
+    .cli-window__bar {
+      display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+      padding: 0.45rem 0.6rem; background: var(--surface-2); border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+    }
+    .cli-window__title { font-weight: 700; margin-right: auto; }
+    .cli-window__bar select, .cli-window__bar button {
+      font-size: 0.74rem; padding: 0.2rem 0.5rem; border-radius: 6px;
+      background: var(--surface); color: inherit; border: 1px solid var(--border); cursor: pointer;
+    }
+    .cli-status { font-size: 0.72rem; color: var(--text-muted); }
+    .cli-status[data-tone="ok"] { color: var(--ok); }
+    .cli-status[data-tone="warn"] { color: var(--warn); }
+    .cli-status[data-tone="bad"] { color: var(--bad); }
+    .cli-quick { display: flex; gap: 0.35rem; flex-wrap: wrap; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
+    .cli-quick:empty { display: none; }
+    .cli-quick__btn {
+      font: 0.72rem var(--font-mono); padding: 0.15rem 0.5rem; border-radius: 4px; cursor: pointer;
+      background: rgba(56, 189, 248, 0.08); color: var(--accent); border: 1px solid var(--border);
+    }
+    .cli-term { flex: 1 1 auto; min-height: 0; padding: 0.35rem; background: #0b0f19; }
   </style>
 </head>
 <body>
@@ -3233,8 +3277,22 @@
             <button id="btnGraphAtlas" class="btn btn--primary" onclick="switchGraph('atlas')">🌌 Constelación 3D (Solar Atlas)</button>
             <button id="btnGraphNovelty" class="btn" onclick="switchGraph('novelty')">🕸️ Grafo 3D de Novedad del Manuscrito</button>
             <button id="btnGraphPapers" class="btn" onclick="switchGraph('papers')">📊 Matriz de Candidatos</button>
+            <button id="btnBuildGraph" class="btn" onclick="triggerBuildAtlas()" title="Regenera la constelación SOTA desde sota-pool/atlas.json (checker + renderer; también: smith atlas build)">⚡ Regenerar grafo</button>
+            <button id="btnGroupLayout" class="btn" onclick="toggleAtlasGroupLayout()" title="Reordena los sistemas por clusters (familias); púlsalo de nuevo para volver a la disposición original">🧩 Disposición de grupos</button>
             <a id="linkOpenGraph" href="/api/atlas/view" target="_blank" class="btn">Abrir en pestaña nueva ↗</a>
           </div>
+        </div>
+        <div id="graphBuildBadge" style="display: none; padding: 0.35rem 0.8rem; font-size: 0.76rem; border-bottom: 1px solid var(--border-subtle);"></div>
+
+        <!-- Selección en el grafo: enlaza el nodo con el PDF y con su artefacto -->
+        <div id="atlasSelectionCard" style="display: none; padding: 0.5rem 0.8rem; background: var(--surface-2); border-bottom: 1px solid var(--border-subtle); font-size: 0.8rem; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+          <span>🪐 <strong id="atlasSelLabel"></strong> <span id="atlasSelMeta" style="color: var(--text-muted);"></span></span>
+          <span style="display: inline-flex; gap: 0.4rem; margin-left: auto;">
+            <button class="btn btn--sm" onclick="atlasSelectionToPdf()" title="Busca el nodo (o su sistema) en el PDF compilado y salta a esa página">📄 Ver en PDF</button>
+            <button class="btn btn--sm" onclick="jumpToArtifact('sota-pool/atlas.json')" title="Abre el artefacto fuente del grafo">🗂️ Ver artefacto</button>
+            <button class="btn btn--sm" onclick="clearAtlasSelection()">✕</button>
+          </span>
+          <span id="atlasSelResult" style="flex-basis: 100%; color: var(--text-muted); font-size: 0.74rem;"></span>
         </div>
 
         <!-- Barra de Ayuda y Sensibilidad de Interacción del Ratón -->
@@ -3769,7 +3827,7 @@
       if (targetPane) targetPane.classList.add('active');
 
       if (tabId === 'preview') {
-        initPdfViewer();
+        ensurePdfLoaded();
       }
       if (tabId === 'modelo') {
         refreshModelData();
@@ -3884,7 +3942,151 @@
     let candidatesFamilies = [];
     let candidatesLoaded = false;
 
+    // ---- Graph toolbar: regenerate, cluster layout and node selection ----
+    let currentGraphKind = 'atlas';
+    let atlasLayoutMode = 'sky';
+    let atlasSelection = null;
+
+    function graphFramePath() {
+      const iframe = document.getElementById('graphIframe');
+      try { return iframe ? new URL(iframe.src, window.location.href).pathname : ''; } catch (_) { return ''; }
+    }
+
+    function postToGraph(message) {
+      const iframe = document.getElementById('graphIframe');
+      if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage(message, '*');
+    }
+
+    function renderGraphToolbar() {
+      const groupBtn = document.getElementById('btnGroupLayout');
+      if (groupBtn) {
+        groupBtn.disabled = currentGraphKind !== 'atlas';
+        groupBtn.className = (currentGraphKind === 'atlas' && atlasLayoutMode === 'groups') ? 'btn btn--primary' : 'btn';
+      }
+      const buildBtn = document.getElementById('btnBuildGraph');
+      if (buildBtn) buildBtn.disabled = currentGraphKind === 'papers';
+    }
+
+    function toggleAtlasGroupLayout() {
+      if (currentGraphKind !== 'atlas') return;
+      postToGraph({ type: 'atlas-command', command: 'toggle-layout' });
+    }
+
+    function showGraphBadge(text, tone) {
+      const badge = document.getElementById('graphBuildBadge');
+      if (!badge) return;
+      badge.style.display = 'block';
+      badge.style.color = tone === 'ok' ? 'var(--ok)' : (tone === 'bad' ? 'var(--bad)' : 'var(--text-muted)');
+      badge.textContent = text;
+    }
+
+    async function triggerBuildAtlas() {
+      const btn = document.getElementById('btnBuildGraph');
+      const iframe = document.getElementById('graphIframe');
+      if (!btn || !iframe) return;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Regenerando…';
+      const stamp = () => new Date().toLocaleTimeString();
+      try {
+        if (currentGraphKind === 'novelty') {
+          // The novelty graph is built on every request: a reload regenerates it.
+          iframe.src = `/api/atlas/novelty/view?v=${Date.now()}`;
+          showGraphBadge(`✓ Grafo de novedad regenerado (${stamp()})`, 'ok');
+          return;
+        }
+        const res = await fetch('/api/atlas/build', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          atlasLayoutMode = 'sky';
+          clearAtlasSelection();
+          iframe.src = `/api/atlas/view?v=${Date.now()}`;
+          showGraphBadge(`✓ Grafo regenerado (${stamp()}): ${data.systems} sistemas · ${data.planets} planetas · ${data.links} enlaces`, 'ok');
+          if (typeof loadStatus === 'function') loadStatus();
+        } else {
+          showGraphBadge(`✕ No se regeneró (${data.stage}): ${data.detail || 'error desconocido'}`, 'bad');
+        }
+      } catch (err) {
+        showGraphBadge(`✕ Error de conexión al regenerar: ${err.message}`, 'bad');
+      } finally {
+        btn.textContent = original;
+        renderGraphToolbar();
+      }
+    }
+
+    function showAtlasSelection(data) {
+      atlasSelection = {
+        key: String(data.key || ''), label: String(data.label || ''), slot: String(data.slot || ''),
+        systemId: String((data.system && data.system.id) || ''), systemTitle: String((data.system && data.system.title) || ''),
+      };
+      const card = document.getElementById('atlasSelectionCard');
+      if (!card) return;
+      document.getElementById('atlasSelLabel').textContent = atlasSelection.label || atlasSelection.key;
+      document.getElementById('atlasSelMeta').textContent = `· ${atlasSelection.slot} · ${atlasSelection.systemTitle || atlasSelection.systemId}`;
+      document.getElementById('atlasSelResult').textContent = '';
+      card.style.display = 'flex';
+    }
+
+    function clearAtlasSelection() {
+      atlasSelection = null;
+      const card = document.getElementById('atlasSelectionCard');
+      if (card) card.style.display = 'none';
+    }
+
+    // Plain-text search over the compiled PDF's text layer; first page wins.
+    async function findTextInPdf(needles) {
+      await ensurePdfLoaded();
+      if (!pdfDoc) return null;
+      const norm = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      const wanted = needles.map(norm).filter((n) => n.length >= 4);
+      for (let p = 1; p <= pdfTotalPages; p++) {
+        let content = pdfTextContentCache.get(p);
+        if (!content) {
+          const page = await pdfDoc.getPage(p);
+          content = await page.getTextContent();
+          pdfTextContentCache.set(p, content);
+        }
+        const text = norm(content.items.map((item) => item.str).join(' '));
+        for (const needle of wanted) {
+          if (text.includes(needle)) return { page: p, needle };
+        }
+      }
+      return null;
+    }
+
+    async function atlasSelectionToPdf() {
+      if (!atlasSelection) return;
+      const result = document.getElementById('atlasSelResult');
+      if (result) result.textContent = '🔎 Buscando en el PDF compilado…';
+      try {
+        const hit = await findTextInPdf([atlasSelection.label, atlasSelection.systemTitle]);
+        if (hit) {
+          if (result) result.textContent = `Encontrado en la página ${hit.page}: “${hit.needle}”`;
+          jumpToPdfPage(hit.page);
+        } else if (result) {
+          result.textContent = 'Este nodo no aparece en el PDF compilado (ni su sistema).';
+        }
+      } catch (err) {
+        if (result) result.textContent = `No se pudo buscar en el PDF: ${err.message}`;
+      }
+    }
+
+    window.addEventListener('message', (e) => {
+      const iframe = document.getElementById('graphIframe');
+      if (!iframe || e.source !== iframe.contentWindow) return;
+      const data = e.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'atlas-layout') {
+        atlasLayoutMode = data.mode === 'groups' ? 'groups' : 'sky';
+        renderGraphToolbar();
+      } else if (data.type === 'atlas-planet-selected') {
+        showAtlasSelection(data);
+      }
+    });
+
     function switchGraph(kind) {
+      currentGraphKind = kind;
+      clearAtlasSelection();
       const btnAtlas = document.getElementById('btnGraphAtlas');
       const btnNovelty = document.getElementById('btnGraphNovelty');
       const btnPapers = document.getElementById('btnGraphPapers');
@@ -3901,7 +4103,8 @@
       if (kind === 'atlas') {
         if (atlas3d) atlas3d.style.display = 'block';
         if (matrixCont) matrixCont.style.display = 'none';
-        if (iframe && !iframe.src.endsWith('/api/atlas/view')) {
+        if (iframe && graphFramePath() !== '/api/atlas/view') {
+          atlasLayoutMode = 'sky';
           iframe.src = '/api/atlas/view';
         }
         if (titleEl) titleEl.textContent = '🌌 Constelación SOTA 3D — Atlas de Literatura y Plausibilidad';
@@ -3909,7 +4112,7 @@
       } else if (kind === 'novelty') {
         if (atlas3d) atlas3d.style.display = 'block';
         if (matrixCont) matrixCont.style.display = 'none';
-        if (iframe && !iframe.src.endsWith('/api/atlas/novelty/view')) {
+        if (iframe && graphFramePath() !== '/api/atlas/novelty/view') {
           iframe.src = '/api/atlas/novelty/view';
         }
         if (titleEl) titleEl.textContent = '🕸️ Grafo 3D de Novedad e Ideas del Manuscrito (Propuesta vs. SOTA)';
@@ -3921,6 +4124,7 @@
         if (openLink) openLink.href = '/api/atlas/candidates/view';
         loadCandidatesMatrix();
       }
+      renderGraphToolbar();
     }
 
     function getFamilyBadgeClass(family) {
@@ -4162,9 +4366,10 @@
       }
     }
 
-    function jumpToPdfPage(pageNum) {
+    async function jumpToPdfPage(pageNum) {
       closeDrawer();
       navigateTab('preview');
+      await ensurePdfLoaded();
       setTimeout(() => {
         scrollToPdfPage(pageNum || 1);
       }, 120);
@@ -4224,7 +4429,10 @@
           <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.85rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.03em;">Comando CLI Terminal:</span>
-              <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="copyCliCommand('${escapeHtml(cliCmd)}', this)">📋 Copiar Comando</button>
+              <span style="display: inline-flex; gap: 0.35rem;">
+                <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="copyCliCommand('${escapeHtml(cliCmd)}', this)">📋 Copiar Comando</button>
+                <button class="btn btn--sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" data-cli="${escapeHtml(cliCmd)}" onclick="sendToCli(this.dataset.cli, false)" title="Escribe el comando en la terminal de apoyo; pulsa Enter allí para ejecutarlo">⌨️ Enviar a CLI</button>
+              </span>
             </div>
             <div style="background: rgba(0,0,0,0.45); border: 1px solid var(--border); border-radius: 4px; padding: 0.55rem 0.75rem; font-family: var(--font-mono); font-size: 0.82rem; color: #38bdf8; overflow-x: auto;">
               <code>$ ${escapeHtml(cliCmd)}</code>
@@ -4869,6 +5077,8 @@
         currentStatus = data;
 
         // Carga el artefacto inicial únicamente una vez al arrancar
+        syncPdfPreview((data.run_details || {}).pdf_mtime || 0);
+
         if (!initialArtifactLoaded && data.artifacts && data.artifacts.length > 0) {
           initialArtifactLoaded = true;
           loadArtifact(data.artifacts[0].rel_path);
@@ -5164,6 +5374,55 @@
     let selectionDebounceTimer = null;
     let zoomDebounceTimer = null;
 
+    // One load in flight at a time: tab switches and cross-panel jumps share it.
+    let pdfLoadPromise = null;
+    function ensurePdfLoaded() {
+      if (pdfDoc) return Promise.resolve(true);
+      if (!pdfLoadPromise) {
+        pdfLoadPromise = initPdfViewer().finally(() => { pdfLoadPromise = null; });
+      }
+      return pdfLoadPromise;
+    }
+
+    // Live preview: /api/status carries run_details.pdf_mtime; when a new build
+    // lands, an open preview reloads in place and keeps the page being read.
+    // A token that arrives while a reload runs is picked up when it ends; a
+    // reload that fails (pdflatex still writing) keeps the document on screen
+    // and is retried on the next poll.
+    let lastPdfToken = null;
+    let loadedPdfToken = null;
+    let pdfReloadInFlight = false;
+    async function syncPdfPreview(token) {
+      const previous = lastPdfToken;
+      lastPdfToken = token;
+      if (previous === null) { loadedPdfToken = token; return; }
+      if (!token || token === loadedPdfToken) return;
+      const native = document.getElementById('pdfNativeIframe');
+      if (native && isNativePdfViewer) native.src = `/api/pdf?v=${token}`;
+      if (pdfReloadInFlight) return;
+      if (!pdfDoc) {
+        // Nothing loaded yet (no PDF when the tab opened): load it now if the
+        // preview is on screen, which also leaves the native fallback.
+        const pane = document.getElementById('pane-preview');
+        if (pane && pane.classList.contains('active') && await ensurePdfLoaded()) loadedPdfToken = token;
+        return;
+      }
+      pdfReloadInFlight = true;
+      try {
+        while (lastPdfToken && lastPdfToken !== loadedPdfToken) {
+          const target = lastPdfToken;
+          const page = pdfCurrentPage;
+          if (!await initPdfViewer(true)) break;
+          loadedPdfToken = target;
+          scrollToPdfPage(Math.min(page, pdfTotalPages || 1));
+          const badge = document.getElementById('pdfInfoBadge');
+          if (badge) badge.textContent = `${pdfTotalPages} páginas · actualizado ${new Date(target).toLocaleTimeString()}`;
+        }
+      } finally {
+        pdfReloadInFlight = false;
+      }
+    }
+
     async function initPdfViewer(forceReload = false) {
       if (pdfDoc && !forceReload) return;
       const spinner = document.getElementById('pdfLoadingSpinner');
@@ -5177,7 +5436,7 @@
       }
 
       try {
-        const url = `/api/pdf?t=${forceReload ? Date.now() : 'doc'}`;
+        const url = `/api/pdf?v=${forceReload ? (lastPdfToken || Date.now()) : 'doc'}`;
         const loadingTask = pdfjsLib.getDocument({
           url: url,
           cMapUrl: './vendor/cmaps/',
@@ -5185,7 +5444,10 @@
           enableXfa: false,
           disableFontFace: false
         });
-        pdfDoc = await loadingTask.promise;
+        const previousDoc = pdfDoc;
+        const loadedDoc = await loadingTask.promise;
+        pdfDoc = loadedDoc;
+        if (previousDoc && previousDoc !== pdfDoc) previousDoc.destroy();
         pdfTotalPages = pdfDoc.numPages;
 
         const totalEl = document.getElementById('pdfTotalPages');
@@ -5204,12 +5466,29 @@
         // Renderizar inmediatamente las páginas en la ventana de visión
         await renderVisiblePdfPages();
 
+        // A successful load always shows the continuous viewer again, unless
+        // the reader chose the native one.
+        if (!isNativePdfViewer) {
+          const stack = document.getElementById('pdfPagesStack');
+          if (stack) stack.style.display = 'flex';
+          document.getElementById('pdfNativeIframe').style.display = 'none';
+        }
+
         loadExecutionHistory();
+        return true;
       } catch (err) {
         console.error("Error cargando PDF con PDF.js:", err);
+        if (forceReload && pdfDoc) {
+          // Keep the document already on screen; the next status poll retries.
+          buildPdfPagesStack();
+          setupPdfContinuousScroll();
+          renderVisiblePdfPages();
+          return false;
+        }
         const stack = document.getElementById('pdfPagesStack');
         if (stack) stack.style.display = 'none';
         document.getElementById('pdfNativeIframe').style.display = 'block';
+        return false;
       } finally {
         if (spinner) spinner.style.display = 'none';
       }
@@ -6189,5 +6468,20 @@
       }
     });
   </script>
+
+  <!-- Support terminal ("CLI de apoyo"): see cli-console.js and terminal.py -->
+  <button id="cliFab" class="cli-fab" type="button" title="Abrir la terminal de apoyo (shell o agente) en el workspace">⌨️ CLI</button>
+  <div id="cliWindow" class="cli-window" role="dialog" aria-label="Terminal de apoyo" aria-hidden="true">
+    <div class="cli-window__bar">
+      <span class="cli-window__title">⌨️ Terminal de apoyo</span>
+      <select id="cliAgent" title="Shell o agente a lanzar en el workspace"></select>
+      <button id="cliConnect" type="button">Conectar</button>
+      <button id="cliStop" type="button">Detener</button>
+      <span id="cliStatus" class="cli-status" data-tone="muted">Sin sesión</span>
+      <button id="cliClose" type="button" title="Ocultar (la sesión sigue viva)">✕</button>
+    </div>
+    <div id="cliQuick" class="cli-quick"></div>
+    <div id="cliTerm" class="cli-term"></div>
+  </div>
 </body>
 </html>

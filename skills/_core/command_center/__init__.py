@@ -7,8 +7,9 @@ standalone from the workspace root::
 
     python -m skills._core.command_center.server --port 8080
 
-Nothing here writes to the workspace. Every reader is read-only and
-best-effort: a damaged file degrades one field, never the whole payload.
+Every reader is read-only and best-effort: a damaged file degrades one field,
+never the whole payload. Writes happen only through explicit dashboard actions
+(for example ``atlas_build``, the "Regenerar grafo" button).
 """
 
 from __future__ import annotations

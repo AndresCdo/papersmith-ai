@@ -6,9 +6,12 @@ channel fed by a debounced filesystem watcher, and the compiled dashboard from
 
     python -m skills._core.command_center.server --port 8080
 
-The API is read-only. The one mutating-looking endpoint,
-``POST /api/health/run-wiring-smoke``, runs the workspace's own verification
+The API is read-only except for explicit dashboard actions.
+``POST /api/health/run-wiring-smoke`` runs the workspace's own verification
 script and reports its output; it changes no paper byte.
+``POST /api/atlas/build`` ("Regenerar grafo") re-renders
+``sota-pool/atlas.html`` through the plausibility checker and renderer
+(:mod:`.atlas_build`); it writes nothing else.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, decisions, history, paper_preview, novelty_graph, model_spec
+from . import atlas, atlas_build, decisions, terminal, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -207,10 +210,20 @@ class HostAllowListMiddleware:
 # --------------------------------------------------------------------------
 # application
 # --------------------------------------------------------------------------
+#: Cookie holding the support terminal's per-server secret.
+TERMINAL_COOKIE = "papersmith_terminal"
+
+
+def terminal_allowed(host: str) -> bool:
+    """The support terminal is a shell: offer it only on a loopback bind."""
+    return host.strip("[]").lower() in _LOOPBACK_HOSTS
+
+
 def create_app(root: Path | str, *, debounce_ms: int = 300,
                health_ttl: float = DEFAULT_HEALTH_TTL_SECONDS,
                history_store: history.HistoryStore | None = None,
-               allowed_hosts: frozenset[str] | None = None) -> FastAPI:
+               allowed_hosts: frozenset[str] | None = None,
+               enable_terminal: bool = False) -> FastAPI:
     root_path = Path(root).expanduser().resolve()
     bus = EventBus()
     revision = {"value": 0}
@@ -283,6 +296,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
     watcher = WorkspaceWatcher(root_path, on_flush, debounce_ms=debounce_ms)
     smoke_lock = threading.Lock()
+    terminals = terminal.TerminalManager(root_path)
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -292,6 +306,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             yield
         finally:
             watcher.stop()
+            terminals.close_all()
 
     app = FastAPI(title="Paper Command Center", version="0.1.0", lifespan=lifespan)
     app.state.root = root_path
@@ -351,6 +366,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # Dynamic PDF page count
         pdf_pages = 0
         pdf_size = pdf_file.stat().st_size if pdf_exists else 0
+        # Change token the dashboard polls to reload an open preview.
+        pdf_mtime = int(pdf_file.stat().st_mtime * 1000) if pdf_exists else 0
         if pdf_exists:
             try:
                 res = subprocess.run(["pdfinfo", str(pdf_file)], capture_output=True, text=True, check=True)
@@ -991,6 +1008,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             "title": target_title,
             "pdf_ready": pdf_exists,
             "pdf_size": pdf_size,
+            "pdf_mtime": pdf_mtime,
             "docx_ready": False,
             "docx_size": 0
         }
@@ -1118,12 +1136,19 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             **_PAPER_HEADERS, "Content-Disposition": "inline"})
 
     @app.get("/api/pdf")
-    def api_pdf_direct() -> Response:
+    def api_pdf_direct(request: Request) -> Response:
         pdf_path = root_path / "paper" / "main.pdf"
         if not pdf_path.is_file():
             return JSONResponse({"detail": "main.pdf not found in paper/"}, status_code=404)
-        return Response(pdf_path.read_bytes(), media_type="application/pdf", headers={
-            **_PAPER_HEADERS, "Content-Disposition": "inline"})
+        # Revalidatable rather than no-store: the live preview re-requests the
+        # PDF whenever the status token moves, and an unchanged build answers 304.
+        info = pdf_path.stat()
+        etag = f'"{info.st_mtime_ns:x}-{info.st_size:x}"'
+        headers = {**_PAPER_HEADERS, "Cache-Control": "no-cache", "ETag": etag,
+                   "Content-Disposition": "inline"}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(pdf_path.read_bytes(), media_type="application/pdf", headers=headers)
 
     @app.get("/api/pdf/annotations")
     def api_pdf_annotations() -> JSONResponse:
@@ -1695,6 +1720,146 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         return Response(data, media_type="text/html; charset=utf-8",
                         headers=dict(_ATLAS_VIEW_HEADERS))
 
+    @app.post("/api/atlas/build")
+    def api_atlas_build(request: Request) -> JSONResponse:
+        # "Regenerar grafo": the workspace's own checker, then its renderer.
+        # Writes only sota-pool/atlas.html, and only when the checker is green.
+        # A bodyless POST is a simple request, so refuse other origins here too.
+        if not origin_is_same(request):
+            return JSONResponse({"ok": False, "stage": "origin",
+                                 "detail": "cross-origin request rejected"},
+                                status_code=403, headers=dict(_PAPER_HEADERS))
+        result = atlas_build.build(root_path)
+        if result["ok"]:
+            status_code = 200
+        elif result["stage"] in ("absent", "scripts"):
+            status_code = 404
+        elif result["stage"] == "timeout":
+            status_code = 504
+        else:
+            status_code = 422
+        return JSONResponse(result, status_code=status_code, headers=dict(_PAPER_HEADERS))
+
+    # ---------------------------------------------------------------- terminal
+    app.state.terminal = terminals
+    app.state.terminal_enabled = enable_terminal
+
+    def _terminal_refusal(request: Request, *, mutating: bool) -> JSONResponse | None:
+        if not enable_terminal:
+            return JSONResponse({"detail": "the support terminal is disabled on this bind"},
+                                status_code=404, headers=dict(_PAPER_HEADERS))
+        # A secret, not just headers: any local client (another OS user, curl)
+        # can send the right headers, but only this server's browser holds it.
+        if not terminals.authorized(request.cookies.get(TERMINAL_COOKIE)):
+            return JSONResponse({"detail": "refused: open the dashboard from the login URL "
+                                 "the server printed"}, status_code=403,
+                                headers=dict(_PAPER_HEADERS))
+        reason = terminal.guard(request.headers, mutating=mutating)
+        if reason is not None:
+            return JSONResponse({"detail": f"refused: {reason}"}, status_code=403,
+                                headers=dict(_PAPER_HEADERS))
+        return None
+
+    async def _terminal_body(request: Request) -> dict[str, Any] | None:
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001 - a bad body is a 422, not a crash
+            return None
+        return body if isinstance(body, dict) else None
+
+    def _bad_body() -> JSONResponse:
+        return JSONResponse({"detail": "the body must be a JSON object"}, status_code=422,
+                            headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/terminal/login")
+    def api_terminal_login(token: str = "") -> Response:
+        if not enable_terminal or not terminals.authorized(token):
+            return JSONResponse({"detail": "invalid terminal token"}, status_code=403,
+                                headers=dict(_PAPER_HEADERS))
+        response = Response(status_code=303, headers={"Location": "/", "Cache-Control": "no-store"})
+        response.set_cookie(TERMINAL_COOKIE, terminals.token, httponly=True,
+                            samesite="strict", path="/api/terminal")
+        return response
+
+    @app.get("/api/terminal/agents")
+    def api_terminal_agents(request: Request) -> JSONResponse:
+        authorized = terminals.authorized(request.cookies.get(TERMINAL_COOKIE))
+        commands_dir = root_path / ".claude" / "commands"
+        slash = sorted(f"/{p.stem}" for p in commands_dir.glob("*.md")) if commands_dir.is_dir() else []
+        return JSONResponse({
+            "enabled": enable_terminal and terminal.fcntl is not None,
+            "authorized": enable_terminal and authorized,
+            "agents": terminals.agents() if enable_terminal and authorized else [],
+            "quick": {"shell": list(terminal.SHELL_QUICK), "agent": slash[:24]},
+        }, headers=dict(_PAPER_HEADERS))
+
+    @app.post("/api/terminal/sessions")
+    async def api_terminal_create(request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        body = await _terminal_body(request)
+        if body is None:
+            return _bad_body()
+        try:
+            session = terminals.create(str(body.get("agent", "shell")),
+                                       body.get("cols", 100), body.get("rows", 30))
+        except terminal.TerminalError as error:
+            return JSONResponse({"detail": str(error)}, status_code=422,
+                                headers=dict(_PAPER_HEADERS))
+        return JSONResponse({"id": session.id, "agent": session.agent},
+                            headers=dict(_PAPER_HEADERS))
+
+    @app.post("/api/terminal/sessions/{sid}/input")
+    async def api_terminal_input(sid: str, request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        body = await _terminal_body(request)
+        if body is None:
+            return _bad_body()
+        try:
+            if "cols" in body or "rows" in body:
+                terminals.resize(sid, body.get("cols"), body.get("rows"))
+            if isinstance(body.get("data"), str):
+                # Off the event loop: a full PTY input queue blocks the write.
+                await asyncio.to_thread(terminals.write, sid, body["data"])
+        except KeyError:
+            return JSONResponse({"detail": "no such session"}, status_code=404,
+                                headers=dict(_PAPER_HEADERS))
+        except terminal.TerminalError as error:
+            return JSONResponse({"detail": str(error)}, status_code=422,
+                                headers=dict(_PAPER_HEADERS))
+        return JSONResponse({"ok": True}, headers=dict(_PAPER_HEADERS))
+
+    @app.delete("/api/terminal/sessions/{sid}")
+    def api_terminal_close(sid: str, request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=True)
+        if refusal is not None:
+            return refusal
+        try:
+            terminals.close(sid)
+        except KeyError:
+            return JSONResponse({"detail": "no such session"}, status_code=404,
+                                headers=dict(_PAPER_HEADERS))
+        return JSONResponse({"ok": True}, headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/terminal/sessions/{sid}/stream")
+    async def api_terminal_stream(sid: str, request: Request) -> Response:
+        refusal = _terminal_refusal(request, mutating=False)
+        if refusal is not None:
+            return refusal
+        try:
+            terminals.get(sid)
+        except KeyError:
+            return JSONResponse({"detail": "no such session"}, status_code=404,
+                                headers=dict(_PAPER_HEADERS))
+        return StreamingResponse(
+            _terminal_stream(request, terminals, sid),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @app.get("/api/atlas/novelty")
     def api_atlas_novelty() -> JSONResponse:
         return JSONResponse(novelty_graph.build_novelty_graph(root_path), headers=dict(_PAPER_HEADERS))
@@ -1740,6 +1905,35 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return _PLACEHOLDER_HTML
 
     return app
+
+
+async def _terminal_stream(request: Request, terminals: "terminal.TerminalManager",
+                           sid: str) -> AsyncIterator[str]:
+    """PTY output as SSE ``output`` frames (base64), then one ``exit`` frame."""
+    import base64
+
+    offset = 0
+    idle = 0.0
+    while True:
+        if await request.is_disconnected():
+            break
+        try:
+            chunk, offset, alive = terminals.read_since(sid, offset)
+        except KeyError:
+            yield format_sse("exit", {"reason": "closed"})
+            break
+        if chunk:
+            idle = 0.0
+            yield format_sse("output", {"data": base64.b64encode(chunk).decode("ascii")})
+            continue
+        if not alive:
+            yield format_sse("exit", {"reason": "ended"})
+            break
+        idle += 0.03
+        if idle >= 15.0:
+            idle = 0.0
+            yield ": ping\n\n"
+        await asyncio.sleep(0.03)
 
 
 async def _event_stream(request: Request, bus: EventBus, root: Path) -> AsyncIterator[str]:
@@ -1851,6 +2045,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allowed-host", action="append", default=[], metavar="HOST:PORT",
                         help="extra Host header to accept on a loopback bind (repeatable); "
                              "for `npm run dev` use --allowed-host localhost:5173")
+    parser.add_argument("--no-terminal", action="store_true",
+                        help="do not offer the dashboard's support terminal (it is only "
+                             "ever offered on a loopback bind)")
     parser.add_argument("--log-level", default="info")
     return parser
 
@@ -1873,8 +2070,14 @@ def main(argv: list[str] | None = None) -> int:
     app = create_app(
         root, debounce_ms=args.debounce_ms, health_ttl=args.health_ttl,
         allowed_hosts=build_allowed_hosts(args.host, args.port, args.allowed_host),
+        enable_terminal=terminal_allowed(args.host) and not args.no_terminal,
     )
     url = f"http://{args.host}:{args.port}/"
+    if app.state.terminal_enabled:
+        # The terminal's secret travels only in this URL; opening it once sets
+        # the cookie. Printed so --no-browser users can open it themselves.
+        url = f"{url}api/terminal/login?token={app.state.terminal.token}"
+        print(f"support terminal enabled; dashboard login URL: {url}", flush=True)
     if not args.no_browser:
         threading.Timer(1.0, open_browser, args=(url,)).start()
     uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)

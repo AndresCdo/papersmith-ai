@@ -2,17 +2,23 @@
 //
 // Built into ../atlas3d.bundle.js by scripts/build-atlas-viewer.mjs and
 // inlined verbatim into every sota-pool/atlas.html, so the page opens with no
-// network. The viewer never lays anything out: every position, orbital frame,
-// edge and family tie arrives precomputed in the scene (see README.md), which
-// keeps "same atlas, same sky" a property of the Python renderer alone.
+// network. The default layout ('sky') is never computed here: every position,
+// orbital frame, edge and family tie arrives precomputed in the scene (see
+// README.md), which keeps "same atlas, same sky" a property of the Python
+// renderer alone. The one exception is opt-in: setLayout('groups') rigidly
+// translates whole systems so each family packs into its own cluster on a flat
+// grid — deterministic (sorted family labels, then system ids), never
+// persisted, and setLayout('sky') restores the precomputed positions exactly.
 //
 // Public surface: window.AtlasViewer.mount(container, scene, hooks) -> handle
 //   hooks.onSelect(key)        click on a planet ("<system>.<planet>")
 //   hooks.onHover(key | null)  pointer enters / leaves a planet
 //   handle.setDim(keep | null) dim every planet not in the Set `keep`
 //   handle.zoom(factor)        dolly toward the orbit target (>1 = closer)
-//   handle.reset()             restore the framed home view
+//   handle.reset()             restore the current layout's home view, undim
 //   handle.focus(key)          fly the orbit target to one planet
+//   handle.setLayout(mode)     animate to 'sky' (default) or 'groups'; returns the mode
+//   handle.layout()            the current mode, 'sky' or 'groups'
 
 import {
   AdditiveBlending,
@@ -21,6 +27,7 @@ import {
   CanvasTexture,
   Color,
   FogExp2,
+  Group,
   InstancedMesh,
   LineBasicMaterial,
   LineDashedMaterial,
@@ -52,6 +59,14 @@ const SUN_HALO_PX = 30;
 const PLANET_HALO_PX = 15;
 const LABEL_SCREEN_HEIGHT = 0.026;
 const CURVE_STEPS = 18;
+// Group layout: systems of one family pack on a small golden spiral, families
+// sit on a flat grid far enough apart that clusters never touch.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const GROUP_MEMBER_STEP = 720;
+const SYSTEM_EXTENT = 300;
+const GROUP_GAP = 1600;
+const FAMILY_LABEL_HEIGHT = 0.034;
+const LAYOUT_SECONDS = 0.8;
 
 function glowTexture() {
   const size = 128;
@@ -116,6 +131,50 @@ function starfield(center, radius) {
   }));
 }
 
+// The group a system belongs to: its first family planet's non-blank label,
+// the same rule as _family_of in render_atlas.py; none gathers under ''.
+function familyOf(system) {
+  for (const planet of system.planets || []) {
+    if (planet && planet.slot === 'family' && typeof planet.label === 'string' && planet.label.trim()) {
+      return planet.label.trim();
+    }
+  }
+  return '';
+}
+
+// Where each system's center goes in the group layout, and each family's
+// cluster center: a pure function of sorted family labels and system ids.
+function groupLayout(systems, frames) {
+  const byFamily = new Map();
+  const ids = systems.map((s) => s.id).filter((id) => frames[id]).sort();
+  const bySystem = new Map(systems.map((s) => [s.id, s]));
+  for (const id of ids) {
+    const family = familyOf(bySystem.get(id));
+    if (!byFamily.has(family)) byFamily.set(family, []);
+    byFamily.get(family).push(id);
+  }
+  const families = [...byFamily.keys()].sort();
+  const largest = Math.max(1, ...families.map((f) => byFamily.get(f).length));
+  const spacing = 2 * (GROUP_MEMBER_STEP * Math.sqrt(largest - 1) + SYSTEM_EXTENT) + GROUP_GAP;
+  const cols = Math.ceil(Math.sqrt(families.length));
+  const rows = Math.ceil(families.length / cols);
+  const centers = new Map();
+  const clusters = [];
+  families.forEach((family, f) => {
+    const col = f % cols;
+    const row = Math.floor(f / cols);
+    const fc = new Vector3((col - (cols - 1) / 2) * spacing, ((rows - 1) / 2 - row) * spacing, 0);
+    const members = byFamily.get(family);
+    members.forEach((id, m) => {
+      const r = GROUP_MEMBER_STEP * Math.sqrt(m);
+      const a = m * GOLDEN_ANGLE;
+      centers.set(id, new Vector3(fc.x + r * Math.cos(a), fc.y + r * Math.sin(a), 0));
+    });
+    clusters.push({ family, center: fc, radius: GROUP_MEMBER_STEP * Math.sqrt(members.length - 1) + SYSTEM_EXTENT });
+  });
+  return { centers, clusters };
+}
+
 function curvePoints(a, b, lift) {
   const mid = a.clone().add(b).multiplyScalar(0.5);
   mid.z += lift;
@@ -160,14 +219,21 @@ function mount(container, data, hooks = {}) {
   }
   const keys = Object.keys(data.positions).sort();
   const index = new Map(keys.map((key, i) => [key, i]));
-  const points = keys.map((key) => new Vector3(...data.positions[key]));
+  // `points` are the drawn positions; `basePoints` keep the precomputed sky so
+  // the group layout can always return to it exactly.
+  const basePoints = keys.map((key) => new Vector3(...data.positions[key]));
+  const points = basePoints.map((p) => p.clone());
+  const owner = keys.map((key) => planets.get(key)?.system.id);
 
   // Frame: the bounding sphere around the bounding-box center of every planet.
-  const low = new Vector3(Infinity, Infinity, Infinity);
-  const high = new Vector3(-Infinity, -Infinity, -Infinity);
-  points.forEach((p) => { low.min(p); high.max(p); });
-  const center = points.length ? low.clone().add(high).multiplyScalar(0.5) : new Vector3();
-  const radius = Math.max(400, ...points.map((p) => p.distanceTo(center)));
+  function bounds(list) {
+    const low = new Vector3(Infinity, Infinity, Infinity);
+    const high = new Vector3(-Infinity, -Infinity, -Infinity);
+    list.forEach((p) => { low.min(p); high.max(p); });
+    const mid = list.length ? low.clone().add(high).multiplyScalar(0.5) : new Vector3();
+    return { center: mid, radius: Math.max(400, ...list.map((p) => p.distanceTo(mid))) };
+  }
+  const { center, radius } = bounds(points);
   scene.fog = new FogExp2(BACKGROUND, 0.35 / radius);
   scene.add(starfield(center, radius));
 
@@ -209,12 +275,18 @@ function mount(container, data, hooks = {}) {
   }
   const halos = [halo((i) => isSun[i], SUN_HALO_PX), halo((i) => !isSun[i], PLANET_HALO_PX)];
 
-  // Orbit rings in each system's own tilted plane.
+  // Orbit rings in each system's own tilted plane. Each system's rings and
+  // label live in one Group at the origin, so the group layout moves them by
+  // translating the Group alone.
+  const systemGroups = new Map();
   const ringMaterial = new LineBasicMaterial({ color: 0x2a3350, transparent: true, opacity: 0.55 });
   for (const [sid, frame] of Object.entries(data.frames)) {
     const system = data.atlas.systems.find((s) => s.id === sid);
     const orbits = [...new Set(system.planets.map((p) => p.orbit))].filter((o) => o > 0).sort();
     const c = new Vector3(...frame.center);
+    const group = new Group();
+    systemGroups.set(sid, group);
+    scene.add(group);
     const u = new Vector3(...frame.u);
     const v = new Vector3(...frame.v);
     for (const orbit of orbits) {
@@ -224,11 +296,11 @@ function mount(container, data, hooks = {}) {
         const a = (k / 96) * Math.PI * 2;
         ring.push(c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(v, r * Math.sin(a)));
       }
-      scene.add(new LineLoop(new BufferGeometry().setFromPoints(ring), ringMaterial));
+      group.add(new LineLoop(new BufferGeometry().setFromPoints(ring), ringMaterial));
     }
     const label = labelSprite(String(system.title || sid).slice(0, 64), LABEL_SCREEN_HEIGHT);
     label.position.copy(c);
-    scene.add(label);
+    group.add(label);
   }
 
   // Edges: intra-system straight, inter-system arcs lifted out of the plane.
@@ -248,7 +320,7 @@ function mount(container, data, hooks = {}) {
       edgeVerts.push(...path[k].toArray(), ...path[k + 1].toArray());
       edgeColors.push(...color.toArray(), ...color.toArray());
     }
-    edgeSpans.push({ from: edge.from, to: edge.to, start, end: edgeColors.length / 3, color, inter: edge.inter });
+    edgeSpans.push({ from: edge.from, to: edge.to, i, j, start, end: edgeColors.length / 3, color, inter: edge.inter });
   }
   const edgeGeometry = new BufferGeometry();
   edgeGeometry.setAttribute('position', new BufferAttribute(new Float32Array(edgeVerts), 3));
@@ -258,6 +330,7 @@ function mount(container, data, hooks = {}) {
   })));
 
   // Family ties: dashed arcs chaining planets that share a family name.
+  const tieLines = [];
   for (const tie of data.ties) {
     const i = index.get(tie.from);
     const j = index.get(tie.to);
@@ -270,6 +343,7 @@ function mount(container, data, hooks = {}) {
     }));
     line.computeLineDistances();
     scene.add(line);
+    tieLines.push({ line, i, j });
   }
 
   const FOV = 50;
@@ -277,11 +351,15 @@ function mount(container, data, hooks = {}) {
   camera.up.set(0, 0, 1);
   // The sky is flatter than its bounding sphere, so frame a little inside
   // the sphere-fit distance; the full sphere would leave most of the view empty.
-  const distance = (radius / Math.sin((FOV / 2) * Math.PI / 180)) * 0.8;
-  const home = {
-    position: center.clone().add(new Vector3(0, -0.85, 0.53).setLength(distance)),
-    target: center.clone(),
-  };
+  function homeOf(frameCenter, frameRadius) {
+    const distance = (frameRadius / Math.sin((FOV / 2) * Math.PI / 180)) * 0.8;
+    return {
+      position: frameCenter.clone().add(new Vector3(0, -0.85, 0.53).setLength(distance)),
+      target: frameCenter.clone(),
+    };
+  }
+  const skyHome = homeOf(center, radius);
+  let home = skyHome;
   camera.position.copy(home.position);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(home.target);
@@ -390,7 +468,114 @@ function mount(container, data, hooks = {}) {
     if (hit) focus(hit.key);
   });
 
-  function animate() {
+  // Group layout: one translation per system, animated from wherever the
+  // systems are now to the chosen layout, then the camera reframes it.
+  const layoutPlan = groupLayout(data.atlas.systems, data.frames);
+  const groupOffsets = new Map();
+  for (const [sid, frame] of Object.entries(data.frames)) {
+    const target = layoutPlan.centers.get(sid);
+    groupOffsets.set(sid, target ? target.clone().sub(new Vector3(...frame.center)) : new Vector3());
+  }
+  const familyLabels = layoutPlan.clusters.map(({ family, center: fc, radius: fr }) => {
+    const sprite = labelSprite(String(family || '(no family)').slice(0, 64), FAMILY_LABEL_HEIGHT);
+    sprite.position.set(fc.x, fc.y, fr * 0.8);
+    sprite.material.opacity = 1;
+    sprite.visible = false;
+    scene.add(sprite);
+    return sprite;
+  });
+  const offsets = new Map([...groupOffsets.keys()].map((sid) => [sid, new Vector3()]));
+  let mode = 'sky';
+  let transition = null;
+  const zero = new Vector3();
+
+  function offsetsFor(which) {
+    return new Map([...offsets.keys()].map((sid) => [sid, which === 'groups' ? groupOffsets.get(sid).clone() : new Vector3()]));
+  }
+
+  // Move every drawn thing that depends on planet positions.
+  function place() {
+    points.forEach((p, i) => p.copy(basePoints[i]).add(offsets.get(owner[i]) || zero));
+    keys.forEach((key, i) => {
+      dummy.position.copy(points[i]);
+      dummy.scale.setScalar(isSun[i] ? SUN_RADIUS : PLANET_RADIUS);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    for (const { cloud, chosen } of halos) {
+      const attr = cloud.geometry.getAttribute('position');
+      chosen.forEach((i, j) => attr.setXYZ(j, points[i].x, points[i].y, points[i].z));
+      attr.needsUpdate = true;
+      cloud.geometry.computeBoundingSphere();
+    }
+    const verts = edgeGeometry.getAttribute('position');
+    for (const span of edgeSpans) {
+      const a = points[span.i];
+      const b = points[span.j];
+      const path = span.inter ? curvePoints(a, b, a.distanceTo(b) * 0.25) : [a, b];
+      let k = span.start;
+      for (let s = 0; s < path.length - 1; s++) {
+        verts.setXYZ(k++, path[s].x, path[s].y, path[s].z);
+        verts.setXYZ(k++, path[s + 1].x, path[s + 1].y, path[s + 1].z);
+      }
+    }
+    verts.needsUpdate = true;
+    edgeGeometry.computeBoundingSphere();
+    for (const { line, i, j } of tieLines) {
+      const path = curvePoints(points[i], points[j], points[i].distanceTo(points[j]) * 0.35);
+      const attr = line.geometry.getAttribute('position');
+      let k = 0;
+      for (let s = 0; s < path.length - 1; s++) {
+        attr.setXYZ(k++, path[s].x, path[s].y, path[s].z);
+        attr.setXYZ(k++, path[s + 1].x, path[s + 1].y, path[s + 1].z);
+      }
+      attr.needsUpdate = true;
+      line.computeLineDistances();
+      line.geometry.computeBoundingSphere();
+    }
+    for (const [sid, group] of systemGroups) group.position.copy(offsets.get(sid) || zero);
+  }
+
+  function frameLayout() {
+    const fit = bounds(points);
+    home = mode === 'sky' ? skyHome : homeOf(fit.center, fit.radius);
+    camera.far = Math.max(radius, fit.radius) * 40;
+    camera.updateProjectionMatrix();
+    controls.autoRotate = false;
+    flight = { target: home.target.clone(), position: home.position.clone(), t: 0 };
+  }
+
+  function setLayout(next) {
+    if (next !== 'sky' && next !== 'groups') return mode;
+    if (next === mode) return mode;
+    mode = next;
+    const from = new Map([...offsets].map(([sid, o]) => [sid, o.clone()]));
+    transition = { from, to: offsetsFor(mode), start: performance.now() };
+    familyLabels.forEach((sprite) => { sprite.visible = false; });
+    return mode;
+  }
+
+  function stepLayout(now) {
+    if (!transition) return;
+    const t = Math.min(1, (now - transition.start) / (LAYOUT_SECONDS * 1000));
+    const e = t * t * (3 - 2 * t);
+    for (const [sid, o] of offsets) o.lerpVectors(transition.from.get(sid), transition.to.get(sid), e);
+    if (t >= 1) {
+      // Land exactly: 'sky' restores the precomputed positions bit for bit.
+      for (const [sid, o] of offsets) o.copy(transition.to.get(sid));
+      transition = null;
+    }
+    place();
+    if (!transition) {
+      familyLabels.forEach((sprite) => { sprite.visible = mode === 'groups'; });
+      frameLayout();
+    }
+  }
+
+  function animate(now) {
+    stepLayout(now === undefined ? performance.now() : now);
     if (flight) {
       flight.t = Math.min(1, flight.t + 0.06);
       controls.target.lerp(flight.target, flight.t);
@@ -417,6 +602,8 @@ function mount(container, data, hooks = {}) {
       camera.position.copy(home.position);
       paint(null);
     },
+    setLayout,
+    layout() { return mode; },
   };
 }
 
