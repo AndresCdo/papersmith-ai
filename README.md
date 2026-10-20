@@ -3593,26 +3593,40 @@ selected node shows **📄 Ver en PDF** (finds the node's label, or its system's
 title, in the compiled PDF's text and jumps to that page) and **🗂️ Ver
 artefacto** (opens `sota-pool/atlas.json` in the artifact viewer).
 
-**Support terminal ("CLI de apoyo").** The **⌨️ CLI** button opens a floating
-xterm.js console bound to a pseudo-terminal in the workspace root: a login shell,
-or `claude`, `opencode` or `pi` when they are on `PATH`. Quick buttons type
-`smith status`, `smith atlas build` and `smith audit` in the shell, or the
-projected slash commands (`.claude/commands/`) inside an agent. Each phase card
-has **⌨️ Enviar a CLI**, which types that phase's command into the console and
-waits for your Enter; **▶ Ejecutar** keeps its own path. Routes:
-`GET /api/terminal/agents`, `POST /api/terminal/sessions`,
-`POST /api/terminal/sessions/<id>/input` (`data`, or `cols`/`rows` to resize),
-`DELETE /api/terminal/sessions/<id>` and `GET /api/terminal/sessions/<id>/stream`
-(SSE, base64 `output` frames then `exit`). At most four sessions; they close
-with the server. The console is a shell with your privileges, so it is only
-offered on a loopback bind (`smith ui --no-terminal` turns it off). Each server
-start creates a secret: the browser it opens (or the `dashboard login URL` it
-prints, for `--no-browser`) goes through `GET /api/terminal/login?token=…`, which
-sets an HttpOnly, SameSite=Strict cookie, and every terminal route requires it,
-so another local user or a `curl` without the token gets `403`. Every call must
-also be same-origin: a foreign `Origin` or `Sec-Fetch-Site`, a missing
-`X-Papersmith-Terminal: 1` header or a non-JSON body answers `403`. Sessions that
-end on their own are released and stop counting toward the cap.
+**Smith CLI assistant ("CLI de apoyo").** The round button at the bottom right,
+with Smith's face, opens a floating xterm.js console (780×520, maximizable;
+closing it only hides it, the session keeps running) bound to a pseudo-terminal
+in the workspace root. The agent picker offers **herdr** (default: it focuses or
+creates the herdr workspace labelled after the project, so the console mirrors
+your herdr panes), `claude`, `opencode`, `pi` and a login shell; binaries are also
+found in `~/.local/bin`, `~/.npm-global/bin`, Homebrew and `~/.cargo/bin`, and the
+choice is remembered. **🖥️ Ghostty** (or WezTerm) opens herdr on the project in a
+native terminal. The footer shows the agent and project path, a *Comandos smith…*
+menu (`smith status`, `smith atlas build`, `smith audit` in the shell; the projected
+slash commands in an agent) and *Limpiar*. The server answers the terminal
+capability queries full-screen TUIs send (DA1, OSC 10/11, `?u`, `?996n`, `16t`) on
+the PTY itself and strips them from the output, keystrokes are coalesced, and the
+console refits and repaints when the tab regains focus. Each phase card has
+**⌨️ Enviar a CLI**, which types that phase's command and waits for your Enter;
+**▶ Ejecutar** keeps its own path. Routes: `GET /api/terminal/agents`,
+`GET /api/terminal/tools`, `POST /api/terminal/launch-external`,
+`POST /api/terminal/sessions`, `POST /api/terminal/sessions/<id>/input` (`data`, or
+`cols`/`rows` to resize), `DELETE /api/terminal/sessions/<id>` and
+`GET /api/terminal/sessions/<id>/stream` (SSE, base64 `output` frames then `exit`).
+At most four live sessions; they close with the server. The console is a shell
+with your privileges, so it is only offered on a loopback bind
+(`smith ui --no-terminal` turns it off). Each server start creates a secret: the
+browser it opens (or the `dashboard login URL` it prints, for `--no-browser`) goes
+through `GET /api/terminal/login?token=…`, which sets an HttpOnly, SameSite=Strict
+cookie, and every terminal route requires it, so another local user or a `curl`
+without the token gets `403`. Every call must also be same-origin: a foreign
+`Origin` or `Sec-Fetch-Site`, a missing `X-Papersmith-Terminal: 1` header or a
+non-JSON body answers `403`.
+
+**Branding.** The LabIA UNAL logo appears once, centred in the footer on a white
+badge; the header carries Smith's avatar and the laboratory line only. The footer
+names the framework version the workspace was last initialized or upgraded to
+(`/api/status` → `framework_version`).
 
 **Live PDF preview.** The *Previsualización PDF* tab renders `paper/main.pdf`
 with pdf.js 3.11.174, vendored in `skills/_core/command_center/static/vendor/`

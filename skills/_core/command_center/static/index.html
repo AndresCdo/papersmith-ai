@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="./vendor/xterm.css">
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
-  <script src="./cli-console.js"></script>
+  <script src="./cli-console.js?v=0.16.1"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -124,45 +124,6 @@
       align-items: center;
       justify-content: center;
       justify-self: center;
-    }
-    .topbar__lab-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.75rem;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      padding: 0.3rem 0.95rem;
-      border-radius: 9999px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      cursor: default;
-    }
-    .topbar__lab-badge:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-    }
-    .topbar__lab-logo {
-      height: 34px;
-      width: auto;
-      display: block;
-      object-fit: contain;
-    }
-    .topbar__lab-text {
-      display: flex;
-      flex-direction: column;
-      text-align: left;
-      line-height: 1.15;
-    }
-    .topbar__lab-text-title {
-      font-size: 0.72rem;
-      font-weight: 800;
-      color: #0b1f3a;
-      letter-spacing: -0.01em;
-    }
-    .topbar__lab-text-sub {
-      font-size: 0.62rem;
-      font-weight: 600;
-      color: #4b5563;
     }
     .topbar__actions {
       display: flex;
@@ -2338,45 +2299,75 @@
     }
 
 
-    /* ---- Support terminal ("CLI de apoyo") ---- */
-    .cli-fab {
-      position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 900;
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      padding: 0.6rem 0.95rem; border-radius: 999px; cursor: pointer;
-      background: var(--surface-2); color: var(--text, #e5e7eb);
-      border: 1px solid var(--accent); font: 600 0.82rem var(--font-mono);
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    /* ---- Smith CLI assistant (FAB + floating terminal) ---- */
+    :root { --fab-size: 58px; --fab-offset: 24px; }
+    footer.dashboard-footer { padding-right: calc(2rem + var(--fab-size) + var(--fab-offset)); }
+    .smith-fab {
+      position: fixed; right: var(--fab-offset); bottom: var(--fab-offset); z-index: 99999;
+      width: var(--fab-size); height: var(--fab-size); border-radius: 50%; padding: 0;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      background: linear-gradient(135deg, #0284c7, #38bdf8); border: none;
+      box-shadow: 0 8px 26px rgba(2, 132, 199, 0.45); transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
-    .cli-fab:hover { background: var(--surface); }
-    .cli-window {
-      position: fixed; right: 1.25rem; bottom: 4.6rem; z-index: 901;
-      width: min(760px, calc(100vw - 2.5rem)); height: min(460px, calc(100vh - 7rem));
-      display: none; flex-direction: column; overflow: hidden;
-      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    .smith-fab:hover { transform: scale(1.08); box-shadow: 0 10px 32px rgba(56, 189, 248, 0.55); }
+    .smith-fab:active { transform: scale(0.96); }
+    .smith-fab__pulse {
+      position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(56, 189, 248, 0.6);
+      animation: smithFabPulse 2.4s ease-out infinite; pointer-events: none;
     }
-    .cli-window.open { display: flex; }
-    .cli-window__bar {
-      display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
-      padding: 0.45rem 0.6rem; background: var(--surface-2); border-bottom: 1px solid var(--border);
-      font-size: 0.78rem;
+    .smith-fab.is-active .smith-fab__pulse { display: none; }
+    @keyframes smithFabPulse { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(1.35); opacity: 0; } }
+    .smith-fab__logo {
+      width: calc(var(--fab-size) - 8px); height: calc(var(--fab-size) - 8px); border-radius: 50%;
+      object-fit: cover; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
     }
-    .cli-window__title { font-weight: 700; margin-right: auto; }
-    .cli-window__bar select, .cli-window__bar button {
-      font-size: 0.74rem; padding: 0.2rem 0.5rem; border-radius: 6px;
-      background: var(--surface); color: inherit; border: 1px solid var(--border); cursor: pointer;
+    .smith-fab__badge {
+      position: absolute; top: -2px; right: -2px; padding: 1px 5px; border-radius: 999px;
+      background: #6b7280; color: #fff; font: 800 0.62rem/1.4 var(--font-mono); border: 2px solid var(--bg);
     }
-    .cli-status { font-size: 0.72rem; color: var(--text-muted); }
-    .cli-status[data-tone="ok"] { color: var(--ok); }
-    .cli-status[data-tone="warn"] { color: var(--warn); }
-    .cli-status[data-tone="bad"] { color: var(--bad); }
-    .cli-quick { display: flex; gap: 0.35rem; flex-wrap: wrap; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
-    .cli-quick:empty { display: none; }
-    .cli-quick__btn {
-      font: 0.72rem var(--font-mono); padding: 0.15rem 0.5rem; border-radius: 4px; cursor: pointer;
-      background: rgba(56, 189, 248, 0.08); color: var(--accent); border: 1px solid var(--border);
+    .smith-fab__badge[data-tone="ok"] { background: #10b981; }
+    .smith-fab__badge[data-tone="warn"] { background: #f59e0b; }
+    .smith-fab__badge[data-tone="bad"] { background: #ef4444; }
+    .smith-term {
+      position: fixed; right: 24px; bottom: 92px; z-index: 99998;
+      width: 780px; height: 520px; max-width: calc(100vw - 36px); max-height: calc(100vh - 120px);
+      display: flex; flex-direction: column; overflow: hidden; background: #080c14;
+      border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+      opacity: 0; pointer-events: none; transform: translateY(16px) scale(0.98);
+      transition: opacity 0.22s ease, transform 0.22s ease;
     }
-    .cli-term { flex: 1 1 auto; min-height: 0; padding: 0.35rem; background: #0b0f19; }
+    .smith-term.is-open { opacity: 1; pointer-events: auto; transform: none; }
+    /* Maximized, the window keeps the FAB's strip free so its footer stays usable. */
+    .smith-term.is-maximized {
+      right: 12px; bottom: calc(var(--fab-size) + var(--fab-offset) + 10px); width: calc(100vw - 24px);
+      height: calc(100vh - var(--fab-size) - var(--fab-offset) - 22px); max-width: none; max-height: none;
+    }
+    .smith-term__header {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.65rem;
+      background: #0f172a; border-bottom: 1px solid #1e293b; color: #e2e8f0; font-size: 0.8rem;
+    }
+    .smith-term__logo { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+    .smith-term__title { font-weight: 700; }
+    .smith-term__dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
+    .smith-term__dot.is-connecting { background: #f59e0b; }
+    .smith-term__dot.is-connected { background: #10b981; box-shadow: 0 0 8px #10b981; }
+    .smith-term__status { color: #94a3b8; font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .smith-term__controls { margin-left: auto; display: flex; gap: 0.35rem; align-items: center; }
+    .smith-term__controls button, .smith-term__controls select, .smith-term__footer button, .smith-term__footer select {
+      font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px; cursor: pointer;
+      background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+    }
+    .smith-term__controls button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .smith-term__body { flex: 1 1 auto; min-height: 0; padding: 0.35rem 0.5rem; background: #080c14; }
+    .smith-term__footer {
+      height: 32px; display: flex; align-items: center; gap: 0.5rem; padding: 0 0.65rem;
+      background: #0f172a; border-top: 1px solid #1e293b; color: #94a3b8; font-size: 0.72rem;
+    }
+    .smith-term__footer code { font-family: var(--font-mono); color: #38bdf8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .smith-term__footer-actions { margin-left: auto; display: flex; gap: 0.35rem; }
+    @media (max-width: 600px) { :root { --fab-size: 48px; --fab-offset: 16px; } }
+    @media (max-width: 900px) { footer.dashboard-footer { padding-right: 2rem; padding-bottom: calc(var(--fab-size) + var(--fab-offset) + 0.5rem); } }
   </style>
 </head>
 <body>
@@ -2390,15 +2381,6 @@
       <div class="topbar__title">
         <h1 id="headerMainTitle">PaperSmith AI — Command Center</h1>
         <p>Laboratorio de Inteligencia Artificial · Universidad Nacional de Colombia</p>
-      </div>
-    </div>
-    <div class="topbar__center">
-      <div class="topbar__lab-badge" title="Laboratorio de Inteligencia Artificial (LabIA) — Universidad Nacional de Colombia">
-        <img src="./logo_labIA.png" alt="LabIA UNAL" class="topbar__lab-logo">
-        <div class="topbar__lab-text">
-          <span class="topbar__lab-text-title">Laboratorio de Inteligencia Artificial</span>
-          <span class="topbar__lab-text-sub">Universidad Nacional de Colombia · Sede Manizales</span>
-        </div>
       </div>
     </div>
     <div class="topbar__actions">
@@ -3764,7 +3746,7 @@
 
   <footer class="dashboard-footer">
     <div class="footer__col footer__col--left">
-      <strong>PaperSmith AI v0.5.0</strong>
+      <strong id="footerVersion">PaperSmith AI</strong>
       <span>Orquestador Multi-Agente de Formulación Científica en IA</span>
     </div>
 
@@ -5115,6 +5097,10 @@
         const totals = data.totals || {};
         const projName = data.project_name || 'PaperSmith AI';
         document.title = `PaperSmith AI — ${projName}`;
+        const footerVersionEl = document.getElementById('footerVersion');
+        if (footerVersionEl) {
+          footerVersionEl.textContent = data.framework_version ? `PaperSmith AI v${data.framework_version}` : 'PaperSmith AI';
+        }
         const headerTitleEl = document.getElementById('headerMainTitle');
         if (headerTitleEl) {
           headerTitleEl.textContent = `PaperSmith AI — Command Center (${projName})`;
@@ -6469,19 +6455,35 @@
     });
   </script>
 
-  <!-- Support terminal ("CLI de apoyo"): see cli-console.js and terminal.py -->
-  <button id="cliFab" class="cli-fab" type="button" title="Abrir la terminal de apoyo (shell o agente) en el workspace">⌨️ CLI</button>
-  <div id="cliWindow" class="cli-window" role="dialog" aria-label="Terminal de apoyo" aria-hidden="true">
-    <div class="cli-window__bar">
-      <span class="cli-window__title">⌨️ Terminal de apoyo</span>
-      <select id="cliAgent" title="Shell o agente a lanzar en el workspace"></select>
-      <button id="cliConnect" type="button">Conectar</button>
-      <button id="cliStop" type="button">Detener</button>
-      <span id="cliStatus" class="cli-status" data-tone="muted">Sin sesión</span>
-      <button id="cliClose" type="button" title="Ocultar (la sesión sigue viva)">✕</button>
+  <!-- Smith CLI assistant: see cli-console.js and terminal.py -->
+  <button id="smithAssistantFab" class="smith-fab" type="button" title="Abrir Asistente CLI Smith (herdr, Claude, OpenCode, Pi)">
+    <span class="smith-fab__pulse"></span>
+    <img src="./smith-face.png" alt="Smith" class="smith-fab__logo">
+    <span id="smithFabBadge" class="smith-fab__badge" data-tone="off">CLI</span>
+  </button>
+  <div id="smithTerminalWindow" class="smith-term" role="dialog" aria-label="Asistente CLI Smith" aria-hidden="true">
+    <div class="smith-term__header">
+      <img src="./smith-face.png" alt="" class="smith-term__logo">
+      <span class="smith-term__title">Asistente CLI Smith</span>
+      <span id="terminalStatusDot" class="smith-term__dot"></span>
+      <span id="terminalStatusText" class="smith-term__status">Sin sesión</span>
+      <div class="smith-term__controls">
+        <button id="btnLaunchExternalTerm" type="button" title="Abrir herdr en una terminal nativa">🖥️ Terminal</button>
+        <select id="terminalAgentSelect" title="Agente a lanzar en el proyecto"></select>
+        <button id="btnTerminalRestart" type="button" title="Reiniciar la sesión">⟳</button>
+        <button id="btnTerminalMaximize" type="button" title="Maximizar">⛶</button>
+        <button id="btnTerminalClose" type="button" title="Minimizar (la sesión sigue viva)">✕</button>
+      </div>
     </div>
-    <div id="cliQuick" class="cli-quick"></div>
-    <div id="cliTerm" class="cli-term"></div>
+    <div id="terminalContainer" class="smith-term__body"></div>
+    <div class="smith-term__footer">
+      <span id="terminalFooterAgent">—</span>
+      <code id="terminalFooterRun"></code>
+      <div class="smith-term__footer-actions">
+        <select id="terminalQuickSelect" title="Escribe y ejecuta un comando del flujo smith"></select>
+        <button id="btnTerminalClear" type="button">Limpiar</button>
+      </div>
+    </div>
   </div>
 </body>
 </html>
