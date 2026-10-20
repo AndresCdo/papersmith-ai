@@ -34,7 +34,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, atlas_build, decisions, math_view, terminal, tutor, history, paper_preview, novelty_graph, model_spec
+from . import atlas, atlas_build, decisions, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -606,7 +606,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": "Fase 4: Deliberación de Propuesta & Modelo Conceptual",
                 "gate": "G-PROP",
                 "agent": "deliberation-publish & mathematical-tutor",
-                "desc": "Deliberación científica formal de la propuesta (rNN), definición de novedad y formalización conceptual.",
+                "desc": "Deliberación científica formal de la propuesta (rNN), definición de novedad, discusión del mapa conceptual y de la matemática con el tutor socrático.",
                 "tools": ["read", "write", "deliberate"],
                 "skills": ["proposal-deliberation", "peer-review-simulator"],
                 "cli_command": "papersmith deliberate proposals/",
@@ -618,7 +618,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     {"id": "4.1", "name": "Stage bound: Delimitación & Locus", "status": fase4_status, "detail": "Definición del problema y anclaje de locus conceptual"},
                     {"id": "4.2", "name": "Stage deliberated: Novedad & Consenso", "status": fase4_status, "detail": "Discusión de hipótesis y pilares de innovación"},
                     {"id": "4.3", "name": "Stage composed: Modelo Matemático Básico", "status": fase4_status, "detail": "Formalización matemática y ecuaciones clave"},
-                    {"id": "4.4", "name": "Stage published: Publicación & Recibo Criptográfico", "status": fase4_status, "detail": "Revisión sellada con hash SHA-256"}
+                    {"id": "4.4", "name": "Stage published: Publicación & Recibo Criptográfico", "status": fase4_status, "detail": "Revisión sellada con hash SHA-256"},
+                    {"id": "4.5", "name": "Discusión del mapa conceptual", "status": fase4_status, "detail": "Pilares, hipótesis y capas del concepto (pestaña Mapa Conceptual)"},
+                    {"id": "4.6", "name": "Matemática y tutor socrático", "status": fase4_status, "detail": "Ecuaciones en LaTeX, tarjeta de novedad y tutor con imágenes a mano (math-tutor)"}
                 ]
             },
             {
@@ -627,7 +629,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": "Fase 5: Deliberación & Planeación Experimental (PoC)",
                 "gate": "G-EXP-POC",
                 "agent": "experimental-deliberation & experimental-validation",
-                "desc": "Diseño y deliberación del protocolo experimental de prueba de concepto, baselines SOTA y métricas de éxito.",
+                "desc": "Diseño y deliberación del protocolo experimental, implementación de la prueba de concepto y de los experimentos, y ejecución local o remota de sus mediciones.",
                 "tools": ["read", "write", "validate"],
                 "skills": ["experimental-deliberation", "experimental-implementation"],
                 "cli_command": "papersmith deliberate experiments/",
@@ -640,7 +642,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     {"id": "5.2", "name": "Stage validated: Baselines & SOTA", "status": fase5_status, "detail": "Contraste contra sistemas y modelos de referencia"},
                     {"id": "5.3", "name": "Stage deliberated: Diseño Metrológico & Protocolos", "status": fase5_status, "detail": "Protocolos de ensayo y validación"},
                     {"id": "5.4", "name": "Stage composed: Especificación de Experimentos", "status": fase5_status, "detail": "Formalización de experimentos con instrumentación"},
-                    {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": fase5_status, "detail": "Superación de compuerta G-EXP-POC"}
+                    {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": fase5_status, "detail": "Superación de compuerta G-EXP-POC"},
+                    {"id": "5.6", "name": "Implementación PoC y experimental", "status": fase5_status, "detail": "proposal-implementation y experimental-implementation contra el repositorio objetivo"},
+                    {"id": "5.7", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
                 ]
             },
             {
@@ -772,6 +776,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 ]
             }
         ]
+        phase_actions.attach(fases)
 
         artifacts = []
         for p in (root_path / "proposals").glob("*.md"):
@@ -1268,8 +1273,18 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         except Exception:
             payload = {}
         phase_id = str(payload.get("phase_id", ""))
-        
-        if "9" in phase_id or "pdf" in phase_id.lower() or "compile" in phase_id.lower():
+        stage = phase_actions.stage_for(phase_id)
+        if stage is None:
+            return JSONResponse({"ok": False, "error": f"fase desconocida: {phase_id}"}, status_code=422)
+
+        if stage == "paper" and not (root_path / "paper" / "main.tex").is_file():
+            return JSONResponse({
+                "ok": True,
+                "phase_id": phase_id,
+                "message": "No hay paper/main.tex que compilar: ábrelo primero con /paper-writing (Fase 6).",
+                "outputs": []
+            })
+        if stage == "paper":
             try:
                 env = os.environ.copy()
                 env["PATH"] = f"/Library/TeX/texbin:/opt/homebrew/bin:{env.get('PATH', '')}"
@@ -1290,7 +1305,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             except Exception as exc:
                 return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
                 
-        elif "7" in phase_id or "writing" in phase_id.lower():
+        elif stage == "writing":
             try:
                 b_script = root_path / "scripts" / "build_manuscript.py"
                 if b_script.is_file():
@@ -1308,7 +1323,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             except Exception as exc:
                 return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
                 
-        elif "8" in phase_id or "figure" in phase_id.lower():
+        elif stage == "figures":
             fig_dir = root_path / "paper" / "Figures"
             figs = [f.name for f in fig_dir.glob("*.pdf")] if fig_dir.is_dir() else []
             return JSONResponse({
@@ -1318,54 +1333,54 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "outputs": [f"paper/Figures/{f}" for f in figs]
             })
             
-        elif "2" in phase_id or "sota" in phase_id.lower() or "plausib" in phase_id.lower():
+        elif stage == "plausibility":
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": f"Fase 2: {_candidate_count(root_path)} candidatos en sota-pool/candidates.json; "
+                "message": f"Plausibilidad: {_candidate_count(root_path)} candidatos en sota-pool/candidates.json; "
                            f"atlas {'presente' if (root_path / 'sota-pool' / 'atlas.html').is_file() else 'pendiente'}.",
                 "outputs": ["sota-pool/atlas.json", "sota-pool/atlas.html", "sota-pool/candidates.json"]
             })
             
-        elif "3" in phase_id or "ingest" in phase_id.lower():
+        elif stage == "ingestion":
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": f"Fase 3: {len(_children(root_path / 'guidance' / 'reference-papers'))} referencias ingeridas en guidance/reference-papers/.",
+                "message": f"Ingestión: {len(_children(root_path / 'guidance' / 'reference-papers'))} referencias ingeridas en guidance/reference-papers/.",
                 "outputs": [f"guidance/reference-papers/{name}/" for name in _children(root_path / 'guidance' / 'reference-papers')]
             })
             
-        elif "4" in phase_id or "prop" in phase_id.lower():
+        elif stage == "proposal":
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": f"Fase 4: {len(list((root_path / 'proposals').glob('research-concept-*.md')))} revisiones de propuesta en proposals/.",
+                "message": f"Propuesta: {len(list((root_path / 'proposals').glob('research-concept-*.md')))} revisiones de propuesta en proposals/.",
                 "outputs": ["proposals/"]
             })
             
-        elif "5" in phase_id or "scaffold" in phase_id.lower():
+        elif stage == "scaffolding":
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": f"Fase 5: {_block_count(root_path)} bloques canónicos en paper/main.tex.",
+                "message": f"Andamiaje: {_block_count(root_path)} bloques canónicos en paper/main.tex.",
                 "outputs": ["paper/main.tex", "sections/"]
             })
             
-        elif "6" in phase_id or "declaration" in phase_id.lower():
+        elif stage == "declarations":
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": "Fase 6 verificada: Declaraciones operativas, roles CRediT y ética fijadas.",
+                "message": "Declaraciones: registra o revisa cada una con /paper-writing mark.",
                 "outputs": ["paper/main.tex"]
             })
             
-        elif "10" in phase_id or "audit" in phase_id.lower():
+        elif stage == "audit":
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": ("Fase 10: auditoría registrada en .papersmith/audit.json."
+                "message": ("Auditoría registrada en .papersmith/audit.json."
                             if (root_path / ".papersmith" / "audit.json").is_file()
-                            else "Fase 10: aún no hay auditoría registrada (.papersmith/audit.json)."),
+                            else "Aún no hay auditoría registrada (.papersmith/audit.json)."),
                 "outputs": [".papersmith/audit.json"]
             })
             
@@ -1373,7 +1388,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id,
-                "message": f"Fase {phase_id} operativa y sincronizada con el framework.",
+                "message": f"{phase_id}: se ejecuta desde su recuadro (comando del agente o panel).",
                 "outputs": []
             })
 
