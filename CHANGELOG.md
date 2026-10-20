@@ -11,6 +11,27 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.16.1
+
+### Changed
+
+- **Smith CLI assistant.** The dashboard console becomes a round button at the
+  bottom right with Smith's face (status badge, pulse) that opens a 780×520
+  floating terminal, maximizable and hidden rather than closed. **herdr** is the
+  default agent: the session focuses or creates the herdr workspace labelled
+  after the project, so the console mirrors your herdr panes; `claude`,
+  `opencode`, `pi` and a login shell remain, found also in `~/.local/bin`,
+  `~/.npm-global/bin`, Homebrew and `~/.cargo/bin`, and the choice is remembered.
+  **🖥️ Ghostty/WezTerm** opens herdr on the project in a native terminal
+  (`GET /api/terminal/tools`, `POST /api/terminal/launch-external`). The server
+  answers the capability queries full-screen TUIs send on the PTY itself,
+  keystrokes are coalesced, and the console repaints when the tab regains focus.
+  Only the herdr agent drops inherited `HERDR*` variables.
+- **LabIA UNAL branding.** The laboratory logo now ships with the dashboard and
+  appears only in the bottom-centre footer; the header keeps Smith's avatar and
+  the laboratory line. The footer shows the workspace's framework version
+  (`/api/status` → `framework_version`).
+
 ## 0.16.0
 
 ### Added
