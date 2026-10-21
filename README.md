@@ -3639,8 +3639,9 @@ switches and adds **⚡ Regenerar grafo** (the SOTA atlas through
 rebuilds the view) and **🧩 Disposición de grupos**, which asks the atlas frame to
 rearrange its systems by family cluster and back. The dashboard and the
 sandboxed atlas frame talk through `postMessage`: the dashboard sends
-`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset'}`
-and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
+`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset' | 'pause' | 'resume'}`
+(`pause` while another tab is shown, so the atlas stops drawing; it loads the
+first time its tab opens) and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
 `{type: 'atlas-planet-selected', key, label, slot, system: {id, title}}`. A
 selected node shows **📄 Ver en PDF** (finds the node's label, or its system's
 title, in the compiled PDF's text and jumps to that page) and **🗂️ Ver
@@ -3666,7 +3667,9 @@ console refits and repaints when the tab regains focus. Each phase card has
 `POST /api/terminal/sessions`, `GET /api/terminal/sessions/<id>` (agent and
 liveness, for a reload to reattach), `POST /api/terminal/sessions/<id>/input` (`data`, or
 `cols`/`rows` to resize), `DELETE /api/terminal/sessions/<id>` and
-`GET /api/terminal/sessions/<id>/stream` (SSE, base64 `output` frames then `exit`).
+`GET /api/terminal/sessions/<id>/stream` (SSE, base64 `output` frames then `exit`;
+it waits for output and pings every 15 s). A closed console drops its stream
+unless a phase is running, and reattaches when opened again.
 At most four live sessions; they close with the server. The console is a shell
 with your privileges, so it is only offered on a loopback bind
 (`smith ui --no-terminal` turns it off). Each server start creates a secret: the
