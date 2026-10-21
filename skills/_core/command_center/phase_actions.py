@@ -17,6 +17,7 @@ command is a ``papersmith`` subcommand the CLI accepts; tests hold both.
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 from typing import Any
 
 # The phase order of the "Fases del Pipeline" panel; ``Fase N`` is index N-1.
@@ -234,17 +235,77 @@ def primary_command(stage: str) -> str:
     return "Compilar desde el tablero (pdflatex + bibtex)" if stage == "paper" else ""
 
 
-def attach(fases: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Add each phase's actions, real skills and command to the status view."""
+# What the server reads to decide a phase, as (label, glob) pairs relative to
+# the workspace. The run tracker shows these and watches them change.
+EVIDENCE: dict[str, tuple[tuple[str, str], ...]] = {
+    "harness": (("Manifiesto del workspace", "papersmith.yaml"),
+                ("Estado del framework", ".papersmith/version")),
+    "plausibility": (("Pool de candidatos", "sota-pool/candidates.json"),
+                     ("Atlas SOTA", "sota-pool/atlas.json"),
+                     ("Constelación HTML", "sota-pool/atlas.html")),
+    "ingestion": (("Referencias ingeridas", "guidance/reference-papers/*/*.md"),
+                  ("PDFs sin ingerir", "guidance/reference-papers/*.pdf")),
+    "proposal": (("Revisiones de propuesta", "proposals/research-concept-*-r*.md"),
+                 ("Cielo de la propuesta", "proposals/*.sky.json")),
+    "poc_experiments": (("Protocolos experimentales", "experiments/*"),
+                        ("Implementaciones", "implementations/*")),
+    "scaffolding": (("Manuscrito", "paper/main.tex"),
+                    ("Contratos de sección", "sections/*.md")),
+    "declarations": (("Manuscrito (región de declaraciones)", "paper/main.tex"),),
+    "writing": (("Manuscrito", "paper/main.tex"),),
+    "figures": (("Figuras compiladas", "paper/Figures/*.pdf"),),
+    "paper": (("PDF compilado", "paper/main.pdf"),),
+    "audit": (("Veredicto de auditoría", ".papersmith/audit.json"),),
+}
+
+#: Phases that need nothing before them: the harness starts everything and the
+#: audit is transversal. Every other phase needs the one before it.
+UNGATED = frozenset({"harness", "audit"})
+MAX_MATCHES = 500
+
+
+def evidence(root: Path, stage: str) -> list[dict[str, Any]]:
+    """Each evidence item with how many files match and the newest change
+    (epoch ms), bounded so a large tree never stalls the status poll."""
+    root = Path(root)
+    items = []
+    for label, pattern in EVIDENCE.get(stage, ()):
+        count, newest = 0, 0
+        try:
+            for path in root.glob(pattern):
+                if path.name.startswith(".") or not path.resolve().is_relative_to(root.resolve()):
+                    continue
+                count += 1
+                newest = max(newest, int(path.stat().st_mtime * 1000))
+                if count >= MAX_MATCHES:
+                    break
+        except OSError:
+            pass
+        items.append({"label": label, "path": pattern, "count": count, "mtime": newest})
+    return items
+
+
+def attach(fases: list[dict[str, Any]], root: Path | None = None) -> list[dict[str, Any]]:
+    """Add each phase's actions, real skills, command, evidence and lock to
+    the status view."""
+    previous: dict[str, Any] | None = None
     for phase in fases:
-        entry = ACTIONS.get(phase.get("stage_id", ""))
-        if not entry:
-            continue
-        phase["actions"] = copy.deepcopy(entry["actions"])
-        phase["skills"] = list(entry["skills"])
-        phase["agent"] = entry["agent"]
-        phase["cli_command"] = primary_command(phase["stage_id"])
+        stage = phase.get("stage_id", "")
+        entry = ACTIONS.get(stage)
+        if entry:
+            phase["actions"] = copy.deepcopy(entry["actions"])
+            phase["skills"] = list(entry["skills"])
+            phase["agent"] = entry["agent"]
+            phase["cli_command"] = primary_command(stage)
+        if root is not None:
+            phase["evidence"] = evidence(root, stage)
+        gated = stage not in UNGATED and previous is not None
+        blocked = gated and previous.get("status") != "PASS"
+        phase["unlocked"] = not blocked
+        phase["blocked_by"] = previous.get("id") if blocked else None
+        if stage != "audit":
+            previous = phase
     return fases
 
 
-__all__ = ["ACTIONS", "STAGES", "attach", "primary_command", "stage_for"]
+__all__ = ["ACTIONS", "EVIDENCE", "STAGES", "UNGATED", "attach", "evidence", "primary_command", "stage_for"]
