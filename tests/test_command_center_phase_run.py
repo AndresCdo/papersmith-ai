@@ -1,0 +1,129 @@
+"""phase-run.js follows a phase from "Ejecutar" to the server's verdict:
+evidence that changed, the PASS that verifies it, the phases it unlocked."""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from skills._core.command_center import server
+
+STATIC = Path(server.__file__).resolve().parent / "static"
+PAGE = (STATIC / "index.html").read_text(encoding="utf-8")
+
+HARNESS = r"""
+const fs = require('fs');
+const cfg = JSON.parse(fs.readFileSync(0, 'utf8'));
+const store = {};
+const els = {};
+function el(id) { return els[id] || (els[id] = { id, dataset: {}, innerHTML: '', textContent: '', classList: { add() {}, remove() {} }, setAttribute() {} }); }
+global.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+global.document = { getElementById: (id) => els[id] || null, addEventListener() {}, createElement: () => el('toast'), body: { appendChild() {} } };
+global.window = { smithTerminalActivity: () => ({ agent: 'claude', lastOutputAt: Date.now() }) };
+const phase = (stage, id, status, unlocked, evidence) => ({ stage_id: stage, id, name: id + ' name', status, unlocked, evidence });
+eval(fs.readFileSync(process.argv[1], 'utf8'));
+const out = {};
+const before = { fases: [
+  phase('harness', 'Fase 1', 'PASS', true, []),
+  phase('plausibility', 'Fase 2', 'PENDING', true, [{ label: 'Atlas', path: 'sota-pool/atlas.json', count: 0, mtime: 0 }]),
+  phase('ingestion', 'Fase 3', 'PENDING', false, []),
+] };
+window.currentStatus = before;
+window.phaseRuns.start(before.fases[1], '/plausibility ' + cfg.idea);
+out.running = window.phaseRuns.isRunning('plausibility');
+out.trackerStart = window.phaseRuns.renderTracker(before.fases[1]);
+const middle = JSON.parse(JSON.stringify(before));
+middle.fases[1].evidence[0] = { label: 'Atlas', path: 'sota-pool/atlas.json', count: 1, mtime: 5 };
+window.currentStatus = middle;
+window.phaseRuns.onStatus(middle);
+out.trackerMiddle = window.phaseRuns.renderTracker(middle.fases[1]);
+out.stillRunning = window.phaseRuns.isRunning('plausibility');
+const after = JSON.parse(JSON.stringify(middle));
+after.fases[1].status = 'PASS';
+after.fases[2].unlocked = true;
+window.currentStatus = after;
+window.phaseRuns.onStatus(after);
+out.trackerAfter = window.phaseRuns.renderTracker(after.fases[1]);
+out.verified = !window.phaseRuns.isRunning('plausibility');
+out.glow = window.phaseRuns.justUnlocked('ingestion');
+out.badge = window.phaseRuns.cardBadge('plausibility');
+out.stored = JSON.parse(store['smith_phase_runs@local']).plausibility.unlocked;
+window.phaseRuns.dismiss('plausibility');
+out.afterDismiss = window.phaseRuns.renderTracker(after.fases[1]);
+// Re-running a phase that already passed waits for new evidence.
+window.phaseRuns.start(after.fases[1], '/plausibility again');
+window.phaseRuns.onStatus(after);
+out.rerunWaits = window.phaseRuns.isRunning('plausibility');
+const newer = JSON.parse(JSON.stringify(after));
+newer.fases[1].evidence[0].mtime = 99;
+window.phaseRuns.onStatus(newer);
+out.rerunVerified = !window.phaseRuns.isRunning('plausibility');
+// A run nothing touches for 30 min stops being followed.
+window.phaseRuns.start(after.fases[2], '/paper-ingestion x');
+const realNow = Date.now;
+Date.now = () => realNow() + 31 * 60 * 1000;
+window.phaseRuns.onStatus(after);
+out.expired = !window.phaseRuns.isRunning('ingestion');
+out.expiredBadge = window.phaseRuns.cardBadge('ingestion');
+Date.now = realNow;
+console.log(JSON.stringify(out));
+process.exit(0);
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class PhaseRunTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        done = subprocess.run(["node", "-e", HARNESS, str(STATIC / "phase-run.js")],
+                              input=json.dumps({"idea": "<img src=x onerror=alert(1)>"}),
+                              capture_output=True, text=True, cwd=tempfile.gettempdir(), timeout=60, check=True)
+        cls.out = json.loads(done.stdout)
+
+    def test_a_run_starts_with_the_command_sent_and_waits_for_evidence(self) -> None:
+        self.assertTrue(self.out["running"])
+        self.assertIn("Comando enviado", self.out["trackerStart"])
+        self.assertIn("En ejecución", self.out["trackerStart"])
+        self.assertIn("Trabajando (claude)", self.out["trackerStart"])
+
+    def test_changed_evidence_is_shown_but_does_not_verify_the_stage(self) -> None:
+        self.assertIn('class="is-new"', self.out["trackerMiddle"])
+        self.assertTrue(self.out["stillRunning"])
+        self.assertIn("Estado actual: PENDING", self.out["trackerMiddle"])
+
+    def test_the_servers_pass_verifies_and_names_the_unlocked_phase(self) -> None:
+        self.assertTrue(self.out["verified"])
+        self.assertIn("Etapa verificada en", self.out["trackerAfter"])
+        self.assertIn("<strong>Fase 3</strong>", self.out["trackerAfter"])
+        self.assertTrue(self.out["glow"])
+        self.assertIn("verificada", self.out["badge"])
+        self.assertEqual(self.out["stored"], [{"stage": "ingestion", "id": "Fase 3", "name": "Fase 3 name"}])
+
+    def test_a_rerun_of_a_passed_phase_needs_new_evidence(self) -> None:
+        self.assertTrue(self.out["rerunWaits"])
+        self.assertTrue(self.out["rerunVerified"])
+
+    def test_a_quiet_run_stops_being_followed(self) -> None:
+        self.assertTrue(self.out["expired"])
+        self.assertIn("sin cambios", self.out["expiredBadge"])
+
+    def test_the_command_is_escaped_and_a_dismissed_run_disappears(self) -> None:
+        self.assertNotIn("<img", self.out["trackerStart"])
+        self.assertEqual(self.out["afterDismiss"], "")
+
+
+class PageWiringTests(unittest.TestCase):
+    def test_the_page_feeds_every_status_to_the_tracker(self) -> None:
+        self.assertIn('<script src="./phase-run.js?v=', PAGE)
+        self.assertIn("if (window.phaseRuns) window.phaseRuns.onStatus(data);", PAGE)
+        self.assertIn('<div id="phaseRunTracker" data-stage=', PAGE)
+        self.assertIn("artifacts: (data.artifacts || []).map(a => `${a.rel_path}:${a.size_kb}`),", PAGE)
+        self.assertIn("🔒 Requiere ${escapeHtml(p.blocked_by)}", PAGE)
+
+
+if __name__ == "__main__":
+    unittest.main()

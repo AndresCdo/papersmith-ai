@@ -249,6 +249,62 @@ def _candidate_count(root: Path) -> int:
     return len(data) if isinstance(data, list) else 0
 
 
+AUDIT_TIMEOUT_SECONDS = 120
+_AUDIT_LOCK = threading.Lock()
+
+
+def _audit_verdict(root: Path) -> bool | None:
+    """True or False from the last recorded audit; None when there is none or
+    it cannot be read."""
+    try:
+        record = json.loads((root / ".papersmith" / "audit.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    ok = record.get("ok") if isinstance(record, dict) else None
+    return ok if isinstance(ok, bool) else None
+
+
+def _run_audit(root: Path) -> dict[str, Any] | None:
+    """Run `papersmith audit --check-drift` on the workspace with this
+    interpreter and record its verdict in `.papersmith/audit.json`.
+
+    One audit at a time: None means another one is still running. `ran` is
+    False when the audit could not run at all (papersmith not importable, a
+    timeout), which is not the same as an audit with findings.
+    """
+    from datetime import datetime, timezone
+    if not _AUDIT_LOCK.acquire(blocking=False):
+        return None
+    try:
+        command = [sys.executable, "-c",
+                   "import sys; from papersmith.cli import main; sys.exit(main(sys.argv[1:]))",
+                   "audit", str(root), "--check-drift"]
+        ran = True
+        try:
+            done = subprocess.run(command, cwd=str(root), capture_output=True, text=True,
+                                  timeout=AUDIT_TIMEOUT_SECONDS)
+            returncode, output = done.returncode, (done.stdout + done.stderr)
+            ran = "ModuleNotFoundError" not in output or returncode == 0
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            returncode, output, ran = -1, f"{type(exc).__name__}: {exc}", False
+        record = {"ok": ran and returncode == 0, "ran": ran, "returncode": returncode,
+                  "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                  "command": f"papersmith audit {root} --check-drift", "output": output[-4000:]}
+        folder = root / ".papersmith"
+        try:
+            folder.mkdir(exist_ok=True)
+            tmp = folder / "audit.json.tmp"
+            tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(folder / "audit.json")
+            record["written"] = True
+        except OSError as exc:
+            record["written"] = False
+            record["write_error"] = str(exc)
+        return record
+    finally:
+        _AUDIT_LOCK.release()
+
+
 def _pdf_page_count(pdf: Path) -> int:
     try:
         return len(re.findall(rb"/Type\s*/Page[^s]", pdf.read_bytes()))
@@ -461,7 +517,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 pass
 
         audit_file = root_path / ".papersmith" / "audit.json"
-        has_audit = audit_file.is_file()
+        has_audit = _audit_verdict(root_path) is True
 
         # Fase 1
         fase1_status = "PASS" if harness_ok else "PENDING"
@@ -534,7 +590,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if has_audit:
             fase11_status, fase11_prog, fase11_det = "PASS", 1.0, "Auditoría transversal ejecutada y superada"
         else:
-            fase11_status, fase11_prog, fase11_det = "PENDING", 0.0, "Auditoría transversal pendiente"
+            fase11_status, fase11_prog, fase11_det = "PENDING", 0.0, (
+                "La última auditoría falló: revisa .papersmith/audit.json"
+                if _audit_verdict(root_path) is False else "Auditoría transversal pendiente")
 
         fases = [
             {
@@ -776,7 +834,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 ]
             }
         ]
-        phase_actions.attach(fases)
+        phase_actions.attach(fases, root_path)
 
         artifacts = []
         for p in (root_path / "proposals").glob("*.md"):
@@ -819,6 +877,15 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "category": "Constelación SOTA",
                 "size_kb": round((root_path / "sota-pool" / "atlas.json").stat().st_size / 1024, 1)
             })
+        experiments_dir = root_path / "experiments"
+        if experiments_dir.is_dir():
+            for ep in sorted(experiments_dir.glob("*.md")):
+                artifacts.append({
+                    "rel_path": f"experiments/{ep.name}",
+                    "name": ep.name,
+                    "category": "Experimentos",
+                    "size_kb": round(ep.stat().st_size / 1024, 1)
+                })
         sections_dir = root_path / "sections"
         if sections_dir.is_dir():
             for sp in sorted(sections_dir.glob("*.md")):
@@ -1268,6 +1335,24 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
 
     @app.post("/api/phase/run")
     async def api_phase_run(request: Request) -> JSONResponse:
+        """Run or check one phase, then answer with that phase's verdict as the
+        status view computes it, so the dashboard can confirm the stage."""
+        response = await _phase_check(request)
+        try:
+            body = json.loads(bytes(response.body))
+            payload = await request.json()
+        except ValueError:
+            return response
+        stage = phase_actions.stage_for(str((payload or {}).get("phase_id", "")))
+        if stage:
+            fases = json.loads(bytes(api_status_adapter().body)).get("fases", [])
+            phase = next((f for f in fases if f.get("stage_id") == stage), {})
+            body["status"] = phase.get("status", "PENDING")
+            body["verified"] = body["status"] == "PASS"
+            body["evidence"] = phase.get("evidence", [])
+        return JSONResponse(body, status_code=response.status_code)
+
+    async def _phase_check(request: Request) -> JSONResponse:
         try:
             payload = await request.json()
         except Exception:
@@ -1280,7 +1365,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if stage == "paper" and not (root_path / "paper" / "main.tex").is_file():
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": "No hay paper/main.tex que compilar: ábrelo primero con /paper-writing (Fase 6).",
                 "outputs": []
             })
@@ -1295,7 +1380,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 subprocess.run(["pdflatex", "-interaction=nonstopmode", "main.tex"], cwd=p_dir, capture_output=True, env=env)
                 return JSONResponse({
                     "ok": True,
-                    "phase_id": phase_id,
+                    "phase_id": phase_id, "stage": stage,
                     "message": (f"paper/main.pdf compilado ({_pdf_page_count(root_path / 'paper' / 'main.pdf')} páginas)."
                                 if res.returncode == 0 else
                                 f"pdflatex terminó con código {res.returncode}; revisa el registro."),
@@ -1316,7 +1401,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     msg = f"Redacción: {_block_count(root_path)} bloques en paper/main.tex."
                 return JSONResponse({
                     "ok": True,
-                    "phase_id": phase_id,
+                    "phase_id": phase_id, "stage": stage,
                     "message": msg,
                     "outputs": ["paper/main.tex"]
                 })
@@ -1328,7 +1413,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             figs = [f.name for f in fig_dir.glob("*.pdf")] if fig_dir.is_dir() else []
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": f"Diagramas y figuras técnicas verificadas ({len(figs)} figuras vectoriales optimizadas).",
                 "outputs": [f"paper/Figures/{f}" for f in figs]
             })
@@ -1336,7 +1421,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         elif stage == "plausibility":
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": f"Plausibilidad: {_candidate_count(root_path)} candidatos en sota-pool/candidates.json; "
                            f"atlas {'presente' if (root_path / 'sota-pool' / 'atlas.html').is_file() else 'pendiente'}.",
                 "outputs": ["sota-pool/atlas.json", "sota-pool/atlas.html", "sota-pool/candidates.json"]
@@ -1345,7 +1430,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         elif stage == "ingestion":
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": f"Ingestión: {len(_children(root_path / 'guidance' / 'reference-papers'))} referencias ingeridas en guidance/reference-papers/.",
                 "outputs": [f"guidance/reference-papers/{name}/" for name in _children(root_path / 'guidance' / 'reference-papers')]
             })
@@ -1353,7 +1438,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         elif stage == "proposal":
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": f"Propuesta: {len(list((root_path / 'proposals').glob('research-concept-*.md')))} revisiones de propuesta en proposals/.",
                 "outputs": ["proposals/"]
             })
@@ -1361,7 +1446,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         elif stage == "scaffolding":
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": f"Andamiaje: {_block_count(root_path)} bloques canónicos en paper/main.tex.",
                 "outputs": ["paper/main.tex", "sections/"]
             })
@@ -1369,25 +1454,37 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         elif stage == "declarations":
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": "Declaraciones: registra o revisa cada una con /paper-writing mark.",
                 "outputs": ["paper/main.tex"]
             })
             
         elif stage == "audit":
+            record = await asyncio.to_thread(_run_audit, root_path)
+            if record is None:
+                message, log = "Ya hay una auditoría en curso: espera su resultado.", ""
+            else:
+                if not record["ran"]:
+                    message = "La auditoría no pudo ejecutarse (papersmith no disponible o tiempo agotado)."
+                elif record["ok"]:
+                    message = "Auditoría superada: papersmith audit --check-drift sin hallazgos."
+                else:
+                    message = f"La auditoría encontró problemas (código {record['returncode']})."
+                if not record["written"]:
+                    message += f" No se pudo escribir .papersmith/audit.json: {record['write_error']}"
+                log = record["output"][-600:]
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
-                "message": ("Auditoría registrada en .papersmith/audit.json."
-                            if (root_path / ".papersmith" / "audit.json").is_file()
-                            else "Aún no hay auditoría registrada (.papersmith/audit.json)."),
+                "phase_id": phase_id, "stage": stage,
+                "message": message,
+                "log": log,
                 "outputs": [".papersmith/audit.json"]
             })
             
         else:
             return JSONResponse({
                 "ok": True,
-                "phase_id": phase_id,
+                "phase_id": phase_id, "stage": stage,
                 "message": f"{phase_id}: se ejecuta desde su recuadro (comando del agente o panel).",
                 "outputs": []
             })

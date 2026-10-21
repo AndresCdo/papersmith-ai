@@ -45,8 +45,9 @@ the event is unusable. It is a tripwire, not a gate. See `docs/guard-hooks.md`.
 These are the eleven phases the command center (`papersmith ui`) shows under
 "Pipeline y Avance", in order. Each phase card runs its stage: a slash command
 `/<skill> <text>` typed into an agent, a `papersmith` command, or a link to the
-panel that owns the work. Every skill refuses when its input is missing, so the
-order is a recommendation and not a lock.
+panel that owns the work. The dashboard locks each phase until the one before
+it is verified from its evidence on disk, with an explicit override, and every
+skill refuses when its input is missing.
 
 1. **Harness**: `papersmith status .` and `papersmith audit . --check-drift`;
    `/upgrade-project` when the workspace runs an older release.

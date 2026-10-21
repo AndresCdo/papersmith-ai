@@ -417,7 +417,7 @@
       if (kind === 'slash' && STARTUP_QUESTIONS.test(screenText())) {
         setStatus('El agente espera una confirmación: respóndela en la terminal y vuelve a pulsar Ejecutar', 'warn');
         state.term.focus();
-        return;
+        return false;
       }
       await api(`/api/terminal/sessions/${sid}/input`, 'POST', { data: text });
       if (run) {
@@ -426,10 +426,17 @@
         }, 200);
       }
       state.term.focus();
+      return true;
     } catch (err) {
       if (!isOpen()) openCliConsole();
       setStatus(`No se pudo enviar: ${err.message}`, 'bad');
+      return false;
     }
+  }
+
+  // What the phase run tracker reads to show whether the agent is working.
+  function smithTerminalActivity() {
+    return { sessionId: state.sessionId, agent: state.agent, lastOutputAt: state.lastOutputAt };
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -469,4 +476,5 @@
   window.openCliConsole = openCliConsole;
   window.closeCliConsole = closeCliConsole;
   window.sendToCli = sendToCli;
+  window.smithTerminalActivity = smithTerminalActivity;
 })();

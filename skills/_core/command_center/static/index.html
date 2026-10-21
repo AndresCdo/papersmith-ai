@@ -13,12 +13,13 @@
   <link rel="stylesheet" href="./vendor/xterm.css">
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
-  <script src="./cli-console.js?v=0.17.2"></script>
+  <script src="./cli-console.js?v=0.18.1"></script>
   <link rel="stylesheet" href="./vendor/katex/katex.min.css">
   <script src="./vendor/katex/katex.min.js"></script>
   <script src="./math-panel.js?v=0.17.0"></script>
   <script src="./model-panel.js?v=0.17.1"></script>
-  <script src="./phase-console.js?v=0.17.2"></script>
+  <script src="./phase-console.js?v=0.18.1"></script>
+  <script src="./phase-run.js?v=0.18.1"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2461,6 +2462,33 @@
     .phase-action--redirect { cursor: pointer; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 0.75rem; }
     .phase-action--redirect span { font-size: 0.76rem; color: var(--text-dim); }
     .phase-action--redirect:hover { border-color: var(--accent); }
+    /* Phase run tracker, locks and unlock glow */
+    .run-tracker { background: var(--surface-2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 0.85rem 1rem; margin-bottom: 1.1rem; }
+    .run-tracker.is-verified { border-color: var(--ok); }
+    .run-tracker__head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; font-size: 0.88rem; }
+    .run-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .run-step { display: grid; grid-template-columns: 1.6rem 1fr; gap: 0.5rem; font-size: 0.82rem; align-items: start; }
+    .run-step__icon { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.75rem; border: 1px solid var(--border); color: var(--text-dim); }
+    .run-step--done .run-step__icon { background: var(--ok); border-color: var(--ok); color: #04130b; }
+    .run-step--run .run-step__icon { border-color: var(--accent); color: var(--accent); animation: runPulse 1.2s ease-in-out infinite; }
+    .run-step--warn .run-step__icon { border-color: var(--warn); color: var(--warn); }
+    .run-step__body { color: var(--text-muted); margin-top: 0.15rem; overflow-wrap: anywhere; }
+    .run-step__body code { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
+    .run-evidence { list-style: none; margin: 0.2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+    .run-evidence li.is-new { color: var(--ok); font-weight: 600; }
+    .run-tracker__foot { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.7rem; }
+    .run-pulse { animation: runPulse 1.2s ease-in-out infinite; }
+    @keyframes runPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+    .phase-lock { border: 1px dashed var(--warn); border-radius: var(--radius); padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-muted); }
+    .phase-lock strong { color: var(--warn); }
+    .phase-lock label { display: flex; gap: 0.4rem; align-items: center; color: var(--text); cursor: pointer; }
+    .phase-card--locked { opacity: 0.6; }
+    .phase-card__lock { font-size: 0.76rem; color: var(--warn); font-weight: 600; margin: 0.25rem 0; }
+    .phase-card--glow, .flujo-step--glow { animation: unlockGlow 1.6s ease-in-out 4; }
+    .flujo-step--locked { opacity: 0.45; }
+    @keyframes unlockGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); } 50% { box-shadow: 0 0 18px 4px rgba(74, 222, 128, 0.55); } }
+    .phase-toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 1rem); background: var(--surface-2); color: var(--text); border: 1px solid var(--ok); border-radius: 999px; padding: 0.55rem 1.1rem; font-size: 0.86rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 4000; }
+    .phase-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
   </style>
 </head>
 <body>
@@ -3879,6 +3907,11 @@
     }
 
     async function triggerRunPhase(phaseId, btnEl) {
+      // Compiling the PDF is a run of its own: track it like an agent run.
+      const runPhase = ((currentStatus && currentStatus.fases) || []).find(f => f.id === phaseId);
+      if (runPhase && runPhase.stage_id === 'paper' && btnEl && window.phaseRuns) {
+        window.phaseRuns.start(runPhase, 'pdflatex + bibtex (desde el tablero)');
+      }
       const btnLabel = btnEl ? btnEl.innerHTML : '';
       if (btnEl) {
         btnEl.disabled = true;
@@ -3898,7 +3931,10 @@
         const result = await res.json();
         if (feedbackEl) {
           if (result.ok) {
-            feedbackEl.innerHTML = `<div style="color: var(--ok); font-weight: 600; margin-bottom: 0.25rem;">✅ ${escapeHtml(result.message)}</div><div style="color: var(--text-dim); font-size: 0.75rem; font-family: var(--font-mono);">${escapeHtml(result.log || '')}</div>`;
+            const verdict = result.verified
+              ? '<div style="color: var(--ok); font-weight: 700;">💡 Etapa verificada: la evidencia en disco la cumple (PASS).</div>'
+              : `<div style="color: var(--warn); font-weight: 600;">⚫ Aún no se cumple (${escapeHtml(result.status || 'PENDING')}): falta evidencia en disco.</div>`;
+            feedbackEl.innerHTML = `${verdict}<div style="color: var(--text); margin: 0.25rem 0;">${escapeHtml(result.message)}</div><div style="color: var(--text-dim); font-size: 0.75rem; font-family: var(--font-mono); white-space: pre-wrap;">${escapeHtml(result.log || '')}</div>`;
           } else {
             feedbackEl.innerHTML = `<div style="color: var(--bad); font-weight: 600;">❌ Error: ${escapeHtml(result.error || result.message)}</div>`;
           }
@@ -3933,10 +3969,25 @@
       }, 120);
     }
 
+    // The open phase drawer's status badge follows every status poll.
+    let openPhaseStage = null;
+    function refreshDrawerStatus(data) {
+      const badge = document.getElementById('drawerStatusBadge');
+      const overlay = document.getElementById('drawerOverlay');
+      if (!badge || !openPhaseStage || !overlay || !overlay.classList.contains('active')) return;
+      const p = (data.fases || []).find(f => f.stage_id === openPhaseStage);
+      if (!p) return;
+      const lit = p.status === 'PASS';
+      const active = p.status === 'ACTIVE' || p.status === 'IN_PROGRESS';
+      badge.className = `badge badge--${lit ? 'ok' : (active ? 'info' : 'warn')}`;
+      badge.textContent = lit ? '💡 SUPERADA (ILUMINADA)' : (active ? '⚡ EN CURSO (ACTIVA)' : '⚫ PENDIENTE (SIN LUZ)');
+    }
+
     function openDrawer(phaseIndex) {
       const phases = (currentStatus && currentStatus.fases && currentStatus.fases.length > 0) ? currentStatus.fases : PHASES_INFO;
       const p = phases[phaseIndex];
       if (!p) return;
+      openPhaseStage = p.stage_id || null;
 
       const gateMatch = (currentStatus?.gates || []).find(g => g.id === p.gate || g.phase === p.id);
       const gateStatus = p.status || (gateMatch ? gateMatch.status : 'PENDING');
@@ -3973,7 +4024,7 @@
         <!-- 1. Estado y Control de Ejecución (CLI & UI) -->
         <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span class="badge badge--${badgeTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${statusIcon}${statusLabel}</span>
+            <span id="drawerStatusBadge" class="badge badge--${badgeTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${statusIcon}${statusLabel}</span>
             <span class="badge badge--info" style="font-size: 0.72rem;">🤖 Agente: ${escapeHtml(p.agent || 'papersmith-worker')}</span>
           </div>
 
@@ -3998,6 +4049,7 @@
           <div id="drawerPhaseActionFeedback" style="display: none; margin-top: 0.6rem; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 0.5rem 0.75rem; border-radius: 4px;"></div>
         </div>
 
+        <div id="phaseRunTracker" data-stage="${escapeHtml(p.stage_id || '')}">${window.phaseRuns ? window.phaseRuns.renderTracker(p) : ''}</div>
         ${actionsHtml}
 
         <!-- 2. Objetivo y Misión -->
@@ -4628,6 +4680,9 @@
         if (!res.ok) return;
         const data = await res.json();
         currentStatus = data;
+        window.currentStatus = data;
+        if (window.phaseRuns) window.phaseRuns.onStatus(data);
+        refreshDrawerStatus(data);
 
         // Carga el artefacto inicial únicamente una vez al arrancar
         syncPdfPreview((data.run_details || {}).pdf_mtime || 0);
@@ -4642,7 +4697,8 @@
           active_run: data.active_run,
           totals: data.totals,
           gates: data.gates,
-          fases: (data.fases || []).map(f => `${f.id}:${f.status}:${f.progress}`),
+          fases: (data.fases || []).map(f => `${f.id}:${f.status}:${f.progress}:${f.unlocked}:${(f.evidence || []).map(e => e.count + '@' + e.mtime).join(',')}`),
+          artifacts: (data.artifacts || []).map(a => `${a.rel_path}:${a.size_kb}`),
           sec_count: (data.sections || []).length,
           tel_count: (data.telemetria || []).length
         });
@@ -4752,7 +4808,9 @@
 
             const stepDiv = document.createElement('div');
             const stepClass = isLit ? 'flujo-step--lit' : (isActive ? 'flujo-step--active' : 'flujo-step--unlit');
-            stepDiv.className = `flujo-step ${stepClass}`;
+            const lockClass = p.unlocked === false ? ' flujo-step--locked' : '';
+            const glowClass = window.phaseRuns && window.phaseRuns.justUnlocked(p.stage_id) ? ' flujo-step--glow' : '';
+            stepDiv.className = `flujo-step ${stepClass}${lockClass}${glowClass}`;
             stepDiv.onclick = () => openDrawer(idx);
             const statusLabel = isLit ? 'SUPERADA (ILUMINADA)' : (isActive ? 'EN CURSO (ACTIVA)' : 'PENDIENTE (SIN LUZ)');
             stepDiv.title = `${p.name} · ${statusLabel}`;
@@ -4769,7 +4827,8 @@
             }
 
             const beaconIcon = isLit ? '💡' : (isActive ? '⚡' : '⚫');
-            const badgeText = isLit ? 'PASS' : (isActive ? 'EN CURSO' : 'SIN LUZ');
+            const running = window.phaseRuns && window.phaseRuns.isRunning(p.stage_id);
+            const badgeText = isLit ? 'PASS' : (running ? 'EJECUTANDO' : (isActive ? 'EN CURSO' : (p.unlocked === false ? 'BLOQUEADA' : 'SIN LUZ')));
 
             stepDiv.innerHTML = `
               ${!isLast ? `<div class="flujo-connector ${connClass}"></div>` : ''}
@@ -4796,20 +4855,25 @@
         phases.forEach((p, idx) => {
           const status = getPhaseVerdict(p);
           const isLit = (status === 'PASS');
-          const isActive = (status === 'ACTIVE' || status === 'IN_PROGRESS');
+          const runningNow = Boolean(window.phaseRuns && window.phaseRuns.isRunning(p.stage_id));
+          const isActive = (status === 'ACTIVE' || status === 'IN_PROGRESS' || (runningNow && status !== 'PASS'));
           const cardClass = isLit ? 'phase-card--lit' : (isActive ? 'phase-card--active' : 'phase-card--unlit');
           const badgeTone = isLit ? 'ok' : (isActive ? 'info' : (status === 'BLOCKED' ? 'bad' : 'warn'));
           const statusIcon = isLit ? '💡 ' : (isActive ? '⚡ ' : '⚫ ');
           const statusText = isLit ? 'PASS' : (isActive ? 'EN CURSO' : (status || 'PENDIENTE'));
 
           const card = document.createElement('div');
-          card.className = `phase-card ${cardClass}`;
+          const locked = p.unlocked === false && !isLit;
+          const glowing = window.phaseRuns && window.phaseRuns.justUnlocked(p.stage_id);
+          card.className = `phase-card ${cardClass}${locked ? ' phase-card--locked' : ''}${glowing ? ' phase-card--glow' : ''}`;
           card.onclick = () => openDrawer(idx);
           card.innerHTML = `
             <div class="phase-card__head">
-              <span class="phase-card__name">${p.name}</span>
-              <span class="badge badge--${badgeTone}">${statusIcon}${p.gate || p.id}: ${statusText}</span>
+              <span class="phase-card__name">${escapeHtml(p.name)}</span>
+              <span class="badge badge--${badgeTone}">${statusIcon}${escapeHtml(p.gate || p.id)}: ${escapeHtml(statusText)}</span>
             </div>
+            ${locked ? `<div class="phase-card__lock">🔒 Requiere ${escapeHtml(p.blocked_by)}</div>` : ''}
+            ${window.phaseRuns ? window.phaseRuns.cardBadge(p.stage_id) : ''}
             <p class="phase-card__desc">${p.desc}</p>
             <div class="phase-card__foot">
               <span>Agente: <strong>${(p.agent || 'papersmith').split('&')[0].trim()}</strong></span>
