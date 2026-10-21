@@ -36,6 +36,7 @@ global.document = {
 };
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+if (input.override) el('phaseOverride').checked = true;
 const html = window.renderPhaseActions(input.phase);
 function click(i) {
   listeners.click({ target: { closest: () => ({ dataset: { phaseAction: String(i) } }) } });
@@ -48,9 +49,9 @@ console.log(JSON.stringify({ html, calls, hints: Object.fromEntries(Object.entri
 """
 
 
-def run(phase: dict, steps: list[dict]) -> dict:
+def run(phase: dict, steps: list[dict], override: bool = False) -> dict:
     out = subprocess.run(["node", "-e", HARNESS, str(STATIC / "phase-console.js")],
-                         input=json.dumps({"phase": phase, "steps": steps}),
+                         input=json.dumps({"phase": phase, "steps": steps, "override": override}),
                          capture_output=True, text=True, cwd=tempfile.gettempdir(), check=True)
     return json.loads(out.stdout)
 
@@ -101,6 +102,16 @@ class PhaseConsoleTests(unittest.TestCase):
         html = run(hostile, [])["html"]
         self.assertNotIn("<img", html)
         self.assertNotIn("<script>", html)
+
+    def test_a_locked_phase_runs_only_with_the_override(self) -> None:
+        locked = dict(phase("plausibility"), unlocked=False, blocked_by="Fase 1")
+        idea = "One sentence here. And a second one."
+        result = run(locked, [{"i": 0, "type": idea}])
+        self.assertIn("Bloqueada: requiere Fase 1", result["html"])
+        self.assertEqual(result["calls"], [])
+        self.assertIn("primero verifica Fase 1", result["hints"]["phaseHint0"])
+        result = run(locked, [{"i": 0, "type": idea}], override=True)
+        self.assertEqual(result["calls"][0][1], "/plausibility " + idea)
 
     def test_a_phase_without_actions_renders_nothing(self) -> None:
         self.assertEqual(run({"actions": []}, [])["html"], "")

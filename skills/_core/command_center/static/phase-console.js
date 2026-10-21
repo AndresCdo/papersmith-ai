@@ -18,6 +18,7 @@
   })[c]);
 
   let current = [];
+  let currentPhase = null;
 
   // Sentences end in . ! or ? followed by a space or the end of the text.
   function phaseSentenceCount(text) {
@@ -62,14 +63,40 @@
 
   function renderPhaseActions(phase) {
     current = Array.isArray(phase && phase.actions) ? phase.actions : [];
+    currentPhase = phase || null;
     if (!current.length) return '';
+    const locked = phase && phase.unlocked === false;
+    const lock = locked ? `<div class="phase-lock">
+        <strong>🔒 Bloqueada: requiere ${esc(phase.blocked_by)}</strong>
+        <span>Se habilita cuando ${esc(phase.blocked_by)} quede verificada. Cada skill se niega si le falta su entrada, así que puedes adelantarla bajo tu responsabilidad.</span>
+        <label><input type="checkbox" id="phaseOverride"> Ejecutar sin el requisito</label>
+      </div>` : '';
     const cards = current.map((a, i) => (
       a.kind === 'prompt' ? promptCard(a, i) : a.kind === 'command' ? commandCard(a, i) : redirectCard(a, i)
     )).join('');
     return `<div class="phase-actions">
         <h4 class="phase-actions__title">⚙️ Ejecutar esta fase</h4>
+        ${lock}
         ${cards}
       </div>`;
+  }
+
+  // A locked phase runs only with the explicit override.
+  function blocked(hint) {
+    if (!currentPhase || currentPhase.unlocked !== false) return false;
+    if (document.getElementById('phaseOverride')?.checked) return false;
+    if (hint) { hint.textContent = `Bloqueada: primero verifica ${currentPhase.blocked_by}, o marca «Ejecutar sin el requisito».`; hint.classList.add('is-error'); }
+    return true;
+  }
+
+  async function send(command, run, kind) {
+    const sent = await window.sendToCli?.(command, run, { kind });
+    if (sent && run && currentPhase && window.phaseRuns) {
+      window.phaseRuns.start(currentPhase, command);
+      const host = document.getElementById('phaseRunTracker');
+      if (host) { host.dataset.stage = currentPhase.stage_id; host.innerHTML = window.phaseRuns.renderTracker(currentPhase); }
+    }
+    return sent;
   }
 
   function runPrompt(a, i) {
@@ -77,13 +104,14 @@
     const hint = document.getElementById(`phaseHint${i}`);
     const text = String(input ? input.value : '').replace(/\s+/g, ' ').trim();
     const fail = (msg) => { if (hint) { hint.textContent = msg; hint.classList.add('is-error'); } input?.focus(); };
+    if (blocked(hint)) return;
     if (!text && !a.optional) return fail('Escribe lo que pide la guía antes de ejecutar.');
     if (a.min_sentences && phaseSentenceCount(text) < a.min_sentences) {
       return fail(`La guía pide al menos ${a.min_sentences} oraciones; llevas ${phaseSentenceCount(text)}.`);
     }
     const command = [a.slash, `${a.prefix || ''}${text}`.trim()].filter(Boolean).join(' ');
     if (hint) { hint.textContent = `Enviado: ${command.slice(0, 80)}${command.length > 80 ? '…' : ''}`; hint.classList.remove('is-error'); }
-    window.sendToCli?.(command, true, { kind: 'slash' });
+    send(command, true, 'slash');
   }
 
   function redirect(a) {
@@ -105,7 +133,8 @@
     if (a.kind === 'prompt') runPrompt(a, i);
     else if (a.kind === 'command') {
       // A command with a <placeholder> is typed, not run: the operator fills it.
-      window.sendToCli?.(a.command, !/<[^>]+>/.test(a.command), { kind: 'shell' });
+      if (blocked(null)) return;
+      send(a.command, !/<[^>]+>/.test(a.command), 'shell');
     } else redirect(a);
   });
 
