@@ -3969,10 +3969,25 @@
       }, 120);
     }
 
+    // The open phase drawer's status badge follows every status poll.
+    let openPhaseStage = null;
+    function refreshDrawerStatus(data) {
+      const badge = document.getElementById('drawerStatusBadge');
+      const overlay = document.getElementById('drawerOverlay');
+      if (!badge || !openPhaseStage || !overlay || !overlay.classList.contains('active')) return;
+      const p = (data.fases || []).find(f => f.stage_id === openPhaseStage);
+      if (!p) return;
+      const lit = p.status === 'PASS';
+      const active = p.status === 'ACTIVE' || p.status === 'IN_PROGRESS';
+      badge.className = `badge badge--${lit ? 'ok' : (active ? 'info' : 'warn')}`;
+      badge.textContent = lit ? '💡 SUPERADA (ILUMINADA)' : (active ? '⚡ EN CURSO (ACTIVA)' : '⚫ PENDIENTE (SIN LUZ)');
+    }
+
     function openDrawer(phaseIndex) {
       const phases = (currentStatus && currentStatus.fases && currentStatus.fases.length > 0) ? currentStatus.fases : PHASES_INFO;
       const p = phases[phaseIndex];
       if (!p) return;
+      openPhaseStage = p.stage_id || null;
 
       const gateMatch = (currentStatus?.gates || []).find(g => g.id === p.gate || g.phase === p.id);
       const gateStatus = p.status || (gateMatch ? gateMatch.status : 'PENDING');
@@ -4009,7 +4024,7 @@
         <!-- 1. Estado y Control de Ejecución (CLI & UI) -->
         <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span class="badge badge--${badgeTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${statusIcon}${statusLabel}</span>
+            <span id="drawerStatusBadge" class="badge badge--${badgeTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${statusIcon}${statusLabel}</span>
             <span class="badge badge--info" style="font-size: 0.72rem;">🤖 Agente: ${escapeHtml(p.agent || 'papersmith-worker')}</span>
           </div>
 
@@ -4667,6 +4682,7 @@
         currentStatus = data;
         window.currentStatus = data;
         if (window.phaseRuns) window.phaseRuns.onStatus(data);
+        refreshDrawerStatus(data);
 
         // Carga el artefacto inicial únicamente una vez al arrancar
         syncPdfPreview((data.run_details || {}).pdf_mtime || 0);
@@ -4839,7 +4855,8 @@
         phases.forEach((p, idx) => {
           const status = getPhaseVerdict(p);
           const isLit = (status === 'PASS');
-          const isActive = (status === 'ACTIVE' || status === 'IN_PROGRESS');
+          const runningNow = Boolean(window.phaseRuns && window.phaseRuns.isRunning(p.stage_id));
+          const isActive = (status === 'ACTIVE' || status === 'IN_PROGRESS' || (runningNow && status !== 'PASS'));
           const cardClass = isLit ? 'phase-card--lit' : (isActive ? 'phase-card--active' : 'phase-card--unlit');
           const badgeTone = isLit ? 'ok' : (isActive ? 'info' : (status === 'BLOCKED' ? 'bad' : 'warn'));
           const statusIcon = isLit ? '💡 ' : (isActive ? '⚡ ' : '⚫ ');

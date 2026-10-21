@@ -11,6 +11,31 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **Live run tracker for pipeline phases.** "Ejecutar" opens a tracker in the
+  phase drawer and marks the card as running. It follows the run through five
+  steps: command sent, agent working (the terminal's output), the phase's
+  evidence files appearing or changing, the server's verdict, and the phases the
+  verdict unlocked. It polls every 3 s while a run is open and shows a notice
+  when a phase is verified.
+- **Evidence and prerequisites per phase.** `/api/status` lists, for each phase,
+  the files it is judged by (count and last change), whether it is unlocked, and
+  which phase blocks it. A phase is locked until the one before it passes (Fase
+  1 and the transversal Fase 11 are never locked). A locked phase can still be
+  run with an explicit override, since each skill still refuses missing input.
+- `POST /api/phase/run` answers with the phase's verdict (`status`, `verified`,
+  `evidence`).
+
+### Fixed
+
+- **Fase 11 can pass.** Verifying the audit phase runs `papersmith audit
+  --check-drift` and records the verdict in `.papersmith/audit.json`. The phase
+  passes only on a clean audit; nothing wrote that file before.
+- The artifacts list refreshes when files change, and lists `experiments/*.md`.
+
 ## 0.18.0
 
 ### Added

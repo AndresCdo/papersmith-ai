@@ -161,7 +161,8 @@
         </div>
         <ol class="run-steps">
           ${step('done', 'Comando enviado', `<code>${esc(run.command)}</code>`)}
-          ${step(verified ? 'done' : term.state, 'Agente trabajando', term.text)}
+          ${step(verified ? 'done' : term.state, 'Agente trabajando',
+              verified && term.state === 'wait' ? 'La etapa se completó.' : term.text)}
           ${step(run.changed.length ? 'done' : (verified ? 'done' : 'wait'), 'Artefactos de la etapa', `<ul class="run-evidence">${evidence}</ul>`)}
           ${step(verified ? 'done' : (quiet ? 'warn' : 'wait'), 'Etapa verificada',
               verified ? 'El servidor confirmó la evidencia en disco (PASS).'

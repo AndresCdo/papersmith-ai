@@ -14,9 +14,9 @@ Branch: `feat/phase-run-tracker` · Delivery: ask-on-risk · Runners: `.venv/bin
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S2, S3 (server: evidence, prerequisites, audit verdict) | inline | done (RED 16 → GREEN 6 tests) | pending-commit |
-| T2 | S1, S3, S4 (run tracker UI, locks, refresh) | inline | pending | |
-| T3 | all (live check in a scratch workspace, kit, docs) | inline | pending | |
+| T1 | S2, S3 (server: evidence, prerequisites, audit verdict) | inline | done (RED 16 → GREEN 6 tests) | `e2aedd3b` |
+| T2 | S1, S3, S4 (run tracker UI, locks, refresh) | inline | done (node harness tests: tracker, locks, override) | `d2ab2d04` + polish |
+| T3 | all (live check in a scratch workspace, kit, docs) | inline | done (live: Fase 2 tracked to PASS, Fase 3 unlocked, notice shown) | this commit |
 
 ## Log
 
@@ -28,3 +28,4 @@ Branch: `feat/phase-run-tracker` · Delivery: ask-on-risk · Runners: `.venv/bin
   - The status signature in `index.html` ignores artifacts, so the artifacts list does not refresh.
   - "Ejecutar" sends the slash command and gives no follow-up.
 - **L3** Decision: prerequisites are linear (Fase N requires Fase N-1), except Fase 1 and the transversal Fase 11, which need nothing. Skills keep refusing on missing input, so the order stays a recommendation. A locked phase can still be run with an explicit "ejecutar sin el requisito" override.
+- **L4** (2026-10-20) Live check. In a scratch workspace from `smith init`, a tracked Fase 2 run showed "Comando enviado". It then marked `sota-pool/candidates.json` as new once that file was written (status ACTIVE). Once `sota-pool/atlas.json` was written, it showed "Etapa verificada" (PASS), named Fase 3 under "Etapas siguientes" and raised the notice "Fase 2 verificada · habilitada: Fase 3". The cards show "🔒 Requiere Fase N" for the locked phases.

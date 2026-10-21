@@ -106,7 +106,10 @@ a text box with the stage's rules as a guide that sends `/<skill> <text>` to an
 agent in the support terminal (for `/plausibility`, the idea in at least two
 sentences), the real `papersmith` command for the phase, or a link to the panel
 that owns the work: the concept map, the math tutor, the PoC board, the
-sections, the PDF preview or the gates. The same eleven phases are written into
+sections, the PDF preview or the gates. After "Ejecutar", the drawer tracks the run
+step by step until the server finds the phase's evidence on disk and marks it
+verified; the next phase then unlocks and lights up. Each phase is locked until
+the one before it passes (override available). The same eleven phases are written into
 every harness entrypoint (`CLAUDE.md`, `OPENCODE.md`, `.pi/APPEND_SYSTEM.md`,
 `.agents/AGENTS.md`) under "Paper construction flow".
 
