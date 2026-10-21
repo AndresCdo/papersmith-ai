@@ -38,6 +38,10 @@ number is `0`, breaking changes can still arrive without a major bump.
 - **"Ejecutar" in a phase drawer did nothing.** The drawer stops click
   propagation, so the phase console's document listener never received the
   click. The phase console and the run tracker now listen in the capture phase.
+- When the agent opens with a startup question, the phase drawer now says
+  which one. For Claude's folder-trust prompt it tells the operator to choose
+  "Yes, I trust this folder" in the terminal and run again. The dashboard never
+  answers that prompt itself.
 - **A refused or stalled phase run is visible.** A long idea written as one
   run-on sentence (commas, no full stops) counted as one sentence and was refused
   with only a small grey hint, so nothing ran and no tracker appeared. Now a long

@@ -70,6 +70,7 @@ eval(fs.readFileSync(process.argv[1], 'utf8'));
   for (const s of cfg.sends) {
     await window.sendToCli(s.text, s.run, s.kind ? { kind: s.kind } : undefined);
     log.push(['status', el('terminalStatusText').textContent]);
+    log.push(['refusal', window.smithTerminalActivity().refusal]);
   }
   await new Promise((r) => setTimeout(r, 300));
   console.log(JSON.stringify(log));
@@ -120,6 +121,7 @@ class CliRoutingTests(unittest.TestCase):
                   sends=[{"text": "/plausibility idea", "run": True, "kind": "slash"}])
         self.assertEqual(events(log, "input"), [])
         self.assertIn("espera una confirmación", events(log, "status")[-1][0])
+        self.assertIn(["refusal", "trust"], [e for e in log if e[0] == "refusal"])
 
     def test_without_a_kind_the_current_agent_is_kept(self) -> None:
         log = run(agent="shell", available=["claude", "shell"], sends=[{"text": "ls", "run": True}])

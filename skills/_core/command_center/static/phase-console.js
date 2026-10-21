@@ -124,7 +124,12 @@
         if (host.scrollIntoView) host.scrollIntoView({ block: 'start', behavior: 'smooth' });
       }
     } else if (sent === false && i !== undefined && i !== null) {
-      showError(i, 'No se pudo enviar a la terminal: revisa el mensaje en la ventana del CLI (abajo a la derecha).');
+      const why = (window.smithTerminalActivity?.() || {}).refusal || '';
+      showError(i, why === 'trust'
+        ? 'El agente pregunta si confías en esta carpeta. En la terminal (abajo a la derecha) elige «Yes, I trust this folder» y pulsa Ejecutar de nuevo.'
+        : why === 'question'
+          ? 'El agente espera una confirmación en la terminal (abajo a la derecha): respóndela y pulsa Ejecutar de nuevo.'
+          : `No se pudo enviar a la terminal${why ? `: ${why}` : ''}. Revisa la ventana del CLI (abajo a la derecha).`);
     }
     return sent;
   }

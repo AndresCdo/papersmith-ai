@@ -31,6 +31,7 @@
     flushTimer: null,
     lastOutputAt: 0,
     startedAt: 0,
+    refusal: '',       // why the last sendToCli did not send, for the caller
   };
 
   const $ = (id) => document.getElementById(id);
@@ -414,7 +415,9 @@
       const fresh = switched || !state.sessionId;
       const sid = await start();
       if (fresh && state.agent !== 'shell') await settle(12000);
+      state.refusal = '';
       if (kind === 'slash' && STARTUP_QUESTIONS.test(screenText())) {
+        state.refusal = /trust/i.test(screenText()) ? 'trust' : 'question';
         setStatus('El agente espera una confirmación: respóndela en la terminal y vuelve a pulsar Ejecutar', 'warn');
         state.term.focus();
         return false;
@@ -428,6 +431,7 @@
       state.term.focus();
       return true;
     } catch (err) {
+      state.refusal = err.message;
       if (!isOpen()) openCliConsole();
       setStatus(`No se pudo enviar: ${err.message}`, 'bad');
       return false;
@@ -436,7 +440,8 @@
 
   // What the phase run tracker reads to show whether the agent is working.
   function smithTerminalActivity() {
-    return { sessionId: state.sessionId, agent: state.agent, lastOutputAt: state.lastOutputAt };
+    return { sessionId: state.sessionId, agent: state.agent, lastOutputAt: state.lastOutputAt,
+             refusal: state.refusal };
   }
 
   document.addEventListener('DOMContentLoaded', () => {
