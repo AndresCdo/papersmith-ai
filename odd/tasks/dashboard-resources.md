@@ -21,7 +21,7 @@ Branch: `perf/dashboard-resources` · Delivery: ask-on-risk · Runners: `.venv/b
 | T3 | S3 | inline | done (RED 1 → GREEN) | see L6 |
 | T4 | S4 | inline | done (RED 2 → GREEN; live check) | see L7 |
 | T5 | S5 (native PDF frame only) | inline | done (RED 1 → GREEN; live check) | see L8 |
-| T6 | S6 | inline | pending | |
+| T6 | S6 | inline | done (RED 1 → GREEN) | see L9 |
 
 ## Log
 
@@ -37,3 +37,4 @@ Branch: `perf/dashboard-resources` · Delivery: ask-on-risk · Runners: `.venv/b
 - **L6** (2026-10-21) T3: `detachIfIdle` closes the EventSource only when the console is hidden and `phaseRuns.anyRunning()` is false. It runs on close, and on `visibilitychange` to hidden (this covers a run that ends after the console was closed). `openCliConsole` reattaches and replays once. The CLI, run and panel harnesses pass (27). Script version bumped to cli-console v0.18.8.
 - **L7** (2026-10-21) T4: the first design, where the viewer checks `window.frameElement`, failed the live check. The atlas is served in a CSP `sandbox allow-scripts` frame with an opaque origin, so it cannot see its frame. It was replaced by `atlas-command` `pause`/`resume`, which the dashboard posts on every tab change and on iframe load while off-tab. The iframe starts at `about:blank` and loads on the first visit to the atlas tab. The live check also caught a double loop on repeated `resume`, now fixed by claiming `looping` when the loop is scheduled. Measured on the scratch :8094 (moneeg atlas, 19 systems): about 115 renders/s running, 0 while paused, a single loop after a triple resume, and no `/api/atlas/view` fetch at page load. Existing atlases pick up the change only when they are regenerated (`Regenerar grafo`).
 - **L8** (2026-10-21) T5: the native PDF frame starts at `about:blank`. `showNativePdfFallback()` loads `/api/pdf` only when PDF.js fails, and the toggle keeps its own load. Live check on :8094: no `/api/pdf` fetch at load. The libraries are not deferred: they are local cached files, and inline code uses them while the page loads (`pdfjsLib.GlobalWorkerOptions` at top level, `ensureTerm` is synchronous). Lazy loading them would need a rework of those dependencies for a one-time parse cost, so it is left out.
+- **L9** (2026-10-21) T6: `renderDock` keeps the markup without times as `dataset.shape`. When a tick leaves the shape unchanged, it writes only the `[data-run-time]` texts, even while the pointer is over the dock, since no buttons are swapped. A state change still rebuilds the dock and keeps the hover guard. The test stubs in the old harnesses gained `querySelectorAll`. The run, panel, CLI and dock harnesses pass (29). Script version bumped to phase-run v0.18.8.

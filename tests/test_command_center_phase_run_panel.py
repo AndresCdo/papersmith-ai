@@ -24,7 +24,7 @@ const els = {};
 const calls = [];
 function el(id) {
   return els[id] || (els[id] = { id, dataset: {}, innerHTML: '', textContent: '', hidden: false, style: {},
-    offsetHeight: 40, classList: { add() {}, remove() {} }, setAttribute() {}, matches: () => false });
+    offsetHeight: 40, classList: { add() {}, remove() {} }, setAttribute() {}, matches: () => false, querySelectorAll: () => [] });
 }
 global.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
 let clickHandler = null;
