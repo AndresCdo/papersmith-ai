@@ -20,14 +20,16 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import copy
 import functools
 import importlib.util
 import json
 import re
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 #: Sections a paper always declares, in rendering order.
 SECTION_ORDER = (
@@ -211,8 +213,46 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+#: Parsed results keyed by (kind, path, extra); each entry carries the file's
+#: stat signature, so a saved file is parsed again on the next read. The
+#: dashboard polls the state every few seconds and most inputs never change.
+_FILE_MEMO: dict[tuple[str, str, Any], tuple[tuple[int, int, int], Any]] = {}
+_FILE_MEMO_LOCK = threading.Lock()
+
+
+def clear_file_memo() -> None:
+    with _FILE_MEMO_LOCK:
+        _FILE_MEMO.clear()
+
+
+def memo_by_file(kind: str, path: Path, compute: Callable[[], Any], extra: Any = None) -> Any:
+    """``compute()`` for ``path``, reused while its mtime, size and inode hold.
+
+    A missing or unreadable file is never remembered. Callers get a deep copy,
+    so mutating a result cannot change what the next caller sees.
+    """
+    try:
+        stat = path.stat()
+    except OSError:
+        return compute()
+    signature = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    key = (kind, str(path), extra)
+    with _FILE_MEMO_LOCK:
+        hit = _FILE_MEMO.get(key)
+    if hit is not None and hit[0] == signature:
+        return copy.deepcopy(hit[1])
+    value = compute()
+    with _FILE_MEMO_LOCK:
+        _FILE_MEMO[key] = (signature, value)
+    return copy.deepcopy(value)
+
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     """Parse a YAML mapping, tolerating a missing parser or a damaged file."""
+    return memo_by_file("yaml", path, lambda: _parse_yaml(path))
+
+
+def _parse_yaml(path: Path) -> dict[str, Any]:
     text = _read_text(path)
     if text is None:
         return {}
@@ -877,6 +917,10 @@ def _module_string_constants(script: Path, names: tuple[str, ...]) -> dict[str, 
     error message is not a declaration, and a scanner that could not tell them
     apart would pick up whichever it met first.
     """
+    return memo_by_file("constants", script, lambda: _parse_string_constants(script, names), names)
+
+
+def _parse_string_constants(script: Path, names: tuple[str, ...]) -> dict[str, str]:
     try:
         tree = ast.parse(script.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError, OSError):
