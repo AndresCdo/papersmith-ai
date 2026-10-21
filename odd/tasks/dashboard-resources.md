@@ -52,3 +52,10 @@ Branch: `perf/dashboard-resources` · Delivery: ask-on-risk · Runners: `.venv/b
   - npm: 784/784 passed.
   - `/api/status` on QMLEEG under the same load: 23–25 ms with the change, 70–76 ms without.
   - Not merged or pushed; that is the user's decision.
+- **L12** (2026-10-21) Second review:
+  - At the user's request, the whole range was tried again and refused again (`lens_context_budget_exceeded`).
+  - The range after the atlas commit (fc19c4b1..6cfb1462: T5, T6, advisory fixes) was reviewed with the resilience and reliability lenses, approved and acknowledged, lineage `review-66241b76a0fcb7a3`.
+  - Two informational suggestions are left as follow-ups:
+    - Reset `dock.dataset.shape` if anything else ever rewrites the dock.
+    - The close-timing test's 0.5 s bound could flake on a loaded runner.
+  - Only the atlas bundle commit (fc19c4b1) has no native review. It is covered by the verifier and the live check.
