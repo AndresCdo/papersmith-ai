@@ -19,7 +19,7 @@ Assumptions: existing workspaces that set `engine: marker` keep Marker (their st
 - T3 S2 inline — per-page content-hash cache with verification. Status: done
 - T4 S3 inline — JSON sidecar + pdf_fragment.py + MCP tool papersmith.ingest_fragment. Status: done (surface 'skill'; 4 MCP integration tests)
 - T5 S4 inline — installer (setup_env.py, requirements, setup.sh), papersmith.yaml + template, CI note, SKILL.md, README, CHANGELOG, license table. Risk item 5. Status: done (harness projection resynced)
-- T6 S1-S4 delegated (verification trigger: installer/dependency change) — independent verifier + real-PDF timings. Status: pending
+- T6 S1-S4 delegated (verification trigger: installer/dependency change) — independent verifier + real-PDF timings. Status: done (S1-S4 PASS, no blockers; advisories A1, A2, A4, A5 fixed in one correction batch with RED-proven tests; A3 model LaTeX spacing and A6 thin Marker sidecar left as advisories)
 
 ## Log
 
@@ -31,3 +31,5 @@ Assumptions: existing workspaces that set `engine: marker` keep Marker (their st
 - L6 Marker baseline measured (fast mode, warm): 6.8 s Attention, 28.2 s VAE. First auto run was slower (46 s / 34 s); profiling showed TableFormer at 90 % of Docling time. Fixes: display-equation line detection instead of glyph counts, citation brackets excluded from table rows, TableFormer FAST mode and only on runs with table cues -> 21.5 s / 28.6 s. Display equations as LaTeX: 6 / 30 (Marker 1 / 23). Cached re-ingest 0.2 s.
 - L7 RapidOCR needs a backend: torch (already installed) instead of adding onnxruntime; language 'en' (default is Chinese). Scanned 2-page PDF read correctly.
 - L8 Assumption kept: PyMuPDF removed from installer/requirements (no import anywhere); Marker kept as opt-in engine with a license notice; existing workspaces' engine: marker is honored, not rewritten.
+- L9 Verifier (independent): S1-S4 PASS, 169 tests, CLI end to end in a scratch workspace, cache tamper detection, licenses from installed metadata, strip_references and --list identical to baseline 5a085d51. Advisory A1 (a lone recomputed Docling page differs from its run) reproduced and fixed: heavy keys carry the run and a miss reconverts the run; real VAE re-check after deleting page 5's entry -> pages 3-5 reconverted, .md identical.
+- L10 Pre-existing failures (also on main, worktree check): test_command_center_paper_preview case test (macOS case-insensitive FS), test_version_sources release hygiene (13 shipped files changed since v0.18.0), kaggle vocabulary subtests; test_command_center_smoke needs fastapi in .venv.
