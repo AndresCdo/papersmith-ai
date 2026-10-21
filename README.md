@@ -109,7 +109,11 @@ that owns the work: the concept map, the math tutor, the PoC board, the
 sections, the PDF preview or the gates. After "Ejecutar", the drawer tracks the run
 step by step until the server finds the phase's evidence on disk and marks it
 verified; the next phase then unlocks and lights up. Each phase is locked until
-the one before it passes (override available). The same eleven phases are written into
+the one before it passes (override available). A running phase also shows in a
+dock at the bottom left on every tab. A click opens its tracking panel in place, with
+the checkpoints, the agent's terminal and **⏹ Detener proceso**, which interrupts the
+agent's turn and keeps its session. Closing the CLI, changing tabs or reloading the
+page never ends the session of a running phase: a reload reattaches to it. The same eleven phases are written into
 every harness entrypoint (`CLAUDE.md`, `OPENCODE.md`, `.pi/APPEND_SYSTEM.md`,
 `.agents/AGENTS.md`) under "Paper construction flow".
 
@@ -3659,7 +3663,8 @@ console refits and repaints when the tab regains focus. Each phase card has
 **⌨️ Enviar a CLI**, which types that phase's command and waits for your Enter;
 **▶ Ejecutar** keeps its own path. Routes: `GET /api/terminal/agents`,
 `GET /api/terminal/tools`, `POST /api/terminal/launch-external`,
-`POST /api/terminal/sessions`, `POST /api/terminal/sessions/<id>/input` (`data`, or
+`POST /api/terminal/sessions`, `GET /api/terminal/sessions/<id>` (agent and
+liveness, for a reload to reattach), `POST /api/terminal/sessions/<id>/input` (`data`, or
 `cols`/`rows` to resize), `DELETE /api/terminal/sessions/<id>` and
 `GET /api/terminal/sessions/<id>/stream` (SSE, base64 `output` frames then `exit`).
 At most four live sessions; they close with the server. The console is a shell

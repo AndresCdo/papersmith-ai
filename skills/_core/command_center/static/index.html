@@ -13,13 +13,13 @@
   <link rel="stylesheet" href="./vendor/xterm.css">
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
-  <script src="./cli-console.js?v=0.18.6"></script>
+  <script src="./cli-console.js?v=0.18.7"></script>
   <link rel="stylesheet" href="./vendor/katex/katex.min.css">
   <script src="./vendor/katex/katex.min.js"></script>
   <script src="./math-panel.js?v=0.17.0"></script>
   <script src="./model-panel.js?v=0.17.1"></script>
   <script src="./phase-console.js?v=0.18.6"></script>
-  <script src="./phase-run.js?v=0.18.4"></script>
+  <script src="./phase-run.js?v=0.18.7"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2476,7 +2476,7 @@
     .run-step__body code { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
     .run-evidence { list-style: none; margin: 0.2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
     .run-evidence li.is-new { color: var(--ok); font-weight: 600; }
-    .run-tracker__foot { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.7rem; }
+    .run-tracker__foot { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; margin-top: 0.7rem; }
     .run-pulse { animation: runPulse 1.2s ease-in-out infinite; }
     @keyframes runPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
     .phase-lock { border: 1px dashed var(--warn); border-radius: var(--radius); padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-muted); }
@@ -2503,6 +2503,12 @@
     .run-dock__steps { display: inline-flex; gap: 4px; }
     .run-dock__steps i { width: 18px; height: 5px; border-radius: 3px; background: var(--border); }
     .run-dock__steps i.on { background: var(--ok); }
+    .run-panel { position: fixed; left: 16px; bottom: 96px; z-index: 99991; width: min(440px, calc(100vw - 32px)); max-height: min(70vh, 640px); overflow-y: auto; border-radius: var(--radius); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); }
+    .run-panel[hidden] { display: none; }
+    .run-panel .run-tracker { margin-bottom: 0; padding-right: 2.2rem; }
+    .run-panel .run-tracker__foot { justify-content: flex-start; }
+    .run-panel__close { position: absolute; top: 0.55rem; right: 0.6rem; background: transparent; border: 0; color: var(--text-muted, var(--text)); font-size: 1rem; cursor: pointer; }
+    .btn--danger { border-color: var(--bad, #f87171); color: var(--bad, #f87171); }
   </style>
 </head>
 <body>
