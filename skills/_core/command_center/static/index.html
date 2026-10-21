@@ -13,13 +13,13 @@
   <link rel="stylesheet" href="./vendor/xterm.css">
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
-  <script src="./cli-console.js?v=0.18.7"></script>
+  <script src="./cli-console.js?v=0.18.8"></script>
   <link rel="stylesheet" href="./vendor/katex/katex.min.css">
   <script src="./vendor/katex/katex.min.js"></script>
   <script src="./math-panel.js?v=0.17.0"></script>
   <script src="./model-panel.js?v=0.17.1"></script>
   <script src="./phase-console.js?v=0.18.6"></script>
-  <script src="./phase-run.js?v=0.18.7"></script>
+  <script src="./phase-run.js?v=0.18.8"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2915,7 +2915,7 @@
 
         <!-- Vista 1: Iframe Constelación 3D Solar Atlas -->
         <div id="atlas3dContainer" style="display: block;">
-          <iframe id="graphIframe" class="iframe-viewer" src="/api/atlas/view"></iframe>
+          <iframe id="graphIframe" class="iframe-viewer" src="about:blank" onload="if (this.getAttribute('src') !== 'about:blank' &amp;&amp; activeTab !== 'atlas') postToGraph({ type: 'atlas-command', command: 'pause' })"></iframe>
         </div>
 
         <!-- Vista 2: Matriz de Candidatos SOTA (Visualización Tipo Tabla Amigable) -->
@@ -3073,7 +3073,7 @@
             <div id="pdfPagesStack" class="pdf-pages-stack">
               <!-- Renderizado continuo vertical multi-página -->
             </div>
-            <iframe id="pdfNativeIframe" class="iframe-viewer" src="/api/pdf" style="display: none; height: 850px; width: 100%;"></iframe>
+            <iframe id="pdfNativeIframe" class="iframe-viewer" src="about:blank" style="display: none; height: 850px; width: 100%;"></iframe>
           </div>
         </div>
 
@@ -3440,6 +3440,14 @@
 
       if (tabId === 'preview') {
         ensurePdfLoaded();
+      }
+      // The 3D views load the first time their tab is shown, not with the page.
+      if (tabId === 'atlas' && graphFramePath() === 'blank') {
+        switchGraph(currentGraphKind);
+      }
+      // The atlas stops drawing while its tab is not shown.
+      if (graphFramePath() !== 'blank') {
+        postToGraph({ type: 'atlas-command', command: tabId === 'atlas' ? 'resume' : 'pause' });
       }
       if (tabId === 'modelo') {
         refreshModelData();
@@ -5021,6 +5029,16 @@
 
     // One load in flight at a time: tab switches and cross-panel jumps share it.
     let pdfLoadPromise = null;
+    // The browser's own viewer, when PDF.js could not open the document. Its
+    // frame starts blank so the page does not fetch the PDF until it is shown.
+    function showNativePdfFallback() {
+      const stack = document.getElementById('pdfPagesStack');
+      if (stack) stack.style.display = 'none';
+      const iframe = document.getElementById('pdfNativeIframe');
+      iframe.style.display = 'block';
+      if (iframe.getAttribute('src') === 'about:blank') iframe.src = `/api/pdf?t=${Date.now()}`;
+    }
+
     function ensurePdfLoaded() {
       if (pdfDoc) return Promise.resolve(true);
       if (!pdfLoadPromise) {
@@ -5130,9 +5148,7 @@
           renderVisiblePdfPages();
           return false;
         }
-        const stack = document.getElementById('pdfPagesStack');
-        if (stack) stack.style.display = 'none';
-        document.getElementById('pdfNativeIframe').style.display = 'block';
+        showNativePdfFallback();
         return false;
       } finally {
         if (spinner) spinner.style.display = 'none';

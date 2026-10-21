@@ -365,6 +365,8 @@
     win.classList.add('is-open');
     win.setAttribute('aria-hidden', 'false');
     $('smithAssistantFab')?.classList.add('is-active');
+    // A session detached while hidden is streamed again (and replayed once).
+    if (state.sessionId && !state.source && ensureTerm()) attach(state.sessionId, true);
     loadInfo().then((info) => {
       if (!ensureTerm()) return;
       setTimeout(() => {
@@ -375,6 +377,20 @@
     });
   }
 
+  function phaseRunLive() {
+    return Boolean(window.phaseRuns && typeof window.phaseRuns.anyRunning === 'function'
+      && window.phaseRuns.anyRunning());
+  }
+
+  // Stops streaming a hidden session nobody follows; the session keeps
+  // running on the server. While a phase runs the stream stays open, because
+  // the run tracker reads the agent's activity from it.
+  function detachIfIdle() {
+    if (!state.source || isOpen() || phaseRunLive()) return;
+    state.source.close();
+    state.source = null;
+  }
+
   // Hides the window only: the session keeps running behind the FAB.
   function closeCliConsole() {
     const win = $('smithTerminalWindow');
@@ -382,6 +398,7 @@
     win.classList.remove('is-open');
     win.setAttribute('aria-hidden', 'true');
     $('smithAssistantFab')?.classList.remove('is-active');
+    detachIfIdle();
   }
 
   function toggleSmithTerminal() {
@@ -570,7 +587,9 @@
     });
     // Back on the tab or window: refit and ask the program to repaint.
     const wake = () => { if (isOpen() && state.sessionId) refit(true); };
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+    // Leaving the page also drops the stream of a closed console once no
+    // phase runs any more (a run that ended after the console was closed).
+    document.addEventListener('visibilitychange', () => { if (document.hidden) detachIfIdle(); else wake(); });
     window.addEventListener('focus', wake);
     window.addEventListener('resize', () => { if (isOpen()) refit(false); });
     // A reload keeps the session of a running phase (and reattaches to it);

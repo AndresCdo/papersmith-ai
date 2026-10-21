@@ -36,13 +36,18 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 
 from . import atlas, atlas_build, decisions, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
-from .state_extractor import get_workspace_state
+from .state_extractor import get_workspace_state, memo_by_file
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
 
 #: How long a wiring-health result is reused before it is measured again. The
 #: endpoint runs subprocesses (CLI ``--help`` probes), so a burst of watcher
 #: events must not multiply them.
 DEFAULT_HEALTH_TTL_SECONDS = 10.0
+
+#: A terminal output stream wakes at least this often to notice a client that
+#: left, and sends a keep-alive comment after this much silence.
+TERMINAL_WAIT_SECONDS = 1.0
+TERMINAL_PING_SECONDS = 15.0
 
 _log = logging.getLogger(__name__)
 
@@ -227,6 +232,23 @@ def _framework_version(root: Path) -> str:
 # --------------------------------------------------------------------------
 # facts the phase actions report, measured on disk
 # --------------------------------------------------------------------------
+def _count_pdf_pages(pdf_file: Path) -> int:
+    """Pages of a PDF: `pdfinfo` when installed, else the first /Count entry."""
+    try:
+        res = subprocess.run(["pdfinfo", str(pdf_file)], capture_output=True, text=True, check=True)
+        m = re.search(r"Pages:\s+(\d+)", res.stdout)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        try:
+            m = re.search(rb"/Count\s+(\d+)", pdf_file.read_bytes())
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+    return 0
+
+
 def _children(folder: Path) -> list[str]:
     return sorted(p.name for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []
 
@@ -467,19 +489,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         # Change token the dashboard polls to reload an open preview.
         pdf_mtime = int(pdf_file.stat().st_mtime * 1000) if pdf_exists else 0
         if pdf_exists:
-            try:
-                res = subprocess.run(["pdfinfo", str(pdf_file)], capture_output=True, text=True, check=True)
-                m = re.search(r"Pages:\s+(\d+)", res.stdout)
-                if m:
-                    pdf_pages = int(m.group(1))
-            except Exception:
-                try:
-                    data = pdf_file.read_bytes()
-                    m = re.search(rb"/Count\s+(\d+)", data)
-                    if m:
-                        pdf_pages = int(m.group(1))
-                except Exception:
-                    pass
+            pdf_pages = memo_by_file("pdf_pages", pdf_file, lambda: _count_pdf_pages(pdf_file))
 
         # Figure counts
         fig_dir = root_path / "paper" / "Figures"
@@ -2180,28 +2190,48 @@ async def _terminal_stream(request: Request, terminals: "terminal.TerminalManage
     """PTY output as SSE ``output`` frames (base64), then one ``exit`` frame."""
     import base64
 
+    # The PTY reader thread sets `wake` on every chunk and when the session
+    # ends, so a quiet session costs one wake-up per TERMINAL_WAIT_SECONDS
+    # (to notice a client that left) instead of a tight polling loop.
+    loop = asyncio.get_running_loop()
+    wake = asyncio.Event()
+    try:
+        session = terminals.watch(sid, loop, wake)
+    except KeyError:
+        yield format_sse("exit", {"reason": "closed"})
+        return
     offset = 0
     idle = 0.0
-    while True:
-        if await request.is_disconnected():
-            break
-        try:
-            chunk, offset, alive = terminals.read_since(sid, offset)
-        except KeyError:
-            yield format_sse("exit", {"reason": "closed"})
-            break
-        if chunk:
-            idle = 0.0
-            yield format_sse("output", {"data": base64.b64encode(chunk).decode("ascii")})
-            continue
-        if not alive:
-            yield format_sse("exit", {"reason": "ended"})
-            break
-        idle += 0.012
-        if idle >= 15.0:
-            idle = 0.0
-            yield ": ping\n\n"
-        await asyncio.sleep(0.012)
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            # Cleared before reading: a chunk appended after this point sets
+            # it again, so no output is ever missed between read and wait.
+            wake.clear()
+            try:
+                chunk, offset, alive = terminals.read_since(sid, offset)
+            except KeyError:
+                yield format_sse("exit", {"reason": "closed"})
+                break
+            if chunk:
+                idle = 0.0
+                yield format_sse("output", {"data": base64.b64encode(chunk).decode("ascii")})
+                continue
+            if not alive:
+                yield format_sse("exit", {"reason": "ended"})
+                break
+            started = loop.time()
+            try:
+                await asyncio.wait_for(wake.wait(), TERMINAL_WAIT_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+            idle += loop.time() - started
+            if idle >= TERMINAL_PING_SECONDS:
+                idle = 0.0
+                yield ": ping\n\n"
+    finally:
+        terminals.unwatch(session, loop, wake)
 
 
 async def _event_stream(request: Request, bus: EventBus, root: Path) -> AsyncIterator[str]:

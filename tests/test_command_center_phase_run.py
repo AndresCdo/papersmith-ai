@@ -20,7 +20,7 @@ const fs = require('fs');
 const cfg = JSON.parse(fs.readFileSync(0, 'utf8'));
 const store = {};
 const els = {};
-function el(id) { return els[id] || (els[id] = { id, dataset: {}, innerHTML: '', textContent: '', classList: { add() {}, remove() {} }, setAttribute() {} }); }
+function el(id) { return els[id] || (els[id] = { id, dataset: {}, innerHTML: '', textContent: '', classList: { add() {}, remove() {} }, setAttribute() {}, querySelectorAll: () => [] }); }
 global.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
 let made = 0;
 global.document = { getElementById: (id) => els[id] || null, addEventListener() {}, createElement: () => el('made' + (made++)), body: { appendChild(n) { els[n.id] = n; } } };

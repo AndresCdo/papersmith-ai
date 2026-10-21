@@ -356,6 +356,8 @@ const COMMANDS = {
   'sky-layout': () => applyLayout('sky'),
   'toggle-layout': toggleLayout,
   'reset': resetView,
+  'pause': () => viewer && viewer.pause(),
+  'resume': () => viewer && viewer.resume(),
 };
 window.addEventListener('message', event => {
   if (!(event.source === window.parent) || window.parent === window) return;

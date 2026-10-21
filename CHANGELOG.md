@@ -49,6 +49,24 @@ number is `0`, breaking changes can still arrive without a major bump.
 - `GET /api/terminal/sessions/{id}` reports a session's agent and whether it is
   alive, so a reloaded page can reattach to it.
 
+### Changed
+
+- **A lighter dashboard, with the same views.**
+  - `/api/status` reuses the module constants, YAML and PDF page count it
+    parsed, until the file changes. On a real workspace a call went from
+    about 31 ms to about 10 ms, and phase evidence is still read on every call.
+  - A terminal output stream waits for the agent's output instead of waking
+    every 12 ms. Its keep-alive ping is unchanged.
+  - Closing the terminal window drops its stream only when no phase is
+    running. During a run, the tracker keeps reading the agent's activity.
+    Opening the window again reattaches the session.
+  - The 3D atlas loads the first time its tab opens, and stops drawing while
+    another tab is shown (new `atlas-command` `pause` / `resume`). Atlases
+    regenerated with "Regenerar grafo" pick this up.
+  - The browser's own PDF viewer fetches the PDF only when it is shown.
+  - The run dock updates its clock in place instead of rebuilding itself
+    every second.
+
 ### Fixed
 
 - **A reload no longer kills the agent of a running phase.** While a phase run is

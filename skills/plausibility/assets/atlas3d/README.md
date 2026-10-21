@@ -70,7 +70,8 @@ talks to its parent with `postMessage`, and only when `window.parent !== window`
 
 ```text
 parent -> atlas  { type: 'atlas-command',
-                   command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset' }
+                   command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset'
+                            | 'pause' | 'resume' }   pause stops drawing until resume
                  accepted only when event.source === window.parent; anything else is ignored
 atlas -> parent  { type: 'atlas-layout', mode: 'sky' | 'groups' }      on load and on every layout command
                  { type: 'atlas-planet-selected', key, label, slot,
