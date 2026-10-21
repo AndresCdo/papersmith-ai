@@ -224,7 +224,8 @@ PAGE = """<!DOCTYPE html>
 html,body{height:100%}
 body{font-family:system-ui,sans-serif;background:#0a0a10;color:#e4e4ed;margin:0;padding:12px 16px;box-sizing:border-box;display:flex;flex-direction:column}
 h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
-.sky{flex:1 1 auto;min-height:420px;width:100%;background:#0a0a10;border:1px solid #1e2236;border-radius:10px;overflow:hidden;cursor:grab}
+.sky{position:relative;flex:1 1 auto;min-height:420px;width:100%;background:#0a0a10;border:1px solid #1e2236;border-radius:10px;overflow:hidden;cursor:grab}
+.sky canvas{display:block;width:100%;height:100%}
 .sky:active{cursor:grabbing}
 #panel{color:#9aa3bd;font-size:13px;margin:0 0 8px}
 #overlay{position:fixed;inset:0;background:rgba(5,5,10,.65);display:none;align-items:center;justify-content:center;z-index:10}
@@ -237,17 +238,27 @@ h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
 .famchip{margin:2px;padding:3px 12px;cursor:pointer;border-radius:12px;border:1px solid #9b7ede;background:#14172a;color:#e4e4ed;font-size:12px}
 .famchip.on{background:#9b7ede;color:#0a0a10}
 .dot{display:inline-block;width:16px;height:0;border-top:2px solid;margin:0 4px 3px 10px;vertical-align:middle}
-#toolbar button{font-size:13px;margin-right:6px;padding:3px 12px;cursor:pointer;background:#14172a;color:#e4e4ed;border:1px solid #2a3350;border-radius:6px}
+#toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#toolbar button{font-size:13px;padding:3px 12px;cursor:pointer;background:#14172a;color:#e4e4ed;border:1px solid #2a3350;border-radius:6px}
 #toolbar button.on{background:#9b7ede;color:#0a0a10;border-color:#9b7ede}
+#toolbar .sep{width:1px;height:20px;background:#2a3350;margin:0 4px}
+#gpunote{margin:0 0 6px;font-size:12px;color:#e8b339}
+#gpunote[hidden]{display:none}
+.atlas-tip{max-width:340px;white-space:normal!important;text-align:center;line-height:1.3;z-index:5}
+.atlas-names{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:4}
+.atlas-names div{position:absolute;left:0;top:0;font:11px system-ui,sans-serif;white-space:nowrap;color:#f3d98b;text-shadow:0 0 3px #0a0a10,0 0 3px #0a0a10,0 0 6px #0a0a10}
+.atlas-names .lit{font-weight:600;color:#fff}
+@media (max-width:820px){#toolbar .sep{display:none}}
 </style>
 </head>
 <body>
 <h1>@@HEADING@@</h1>
 <div id="panel">Drag to orbit, right-drag to pan, wheel to zoom. Hover a planet to trace its cross-system links; click to read it; double-click to fly to it.</div>
+<div id="gpunote" role="status" hidden></div>
 <div id="overlay"><div id="modal"><button id="modalclose">close</button><div id="modalbody"></div></div></div>
 <div id="famlegend"><em>Families:</em> <span id="famchips"></span></div>
 <div id="rellegend"><em>Links:</em> <span class="dot" style="border-color:#2ecc71"></span>extends <span class="dot" style="border-color:#5aa9e6"></span>supports <span class="dot" style="border-color:#e65a5a"></span>contradicts <span class="dot" style="border-color:#8a93ad"></span>addresses <span class="dot" style="border-color:#9b7ede;border-top-style:dashed"></span>shared family <span class="dot" style="border-color:#e8b339"></span>yields <span class="dot" style="border-color:#4a5a80"></span>about</div>
-<div id="toolbar"><button id="zoomin">zoom +</button><button id="zoomout">zoom −</button><button id="zoomreset">reset view</button><button id="grouplayout">Disposición de grupos</button></div>
+<div id="toolbar"><button id="zoomin">zoom +</button><button id="zoomout">zoom −</button><span class="sep"></span><button id="spinleft" title="Turn left">⟲ turn</button><button id="spinright" title="Turn right">turn ⟳</button><button id="tiltup" title="Tilt up">▲ tilt</button><button id="tiltdown" title="Tilt down">▼ tilt</button><button id="autorotate" class="on" title="Automatic rotation">⏸ rotation</button><button id="names" class="on" title="Show or hide system names; only names that do not overlap are drawn, and zooming in shows more">names</button><span class="sep"></span><button id="zoomreset">reset view</button><button id="grouplayout">Disposición de grupos</button><span class="sep"></span><button id="viewmode" title="Switch between the 3D sky and the lighter 2D constellation">2D view</button></div>
 <div id="sky" class="sky"></div>
 <script type="application/json" id="atlas-data">@@DATA@@</script>
 <script>
@@ -257,7 +268,16 @@ h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
 const SCENE = JSON.parse(document.getElementById('atlas-data').textContent);
 const ATLAS = SCENE.atlas;
 const PLANETS = new Map();
-ATLAS.systems.forEach(s => s.planets.forEach(p => PLANETS.set(s.id + '.' + p.id, {system: s, planet: p})));
+const SYSTEMS = new Map();
+ATLAS.systems.forEach(s => {
+  SYSTEMS.set(s.id, s);
+  s.planets.forEach(p => PLANETS.set(s.id + '.' + p.id, {system: s, planet: p}));
+});
+// The group a system belongs to: its first non-blank family label (the viewer's rule).
+function familyLabel(s) {
+  const fam = s ? s.planets.find(p => p.slot === 'family' && typeof p.label === 'string' && p.label.trim()) : null;
+  return fam ? fam.label.trim() : '';
+}
 const panel = document.getElementById('modalbody');
 const overlay = document.getElementById('overlay');
 function closeModal() { overlay.classList.remove('open'); }
@@ -326,15 +346,535 @@ function reportPlanet(key) {
     system: {id: String(entry.system.id), title: String(entry.system.title || '')},
   });
 }
-const viewer = AtlasViewer.mount(document.getElementById('sky'), SCENE, {
-  onSelect: key => { showPlanet(key); reportPlanet(key); },
-  onHover: key => { if (viewer) viewer.setDim(key ? hoverKeep(key) : familyKeep()); },
+// 'ok' when WebGL runs on a real GPU; 'weak' when only a software renderer is
+// available (failIfMajorPerformanceCaveat, or a renderer named like one);
+// 'none' when WebGL cannot start at all.
+function webglSupport() {
+  try {
+    const strict = {failIfMajorPerformanceCaveat: true};
+    const c = document.createElement('canvas');
+    const g = c.getContext('webgl2', strict) || c.getContext('webgl', strict);
+    if (g) {
+      const debug = g.getExtension('WEBGL_debug_renderer_info');
+      const name = debug ? String(g.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
+      const lose = g.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+      return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(name) ? 'weak' : 'ok';
+    }
+    const any = document.createElement('canvas');
+    return any.getContext('webgl2') || any.getContext('webgl') ? 'weak' : 'none';
+  } catch (e) {
+    return 'none';
+  }
+}
+// Which view to open: ?view=2d or ?view=3d wins, then the viewer's last choice,
+// then the machine: no or software WebGL, under 4 GB of memory or under 4
+// cores opens the 2D constellation, which costs a fraction of the 3D sky.
+const VIEW_KEY = 'papersmith-atlas-view';
+function storedView() {
+  try { return localStorage.getItem(VIEW_KEY); } catch (e) { return null; }
+}
+function storeView(mode) {
+  try { localStorage.setItem(VIEW_KEY, mode); } catch (e) { /* sandboxed frame: no storage */ }
+}
+function chooseView() {
+  const asked = new URLSearchParams(location.search).get('view') || storedView();
+  const gl = webglSupport();
+  if (asked === '2d') return {mode: '2d', reason: 'chosen'};
+  if (asked === '3d' && gl !== 'none') return {mode: '3d', reason: 'chosen'};
+  if (gl !== 'ok') return {mode: '2d', reason: gl};
+  const memory = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
+  if ((memory && memory < 4) || (cores && cores < 4)) return {mode: '2d', reason: 'low'};
+  return {mode: '3d', reason: 'auto'};
+}
+// Canvas 2D constellation with the same handle as AtlasViewer: an orthographic
+// projection of the precomputed sky that can still spin and tilt, drawn only
+// when something changes (one requestAnimationFrame per change, none at rest).
+const FlatViewer = {mount(host, scene, opts) {
+  const keys = Object.keys(scene.positions).sort();
+  const index = new Map(keys.map((k, i) => [k, i]));
+  const color = keys.map(k => {
+    const e = PLANETS.get(k);
+    return (e && scene.slot_colors[e.planet.slot]) || '#9aa3bd';
+  });
+  const isSun = keys.map(k => { const e = PLANETS.get(k); return !!e && e.planet.slot === 'sun'; });
+  const skyPos = keys.map(k => scene.positions[k]);
+  const centroid = [0, 1, 2].map(d => skyPos.reduce((a, p) => a + p[d], 0) / Math.max(1, skyPos.length));
+  // Group layout: the 3D viewer's rule (sorted family labels, then system ids,
+  // a golden spiral per family on a flat grid), each system keeping its shape.
+  const families = new Map();
+  ATLAS.systems.map(s => s.id).filter(id => scene.frames[id]).sort().forEach(id => {
+    const fam = familyLabel(SYSTEMS.get(id));
+    if (!families.has(fam)) families.set(fam, []);
+    families.get(fam).push(id);
+  });
+  const famNames = [...families.keys()].sort();
+  const most = Math.max(1, ...famNames.map(f => families.get(f).length));
+  const cell = 2 * (720 * Math.sqrt(most - 1) + 300) + 1600;
+  const cols = Math.ceil(Math.sqrt(famNames.length)), rows = Math.ceil(famNames.length / cols);
+  const anchor = new Map();
+  famNames.forEach((f, n) => {
+    const cx = (n % cols - (cols - 1) / 2) * cell, cy = ((rows - 1) / 2 - Math.floor(n / cols)) * cell;
+    families.get(f).forEach((id, j) => {
+      const r = 720 * Math.sqrt(j), a = j * Math.PI * (3 - Math.sqrt(5));
+      anchor.set(id, [cx + r * Math.cos(a), cy + r * Math.sin(a), 0]);
+    });
+  });
+  const groupPos = keys.map((k, i) => {
+    const id = PLANETS.get(k) ? PLANETS.get(k).system.id : k.split('.')[0];
+    const f = scene.frames[id], a = anchor.get(id);
+    if (!f || !a) return skyPos[i];
+    return [0, 1, 2].map(d => a[d] + skyPos[i][d] - f.center[d]);
+  });
+  const lines = scene.edges.map(e => ({a: index.get(e.from), b: index.get(e.to), color: e.color, inter: e.inter}))
+    .concat((scene.ties || []).map(t => ({a: index.get(t.from), b: index.get(t.to), color: '#9b7ede', tie: true})))
+    .filter(l => l.a !== undefined && l.b !== undefined);
+
+  const canvas = document.createElement('canvas');
+  host.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  const tip = document.createElement('div');
+  tip.className = 'atlas-tip';
+  tip.style.cssText = 'position:absolute;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(10,10,16,.88);border:1px solid #2a3350;color:#e4e4ed;font:12px system-ui,sans-serif;white-space:nowrap;transform:translate(-50%,-130%)';
+  host.appendChild(tip);
+
+  let layout = 'sky', yaw = 0, pitch = 0, scale = 1, fit = 1, panX = 0, panY = 0;
+  let dim = null, hover = null, spinning = false, queued = false, last = 0, hidden = false, gone = false;
+  let W = 0, H = 0;
+  const sx = new Float32Array(keys.length), sy = new Float32Array(keys.length);
+  function points() { return layout === 'groups' ? groupPos : skyPos; }
+  function project() {
+    const pts = points(), cy = Math.cos(yaw), sn = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const c = layout === 'groups' ? [0, 0, 0] : centroid;
+    pts.forEach((p, i) => {
+      const dx = p[0] - c[0], dy = p[1] - c[1], dz = p[2] - c[2];
+      const x = dx * cy - dy * sn, y = dx * sn + dy * cy;
+      sx[i] = W / 2 + (x - panX) * scale;
+      sy[i] = H / 2 - (y * cp - dz * sp - panY) * scale;
+    });
+  }
+  function fitView() {
+    const pts = points(), c = layout === 'groups' ? [0, 0, 0] : centroid;
+    let ext = 1;
+    pts.forEach(p => { ext = Math.max(ext, Math.abs(p[0] - c[0]), Math.abs(p[1] - c[1])); });
+    fit = scale = Math.min(W, H) / (2 * ext) * 0.92;
+    panX = panY = 0;
+  }
+  function draw() {
+    queued = false;
+    if (gone) return;
+    project();
+    const dpr = Math.max(window.devicePixelRatio || 1, 1);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#0a0a10';
+    ctx.fillRect(0, 0, W, H);
+    const lit = i => !dim || dim.has(keys[i]);
+    ctx.lineWidth = 1;
+    lines.forEach(l => {
+      const on = lit(l.a) && lit(l.b);
+      ctx.globalAlpha = on ? (l.inter ? 0.9 : l.tie ? 0.45 : 0.35) : 0.05;
+      ctx.strokeStyle = l.color;
+      ctx.setLineDash(l.tie ? [4, 4] : []);
+      ctx.beginPath();
+      ctx.moveTo(sx[l.a], sy[l.a]);
+      ctx.lineTo(sx[l.b], sy[l.b]);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    const grow = Math.min(3, Math.max(1, Math.sqrt(scale / fit)));
+    keys.forEach((k, i) => {
+      if (sx[i] < -10 || sy[i] < -10 || sx[i] > W + 10 || sy[i] > H + 10) return;
+      ctx.globalAlpha = lit(i) ? 1 : 0.12;
+      ctx.fillStyle = color[i];
+      ctx.beginPath();
+      ctx.arc(sx[i], sy[i], (isSun[i] ? 4.5 : 2) * grow + (k === hover ? 2 : 0), 0, 2 * Math.PI);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    if (opts.afterDraw) opts.afterDraw(ctx, W, H);
+  }
+  function redraw() {
+    if (!queued && !hidden && !gone) { queued = true; requestAnimationFrame(draw); }
+  }
+  function resize() {
+    const dpr = Math.max(window.devicePixelRatio || 1, 1);
+    const first = !W;
+    W = host.clientWidth || 800;
+    H = host.clientHeight || 600;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    if (first) fitView();
+    redraw();
+  }
+  function tick(t) {
+    if (!spinning || hidden || gone) return;
+    if (last) yaw += (t - last) * 0.00008;
+    last = t;
+    draw();
+    requestAnimationFrame(tick);
+  }
+  function pick(ev) {
+    const r = canvas.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+    let best = -1, bestD = 64;
+    for (let i = 0; i < keys.length; i++) {
+      const d = (sx[i] - x) ** 2 + (sy[i] - y) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best < 0 ? null : {key: keys[best], x: sx[best], y: sy[best]};
+  }
+  let drag = null;
+  canvas.addEventListener('contextmenu', ev => ev.preventDefault());
+  canvas.addEventListener('pointerdown', ev => {
+    drag = {x: ev.clientX, y: ev.clientY, panX, panY, moved: false};
+    canvas.setPointerCapture(ev.pointerId);
+    spinning = false;
+  });
+  canvas.addEventListener('pointermove', ev => {
+    if (drag) {
+      const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+      panX = drag.panX - dx / scale;
+      panY = drag.panY + dy / scale;
+      redraw();
+      return;
+    }
+    const hit = pick(ev);
+    const key = hit ? hit.key : null;
+    if (hit) {
+      const e = PLANETS.get(hit.key);
+      tip.textContent = e ? (e.planet.tip || e.planet.label + ' [' + e.planet.slot + ']') : hit.key;
+      tip.style.left = hit.x + 'px';
+      tip.style.top = hit.y + 'px';
+      tip.style.display = 'block';
+    } else {
+      tip.style.display = 'none';
+    }
+    canvas.style.cursor = key ? 'pointer' : 'grab';
+    if (key !== hover) {
+      hover = key;
+      if (opts.onHover) opts.onHover(key);
+      redraw();
+    }
+  });
+  canvas.addEventListener('pointerleave', () => {
+    tip.style.display = 'none';
+    if (hover) { hover = null; if (opts.onHover) opts.onHover(null); redraw(); }
+  });
+  canvas.addEventListener('pointerup', ev => {
+    const d = drag;
+    drag = null;
+    if (!d || d.moved || ev.button !== 0) return;
+    const hit = pick(ev);
+    if (hit && opts.onSelect) opts.onSelect(hit.key);
+  });
+  canvas.addEventListener('dblclick', ev => { const hit = pick(ev); if (hit) api.focus(hit.key); });
+  canvas.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const mx = ev.clientX - r.left - W / 2, my = ev.clientY - r.top - H / 2;
+    const f = Math.exp(-ev.deltaY * 0.0015);
+    panX += mx / scale - mx / (scale * f);
+    panY -= my / scale - my / (scale * f);
+    scale *= f;
+    spinning = false;
+    redraw();
+  }, {passive: false});
+  const resizer = new ResizeObserver(resize);
+  resizer.observe(host);
+  resize();
+
+  const api = {
+    setDim(keep) { dim = keep && keep.size ? keep : null; redraw(); },
+    focus(key) {
+      const i = index.get(key);
+      if (i === undefined) return;
+      spinning = false;
+      scale = Math.max(scale, fit * 4);
+      project();
+      panX += (sx[i] - W / 2) / scale;
+      panY -= (sy[i] - H / 2) / scale;
+      redraw();
+    },
+    zoom(f) { scale *= f; redraw(); },
+    spin(a) { spinning = false; yaw += a; redraw(); },
+    tilt(a) { spinning = false; pitch = Math.min(Math.PI / 2, Math.max(-Math.PI / 2, pitch + a)); redraw(); },
+    reset() { spinning = false; yaw = pitch = 0; dim = null; fitView(); redraw(); },
+    rotating() { return spinning; },
+    rotate(on) {
+      spinning = on === undefined ? !spinning : !!on;
+      last = 0;
+      if (spinning && !hidden) requestAnimationFrame(tick);
+      return spinning;
+    },
+    setLayout(name) { layout = name === 'groups' ? 'groups' : 'sky'; fitView(); redraw(); return layout; },
+    layout() { return layout; },
+    project(ks) {
+      return ks.map(k => {
+        const i = index.get(k);
+        return i === undefined ? null
+          : {x: sx[i], y: sy[i], z: 0, on: sx[i] >= 0 && sy[i] >= 0 && sx[i] <= W && sy[i] <= H};
+      });
+    },
+    refresh() { redraw(); },
+    pause() { hidden = true; },
+    resume() {
+      if (!hidden) return;
+      hidden = false;
+      last = 0;
+      if (spinning) requestAnimationFrame(tick);
+      redraw();
+    },
+    dispose() {
+      gone = true;
+      resizer.disconnect();
+      canvas.width = canvas.height = 0;
+      canvas.remove();
+      tip.remove();
+    },
+  };
+  return api;
+}};
+// System names next to their suns, placed greedily by priority (hovered, lit,
+// then nearer and better connected); a name that would overlap one already
+// placed is skipped, so zooming in reveals more of them.
+const SUNS = [];
+ATLAS.systems.forEach(s => {
+  const sun = s.planets.find(p => p.slot === 'sun');
+  if (sun) SUNS.push({key: s.id + '.' + sun.id, id: s.id, name: String(s.title || s.id).slice(0, 48)});
 });
+const DEGREE = new Map(SUNS.map(s => [s.id, 0]));
+SCENE.edges.forEach(e => {
+  if (!e.inter) return;
+  [e.from, e.to].forEach(k => { const p = PLANETS.get(k); if (p && DEGREE.has(p.system.id)) DEGREE.set(p.system.id, DEGREE.get(p.system.id) + 1); });
+});
+const NAME_FONT = '11px system-ui, sans-serif';
+const measureCtx = document.createElement('canvas').getContext('2d');
+measureCtx.font = NAME_FONT;
+const NAME_WIDTH = new Map(SUNS.map(s => [s.key, Math.ceil(measureCtx.measureText(s.name).width)]));
+let showNames = true;
+let hovered = null;
+let namesKeep = null;
+let namesDirty = true;
+function placeNames(W, H, pos) {
+  if (!showNames || !viewer) return [];
+  pos = pos || viewer.project(SUNS.map(s => s.key));
+  const keep = namesKeep;
+  const hoverId = hovered && PLANETS.get(hovered) ? PLANETS.get(hovered).system.id : null;
+  const cands = [];
+  SUNS.forEach((s, i) => {
+    const p = pos[i];
+    if (!p || !p.on) return;
+    const lit = !keep || keep.has(s.key);
+    const boost = s.id === hoverId ? 3 : 0;
+    if (!lit && !boost) return;
+    cands.push({s, p, prio: boost + (keep && lit ? 2 : 0) + (1 - p.z) + DEGREE.get(s.id) * 0.01});
+  });
+  cands.sort((a, b) => b.prio - a.prio);
+  const placed = [], budget = Math.max(12, Math.floor(W * H / 12000));
+  for (const c of cands) {
+    if (placed.length >= budget) break;
+    const w = NAME_WIDTH.get(c.s.key), h = 14;
+    const box = {x: c.p.x - w / 2, y: c.p.y - h - 7, w, h};
+    if (box.x < 2 || box.y < 2 || box.x + w > W - 2 || box.y + h > H - 2) continue;
+    if (placed.some(o => box.x < o.x + o.w + 6 && o.x < box.x + w + 6 && box.y < o.y + o.h + 2 && o.y < box.y + h + 2)) continue;
+    placed.push(Object.assign(box, {s: c.s, lit: c.prio >= 2}));
+  }
+  return placed;
+}
+// 2D: names are drawn on the canvas whenever it redraws.
+function drawNames(ctx, W, H) {
+  ctx.font = NAME_FONT;
+  ctx.textBaseline = 'top';
+  ctx.lineJoin = 'round';
+  placeNames(W, H).forEach(b => {
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0a0a10';
+    ctx.strokeText(b.s.name, b.x, b.y + 1);
+    ctx.fillStyle = b.lit ? '#ffffff' : '#f3d98b';
+    ctx.fillText(b.s.name, b.x, b.y + 1);
+  });
+}
+// 3D: an HTML layer over the WebGL canvas. Each frame only projects the suns;
+// placement and DOM writes happen when the view moved by half a pixel or the
+// dimming changed, and the loop stops whenever the viewer is paused.
+const nameLayer = {running: false, stop: true, el: null};
+function startNameLayer(host) {
+  if (!nameLayer.el) {
+    nameLayer.el = document.createElement('div');
+    nameLayer.el.className = 'atlas-names';
+    nameLayer.pool = new Map();
+  }
+  if (nameLayer.el.parentNode !== host) host.appendChild(nameLayer.el);
+  const keys = SUNS.map(s => s.key);
+  let last = null, lastW = 0, lastH = 0;
+  function moved(pos, W, H) {
+    if (!last || W !== lastW || H !== lastH) return true;
+    for (let i = 0; i < pos.length; i++) {
+      const a = pos[i], b = last[i];
+      if (!a !== !b || (a && (Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5 || a.on !== b.on))) return true;
+    }
+    return false;
+  }
+  function frame() {
+    if (nameLayer.stop || !viewer || view !== '3d') { nameLayer.running = false; return; }
+    const W = host.clientWidth, H = host.clientHeight;
+    const pos = showNames ? viewer.project(keys) : null;
+    if (namesDirty || (pos && moved(pos, W, H))) {
+      namesDirty = false;
+      last = pos; lastW = W; lastH = H;
+      const shown = new Set();
+      placeNames(W, H, pos).forEach(b => {
+        let el = nameLayer.pool.get(b.s.key);
+        if (!el) {
+          el = document.createElement('div');
+          el.textContent = b.s.name;
+          nameLayer.pool.set(b.s.key, el);
+          nameLayer.el.appendChild(el);
+        }
+        el.className = b.lit ? 'lit' : '';
+        el.style.transform = 'translate(' + Math.round(b.x) + 'px,' + Math.round(b.y) + 'px)';
+        el.style.display = '';
+        shown.add(b.s.key);
+      });
+      nameLayer.pool.forEach((el, key) => { if (!shown.has(key)) el.style.display = 'none'; });
+    }
+    requestAnimationFrame(frame);
+  }
+  nameLayer.stop = false;
+  namesDirty = true;
+  if (!nameLayer.running) { nameLayer.running = true; requestAnimationFrame(frame); }
+}
+function stopNameLayer(remove) {
+  nameLayer.stop = true;
+  if (remove && nameLayer.el) { nameLayer.el.remove(); nameLayer.el = null; }
+}
+// Every dimming change goes through here, so the names know what is lit.
+function dimTo(keep) {
+  namesKeep = keep;
+  namesDirty = true;
+  if (viewer) viewer.setDim(keep);
+}
+const skyHost = document.getElementById('sky');
+const gpuNote = document.getElementById('gpunote');
+const viewButton = document.getElementById('viewmode');
+const helpPanel = document.getElementById('panel');
+const HELP_3D = helpPanel.textContent;
+const HELP_2D = '2D view: drag to pan, wheel to zoom; turn and tilt change the angle. Hover a planet to trace its cross-system links; click to read it; double-click to center it.';
+const NOTES = {
+  weak: '⚠ This computer has no suitable GPU for the 3D sky (software rendering): showing the 2D constellation.',
+  none: '⚠ WebGL is not available here: showing the 2D constellation.',
+  low: '⚠ This computer reports little memory or few cores: showing the lighter 2D constellation.',
+  slow: '⚠ The 3D sky drew too slowly here: switched to the lighter 2D constellation.',
+};
+const viewerHooks = {
+  onSelect: key => { showPlanet(key); reportPlanet(key); },
+  onHover: key => { hovered = key; dimTo(key ? hoverKeep(key) : familyKeep()); },
+  afterDraw: drawNames,
+};
+let viewer = null;
+let view = null;
+let pageHidden = document.hidden;
+let dashboardPaused = false;
+function mountView(mode, reason) {
+  const layout = viewer ? viewer.layout() : 'sky';
+  if (viewer && viewer.dispose) viewer.dispose();
+  stopNameLayer(true);
+  viewer = null;
+  skyHost.textContent = '';
+  if (mode === '3d') viewer = AtlasViewer.mount(skyHost, SCENE, viewerHooks);
+  if (!viewer) {
+    if (mode === '3d') reason = 'none';
+    mode = '2d';
+    skyHost.textContent = '';
+    viewer = FlatViewer.mount(skyHost, SCENE, viewerHooks);
+  }
+  view = mode;
+  if (layout !== 'sky') viewer.setLayout(layout);
+  dimTo(familyKeep());
+  gpuNote.textContent = NOTES[reason] || '';
+  gpuNote.hidden = !NOTES[reason];
+  helpPanel.textContent = mode === '2d' ? HELP_2D : HELP_3D;
+  viewButton.textContent = mode === '2d' ? '3D view' : '2D view';
+  viewButton.disabled = mode === '2d' && webglSupport() === 'none';
+  if (mode === '3d') startNameLayer(skyHost);
+  applyVisibility();
+  syncRotate();
+  if (mode === '3d' && reason === 'auto') watchFrameRate();
+}
+// Draw nothing while nobody can see the sky: the page is hidden (another
+// browser tab, a minimized window) or the dashboard paused it.
+function applyVisibility() {
+  if (!viewer) return;
+  if (pageHidden || dashboardPaused) {
+    viewer.pause();
+    stopNameLayer(false);
+  } else {
+    viewer.resume();
+    if (view === '3d') startNameLayer(skyHost);
+  }
+}
+document.addEventListener('visibilitychange', () => { pageHidden = document.hidden; applyVisibility(); });
+// A machine that passed the GPU check can still be too slow for the 3D sky:
+// count frames for a few seconds after opening and fall back to 2D under 20 fps.
+function watchFrameRate() {
+  let frames = 0, start = 0;
+  const mounted = viewer;
+  function count(t) {
+    if (viewer !== mounted || pageHidden || dashboardPaused) return;
+    if (!start) start = t;
+    frames++;
+    if (t - start < 3000) { requestAnimationFrame(count); return; }
+    if (frames * 1000 / (t - start) < 20) mountView('2d', 'slow');
+  }
+  setTimeout(() => requestAnimationFrame(count), 1000);
+}
+viewButton.addEventListener('click', () => {
+  const next = view === '2d' ? '3d' : '2d';
+  storeView(next);
+  mountView(next, 'chosen');
+});
+const rotateButton = document.getElementById('autorotate');
+function syncRotate() {
+  if (!viewer) return;
+  const on = viewer.rotating();
+  rotateButton.classList.toggle('on', on);
+  rotateButton.textContent = on ? '⏸ rotation' : '▶ rotation';
+}
+rotateButton.addEventListener('click', () => { if (viewer) { viewer.rotate(); syncRotate(); } });
+skyHost.addEventListener('pointerdown', () => setTimeout(syncRotate, 0));
+skyHost.addEventListener('wheel', () => setTimeout(syncRotate, 0), {passive: true});
+const STEP = Math.PI / 12;
+function act(id, fn) {
+  document.getElementById(id).addEventListener('click', () => { if (viewer) { fn(); syncRotate(); } });
+}
+act('spinleft', () => viewer.spin(STEP));
+act('spinright', () => viewer.spin(-STEP));
+act('tiltup', () => viewer.tilt(STEP / 2));
+act('tiltdown', () => viewer.tilt(-STEP / 2));
+const namesButton = document.getElementById('names');
+namesButton.addEventListener('click', () => {
+  showNames = !showNames;
+  namesDirty = true;
+  namesButton.classList.toggle('on', showNames);
+  if (viewer) viewer.refresh();
+});
+// Keep the hover label inside the sky: the viewer centers it over the planet.
+skyHost.addEventListener('pointermove', () => {
+  const tip = skyHost.querySelector('.atlas-tip');
+  if (!tip || tip.style.display === 'none') return;
+  const w = tip.offsetWidth, h = tip.offsetHeight, W = skyHost.clientWidth;
+  tip.style.left = Math.min(Math.max(parseFloat(tip.style.left), w / 2 + 4), W - w / 2 - 4) + 'px';
+  tip.style.transform = parseFloat(tip.style.top) < h * 1.3 + 4 ? 'translate(-50%, 30%)' : 'translate(-50%,-130%)';
+});
+const initial = chooseView();
+mountView(initial.mode, initial.reason);
 function resetView() {
   if (!viewer) return;
   activeFam = null;
   document.querySelectorAll('.famchip').forEach(c => c.classList.remove('on'));
   viewer.reset();
+  dimTo(null);
+  syncRotate();
 }
 const layoutButton = document.getElementById('grouplayout');
 function applyLayout(mode) {
@@ -356,8 +896,10 @@ const COMMANDS = {
   'sky-layout': () => applyLayout('sky'),
   'toggle-layout': toggleLayout,
   'reset': resetView,
-  'pause': () => viewer && viewer.pause(),
-  'resume': () => viewer && viewer.resume(),
+  'pause': () => { dashboardPaused = true; applyVisibility(); },
+  'resume': () => { dashboardPaused = false; applyVisibility(); },
+  'view-2d': () => { storeView('2d'); mountView('2d', 'chosen'); },
+  'view-3d': () => { storeView('3d'); mountView('3d', 'chosen'); },
 };
 window.addEventListener('message', event => {
   if (!(event.source === window.parent) || window.parent === window) return;
@@ -379,7 +921,7 @@ Object.keys(fams).sort().forEach(label => {
   b.addEventListener('click', () => {
     activeFam = (activeFam === label) ? null : label;
     document.querySelectorAll('.famchip').forEach(c => c.classList.toggle('on', c === b && activeFam === label));
-    if (viewer) viewer.setDim(familyKeep());
+    dimTo(familyKeep());
   });
   chips.appendChild(b);
 });

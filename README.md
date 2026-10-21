@@ -3639,9 +3639,9 @@ switches and adds **⚡ Regenerar grafo** (the SOTA atlas through
 rebuilds the view) and **🧩 Disposición de grupos**, which asks the atlas frame to
 rearrange its systems by family cluster and back. The dashboard and the
 sandboxed atlas frame talk through `postMessage`: the dashboard sends
-`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset' | 'pause' | 'resume'}`
+`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset' | 'pause' | 'resume' | 'view-2d' | 'view-3d'}`
 (`pause` while another tab is shown, so the atlas stops drawing; it loads the
-first time its tab opens) and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
+first time its tab opens, and it also stops while the browser hides the page) and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
 `{type: 'atlas-planet-selected', key, label, slot, system: {id, title}}`. A
 selected node shows **📄 Ver en PDF** (finds the node's label, or its system's
 title, in the compiled PDF's text and jumps to that page) and **🗂️ Ver

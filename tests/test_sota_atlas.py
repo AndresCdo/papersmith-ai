@@ -519,6 +519,37 @@ class GroupLayoutAndBridgeTests(unittest.TestCase):
         self.assertIn("window.parent !== window", script)
         self.assertIn("postMessage(", script)
 
+    def test_page_offers_the_2d_constellation_when_the_3d_sky_should_not_run(self):
+        """No WebGL, a software renderer, a small machine or a slow first few
+        seconds open the 2D constellation, and the viewer can switch by hand."""
+        page = self.page()
+        toolbar = page[page.index('<div id="toolbar">'):]
+        toolbar = toolbar[:toolbar.index("</div>")]
+        for button in ('id="viewmode"', 'id="names"', 'id="autorotate"', 'id="spinleft"',
+                       'id="spinright"', 'id="tiltup"', 'id="tiltdown"'):
+            self.assertIn(button, toolbar)
+        self.assertIn('<div id="gpunote" role="status" hidden></div>', page)
+        script = self.page_script()
+        for needle in ("failIfMajorPerformanceCaveat", "WEBGL_debug_renderer_info",
+                       "navigator.deviceMemory", "navigator.hardwareConcurrency",
+                       "get('view')", "const FlatViewer", "function watchFrameRate",
+                       "'view-2d'", "'view-3d'"):
+            self.assertIn(needle, script)
+
+    def test_page_stops_drawing_while_nobody_can_see_it(self):
+        script = self.page_script()
+        self.assertIn("addEventListener('visibilitychange'", script)
+        self.assertIn("'pause': () => { dashboardPaused = true; applyVisibility(); }", script)
+        self.assertIn("'resume': () => { dashboardPaused = false; applyVisibility(); }", script)
+
+    def test_bundle_draws_no_system_label_sprites_and_exposes_the_page_handle(self):
+        source = (BUNDLE.parent / "atlas3d" / "viewer.js").read_text(encoding="utf-8")
+        self.assertNotIn("labelSprite(String(system.title", source)
+        self.assertIn("Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)", source)
+        bundle = BUNDLE.read_text(encoding="utf-8")
+        for method in ("dispose(", "project(", "rotating(", "spin(", "tilt(", "refresh("):
+            self.assertIn(method, bundle)
+
     def test_bundle_exposes_the_layout_switch(self):
         bundle = BUNDLE.read_text(encoding="utf-8")
         self.assertIn("setLayout", bundle)
