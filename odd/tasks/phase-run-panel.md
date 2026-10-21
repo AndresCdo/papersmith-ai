@@ -34,3 +34,7 @@ Branch: `feat/phase-run-panel` · Delivery: ask-on-risk · Runners: `.venv/bin/p
   - Fase 2 was run, the CLI closed and the tab switched to #archify. A dock click opened the panel on #archify with the five checkpoints, "Detener proceso", "Ver terminal del agente" and "Abrir en Pipeline".
   - On reload, the same session id was reattached, the run was still live and the output appeared once (tick 1–3, not duplicated).
   - "Detener proceso" sent ^C (the loop ended), the session was kept, and the panel and dock show "⏹ detenida".
+- **L4** (2026-10-21) Full suite: 4 failures, none caused by this change. `paper_preview` (environmental), release hygiene (needs 0.18.1) and two `borrows_no_repository_s_vocabulary` subtests ('kaggle' in `server.py` and `phase_actions.py`) all fail on main as well. Native review (reliability lens, medium) was approved and acknowledged. Its advisories were fixed in one batch:
+  - A failed interrupt keeps the run followed and says so.
+  - A transient reattach failure keeps the remembered session.
+  - The dismiss label is restored for quiet runs.

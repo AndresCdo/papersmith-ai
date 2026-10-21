@@ -294,8 +294,10 @@
       state.exited = false;
       state.startedAt = Date.now();
       attach(session.id, true);
-    } catch (_) {
-      forgetSession(stored.id);
+    } catch (err) {
+      // Only a session the server no longer has is forgotten; a transient
+      // failure keeps the record so the next load can still reattach.
+      if (/no such session/.test(err.message)) forgetSession(stored.id);
     }
   }
 
@@ -529,18 +531,15 @@
   }
 
   // "Detener proceso": interrupts the agent's turn (Esc) or the shell's command
-  // (Ctrl-C). The session stays open for the next phase.
+  // (Ctrl-C). The session stays open for the next phase. Resolves false when
+  // there is no session; rejects when the key could not be delivered.
   async function interrupt() {
     if (state.resuming) await state.resuming;
     const sid = state.sessionId;
     if (!sid) return false;
     const key = state.agent === 'shell' || state.agent === 'herdr' ? '\x03' : '\x1b';
-    try {
-      await api(`/api/terminal/sessions/${sid}/input`, 'POST', { data: key });
-      return true;
-    } catch (_) {
-      return false;
-    }
+    await api(`/api/terminal/sessions/${sid}/input`, 'POST', { data: key });
+    return true;
   }
 
   // What the phase run tracker reads to show whether the agent is working.

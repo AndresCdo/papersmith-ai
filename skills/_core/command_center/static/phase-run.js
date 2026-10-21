@@ -220,7 +220,7 @@
           <button class="btn btn--sm" data-run-terminal="1" title="Abre la terminal con la sesión del agente">🖥 Ver terminal del agente</button>
           ${running ? '<button class="btn btn--sm" data-run-verify="1" title="Vuelve a leer la evidencia en disco">⟳ Verificar ahora</button>' : ''}
           ${panel ? `<button class="btn btn--sm" data-run-pipeline="${esc(run.stage)}">Abrir en Pipeline</button>` : ''}
-          <button class="btn btn--sm" data-run-dismiss="${esc(run.stage)}">${running ? 'Dejar de seguir' : 'Cerrar seguimiento'}</button>
+          <button class="btn btn--sm" data-run-dismiss="${esc(run.stage)}">${verified ? 'Cerrar seguimiento' : 'Dejar de seguir'}</button>
         </div>
       </div>`;
   }
@@ -284,8 +284,15 @@
     if (!live(run)) return false;
     if (typeof window.confirm === 'function'
       && !window.confirm(`¿Detener ${run.phaseId}? Se interrumpe el turno del agente; la sesión de la terminal sigue abierta.`)) return false;
-    const sent = typeof window.smithTerminalInterrupt === 'function' && !sessionGone(run)
-      ? await window.smithTerminalInterrupt() : false;
+    let sent = false;
+    try {
+      sent = typeof window.smithTerminalInterrupt === 'function' && !sessionGone(run)
+        ? await window.smithTerminalInterrupt() : false;
+    } catch (err) {
+      // The agent may still be working: keep following the run.
+      toast(`⚠ ${run.phaseId}: no se pudo interrumpir al agente (${err.message}). Detenlo desde la terminal.`, 'warn');
+      return false;
+    }
     run.stoppedAt = now();
     save();
     ensurePolling();

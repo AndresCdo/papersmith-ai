@@ -54,7 +54,8 @@ global.fetch = async (path, opts = {}) => {
     sessions += 1; data = { id: 's' + sessions }; log.push(['open', body.agent]);
   } else if (/^\/api\/terminal\/sessions\/[^/]+$/.test(path) && method === 'GET') {
     log.push(['lookup', path.split('/')[4]]);
-    if (cfg.lookup) data = cfg.lookup; else ok = false;
+    if (cfg.lookupDown) throw new Error('network down');
+    if (cfg.lookup) data = cfg.lookup; else { ok = false; data = { detail: 'no such session' }; }
   } else if (path.endsWith('/input')) {
     if ('data' in body) log.push(['input', path.split('/')[4], body.data]);
   } else if (method === 'DELETE') {
@@ -132,6 +133,11 @@ class CliSessionTests(unittest.TestCase):
         self.assertIn(["open", "claude"], out["log"])
         self.assertIn(["input", "s1", "/plausibility idea"], out["log"])
         self.assertEqual(out["stored"], {"id": "s1", "agent": "claude"})
+
+    def test_a_transient_lookup_failure_keeps_the_remembered_session(self) -> None:
+        out = run(stored={"id": "s9", "agent": "claude"}, lookupDown=True, running=True)
+        self.assertIsNone(out["afterLoad"]["sessionId"])
+        self.assertEqual(out["stored"], {"id": "s9", "agent": "claude"})
 
     def test_closing_the_console_keeps_the_session(self) -> None:
         out = run(send=True, running=True)

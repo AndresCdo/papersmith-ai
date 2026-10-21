@@ -38,7 +38,7 @@ global.document = {
 let session = 's1';
 global.window = {
   smithTerminalActivity: () => ({ agent: 'claude', sessionId: session, lastOutputAt: Date.now() }),
-  smithTerminalInterrupt: async () => { calls.push('interrupt'); return true; },
+  smithTerminalInterrupt: async () => { calls.push('interrupt'); if (cfg.interruptFails) throw new Error('HTTP 403'); return true; },
   openCliConsole: () => calls.push('terminal'),
   navigateTab: (t) => calls.push('tab:' + t),
   openDrawer: (i) => calls.push('drawer:' + i),
@@ -131,6 +131,12 @@ class RunPanelTests(unittest.TestCase):
     def test_the_panel_can_still_open_the_phase_in_the_pipeline(self) -> None:
         self.assertEqual(self.out["callsAfterPipeline"][-2:], ["tab:pipeline", "drawer:1"])
         self.assertTrue(self.out["panelHiddenAfterPipeline"])
+
+    def test_a_failed_interrupt_keeps_following_the_run(self) -> None:
+        out = run(confirm=True, interruptFails=True)
+        self.assertIn("interrupt", out["callsAfterStop"])
+        self.assertTrue(out["runningAfterStop"])
+        self.assertIn('data-run-stop="plausibility"', out["panelAfterStop"])
 
     def test_a_declined_stop_changes_nothing(self) -> None:
         out = run(confirm=False)
