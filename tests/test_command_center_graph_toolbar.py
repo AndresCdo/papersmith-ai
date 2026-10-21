@@ -33,8 +33,10 @@ class GraphToolbarTests(unittest.TestCase):
         self.assertIn("postToGraph({ type: 'atlas-command', command: tabId === 'atlas' ? 'resume' : 'pause' });", PAGE)
         assets = Path(server.__file__).resolve().parents[2] / "plausibility"
         page = (assets / "scripts" / "render_atlas.py").read_text(encoding="utf-8")
-        self.assertIn("'pause': () => viewer && viewer.pause(),", page)
-        self.assertIn("'resume': () => viewer && viewer.resume(),", page)
+        # The page also pauses while the browser hides it, so the dashboard's
+        # pause and the page's own visibility combine in applyVisibility().
+        self.assertIn("'pause': () => { dashboardPaused = true; applyVisibility(); },", page)
+        self.assertIn("'resume': () => { dashboardPaused = false; applyVisibility(); },", page)
 
     def test_the_native_pdf_viewer_loads_only_when_it_is_shown(self) -> None:
         self.assertIn('<iframe id="pdfNativeIframe" class="iframe-viewer" src="about:blank"', PAGE)

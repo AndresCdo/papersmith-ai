@@ -169,6 +169,11 @@ three.js viewer `assets/atlas3d.bundle.js` is inlined verbatim and only
 draws it, so there is no CDN and no network at view time. Rebuild that
 bundle with `npm run build:atlas-viewer` only when `assets/atlas3d/viewer.js`
 changes (see `assets/atlas3d/README.md`); rendering never needs Node.
+When the computer has no suitable GPU (no WebGL, a software renderer, little
+memory or few cores, or a 3D sky that draws too slowly) the page opens a
+lighter 2D constellation of the same scene and says why; a toolbar button and
+`?view=2d` / `?view=3d` switch views. System names appear where they do not
+overlap, and the page draws nothing while it is hidden.
 Drag orbits the sky and the wheel zooms. Clicking a planet shows its detail
 and abstract quote; a family filter dims what does not belong; hovering a
 planet highlights its links across systems; double-clicking flies to it.

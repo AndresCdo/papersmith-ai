@@ -15,6 +15,17 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **2D constellation and a lighter SOTA sky.** `atlas.html` opens a canvas
+  2D view of the same scene when the 3D sky cannot or should not run (no
+  WebGL, a software renderer, under 4 GB of memory or 4 cores, or under 20 fps
+  in its first seconds) and says why; a view button and `?view=2d|3d` switch
+  by hand. System names replace the overlapping title sprites and appear only
+  where they fit. The home view fits every planet in the frame, the canvas
+  keeps one pixel per CSS pixel on zoomed-out displays, orbit rings and family
+  ties are one draw call each, an idle sky is not redrawn, and either view
+  stops drawing while the page is hidden. New toolbar controls turn, tilt and
+  pause rotation. Playwright checks in `ui/e2e/atlas.spec.ts`.
+
 - **Live run tracker for pipeline phases.** "Ejecutar" opens a tracker in the
   phase drawer and marks the card as running. It follows the run through five
   steps: command sent, agent working (the terminal's output), the phase's
