@@ -22,8 +22,10 @@ const store = {};
 const els = {};
 function el(id) { return els[id] || (els[id] = { id, dataset: {}, innerHTML: '', textContent: '', classList: { add() {}, remove() {} }, setAttribute() {} }); }
 global.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
-global.document = { getElementById: (id) => els[id] || null, addEventListener() {}, createElement: () => el('toast'), body: { appendChild() {} } };
-global.window = { smithTerminalActivity: () => ({ agent: 'claude', lastOutputAt: Date.now() }) };
+let made = 0;
+global.document = { getElementById: (id) => els[id] || null, addEventListener() {}, createElement: () => el('made' + (made++)), body: { appendChild(n) { els[n.id] = n; } } };
+let lastOut = Date.now();
+global.window = { smithTerminalActivity: () => ({ agent: 'claude', lastOutputAt: lastOut }) };
 const phase = (stage, id, status, unlocked, evidence) => ({ stage_id: stage, id, name: id + ' name', status, unlocked, evidence });
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 const out = {};
@@ -35,6 +37,13 @@ const before = { fases: [
 window.currentStatus = before;
 window.phaseRuns.start(before.fases[1], '/plausibility ' + cfg.idea);
 out.running = window.phaseRuns.isRunning('plausibility');
+out.dock = (els.phaseRunDock || {}).innerHTML || '';
+lastOut = Date.now() + 1;
+const realNow0 = Date.now;
+Date.now = () => realNow0() + 25000;
+out.trackerIdle = window.phaseRuns.renderTracker(before.fases[1]);
+Date.now = realNow0;
+lastOut = Date.now();
 out.trackerStart = window.phaseRuns.renderTracker(before.fases[1]);
 const middle = JSON.parse(JSON.stringify(before));
 middle.fases[1].evidence[0] = { label: 'Atlas', path: 'sota-pool/atlas.json', count: 1, mtime: 5 };
@@ -89,6 +98,13 @@ class PhaseRunTests(unittest.TestCase):
         self.assertIn("Comando enviado", self.out["trackerStart"])
         self.assertIn("En ejecución", self.out["trackerStart"])
         self.assertIn("Trabajando (claude)", self.out["trackerStart"])
+
+    def test_a_floating_dock_shows_the_run_on_any_tab(self) -> None:
+        self.assertIn('data-run-open="plausibility"', self.out["dock"])
+        self.assertIn("en ejecución", self.out["dock"])
+
+    def test_an_agent_that_stops_writing_is_reported_as_waiting(self) -> None:
+        self.assertIn("espera tu respuesta en la terminal", self.out["trackerIdle"])
 
     def test_changed_evidence_is_shown_but_does_not_verify_the_stage(self) -> None:
         self.assertIn('class="is-new"', self.out["trackerMiddle"])

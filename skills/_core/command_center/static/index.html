@@ -13,13 +13,13 @@
   <link rel="stylesheet" href="./vendor/xterm.css">
   <script src="./vendor/xterm.js"></script>
   <script src="./vendor/xterm-addon-fit.js"></script>
-  <script src="./cli-console.js?v=0.18.1"></script>
+  <script src="./cli-console.js?v=0.18.4"></script>
   <link rel="stylesheet" href="./vendor/katex/katex.min.css">
   <script src="./vendor/katex/katex.min.js"></script>
   <script src="./math-panel.js?v=0.17.0"></script>
   <script src="./model-panel.js?v=0.17.1"></script>
-  <script src="./phase-console.js?v=0.18.1"></script>
-  <script src="./phase-run.js?v=0.18.1"></script>
+  <script src="./phase-console.js?v=0.18.4"></script>
+  <script src="./phase-run.js?v=0.18.4"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -2489,6 +2489,16 @@
     @keyframes unlockGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); } 50% { box-shadow: 0 0 18px 4px rgba(74, 222, 128, 0.55); } }
     .phase-toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 1rem); background: var(--surface-2); color: var(--text); border: 1px solid var(--ok); border-radius: 999px; padding: 0.55rem 1.1rem; font-size: 0.86rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 4000; }
     .phase-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+    .phase-toast[data-tone="warn"] { border-color: var(--warn); }
+    .phase-action__error { border: 1px solid var(--bad); background: rgba(248, 113, 113, 0.12); color: var(--text); border-radius: 6px; padding: 0.5rem 0.65rem; font-size: 0.82rem; font-weight: 600; }
+    .phase-action__input.is-invalid { border-color: var(--bad); box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25); }
+    .run-dock { position: fixed; left: 16px; bottom: 16px; z-index: 99990; display: flex; flex-direction: column; gap: 0.4rem; max-width: min(340px, calc(100vw - 32px)); }
+    .run-dock__item { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.6rem; align-items: center; text-align: left; background: var(--surface-2); color: var(--text); border: 1px solid var(--accent); border-radius: 12px; padding: 0.55rem 0.75rem; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); cursor: pointer; font: inherit; font-size: 0.8rem; }
+    .run-dock__item.is-verified { border-color: var(--ok); }
+    .run-dock__item strong { grid-row: span 2; font-size: 0.86rem; }
+    .run-dock__steps { display: inline-flex; gap: 4px; }
+    .run-dock__steps i { width: 18px; height: 5px; border-radius: 3px; background: var(--border); }
+    .run-dock__steps i.on { background: var(--ok); }
   </style>
 </head>
 <body>

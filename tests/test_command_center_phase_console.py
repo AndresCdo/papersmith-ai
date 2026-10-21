@@ -23,8 +23,11 @@ const calls = [];
 const els = {};
 const listeners = {};
 function el(id) { return els[id] || (els[id] = { id, value: '', textContent: '', classList: { add(){}, remove(){} }, focus(){} }); }
+let sendResult;
+let refusal = '';
 global.window = {
-  sendToCli: (t, r, o) => calls.push(['send', t, r, o && o.kind]),
+  smithTerminalActivity: () => ({ refusal }),
+  sendToCli: (t, r, o) => { calls.push(['send', t, r, o && o.kind]); return sendResult; },
   navigateTab: (t) => calls.push(['tab', t]),
   filterModelView: (s) => calls.push(['section', s]),
   closeDrawer: () => calls.push(['close']),
@@ -36,22 +39,27 @@ global.document = {
 };
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+sendResult = input.sendResult;
+refusal = input.refusal || '';
 if (input.override) el('phaseOverride').checked = true;
 const html = window.renderPhaseActions(input.phase);
 function click(i) {
   listeners.click({ target: { closest: () => ({ dataset: { phaseAction: String(i) } }) } });
 }
+(async () => {
 for (const step of input.steps) {
   if (step.type) el('phaseInput' + step.i).value = step.type;
   click(step.i);
+  await new Promise((r) => setTimeout(r, 10));
 }
 console.log(JSON.stringify({ html, calls, hints: Object.fromEntries(Object.entries(els).map(([k, v]) => [k, v.textContent])) }));
+})();
 """
 
 
-def run(phase: dict, steps: list[dict], override: bool = False) -> dict:
+def run(phase: dict, steps: list[dict], override: bool = False, **extra) -> dict:
     out = subprocess.run(["node", "-e", HARNESS, str(STATIC / "phase-console.js")],
-                         input=json.dumps({"phase": phase, "steps": steps, "override": override}),
+                         input=json.dumps({"phase": phase, "steps": steps, "override": override, **extra}),
                          capture_output=True, text=True, cwd=tempfile.gettempdir(), check=True)
     return json.loads(out.stdout)
 
@@ -68,6 +76,28 @@ class PhaseConsoleTests(unittest.TestCase):
         self.assertIn('id="phaseInput0"', result["html"])
         self.assertEqual(result["calls"], [])
         self.assertIn("al menos 2 oraciones", result["hints"]["phaseHint0"])
+
+    def test_a_long_idea_written_as_one_run_on_sentence_is_accepted(self) -> None:
+        # The operator's own wording: one period-free paragraph with a URL.
+        idea = ("Revisa el paper https://www.mdpi.com/2227-7080/14/7/392, con base a esa idea, vamos a "
+                "construir un paper en esa misma linea pero utilizando QML hibrido, vas a explorar como "
+                "incluir una o par de capas tipo DRU al final, para clasificar tdah desde erg, buscando "
+                "aprovechar la capacidad de representación de los QML , enfocándose en un buen rendimiento, "
+                "explorar estrategias QML hibridas y preservando interpretabilidad")
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}])
+        self.assertEqual(result["calls"], [["send", "/plausibility " + idea, True, "slash"]])
+
+    def test_a_folder_trust_question_is_named_in_the_drawer(self) -> None:
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], sendResult=False, refusal="trust")
+        self.assertIn("Yes, I trust this folder", result["hints"]["phaseError0"])
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], sendResult=False, refusal="question")
+        self.assertIn("espera una confirmación", result["hints"]["phaseError0"])
+
+    def test_a_refusal_is_shown_in_a_visible_error_box(self) -> None:
+        result = run(phase("plausibility"), [{"i": 0, "type": "Una sola idea."}])
+        self.assertIn('id="phaseError0"', result["html"])
+        self.assertIn("al menos 2 oraciones", result["hints"]["phaseError0"])
 
     def test_plausibility_sends_the_idea_as_one_slash_command_line(self) -> None:
         idea = "EEG models fail across subjects.\nI propose a quantum kernel."
@@ -118,6 +148,15 @@ class PhaseConsoleTests(unittest.TestCase):
 
 
 class PageWiringTests(unittest.TestCase):
+    def test_drawer_clicks_reach_the_phase_handlers(self) -> None:
+        # The drawer stops click propagation, so a bubbling document listener
+        # never sees "Ejecutar": both scripts must listen in the capture phase.
+        self.assertIn('<div class="drawer" onclick="event.stopPropagation()">', PAGE)
+        for name in ("phase-console.js", "phase-run.js"):
+            script = (STATIC / name).read_text(encoding="utf-8")
+            start = script.index("document.addEventListener('click', (event) => {")
+            self.assertIn("}, true);", script[start:start + 2500], name)
+
     def test_the_drawer_renders_the_phase_actions(self) -> None:
         self.assertIn('<script src="./phase-console.js?v=', PAGE)
         self.assertIn("window.renderPhaseActions ? window.renderPhaseActions(p) : ''", PAGE)

@@ -21,6 +21,7 @@
   const FAST_POLL_MS = 3000;
   const QUIET_MS = 30 * 60 * 1000;
   const UNLOCK_GLOW_MS = 15000;
+  const IDLE_MS = 20000;
 
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -71,6 +72,7 @@
     save();
     ensurePolling();
     refreshTracker(phase.stage_id);
+    renderDock();
   }
 
   function onStatus(data) {
@@ -103,6 +105,7 @@
     }
     if (touched) save();
     for (const run of Object.values(runs)) refreshTracker(run.stage);
+    renderDock();
     ensurePolling();
   }
 
@@ -122,7 +125,10 @@
     }
     if (!anyRunning() && fastTimer) { clearInterval(fastTimer); fastTimer = null; }
     if (anyRunning() && !tickTimer) {
-      tickTimer = setInterval(() => { for (const r of Object.values(runs)) if (live(r)) refreshTracker(r.stage); }, 1000);
+      tickTimer = setInterval(() => {
+        for (const r of Object.values(runs)) if (live(r)) { refreshTracker(r.stage); notifyIdle(r); }
+        renderDock();
+      }, 1000);
     }
     if (!anyRunning() && tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   }
@@ -136,9 +142,10 @@
     const act = typeof window.smithTerminalActivity === 'function' ? window.smithTerminalActivity() : null;
     if (!act || !act.lastOutputAt || act.lastOutputAt < run.startedAt) return { state: 'wait', text: 'Esperando salida del agente en la terminal…' };
     const ago = now() - act.lastOutputAt;
-    return ago < 5000
-      ? { state: 'run', text: `Trabajando (${esc(act.agent || 'agente')}): salida hace ${Math.round(ago / 1000)} s` }
-      : { state: 'done', text: `El agente respondió (última salida hace ${elapsed(ago)})` };
+    if (ago < 5000) return { state: 'run', text: `Trabajando (${esc(act.agent || 'agente')}): salida hace ${Math.round(ago / 1000)} s` };
+    if (ago < IDLE_MS) return { state: 'run', text: `Trabajando (${esc(act.agent || 'agente')}): última salida hace ${Math.round(ago / 1000)} s` };
+    return { state: 'warn', idle: true,
+      text: `Sin salida hace ${elapsed(ago)}: el agente terminó su turno o espera tu respuesta en la terminal (por ejemplo, aceptar el informe).` };
   }
 
   function step(state, title, body) {
@@ -193,6 +200,46 @@
     if (phase) host.innerHTML = renderTracker(phase);
   }
 
+  // The floating dock (bottom-left): every followed run, on any tab.
+  function renderDock() {
+    if (typeof document === 'undefined' || !document.body) return;
+    let dock = document.getElementById('phaseRunDock');
+    const shown = Object.values(runs).filter((r) => live(r) || (r.verifiedAt && now() - r.verifiedAt < 60000));
+    if (!shown.length) { if (dock) dock.hidden = true; return; }
+    if (!dock) {
+      dock = document.createElement('div');
+      dock.id = 'phaseRunDock';
+      dock.className = 'run-dock';
+      dock.setAttribute('role', 'status');
+      document.body.appendChild(dock);
+    }
+    dock.hidden = false;
+    // Never swap the buttons under the pointer: a click split across the old
+    // and new button would land on the dock and be lost.
+    if (dock.matches && dock.matches(':hover')) return;
+    dock.innerHTML = shown.map((r) => {
+      const term = terminalWorking(r);
+      const state = r.verifiedAt ? '✅ verificada' : (term.idle ? '⏸ esperando en la terminal' : '⏳ en ejecución');
+      const time = elapsed((r.verifiedAt || now()) - r.startedAt);
+      const steps = [true, r.verifiedAt || term.state !== 'wait', r.changed.length > 0 || r.verifiedAt, r.verifiedAt, r.verifiedAt]
+        .map((on) => `<i class="${on ? 'on' : ''}"></i>`).join('');
+      return `<button class="run-dock__item${r.verifiedAt ? ' is-verified' : ''}" data-run-open="${esc(r.stage)}">
+          <strong>${esc(r.phaseId)}</strong><span>${state} · ${time}</span><span class="run-dock__steps">${steps}</span>
+        </button>`;
+    }).join('');
+  }
+
+  function notifyIdle(run) {
+    if (run.verifiedAt) return;
+    const idle = Boolean(terminalWorking(run).idle);
+    // Output resumed: a later pause gets its own notice.
+    if (!idle) { if (run.idleNotified) { run.idleNotified = false; save(); } return; }
+    if (run.idleNotified) return;
+    run.idleNotified = true;
+    save();
+    toast(`⏸ ${run.phaseId}: el agente dejó de escribir. Revisa la terminal (abajo a la derecha); puede estar esperando tu respuesta.`, 'warn');
+  }
+
   function cardBadge(stage) {
     const run = runs[stage];
     if (!run) return '';
@@ -215,7 +262,10 @@
 
   function announce(run) {
     const names = run.unlocked.map((u) => u.id).join(', ');
-    const text = `✅ ${run.phaseId} verificada${names ? ` · habilitada: ${names}` : ''}`;
+    toast(`✅ ${run.phaseId} verificada${names ? ` · habilitada: ${names}` : ''}`, 'ok');
+  }
+
+  function toast(text, tone) {
     let toast = document.getElementById('phaseToast');
     if (!toast && document.body) {
       toast = document.createElement('div');
@@ -226,10 +276,13 @@
     }
     if (!toast) return;
     toast.textContent = text;
+    toast.dataset.tone = tone || 'ok';
     toast.classList.add('is-visible');
-    setTimeout(() => toast.classList.remove('is-visible'), 6000);
+    setTimeout(() => toast.classList.remove('is-visible'), 8000);
   }
 
+  // Capture phase: the phase drawer stops click propagation
+  // (onclick="event.stopPropagation()"), so a bubbling listener never fires.
   document.addEventListener('click', (event) => {
     const verify = event.target.closest && event.target.closest('[data-run-verify]');
     // Re-reads the status only: no audit, compile or other side effect.
@@ -238,9 +291,22 @@
       return;
     }
     const close = event.target.closest && event.target.closest('[data-run-dismiss]');
-    if (close) dismiss(close.dataset.runDismiss);
-  });
+    if (close) { dismiss(close.dataset.runDismiss); renderDock(); return; }
+    // The dock opens the run's phase drawer.
+    const open = event.target.closest && event.target.closest('[data-run-open]');
+    if (open && typeof window.openDrawer === 'function') {
+      const list = fases(window.currentStatus);
+      const index = list.findIndex((f) => f.stage_id === open.dataset.runOpen);
+      if (index >= 0) {
+        if (typeof window.navigateTab === 'function') window.navigateTab('pipeline');
+        window.openDrawer(index);
+      }
+    }
+  }, true);
 
-  window.phaseRuns = { start, onStatus, renderTracker, cardBadge, isRunning, dismiss, justUnlocked };
+  window.phaseRuns = { start, onStatus, renderTracker, cardBadge, isRunning, dismiss, justUnlocked, renderDock };
   ensurePolling();
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('DOMContentLoaded', renderDock);
+  }
 })();
