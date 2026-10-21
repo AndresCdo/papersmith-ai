@@ -36,6 +36,12 @@ class GraphToolbarTests(unittest.TestCase):
         self.assertIn("'pause': () => viewer && viewer.pause(),", page)
         self.assertIn("'resume': () => viewer && viewer.resume(),", page)
 
+    def test_the_native_pdf_viewer_loads_only_when_it_is_shown(self) -> None:
+        self.assertIn('<iframe id="pdfNativeIframe" class="iframe-viewer" src="about:blank"', PAGE)
+        self.assertIn("showNativePdfFallback();", PAGE)
+        self.assertIn("if (iframe.getAttribute('src') === 'about:blank') iframe.src = `/api/pdf?t=${Date.now()}`;", PAGE)
+        self.assertIn("if (native && isNativePdfViewer) native.src = `/api/pdf?v=${token}`;", PAGE)
+
     def test_the_atlas_contract_is_spoken_and_heard(self) -> None:
         self.assertIn("postToGraph({ type: 'atlas-command', command: 'toggle-layout' })", PAGE)
         self.assertIn("e.source !== iframe.contentWindow", PAGE)

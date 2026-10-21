@@ -3073,7 +3073,7 @@
             <div id="pdfPagesStack" class="pdf-pages-stack">
               <!-- Renderizado continuo vertical multi-página -->
             </div>
-            <iframe id="pdfNativeIframe" class="iframe-viewer" src="/api/pdf" style="display: none; height: 850px; width: 100%;"></iframe>
+            <iframe id="pdfNativeIframe" class="iframe-viewer" src="about:blank" style="display: none; height: 850px; width: 100%;"></iframe>
           </div>
         </div>
 
@@ -5029,6 +5029,16 @@
 
     // One load in flight at a time: tab switches and cross-panel jumps share it.
     let pdfLoadPromise = null;
+    // The browser's own viewer, when PDF.js could not open the document. Its
+    // frame starts blank so the page does not fetch the PDF until it is shown.
+    function showNativePdfFallback() {
+      const stack = document.getElementById('pdfPagesStack');
+      if (stack) stack.style.display = 'none';
+      const iframe = document.getElementById('pdfNativeIframe');
+      iframe.style.display = 'block';
+      if (iframe.getAttribute('src') === 'about:blank') iframe.src = `/api/pdf?t=${Date.now()}`;
+    }
+
     function ensurePdfLoaded() {
       if (pdfDoc) return Promise.resolve(true);
       if (!pdfLoadPromise) {
@@ -5138,9 +5148,7 @@
           renderVisiblePdfPages();
           return false;
         }
-        const stack = document.getElementById('pdfPagesStack');
-        if (stack) stack.style.display = 'none';
-        document.getElementById('pdfNativeIframe').style.display = 'block';
+        showNativePdfFallback();
         return false;
       } finally {
         if (spinner) spinner.style.display = 'none';
