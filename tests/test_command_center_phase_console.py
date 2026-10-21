@@ -24,10 +24,13 @@ const els = {};
 const listeners = {};
 function el(id) { return els[id] || (els[id] = { id, value: '', textContent: '', classList: { add(){}, remove(){} }, focus(){} }); }
 let sendResult;
+const options = [];
+let agents = { current: 'herdr', live: false, agents: [] };
 let refusal = '';
 global.window = {
   smithTerminalActivity: () => ({ refusal }),
-  sendToCli: (t, r, o) => { calls.push(['send', t, r, o && o.kind]); return sendResult; },
+  smithTerminalAgents: async () => agents,
+  sendToCli: (t, r, o) => { calls.push(['send', t, r, o && o.kind]); options.push(o); return sendResult; },
   navigateTab: (t) => calls.push(['tab', t]),
   filterModelView: (s) => calls.push(['section', s]),
   closeDrawer: () => calls.push(['close']),
@@ -40,19 +43,24 @@ global.document = {
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 sendResult = input.sendResult;
+if (input.agents) agents = input.agents;
+if (input.remembered) global.localStorage = { getItem: () => input.remembered, setItem() {} };
 refusal = input.refusal || '';
 if (input.override) el('phaseOverride').checked = true;
+(async () => {
 const html = window.renderPhaseActions(input.phase);
+await new Promise((r) => setTimeout(r, 20));
+if (input.pick) el('phaseAgent0').value = input.pick;
+if (input.fresh) el('phaseFresh0').checked = true;
 function click(i) {
   listeners.click({ target: { closest: () => ({ dataset: { phaseAction: String(i) } }) } });
 }
-(async () => {
 for (const step of input.steps) {
   if (step.type) el('phaseInput' + step.i).value = step.type;
   click(step.i);
   await new Promise((r) => setTimeout(r, 10));
 }
-console.log(JSON.stringify({ html, calls, hints: Object.fromEntries(Object.entries(els).map(([k, v]) => [k, v.textContent])) }));
+console.log(JSON.stringify({ html, calls, options, select: el('phaseAgent0').innerHTML, note: el('phaseAgentNote0').textContent, hints: Object.fromEntries(Object.entries(els).map(([k, v]) => [k, v.textContent])) }));
 })();
 """
 
@@ -86,6 +94,37 @@ class PhaseConsoleTests(unittest.TestCase):
                 "explorar estrategias QML hibridas y preservando interpretabilidad")
         result = run(phase("plausibility"), [{"i": 0, "type": idea}])
         self.assertEqual(result["calls"], [["send", "/plausibility " + idea, True, "slash"]])
+
+    def test_the_drawer_continues_the_open_session_by_default(self) -> None:
+        agents = {"current": "pi", "live": True,
+                  "agents": [{"id": "claude", "label": "Claude Code"}, {"id": "pi", "label": "Pi"}]}
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents, remembered="claude")
+        self.assertIn('value="pi" selected', result["select"])
+        self.assertIn("Continúa en la sesión abierta de Pi", result["note"])
+        self.assertEqual(result["options"][0], {"kind": "slash", "agent": "pi", "fresh": False})
+
+    def test_without_a_session_the_last_chosen_agent_is_offered(self) -> None:
+        agents = {"current": "herdr", "live": False,
+                  "agents": [{"id": "claude", "label": "Claude Code"}, {"id": "opencode", "label": "OpenCode"}]}
+        result = run(phase("plausibility"), [], agents=agents, remembered="opencode")
+        self.assertIn('value="opencode" selected', result["select"])
+        self.assertIn("Abrirá una sesión de OpenCode", result["note"])
+
+    def test_the_note_warns_before_closing_the_open_session(self) -> None:
+        agents = {"current": "claude", "live": True,
+                  "agents": [{"id": "claude", "label": "Claude Code"}, {"id": "pi", "label": "Pi"}]}
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents, pick="pi")
+        self.assertIn("Cerrará la sesión de Claude Code y abrirá Pi", result["note"])
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents, fresh=True)
+        self.assertIn("Cerrará la sesión de Claude Code y abrirá una nueva", result["note"])
+
+    def test_a_new_session_is_requested_only_when_ticked(self) -> None:
+        agents = {"current": "claude", "live": True, "agents": [{"id": "claude", "label": "Claude Code"}]}
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents, fresh=True)
+        self.assertEqual(result["options"][0], {"kind": "slash", "agent": "claude", "fresh": True})
 
     def test_a_folder_trust_question_is_named_in_the_drawer(self) -> None:
         idea = "One sentence here. And a second one."

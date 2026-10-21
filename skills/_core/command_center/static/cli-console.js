@@ -349,29 +349,57 @@
   // do not, so a slash command switches the console to the first of these.
   const SLASH_AGENTS = ['claude', 'opencode', 'pi'];
 
-  async function useAgent(kind) {
+  // Which agent runs a phase command, keeping the open session whenever it can:
+  //  - slash: the agent the operator picked (options.agent), else the open
+  //    slash agent, else the first installed one;
+  //  - shell: an open slash-agent session runs it as `!command` (every one of
+  //    claude, opencode and pi has a shell escape), so one session follows the
+  //    whole pipeline; otherwise the plain shell.
+  // A different agent, or options.fresh, ends the open session: never without
+  // the operator's confirmation. Returns { switched, prefix }.
+  async function useAgent(kind, options) {
+    const opts = options || {};
     const info = await loadInfo();
     const available = (info.agents || []).filter((a) => a.available).map((a) => a.id);
+    const live = Boolean(state.sessionId);
     let wanted = state.agent;
-    if (kind === 'shell') wanted = 'shell';
-    if (kind === 'slash' && !SLASH_AGENTS.includes(state.agent)) {
-      wanted = SLASH_AGENTS.find((id) => available.includes(id)) || null;
+    if (kind === 'shell') {
+      if (live && SLASH_AGENTS.includes(state.agent)) return { switched: false, prefix: '!' };
+      wanted = 'shell';
+    }
+    if (kind === 'slash') {
+      if (opts.agent && !(SLASH_AGENTS.includes(opts.agent) && available.includes(opts.agent))) {
+        throw new Error(`el agente ${agentLabel(opts.agent)} no está instalado`);
+      }
+      if (opts.agent) wanted = opts.agent;
+      else if (!SLASH_AGENTS.includes(state.agent)) wanted = SLASH_AGENTS.find((id) => available.includes(id)) || null;
       if (!wanted) throw new Error('no hay un agente (claude, opencode, pi) instalado');
     }
-    if (wanted === state.agent) return false;
-    // Switching ends the live session: never without the operator's say-so.
-    if (state.sessionId && !window.confirm(
-      `Esto cierra la sesión de ${agentLabel(state.agent)} y abre ${agentLabel(wanted)}. ¿Continuar?`)) {
+    const restart = wanted !== state.agent || (opts.fresh && live);
+    if (!restart) return { switched: false, prefix: '' };
+    if (live && !window.confirm(wanted === state.agent
+      ? `Esto cierra la sesión actual de ${agentLabel(state.agent)} y abre una nueva. ¿Continuar?`
+      : `Esto cierra la sesión de ${agentLabel(state.agent)} y abre ${agentLabel(wanted)}. ¿Continuar?`)) {
       throw new Error(`se mantuvo la sesión de ${agentLabel(state.agent)}`);
     }
     state.agent = wanted;
+    if (kind === 'slash') saveAgent(wanted);
     const select = $('terminalAgentSelect');
     if (select) select.value = wanted;
     renderQuick();
     renderFooter();
     await stop();
     if (state.term) state.term.reset();
-    return true;
+    return { switched: true, prefix: '' };
+  }
+
+  // What the phase drawer offers: the installed slash agents and the session
+  // a phase would continue in.
+  async function smithTerminalAgents() {
+    const info = await loadInfo();
+    const agents = (info.agents || []).filter((a) => a.available && SLASH_AGENTS.includes(a.id))
+      .map((a) => ({ id: a.id, label: a.label }));
+    return { current: state.agent, live: Boolean(state.sessionId), agents };
   }
 
   // A freshly started agent paints its prompt before it reads input: wait for
@@ -405,12 +433,15 @@
 
   // Types `text` into the session (opening one if needed). run=true also sends
   // Enter, as a separate write so an agent does not read it as a paste.
-  // options.kind: 'slash' runs it in an agent, 'shell' in the plain shell.
+  // options.kind: 'slash' runs it in an agent, 'shell' as a shell command;
+  // options.agent picks the slash agent; options.fresh asks for a new session.
   async function sendToCli(text, run, options) {
     try {
       const kind = options && options.kind;
       // Choose the agent before opening the window, which starts a session.
-      const switched = kind ? await useAgent(kind) : false;
+      const choice = kind ? await useAgent(kind, options) : { switched: false, prefix: '' };
+      const switched = choice.switched;
+      text = choice.prefix + text;
       openCliConsole();
       const fresh = switched || !state.sessionId;
       const sid = await start();
@@ -482,4 +513,5 @@
   window.closeCliConsole = closeCliConsole;
   window.sendToCli = sendToCli;
   window.smithTerminalActivity = smithTerminalActivity;
+  window.smithTerminalAgents = smithTerminalAgents;
 })();

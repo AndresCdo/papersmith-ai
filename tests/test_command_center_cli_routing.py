@@ -68,11 +68,12 @@ global.window = {
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 (async () => {
   for (const s of cfg.sends) {
-    await window.sendToCli(s.text, s.run, s.kind ? { kind: s.kind } : undefined);
+    await window.sendToCli(s.text, s.run, s.kind ? { kind: s.kind, ...(s.opts || {}) } : undefined);
     log.push(['status', el('terminalStatusText').textContent]);
     log.push(['refusal', window.smithTerminalActivity().refusal]);
   }
   await new Promise((r) => setTimeout(r, 300));
+  log.push(['saved', store.smith_terminal_agent]);
   console.log(JSON.stringify(log));
 })();
 """
@@ -104,17 +105,57 @@ class CliRoutingTests(unittest.TestCase):
         self.assertEqual(events(log, "input"), [])
         self.assertIn("no hay un agente", events(log, "status")[-1][0])
 
-    def test_a_live_session_is_closed_only_after_confirmation(self) -> None:
-        sends = [{"text": "ls", "run": False}, {"text": "papersmith status .", "run": True, "kind": "shell"}]
-        refused = run(agent="claude", available=["claude", "shell"], confirm=False, sends=sends)
-        self.assertEqual(events(refused, "confirm"), [[]])
-        self.assertEqual(events(refused, "close"), [])
+    def test_a_shell_command_runs_inside_the_open_agent_session(self) -> None:
+        sends = [{"text": "/plausibility idea", "run": True, "kind": "slash"},
+                 {"text": "papersmith status .", "run": True, "kind": "shell"}]
+        log = run(agent="claude", available=["claude", "shell"], sends=sends)
+        self.assertEqual(events(log, "open"), [["claude"]])
+        self.assertEqual(events(log, "confirm"), [])
+        self.assertIn(["s1", "!papersmith status ."], events(log, "input"))
+
+    def test_without_an_agent_session_a_shell_command_uses_the_shell(self) -> None:
+        log = run(agent="herdr", available=["herdr", "shell"],
+                  sends=[{"text": "papersmith status .", "run": True, "kind": "shell"}])
+        self.assertEqual(events(log, "open"), [["shell"]])
+        self.assertIn(["s1", "papersmith status ."], events(log, "input"))
+
+    def test_the_same_agent_keeps_one_session_across_phases(self) -> None:
+        sends = [{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "claude"}},
+                 {"text": "/paper-ingestion x", "run": True, "kind": "slash", "opts": {"agent": "claude"}}]
+        log = run(agent="herdr", available=["herdr", "claude", "pi"], sends=sends)
+        self.assertEqual(events(log, "open"), [["claude"]])
+        self.assertEqual([e for e in events(log, "input") if e[1] != "\r"],
+                         [["s1", "/plausibility idea"], ["s1", "/paper-ingestion x"]])
+        self.assertEqual(events(log, "saved")[-1], ["claude"])
+
+    def test_the_operator_picks_the_agent_and_a_switch_needs_confirmation(self) -> None:
+        sends = [{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "claude"}},
+                 {"text": "/paper-ingestion x", "run": True, "kind": "slash", "opts": {"agent": "pi"}}]
+        refused = run(agent="herdr", available=["claude", "pi"], confirm=False, sends=sends)
         self.assertEqual(events(refused, "open"), [["claude"]])
-        self.assertNotIn(["s1", "papersmith status ."], events(refused, "input"))
-        accepted = run(agent="claude", available=["claude", "shell"], confirm=True, sends=sends)
+        self.assertEqual(events(refused, "close"), [])
+        self.assertNotIn(["s1", "/paper-ingestion x"], events(refused, "input"))
+        accepted = run(agent="herdr", available=["claude", "pi"], confirm=True, sends=sends)
+        self.assertEqual(events(accepted, "open"), [["claude"], ["pi"]])
         self.assertEqual(events(accepted, "close"), [["s1"]])
-        self.assertEqual(events(accepted, "open"), [["claude"], ["shell"]])
-        self.assertIn(["s2", "papersmith status ."], events(accepted, "input"))
+        self.assertIn(["s2", "/paper-ingestion x"], events(accepted, "input"))
+
+    def test_an_agent_that_is_not_installed_is_refused_not_replaced(self) -> None:
+        log = run(agent="herdr", available=["claude"],
+                  sends=[{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "pi"}}])
+        # The window opens on the current terminal to show why; no agent runs.
+        self.assertNotIn(["pi"], events(log, "open"))
+        self.assertNotIn(["claude"], events(log, "open"))
+        self.assertEqual(events(log, "input"), [])
+        self.assertIn("no está instalado", events(log, "status")[-1][0])
+
+    def test_a_new_session_is_opened_only_when_asked(self) -> None:
+        sends = [{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "claude"}},
+                 {"text": "/plausibility again", "run": True, "kind": "slash", "opts": {"agent": "claude", "fresh": True}}]
+        log = run(agent="claude", available=["claude"], confirm=True, sends=sends)
+        self.assertEqual(events(log, "open"), [["claude"], ["claude"]])
+        self.assertEqual(events(log, "close"), [["s1"]])
+        self.assertEqual(len(events(log, "confirm")), 1)
 
     def test_a_startup_question_is_never_answered_by_the_command(self) -> None:
         log = run(agent="claude", available=["claude"], screen=["Do you trust the files?", "Enter to confirm"],
