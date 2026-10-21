@@ -23,8 +23,11 @@ const calls = [];
 const els = {};
 const listeners = {};
 function el(id) { return els[id] || (els[id] = { id, value: '', textContent: '', classList: { add(){}, remove(){} }, focus(){} }); }
+let sendResult;
+let refusal = '';
 global.window = {
-  sendToCli: (t, r, o) => calls.push(['send', t, r, o && o.kind]),
+  smithTerminalActivity: () => ({ refusal }),
+  sendToCli: (t, r, o) => { calls.push(['send', t, r, o && o.kind]); return sendResult; },
   navigateTab: (t) => calls.push(['tab', t]),
   filterModelView: (s) => calls.push(['section', s]),
   closeDrawer: () => calls.push(['close']),
@@ -36,22 +39,27 @@ global.document = {
 };
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+sendResult = input.sendResult;
+refusal = input.refusal || '';
 if (input.override) el('phaseOverride').checked = true;
 const html = window.renderPhaseActions(input.phase);
 function click(i) {
   listeners.click({ target: { closest: () => ({ dataset: { phaseAction: String(i) } }) } });
 }
+(async () => {
 for (const step of input.steps) {
   if (step.type) el('phaseInput' + step.i).value = step.type;
   click(step.i);
+  await new Promise((r) => setTimeout(r, 10));
 }
 console.log(JSON.stringify({ html, calls, hints: Object.fromEntries(Object.entries(els).map(([k, v]) => [k, v.textContent])) }));
+})();
 """
 
 
-def run(phase: dict, steps: list[dict], override: bool = False) -> dict:
+def run(phase: dict, steps: list[dict], override: bool = False, **extra) -> dict:
     out = subprocess.run(["node", "-e", HARNESS, str(STATIC / "phase-console.js")],
-                         input=json.dumps({"phase": phase, "steps": steps, "override": override}),
+                         input=json.dumps({"phase": phase, "steps": steps, "override": override, **extra}),
                          capture_output=True, text=True, cwd=tempfile.gettempdir(), check=True)
     return json.loads(out.stdout)
 
@@ -78,6 +86,13 @@ class PhaseConsoleTests(unittest.TestCase):
                 "explorar estrategias QML hibridas y preservando interpretabilidad")
         result = run(phase("plausibility"), [{"i": 0, "type": idea}])
         self.assertEqual(result["calls"], [["send", "/plausibility " + idea, True, "slash"]])
+
+    def test_a_folder_trust_question_is_named_in_the_drawer(self) -> None:
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], sendResult=False, refusal="trust")
+        self.assertIn("Yes, I trust this folder", result["hints"]["phaseError0"])
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], sendResult=False, refusal="question")
+        self.assertIn("espera una confirmación", result["hints"]["phaseError0"])
 
     def test_a_refusal_is_shown_in_a_visible_error_box(self) -> None:
         result = run(phase("plausibility"), [{"i": 0, "type": "Una sola idea."}])

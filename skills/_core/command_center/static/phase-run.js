@@ -214,6 +214,9 @@
       document.body.appendChild(dock);
     }
     dock.hidden = false;
+    // Never swap the buttons under the pointer: a click split across the old
+    // and new button would land on the dock and be lost.
+    if (dock.matches && dock.matches(':hover')) return;
     dock.innerHTML = shown.map((r) => {
       const term = terminalWorking(r);
       const state = r.verifiedAt ? '✅ verificada' : (term.idle ? '⏸ esperando en la terminal' : '⏳ en ejecución');
@@ -227,8 +230,11 @@
   }
 
   function notifyIdle(run) {
-    if (run.idleNotified || run.verifiedAt) return;
-    if (!terminalWorking(run).idle) return;
+    if (run.verifiedAt) return;
+    const idle = Boolean(terminalWorking(run).idle);
+    // Output resumed: a later pause gets its own notice.
+    if (!idle) { if (run.idleNotified) { run.idleNotified = false; save(); } return; }
+    if (run.idleNotified) return;
     run.idleNotified = true;
     save();
     toast(`⏸ ${run.phaseId}: el agente dejó de escribir. Revisa la terminal (abajo a la derecha); puede estar esperando tu respuesta.`, 'warn');
