@@ -7,8 +7,11 @@
  * same-origin JSON requests carrying the X-Papersmith-Terminal header, and the
  * server also requires the per-server cookie set by its printed login URL.
  *
+ * The session outlives the window: closing it only hides it, and a reload
+ * while a phase run is live keeps the session and reattaches to it.
+ *
  * Public surface (window): toggleSmithTerminal(), openCliConsole(),
- * closeCliConsole(), sendToCli(text, run).
+ * closeCliConsole(), sendToCli(text, run), smithTerminalInterrupt().
  */
 (function () {
   'use strict';
@@ -16,6 +19,10 @@
   const HEADERS = { 'Content-Type': 'application/json', 'X-Papersmith-Terminal': '1' };
   const AGENT_KEY = 'smith_terminal_agent';
   const INPUT_FLUSH_MS = 6;
+  // One remembered session per dashboard server, for a reload to reattach.
+  const SESSION_KEY = `smith_terminal_session@${(typeof location !== 'undefined' && location.host) || 'local'}`;
+  // Output replayed on reconnect is not the agent working.
+  const REPLAY_QUIET_MS = 800;
 
   const state = {
     info: null,        // GET /api/terminal/agents
@@ -32,6 +39,8 @@
     lastOutputAt: 0,
     startedAt: 0,
     refusal: '',       // why the last sendToCli did not send, for the caller
+    quietUntil: 0,     // replayed output before this does not count as activity
+    resuming: null,    // the reattach attempt started on load
   };
 
   const $ = (id) => document.getElementById(id);
@@ -41,6 +50,17 @@
   }
   function saveAgent(agent) {
     try { localStorage.setItem(AGENT_KEY, agent); } catch (_) { /* storage blocked */ }
+  }
+  function rememberSession(id, agent) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ id, agent })); } catch (_) { /* storage blocked */ }
+  }
+  function storedSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (_) { return null; }
+  }
+  function forgetSession(id) {
+    const stored = storedSession();
+    if (id && stored && stored.id !== id) return;
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) { /* storage blocked */ }
   }
 
   async function api(path, method, body) {
@@ -220,17 +240,22 @@
     return bytes;
   }
 
-  function attach(sessionId) {
+  // Every connect streams the session from its start. A reconnect (and a
+  // reattach after a reload) clears the screen first, so the replay is drawn
+  // once, and its burst is not read as the agent working.
+  function attach(sessionId, replay) {
     if (state.source) state.source.close();
     const source = new EventSource(`/api/terminal/sessions/${sessionId}/stream`);
+    let opened = false;
     source.addEventListener('output', (event) => {
-      state.lastOutputAt = Date.now();
+      if (Date.now() >= state.quietUntil) state.lastOutputAt = Date.now();
       state.term.write(decode(JSON.parse(event.data).payload.data));
     });
     source.addEventListener('exit', () => {
       source.close();
       // Release the ended session so it stops counting toward the cap.
       api(`/api/terminal/sessions/${sessionId}`, 'DELETE', {}).catch(() => {});
+      forgetSession(sessionId);
       if (state.sessionId === sessionId) {
         state.sessionId = null;
         state.exited = true;
@@ -239,11 +264,43 @@
       }
     });
     source.onerror = () => { if (state.sessionId === sessionId) setStatus('Reconectando…', 'warn'); };
-    source.onopen = () => setStatus(`Conectado · ${agentLabel(state.agent)}`, 'ok');
+    source.onopen = () => {
+      if (opened || replay) {
+        state.term.reset();
+        state.quietUntil = Date.now() + REPLAY_QUIET_MS;
+      }
+      opened = true;
+      setStatus(`Conectado · ${agentLabel(state.agent)}`, 'ok');
+    };
     state.source = source;
   }
 
+  // After a reload: reattach to the remembered session if it is still alive.
+  async function resume() {
+    const stored = storedSession();
+    if (!stored || !stored.id) return;
+    try {
+      const info = await loadInfo();
+      if (!info.enabled || !info.authorized) return;
+      const session = await api(`/api/terminal/sessions/${encodeURIComponent(stored.id)}`, 'GET');
+      if (!session.alive || state.sessionId) { if (!session.alive) forgetSession(stored.id); return; }
+      if (!ensureTerm()) return;
+      state.agent = session.agent;
+      const select = $('terminalAgentSelect');
+      if (select) select.value = session.agent;
+      renderQuick();
+      renderFooter();
+      state.sessionId = session.id;
+      state.exited = false;
+      state.startedAt = Date.now();
+      attach(session.id, true);
+    } catch (_) {
+      forgetSession(stored.id);
+    }
+  }
+
   async function start() {
+    if (state.resuming) await state.resuming;
     if (state.sessionId) return state.sessionId;
     if (state.starting) return state.starting;
     state.starting = (async () => {
@@ -261,7 +318,8 @@
       });
       state.sessionId = created.id;
       state.exited = false;
-      attach(created.id);
+      rememberSession(created.id, state.agent);
+      attach(created.id, false);
       term.focus();
       return created.id;
     })();
@@ -279,6 +337,7 @@
     const sid = state.sessionId;
     state.sessionId = null;
     if (state.source) { state.source.close(); state.source = null; }
+    forgetSession(sid);
     if (sid) {
       try { await api(`/api/terminal/sessions/${sid}`, 'DELETE', {}); } catch (_) { /* gone */ }
     }
@@ -469,6 +528,21 @@
     }
   }
 
+  // "Detener proceso": interrupts the agent's turn (Esc) or the shell's command
+  // (Ctrl-C). The session stays open for the next phase.
+  async function interrupt() {
+    if (state.resuming) await state.resuming;
+    const sid = state.sessionId;
+    if (!sid) return false;
+    const key = state.agent === 'shell' || state.agent === 'herdr' ? '\x03' : '\x1b';
+    try {
+      await api(`/api/terminal/sessions/${sid}/input`, 'POST', { data: key });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // What the phase run tracker reads to show whether the agent is working.
   function smithTerminalActivity() {
     return { sessionId: state.sessionId, agent: state.agent, lastOutputAt: state.lastOutputAt,
@@ -500,12 +574,18 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
     window.addEventListener('focus', wake);
     window.addEventListener('resize', () => { if (isOpen()) refit(false); });
+    // A reload keeps the session of a running phase (and reattaches to it);
+    // otherwise it ends the session so it never lingers unseen.
     window.addEventListener('beforeunload', () => {
-      if (state.sessionId) {
+      const running = window.phaseRuns && typeof window.phaseRuns.anyRunning === 'function'
+        && window.phaseRuns.anyRunning();
+      if (state.sessionId && !running) {
+        forgetSession(state.sessionId);
         fetch(`/api/terminal/sessions/${state.sessionId}`, { method: 'DELETE', headers: HEADERS, body: '{}', keepalive: true });
       }
     });
     setStatus('Sin sesión', 'off');
+    state.resuming = resume().finally(() => { state.resuming = null; });
   });
 
   window.toggleSmithTerminal = toggleSmithTerminal;
@@ -514,4 +594,5 @@
   window.sendToCli = sendToCli;
   window.smithTerminalActivity = smithTerminalActivity;
   window.smithTerminalAgents = smithTerminalAgents;
+  window.smithTerminalInterrupt = interrupt;
 })();

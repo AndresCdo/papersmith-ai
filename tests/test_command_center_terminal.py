@@ -239,6 +239,14 @@ class RouteTests(unittest.TestCase):
                          "x", self.req({**SAME, "Sec-Fetch-Site": "cross-site"}))
         self.assertEqual(response.status_code, 403)
 
+    def test_a_session_can_be_looked_up_to_reattach_after_a_reload(self) -> None:
+        sid = _body(self.create(SAME))["id"]
+        lookup = _route(self.app, "/api/terminal/sessions/{sid}", "GET")
+        self.assertEqual(_body(_call(lookup, sid, self.req(SAME))),
+                         {"id": sid, "agent": "shell", "alive": True})
+        self.assertEqual(_call(lookup, "nope", self.req(SAME)).status_code, 404)
+        self.assertEqual(_call(lookup, sid, self.req(SAME, cookie=False)).status_code, 403)
+
     def test_an_unknown_session_is_404(self) -> None:
         response = _call(_route(self.app, "/api/terminal/sessions/{sid}/input", "POST"),
                          "nope", self.req(SAME, {"data": "x"}))

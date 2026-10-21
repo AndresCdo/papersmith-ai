@@ -37,9 +37,24 @@ number is `0`, breaking changes can still arrive without a major bump.
   - The chosen agent is remembered across reloads.
 - `POST /api/phase/run` answers with the phase's verdict (`status`, `verified`,
   `evidence`).
+- **Follow a running phase from any tab.**
+  - A click on the run dock (bottom left) opens the run's tracking panel in
+    place, with the same checkpoints as the drawer. The operator stays on the tab
+    they were on.
+  - The panel opens the agent's terminal and says when the phase's session is no
+    longer open. "Abrir en Pipeline" still leads to the drawer.
+  - **"Detener proceso"** interrupts the agent's turn (Esc, or Ctrl-C in the
+    shell) after a confirmation. It keeps the session and marks the run as
+    stopped.
+- `GET /api/terminal/sessions/{id}` reports a session's agent and whether it is
+  alive, so a reloaded page can reattach to it.
 
 ### Fixed
 
+- **A reload no longer kills the agent of a running phase.** While a phase run is
+  live, the page keeps the CLI session on unload and reattaches to it on load.
+- **A terminal reconnect no longer draws its output twice.** The stream replays
+  the session from its start, so the screen is cleared before the replay.
 - **Fase 11 can pass.** Verifying the audit phase runs `papersmith audit
   --check-drift` and records the verdict in `.papersmith/audit.json`. The phase
   passes only on a clean audit; nothing wrote that file before.

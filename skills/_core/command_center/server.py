@@ -2098,6 +2098,20 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                                 headers=dict(_PAPER_HEADERS))
         return JSONResponse({"ok": True}, headers=dict(_PAPER_HEADERS))
 
+    # A reloaded page looks its session up before reattaching to it.
+    @app.get("/api/terminal/sessions/{sid}")
+    def api_terminal_session(sid: str, request: Request) -> JSONResponse:
+        refusal = _terminal_refusal(request, mutating=False)
+        if refusal is not None:
+            return refusal
+        try:
+            session = terminals.get(sid)
+        except KeyError:
+            return JSONResponse({"detail": "no such session"}, status_code=404,
+                                headers=dict(_PAPER_HEADERS))
+        return JSONResponse({"id": session.id, "agent": session.agent, "alive": session.alive},
+                            headers=dict(_PAPER_HEADERS))
+
     @app.get("/api/terminal/sessions/{sid}/stream")
     async def api_terminal_stream(sid: str, request: Request) -> Response:
         refusal = _terminal_refusal(request, mutating=False)
