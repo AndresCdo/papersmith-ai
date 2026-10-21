@@ -470,11 +470,12 @@ class HeavyEngine:
     def __init__(self, images_scale: float = 2.0, formulas_on_cpu: bool = False, table_mode: str = "fast",
                  ocr_lang: tuple[str, ...] = ("en",)):
         self.images_scale = images_scale
+        self.formulas_on_cpu = formulas_on_cpu
+        self._formula: tuple[str | None, str] | None = None
         # RapidOCR on its torch backend: torch is already here, so OCR adds no
         # runtime; its default language is Chinese, so name the one we read.
         self.ocr_lang = list(ocr_lang)
         self.table_mode = table_mode
-        self.formula_preset, self.formula_why = formula_backend(formulas_on_cpu)
         self._converters: dict[tuple[bool, bool], object] = {}
 
     @staticmethod
@@ -482,6 +483,19 @@ class HeavyEngine:
         from importlib.metadata import version
 
         return version("docling")
+
+    # Decided on first use, not at construction: `engine: pdfium` builds this
+    # object but never asks, so it never imports torch to look for CUDA.
+    @property
+    def formula_preset(self) -> str | None:
+        if self._formula is None:
+            self._formula = formula_backend(self.formulas_on_cpu)
+        return self._formula[0]
+
+    @property
+    def formula_why(self) -> str:
+        self.formula_preset  # noqa: B018 -- decides the backend once
+        return self._formula[1]
 
     def options(self, ocr: bool, tables: bool = True) -> dict:
         return {"ocr": f"rapidocr-torch-{'+'.join(self.ocr_lang)}" if ocr else None, "formulas": self.formula_preset,
@@ -622,8 +636,8 @@ class PageCache:
             if folder.exists():
                 shutil.rmtree(folder)
             staging.rename(folder)
-        except OSError:
-            shutil.rmtree(staging, ignore_errors=True)  # a cache that cannot be written is only a miss later
+        except Exception:  # an unwritable entry (disk, an image codec) is only a miss later
+            shutil.rmtree(staging, ignore_errors=True)
 
     def verify(self) -> tuple[int, list[Path]]:
         """Re-check every entry; returns (entries checked, entries that fail)."""

@@ -290,6 +290,17 @@ class RoutedEngineTests(_Tmp):
         self.assertTrue(all(p["cached"] for p in sidecar["pages"]))
         self.assertEqual(first, second)
 
+    def test_a_missing_entry_reconverts_its_whole_run_not_the_page_alone(self) -> None:
+        pdf = self.pdf(TEXT_PAGE, MATH_PAGE, MATH_PAGE)
+        first, _ = self.render(self.engine(), pdf)
+        entry = next(f for f in (self.tmp / "cache").glob("*/*/p0003-math-*/entry.json"))
+        shutil.rmtree(entry.parent)
+        heavy = _StubHeavy()
+        second, sidecar = self.render(self.engine(heavy=heavy), pdf)
+        self.assertEqual(heavy.calls, [(2, 3, False, False)])
+        self.assertEqual([p["cached"] for p in sidecar["pages"]], [True, False, False])
+        self.assertEqual(first, second)
+
     def test_without_the_cache_nothing_is_stored(self) -> None:
         self.render(self.engine(cache=False), self.pdf(TEXT_PAGE, MATH_PAGE))
         self.assertFalse((self.tmp / "cache").exists())
@@ -299,6 +310,16 @@ class RoutedEngineTests(_Tmp):
         _text, sidecar = self.render(self.engine("pdfium", heavy), self.pdf(MATH_PAGE, TABLE_PAGE))
         self.assertEqual(heavy.calls, [])
         self.assertEqual({p["engine"] for p in sidecar["pages"]}, {"pdfium"})
+
+    def test_engine_pdfium_never_looks_for_a_formula_accelerator(self) -> None:
+        real = pdf_pipeline.formula_backend
+        pdf_pipeline.formula_backend = lambda *_: self.fail("pdfium must not probe for MLX or CUDA")
+        try:
+            routed = extract_pdf.RoutedEngine("pdfium", "fast", False, None)
+            _text, sidecar = self.render(routed, self.pdf(MATH_PAGE))
+        finally:
+            pdf_pipeline.formula_backend = real
+        self.assertIsNone(sidecar["engine"]["formulas"])
 
     def test_engine_docling_sends_every_page_with_content(self) -> None:
         heavy = _StubHeavy()
@@ -324,6 +345,16 @@ class RoutedEngineTests(_Tmp):
         self.assertIn("<!-- page 2 -->", text, "a page marker inside the cut survives it")
         self.assertEqual([(r["text"], r["page"]) for r in sidecar["references"]],
                          [("[1] A. Author. A first paper. 2020.", 2), ("[2] B. Author. A second paper. 2021.", 2)])
+
+    def test_bulleted_references_leave_no_empty_rows(self) -> None:
+        class Bulleted(_StubHeavy):
+            def convert(self, pdf_path, first, last, ocr, tables=True):
+                self.calls.append((first, last, ocr, tables))
+                return {n: pdf_pipeline.FastPage("## References\n\n- [1] A first paper.\n- [2] A second paper.")
+                        for n in range(first, last + 1)}
+
+        _text, sidecar = self.render(self.engine(heavy=Bulleted()), self.pdf(TABLE_PAGE))
+        self.assertEqual([r["text"] for r in sidecar["references"]], ["[1] A first paper.", "[2] A second paper."])
 
     def test_without_a_formula_accelerator_math_pages_stay_fast(self) -> None:
         heavy = _StubHeavy()

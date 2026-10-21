@@ -612,14 +612,15 @@ class RoutedEngine:
             cached: set[int] = set()
             fast_version = f"pypdfium2-{_version('pypdfium2')}"
             for probe in probes:
-                heavy = probe.route in pp.HEAVY_ROUTES
-                key = self._key(pdf_sha, probe, heavy, body, fast_version)
+                if probe.route in pp.HEAVY_ROUTES:
+                    continue  # heavy pages are cached and converted by run, below
+                key = self._key(pdf_sha, probe, None, body, fast_version)
                 hit = self.cache.get(pdf_sha, key) if self.cache else None
                 if hit is not None:
                     pages[probe.page] = hit
-                    engines[probe.page] = "docling" if heavy else "pdfium"
+                    engines[probe.page] = "pdfium"
                     cached.add(probe.page)
-                elif not heavy:
+                else:
                     page = document[probe.page - 1]
                     try:
                         pages[probe.page] = pp.fast_page_markdown(page, probe.page, body, line_groups[probe.page])
@@ -627,9 +628,20 @@ class RoutedEngine:
                         page.close()
                     engines[probe.page] = "pdfium"
                     self._store(pdf_sha, key, probe, pages[probe.page], "pdfium")
-            missing = [p for p in probes if p.page not in pages]
             heavy_seconds = 0.0
-            for first, last, ocr, tables in pp.heavy_runs(missing):
+            for run in pp.heavy_runs(probes):
+                first, last, ocr, tables = run
+                # Docling lays a page out with its neighbours in the same run, so
+                # a page is only reused when its whole run is: one missing entry
+                # reconverts the run, never one page alone with other neighbours.
+                keys = {n: self._key(pdf_sha, probes[n - 1], run, body, fast_version) for n in range(first, last + 1)}
+                hits = {n: self.cache.get(pdf_sha, key) for n, key in keys.items()} if self.cache else {}
+                if hits and all(hit is not None for hit in hits.values()):
+                    for number, hit in hits.items():
+                        pages[number] = hit
+                        engines[number] = "docling"
+                        cached.add(number)
+                    continue
                 run_started = time.monotonic()
                 try:
                     produced = self.heavy.convert(pdf_path, first, last, ocr, tables)
@@ -645,8 +657,7 @@ class RoutedEngine:
                     if number in produced:
                         pages[number] = produced[number]
                         engines[number] = "docling"
-                        self._store(pdf_sha, self._key(pdf_sha, probe, True, body, fast_version),
-                                    probe, produced[number], "docling")
+                        self._store(pdf_sha, keys[number], probe, produced[number], "docling")
                     else:
                         if number not in line_groups:
                             line_groups[number] = pp.page_lines(document, number)
@@ -673,7 +684,8 @@ class RoutedEngine:
         (staging / f"{pdf_path.stem}.md").write_text(text, encoding="utf-8")
         page_rows = [dict(p.as_dict(), engine=engines[p.page], cached=p.page in cached) for p in probes]
         engine = {"name": self.engine, "fast": fast_version, "heavy": None if self.heavy_missing else self._heavy_version(),
-                  "heavy_unavailable": self.heavy_missing, "formulas": self.heavy.formula_why,
+                  "heavy_unavailable": self.heavy_missing,
+                  "formulas": None if self.engine == "pdfium" else self.heavy.formula_why,
                   "pipeline": pp.PIPELINE_VERSION}
         write_sidecar(staging / f"{pdf_path.stem}.json", pdf_path, text, references, engine=engine,
                       pages=page_rows, seconds=time.monotonic() - started, heavy_seconds=heavy_seconds,
@@ -689,10 +701,12 @@ class RoutedEngine:
         except Exception:
             return None
 
-    def _key(self, pdf_sha: str, probe, heavy: bool, body: float, fast_version: str) -> str:
-        if heavy:
+    def _key(self, pdf_sha: str, probe, run: tuple | None, body: float, fast_version: str) -> str:
+        """A heavy page's key carries its run: the same page laid out in another
+        run is another entry."""
+        if run is not None:
             version = self._heavy_version() or "docling-missing"
-            options = self.heavy.options(probe.route == "scan", probe.route == "scan" or probe.has_table)
+            options = dict(self.heavy.options(run[2], run[3]), run=[run[0], run[1]])
             return self.pipeline.PageCache.key(pdf_sha, probe.page, probe.route, "docling", version, options)
         return self.pipeline.PageCache.key(pdf_sha, probe.page, probe.route, "pdfium", fast_version, {"body": body})
 
@@ -770,7 +784,7 @@ def write_sidecar(path: Path, pdf_path: Path, text: str, references: list[tuple[
             # The fast path joins a bibliography into one paragraph and Docling
             # bullets it; one row per entry either way.
             for part in _REFERENCE_START.split(entry):
-                part = part.strip().removeprefix("- ").strip()
+                part = part.strip().lstrip("-").strip()  # a Docling bullet, alone or before its entry
                 if part:
                     reference_rows.append({"text": part, "page": page})
     sidecar = {
