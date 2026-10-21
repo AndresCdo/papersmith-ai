@@ -1,9 +1,24 @@
 paper_ingestion:
-  engine: marker
+  # Engine (every default is license-unrestricted: no copyleft, no revenue or
+  # user threshold):
+  #   auto    -> route each page: digital prose through pypdfium2 (milliseconds),
+  #              only display-equation, table and scanned pages through Docling
+  #   pdfium  -> fast path only, no model (formulas as Unicode, tables as text)
+  #   docling -> every page through Docling
+  #   marker  -> the former engine, opt-in: its weights are free only below
+  #              USD 5M in funding or revenue (pip install marker-pdf==2.0.0)
+  engine: auto
   # Conversion mode:
-  #   fast     -> lightweight layout/table detectors, OCR only garbled/empty blocks (recommended on CPU/MPS)
-  #   balanced -> VLM layout model + full-page OCR (highest fidelity, best on GPU, slow on Mac)
+  #   fast     -> route pages as above (recommended)
+  #   balanced -> fidelity first: every page through Docling (marker: VLM layout + full OCR)
   mode: fast
+  # Docling's formula model runs on Apple Silicon (MLX) or CUDA. On a CPU-only
+  # machine it takes about 40 s per formula, so math pages stay on the fast
+  # path unless this is true.
+  formulas_on_cpu: false
+  # Per-page cache under .papersmith/cache/ingestion, keyed by the PDF's SHA-256:
+  # re-ingesting a paper, or the same PDF fetched again, converts nothing twice.
+  cache: true
   # true -> drop the references/bibliography section at the end of each paper (no
   # information value, and it inflates token cost).
   strip_references: true
