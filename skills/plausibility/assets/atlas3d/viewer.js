@@ -574,7 +574,17 @@ function mount(container, data, hooks = {}) {
     }
   }
 
+  // The dashboard pauses the loop while the atlas tab is not shown: nothing
+  // would be seen, so nothing is drawn until it resumes.
+  let paused = false;
+  let looping = false;
+
   function animate(now) {
+    if (paused) {
+      looping = false;
+      return;
+    }
+    looping = true;
     stepLayout(now === undefined ? performance.now() : now);
     if (flight) {
       flight.t = Math.min(1, flight.t + 0.06);
@@ -589,6 +599,13 @@ function mount(container, data, hooks = {}) {
   animate();
 
   return {
+    pause() { paused = true; },
+    resume() {
+      paused = false;
+      if (looping) return;
+      looping = true; // claimed now, so a second resume cannot start a second loop
+      requestAnimationFrame(animate);
+    },
     setDim: paint,
     focus,
     zoom(factor) {

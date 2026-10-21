@@ -25,6 +25,17 @@ class GraphToolbarTests(unittest.TestCase):
         self.assertIn("fetch('/api/atlas/build', { method: 'POST' })", PAGE)
         self.assertIn("iframe.src = `/api/atlas/view?v=${Date.now()}`", PAGE)
 
+    def test_the_3d_view_loads_with_its_tab_not_with_the_page(self) -> None:
+        self.assertIn('<iframe id="graphIframe" class="iframe-viewer" src="about:blank" onload="if (activeTab !== \'atlas\') postToGraph({ type: \'atlas-command\', command: \'pause\' })"></iframe>', PAGE)
+        self.assertIn("if (tabId === 'atlas' && graphFramePath() === 'blank') {", PAGE)
+
+    def test_the_atlas_stops_drawing_while_its_tab_is_not_shown(self) -> None:
+        self.assertIn("postToGraph({ type: 'atlas-command', command: tabId === 'atlas' ? 'resume' : 'pause' });", PAGE)
+        assets = Path(server.__file__).resolve().parents[2] / "plausibility"
+        page = (assets / "scripts" / "render_atlas.py").read_text(encoding="utf-8")
+        self.assertIn("'pause': () => viewer && viewer.pause(),", page)
+        self.assertIn("'resume': () => viewer && viewer.resume(),", page)
+
     def test_the_atlas_contract_is_spoken_and_heard(self) -> None:
         self.assertIn("postToGraph({ type: 'atlas-command', command: 'toggle-layout' })", PAGE)
         self.assertIn("e.source !== iframe.contentWindow", PAGE)
