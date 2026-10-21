@@ -15,6 +15,18 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **Page-routed, license-unrestricted paper ingestion.** The default engine is
+  now `auto`: each page is probed without a model and digital prose is read by
+  pypdfium2 in milliseconds; only display-equation, table and scanned pages go
+  to Docling through its page range (formulas as LaTeX with Granite-Docling on
+  MLX on Apple Silicon or CodeFormulaV2 on CUDA, TableFormer only on table pages,
+  RapidOCR only on scans). Every page is cached by the PDF's SHA-256 and
+  verified before reuse (`--verify-cache`). Each paper gains a `<stem>.json`
+  page map with references kept by page, and `pdf_fragment.py` / the MCP tool
+  `papersmith.ingest_fragment` return one page, section, equation or search hit
+  without the whole document. New flags `--engine` and `--no-cache`; new keys
+  `cache` and `formulas_on_cpu`.
+
 - **Live run tracker for pipeline phases.** "Ejecutar" opens a tracker in the
   phase drawer and marks the card as running. It follows the run through five
   steps: command sent, agent working (the terminal's output), the phase's
@@ -50,6 +62,13 @@ number is `0`, breaking changes can still arrive without a major bump.
   alive, so a reloaded page can reattach to it.
 
 ### Changed
+
+- **Marker is no longer the default ingestion engine nor installed by default.**
+  Its model weights are free only below USD 5M in funding or revenue; every
+  default engine now carries no copyleft and no revenue or user threshold.
+  `engine: marker` still works as an explicit opt-in after
+  `pip install marker-pdf==2.0.0`, and says why. The installer drops PyMuPDF
+  (AGPL, unused) for pypdfium2, and `--no-ingestion` keeps the fast path.
 
 - **A lighter dashboard, with the same views.**
   - `/api/status` reuses the module constants, YAML and PDF page count it

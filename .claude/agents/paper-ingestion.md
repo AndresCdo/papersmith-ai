@@ -24,7 +24,7 @@ Run `python3 skills/paper-ingestion/scripts/extract_pdf.py <pdf> --output-dir <s
 
 This is lite evidence retention, not structured table extraction. `extract.tables: true` means preserve possible table evidence only in exact raw page text and rendered page images. Markdown must state this limitation. Manifest v1.1 must expose a machine-readable `lite_evidence_only` table mode and must not emit rows, columns, cells, inferred values, or structured-table claims.
 
-Preserve textual figure captions as page-level text evidence. Never associate captions with embedded images by list order. For every image, record only PyMuPDF metadata and page provenance; set it to `review_required` unless a defensible spatial association is proven and recorded. Do not claim image content, labels, values, trends, or relationships.
+Preserve textual figure captions as page-level text evidence. Never associate captions with embedded images by list order. For every image, record only the PDF's own image metadata and page provenance; set it to `review_required` unless a defensible spatial association is proven and recorded. Do not claim image content, labels, values, trends, or relationships.
 
 Preserve equation candidates as exact raw text with page provenance, numeric confidence, and review status; never synthesize LaTeX. Preserve page images, source SHA-256, effective configuration, and per-page confidence. Verify the complete artifact set before reporting success, and explicitly report the lite table limitation and all review-required evidence.
 

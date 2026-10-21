@@ -102,7 +102,7 @@ class ToolSpec:
     title: str
     description: str
     verb: str
-    surface: str  # "cli" | "paper"
+    surface: str  # "cli" | "paper" | "skill" (a skill script run by the workspace interpreter)
     annotations: dict[str, Any]
     input_schema: dict[str, Any]
     build: Callable[[dict[str, Any], Path], ChildPlan]
@@ -229,6 +229,33 @@ def _build_ingest(arguments: dict[str, Any], workspace: Path) -> ChildPlan:
     if arguments.get("ocr"):
         tokens.append("--ocr")
     return ChildPlan("cli", tuple(tokens), timeout=INGEST_TIMEOUT)
+
+
+_FRAGMENT_SELECTORS = (
+    Flag("page", "--page", kind="int", description="page number, from 1"),
+    Flag("heading", "--heading", description="text contained in a heading"),
+    Flag("equation", "--equation", kind="int", description="display equation index, from 0"),
+    Flag("search", "--search", description="text to find in the paragraphs"),
+    Flag("outline", "--outline", kind="bool", description="headings and counts only"),
+)
+_FRAGMENT_FLAGS = (
+    Flag("paper", "paper", required=True, path=True,
+         description="workspace-relative ingested paper folder, or its .json / .md"),
+    *_FRAGMENT_SELECTORS,
+    Flag("max_chars", "--max-chars", kind="int", description="cap on the returned text (default 6000)"),
+)
+
+
+def _build_ingest_fragment(arguments: dict[str, Any], workspace: Path) -> ChildPlan:
+    script = workspace / "skills" / "paper-ingestion" / "scripts" / "pdf_fragment.py"
+    tokens = [str(script), str(resolve_under(workspace, str(arguments["paper"])))]
+    for spec in _FRAGMENT_FLAGS[1:]:
+        value = arguments.get(spec.name)
+        if value is None or value is False:
+            continue
+        tokens.extend([spec.flag] if spec.kind == "bool" else [spec.flag, str(value)])
+    tokens.append("--json")
+    return ChildPlan("paper", tuple(tokens))
 
 
 # --------------------------------------------------------------------------- #
@@ -741,6 +768,25 @@ _WORKSPACE_TOOLS = (
             )
         ),
         build=_build_ingest,
+    ),
+    ToolSpec(
+        name="papersmith.ingest_fragment",
+        title="Read part of an ingested paper",
+        description=(
+            "Return one fragment of an ingested paper -- a page, the section under a heading, "
+            "a display equation as LaTeX, the paragraphs matching a search, or the outline -- "
+            "never the whole document. Exactly one selector is required; the child refuses "
+            "otherwise (exit 2) and answers exit 1 when nothing matches."
+        ),
+        verb="fragment",
+        surface="skill",
+        annotations=tool_annotations(
+            "Read part of an ingested paper", read_only=True, destructive=False, open_world=False,
+            idempotent=True
+        ),
+        input_schema=_schema(_FRAGMENT_FLAGS),
+        build=_build_ingest_fragment,
+        result_json=True,
     ),
 )
 
