@@ -18,7 +18,7 @@ Branch: `perf/dashboard-resources` · Delivery: ask-on-risk · Runners: `.venv/b
 |----|-------|-------|--------|--------|
 | T1 | S1 | inline | done (RED 4 → GREEN) | see L4 |
 | T2 | S2 | inline | done (RED 2 → GREEN); high risk (concurrency), independent verifier at feature end | see L5 |
-| T3 | S3 | inline | pending | |
+| T3 | S3 | inline | done (RED 1 → GREEN) | see L6 |
 | T4 | S4 | inline | pending | |
 | T5 | S5 | inline | pending | |
 | T6 | S6 | inline | pending | |
@@ -34,3 +34,4 @@ Branch: `perf/dashboard-resources` · Delivery: ask-on-risk · Runners: `.venv/b
   - The watcher only watches `sections`, `openspec`, `experiments`, `paper` and `papersmith.yaml`, so a cache keyed on its revision would freeze phase evidence. That design was rejected in favour of per-file mtime memoization.
 - **L4** (2026-10-21) T1: `memo_by_file` in `state_extractor.py` (stat signature: mtime_ns, size, inode; deep copies; missing files not remembered) wraps module-constant parsing, YAML and the `pdfinfo` page count. `/api/status` on QMLEEG went from 31.2 ms to 10.5 ms per call (20-call average). Related suites: 821 passed; 1 failure, `paper_preview`, which is environmental and known.
 - **L5** (2026-10-21) T2: sessions keep `(loop, asyncio.Event)` waiters. `append` and the end of the pump call `notify` (`call_soon_threadsafe`). The stream clears its event before each read and waits at most `TERMINAL_WAIT_SECONDS` (1 s). The ping still comes every `TERMINAL_PING_SECONDS` (15 s). An idle stream went from 79 wake-ups/s to ≤ 6 in 1 s. Stream, terminal and server tests: 58 passed, 5 runs stable.
+- **L6** (2026-10-21) T3: `detachIfIdle` closes the EventSource only when the console is hidden and `phaseRuns.anyRunning()` is false. It runs on close, and on `visibilitychange` to hidden (this covers a run that ends after the console was closed). `openCliConsole` reattaches and replays once. The CLI, run and panel harnesses pass (27). Script version bumped to cli-console v0.18.8.

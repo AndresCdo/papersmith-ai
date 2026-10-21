@@ -66,16 +66,18 @@ global.fetch = async (path, opts = {}) => {
 global.EventSource = class {
   constructor(url) {
     this.l = {};
-    log.push(['stream', url.split('/')[4]]);
+    this.sid = url.split('/')[4];
+    log.push(['stream', this.sid]);
     setTimeout(() => {
+      if (this.closed) return;
       this.onopen && this.onopen();
       this.l.output && this.l.output({ data: JSON.stringify({ payload: { data: '' } }) });
       // A dropped connection: the browser reconnects and the server replays.
-      setTimeout(() => { this.onerror && this.onerror(); this.onopen && this.onopen(); }, 20);
+      setTimeout(() => { if (this.closed) return; this.onerror && this.onerror(); this.onopen && this.onopen(); }, 20);
     }, 10);
   }
   addEventListener(t, fn) { this.l[t] = fn; }
-  close() {}
+  close() { this.closed = true; log.push(['streamClose', this.sid]); }
 };
 global.window = {
   confirm: () => true,
@@ -98,6 +100,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await wait(300);
     window.closeCliConsole();
     out.afterSend = window.smithTerminalActivity();
+    out.logAfterClose = log.slice();
+    if (cfg.reopen) {
+      window.openCliConsole();
+      await wait(300);
+      out.logAfterReopen = log.slice();
+    }
   }
   out.interrupt = await window.smithTerminalInterrupt();
   winListeners.beforeunload();
@@ -163,6 +171,21 @@ class CliSessionTests(unittest.TestCase):
         self.assertTrue(out["interrupt"])
         self.assertIn(["input", "s1", "\u001b"], out["log"])
         self.assertNotIn("close", [entry[0] for entry in out["log"]])
+
+    def test_closing_the_console_without_a_run_closes_only_its_stream(self) -> None:
+        out = run(send=True, running=False, reopen=True)
+        closed = out["logAfterClose"]
+        self.assertIn(["streamClose", "s1"], closed)
+        self.assertNotIn("close", [entry[0] for entry in closed])
+        self.assertEqual(out["afterSend"]["sessionId"], "s1")
+        # Opening the console again reattaches the same session.
+        reopened = out["logAfterReopen"][len(closed):]
+        self.assertIn(["stream", "s1"], reopened)
+        self.assertNotIn("open", [entry[0] for entry in reopened])
+
+    def test_closing_the_console_during_a_run_keeps_following_the_agent(self) -> None:
+        out = run(send=True, running=True)
+        self.assertNotIn(["streamClose", "s1"], out["logAfterClose"])
 
     def test_without_a_session_there_is_nothing_to_interrupt(self) -> None:
         out = run(running=False)
