@@ -47,3 +47,8 @@ Branch: `perf/dashboard-resources` · Delivery: ask-on-risk · Runners: `.venv/b
     - `close()` notifies its streams.
     - A stream unwatches the `Session` it holds, even after the session was removed.
   - New tests pin: waiter cleanup, a prompt end on close, and a phase run started after an idle detach streaming again (R3-002/R4-001). That last one already passed, because `sendToCli` opens the console.
+- **L11** (2026-10-21) Close:
+  - Full suite at 6cfb1462: 6442 passed, 12 skipped. The 4 failures all also fail on main: `paper_preview` (environmental), release hygiene (needs a version bump), and the two `borrows_no_repository_s_vocabulary` subtests ('kaggle').
+  - npm: 784/784 passed.
+  - `/api/status` on QMLEEG under the same load: 23–25 ms with the change, 70–76 ms without.
+  - Not merged or pushed; that is the user's decision.
