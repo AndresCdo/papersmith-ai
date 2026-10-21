@@ -310,17 +310,19 @@ class TerminalManager:
             data = bytes(session.buffer[start:])
             return data, session.base + len(session.buffer), session.alive
 
-    def watch(self, sid: str, loop: Any, event: Any) -> None:
-        """Set ``event`` on ``loop`` whenever session ``sid`` writes or ends."""
+    def watch(self, sid: str, loop: Any, event: Any) -> Session:
+        """Set ``event`` on ``loop`` whenever session ``sid`` writes or ends.
+
+        Returns the session, so the stream can unwatch it even after it was
+        closed and removed from the manager.
+        """
         session = self.get(sid)
         with session.lock:
             session.waiters.add((loop, event))
+        return session
 
-    def unwatch(self, sid: str, loop: Any, event: Any) -> None:
-        try:
-            session = self.get(sid)
-        except KeyError:
-            return
+    @staticmethod
+    def unwatch(session: Session, loop: Any, event: Any) -> None:
         with session.lock:
             session.waiters.discard((loop, event))
 
@@ -404,6 +406,8 @@ class TerminalManager:
     def close(self, sid: str) -> None:
         with self._lock:
             session = self._sessions.pop(sid)
+        # Its streams find the session gone and end now, not on their timeout.
+        session.notify()
         try:
             os.killpg(session.process.pid, signal.SIGHUP)
         except OSError:

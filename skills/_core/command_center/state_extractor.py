@@ -27,6 +27,7 @@ import json
 import re
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -216,8 +217,10 @@ def _read_text(path: Path) -> str | None:
 #: Parsed results keyed by (kind, path, extra); each entry carries the file's
 #: stat signature, so a saved file is parsed again on the next read. The
 #: dashboard polls the state every few seconds and most inputs never change.
-_FILE_MEMO: dict[tuple[str, str, Any], tuple[tuple[int, int, int], Any]] = {}
+_FILE_MEMO: dict[tuple[str, str, Any], tuple[tuple[int, int, int, int], Any]] = {}
 _FILE_MEMO_LOCK = threading.Lock()
+#: How long a file must stay unchanged before its parse is reused.
+MEMO_SETTLE_NS = 2_000_000_000
 
 
 def clear_file_memo() -> None:
@@ -226,24 +229,32 @@ def clear_file_memo() -> None:
 
 
 def memo_by_file(kind: str, path: Path, compute: Callable[[], Any], extra: Any = None) -> Any:
-    """``compute()`` for ``path``, reused while its mtime, size and inode hold.
+    """``compute()`` for ``path``, reused while its stat signature holds.
 
-    A missing or unreadable file is never remembered. Callers get a deep copy,
-    so mutating a result cannot change what the next caller sees.
+    The signature is mtime, ctime (moved by a permission change too), size and
+    inode. A missing file is never remembered, and neither is a file changed
+    in the last ``MEMO_SETTLE_NS``: two saves inside one timestamp tick can
+    share a signature, so a fresh file is parsed every time until it settles.
+    Callers get a deep copy, so mutating a result cannot change what the next
+    caller sees.
     """
     try:
         stat = path.stat()
     except OSError:
         return compute()
-    signature = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    signature = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
     key = (kind, str(path), extra)
     with _FILE_MEMO_LOCK:
         hit = _FILE_MEMO.get(key)
     if hit is not None and hit[0] == signature:
         return copy.deepcopy(hit[1])
     value = compute()
+    settled = time.time_ns() - stat.st_mtime_ns >= MEMO_SETTLE_NS
     with _FILE_MEMO_LOCK:
-        _FILE_MEMO[key] = (signature, value)
+        if settled:
+            _FILE_MEMO[key] = (signature, value)
+        else:
+            _FILE_MEMO.pop(key, None)
     return copy.deepcopy(value)
 
 

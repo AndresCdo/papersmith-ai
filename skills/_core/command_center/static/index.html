@@ -2915,7 +2915,7 @@
 
         <!-- Vista 1: Iframe Constelación 3D Solar Atlas -->
         <div id="atlas3dContainer" style="display: block;">
-          <iframe id="graphIframe" class="iframe-viewer" src="about:blank" onload="if (activeTab !== 'atlas') postToGraph({ type: 'atlas-command', command: 'pause' })"></iframe>
+          <iframe id="graphIframe" class="iframe-viewer" src="about:blank" onload="if (this.getAttribute('src') !== 'about:blank' &amp;&amp; activeTab !== 'atlas') postToGraph({ type: 'atlas-command', command: 'pause' })"></iframe>
         </div>
 
         <!-- Vista 2: Matriz de Candidatos SOTA (Visualización Tipo Tabla Amigable) -->

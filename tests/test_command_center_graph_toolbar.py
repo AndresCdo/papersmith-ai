@@ -26,7 +26,7 @@ class GraphToolbarTests(unittest.TestCase):
         self.assertIn("iframe.src = `/api/atlas/view?v=${Date.now()}`", PAGE)
 
     def test_the_3d_view_loads_with_its_tab_not_with_the_page(self) -> None:
-        self.assertIn('<iframe id="graphIframe" class="iframe-viewer" src="about:blank" onload="if (activeTab !== \'atlas\') postToGraph({ type: \'atlas-command\', command: \'pause\' })"></iframe>', PAGE)
+        self.assertIn('<iframe id="graphIframe" class="iframe-viewer" src="about:blank" onload="if (this.getAttribute(\'src\') !== \'about:blank\' &amp;&amp; activeTab !== \'atlas\') postToGraph({ type: \'atlas-command\', command: \'pause\' })"></iframe>', PAGE)
         self.assertIn("if (tabId === 'atlas' && graphFramePath() === 'blank') {", PAGE)
 
     def test_the_atlas_stops_drawing_while_its_tab_is_not_shown(self) -> None:

@@ -101,6 +101,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     window.closeCliConsole();
     out.afterSend = window.smithTerminalActivity();
     out.logAfterClose = log.slice();
+    if (cfg.sendAfterClose) {
+      // A phase run starts while the console is closed and its stream dropped.
+      await window.sendToCli('/ingestion x', true, { kind: 'slash', agent: 'claude' });
+      await wait(300);
+      out.logAfterSendAgain = log.slice();
+    }
     if (cfg.reopen) {
       window.openCliConsole();
       await wait(300);
@@ -182,6 +188,13 @@ class CliSessionTests(unittest.TestCase):
         reopened = out["logAfterReopen"][len(closed):]
         self.assertIn(["stream", "s1"], reopened)
         self.assertNotIn("open", [entry[0] for entry in reopened])
+
+    def test_a_run_started_after_the_stream_was_dropped_streams_again(self) -> None:
+        out = run(send=True, running=False, sendAfterClose=True)
+        later = out["logAfterSendAgain"][len(out["logAfterClose"]):]
+        self.assertIn(["stream", "s1"], later)
+        self.assertIn(["input", "s1", "/ingestion x"], later)
+        self.assertNotIn("open", [entry[0] for entry in later])
 
     def test_closing_the_console_during_a_run_keeps_following_the_agent(self) -> None:
         out = run(send=True, running=True)

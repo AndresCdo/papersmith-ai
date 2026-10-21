@@ -2196,7 +2196,7 @@ async def _terminal_stream(request: Request, terminals: "terminal.TerminalManage
     loop = asyncio.get_running_loop()
     wake = asyncio.Event()
     try:
-        terminals.watch(sid, loop, wake)
+        session = terminals.watch(sid, loop, wake)
     except KeyError:
         yield format_sse("exit", {"reason": "closed"})
         return
@@ -2231,7 +2231,7 @@ async def _terminal_stream(request: Request, terminals: "terminal.TerminalManage
                 idle = 0.0
                 yield ": ping\n\n"
     finally:
-        terminals.unwatch(sid, loop, wake)
+        terminals.unwatch(session, loop, wake)
 
 
 async def _event_stream(request: Request, bus: EventBus, root: Path) -> AsyncIterator[str]:

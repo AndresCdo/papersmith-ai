@@ -107,6 +107,22 @@ class StreamWakeupTests(unittest.TestCase):
         frames = asyncio.run(_collect(self.manager, self.sid, request, before=leave,
                                       until=lambda f: f and f[-1].startswith("event: exit")))
         self.assertTrue(frames[-1].startswith("event: exit"))
+        self.assertEqual(self.manager.get(self.sid).waiters, set())
+
+    def test_closing_the_session_ends_its_stream_at_once(self) -> None:
+        request = _CountingRequest()
+        session = self.manager.get(self.sid)
+
+        async def close() -> None:
+            await asyncio.sleep(0.3)
+            self.manager.close(self.sid)
+            self.closed_at = time.monotonic()
+
+        frames = asyncio.run(_collect(self.manager, self.sid, request, before=close,
+                                      until=lambda f: f and f[-1].startswith("event: exit")))
+        self.assertTrue(frames[-1].startswith("event: exit"))
+        self.assertLess(time.monotonic() - self.closed_at, 0.5)
+        self.assertEqual(session.waiters, set())
 
 
 if __name__ == "__main__":
