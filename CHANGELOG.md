@@ -26,6 +26,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   which phase blocks it. A phase is locked until the one before it passes (Fase
   1 and the transversal Fase 11 are never locked). A locked phase can still be
   run with an explicit override, since each skill still refuses missing input.
+- **The operator picks the agent, and one session follows the pipeline.**
+  - Each guided prompt has an agent selector (claude, opencode or pi).
+  - It proposes the agent of the session already open, else the last one chosen.
+  - It says whether the phase continues in that session or opens one.
+  - Later phases reuse the same session. A new one opens only when the operator
+    picks another agent or ticks "Nueva sesión", always after a confirmation.
+  - A phase's `papersmith` command runs inside the open agent session as
+    `!command` instead of replacing it with a shell.
+  - The chosen agent is remembered across reloads.
 - `POST /api/phase/run` answers with the phase's verdict (`status`, `verified`,
   `evidence`).
 

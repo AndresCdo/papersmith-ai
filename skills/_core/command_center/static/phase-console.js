@@ -43,11 +43,60 @@
         <textarea class="phase-action__input" id="phaseInput${i}" rows="4"
           placeholder="${esc(a.placeholder)}" aria-label="${esc(a.label)}"></textarea>
         <div class="phase-action__error" id="phaseError${i}" role="alert" hidden></div>
+        <div class="phase-action__agent">
+          <label>Agente <select id="phaseAgent${i}" data-phase-agent="${i}" aria-label="Agente que ejecuta la fase"></select></label>
+          <label title="Cierra la sesión abierta y empieza otra"><input type="checkbox" id="phaseFresh${i}" data-phase-agent="${i}"> Nueva sesión</label>
+          <span class="phase-action__note" id="phaseAgentNote${i}"></span>
+        </div>
         <div class="phase-action__foot">
           <span class="phase-action__hint" id="phaseHint${i}">Se envía al agente de la terminal${esc(need)}</span>
           <button class="btn btn--primary btn--sm" data-phase-action="${i}">▶ Ejecutar</button>
         </div>
       </div>`;
+  }
+
+  // ---- agent picker --------------------------------------------------------
+  const AGENT_KEY = 'smith_phase_agent';
+  let agentInfo = { current: null, live: false, agents: [] };
+  const remembered = () => { try { return localStorage.getItem(AGENT_KEY); } catch (_) { return null; } };
+  const remember = (id) => { try { localStorage.setItem(AGENT_KEY, id); } catch (_) { /* blocked */ } };
+  const label = (id) => (agentInfo.agents.find((a) => a.id === id) || {}).label || id;
+
+  // The default keeps the session that is already following the pipeline;
+  // without one, the agent the operator last chose, else the first installed.
+  function defaultAgent() {
+    const ids = agentInfo.agents.map((a) => a.id);
+    if (agentInfo.live && ids.includes(agentInfo.current)) return agentInfo.current;
+    const last = remembered();
+    if (last && ids.includes(last)) return last;
+    return ids[0] || '';
+  }
+
+  function agentNote(i) {
+    const select = document.getElementById(`phaseAgent${i}`);
+    const note = document.getElementById(`phaseAgentNote${i}`);
+    if (!select || !note) return;
+    const fresh = document.getElementById(`phaseFresh${i}`)?.checked;
+    const same = agentInfo.live && select.value === agentInfo.current;
+    note.textContent = !select.value ? 'No hay claude, opencode ni pi instalados.'
+      : same && !fresh ? `Continúa en la sesión abierta de ${label(select.value)} (no se abre otra).`
+        : agentInfo.live ? `Cerrará la sesión de ${label(agentInfo.current)} y abrirá ${fresh && same ? 'una nueva' : label(select.value)}.`
+          : `Abrirá una sesión de ${label(select.value)} en la terminal.`;
+  }
+
+  async function fillAgents() {
+    if (typeof window.smithTerminalAgents !== 'function') return;
+    try { agentInfo = await window.smithTerminalAgents(); } catch (_) { return; }
+    const choice = defaultAgent();
+    current.forEach((a, i) => {
+      if (a.kind !== 'prompt') return;
+      const select = document.getElementById(`phaseAgent${i}`);
+      if (!select) return;
+      select.innerHTML = agentInfo.agents
+        .map((g) => `<option value="${esc(g.id)}"${g.id === choice ? ' selected' : ''}>${esc(g.label)}</option>`).join('');
+      select.value = choice;
+      agentNote(i);
+    });
   }
 
   function commandCard(a, i) {
@@ -80,6 +129,7 @@
     const cards = current.map((a, i) => (
       a.kind === 'prompt' ? promptCard(a, i) : a.kind === 'command' ? commandCard(a, i) : redirectCard(a, i)
     )).join('');
+    setTimeout(fillAgents, 0);
     return `<div class="phase-actions">
         <h4 class="phase-actions__title">⚙️ Ejecutar esta fase</h4>
         ${lock}
@@ -113,8 +163,8 @@
     return true;
   }
 
-  async function send(command, run, kind, i) {
-    const sent = await window.sendToCli?.(command, run, { kind });
+  async function send(command, run, kind, i, extra) {
+    const sent = await window.sendToCli?.(command, run, { kind, ...(extra || {}) });
     if (sent && run && currentPhase && window.phaseRuns) {
       window.phaseRuns.start(currentPhase, command);
       const host = document.getElementById('phaseRunTracker');
@@ -146,8 +196,11 @@
       return fail(`La guía pide la idea en al menos ${a.min_sentences} oraciones (el problema y lo que propones); amplíala un poco.`);
     }
     const command = [a.slash, `${a.prefix || ''}${text}`.trim()].filter(Boolean).join(' ');
+    const agent = document.getElementById(`phaseAgent${i}`)?.value || undefined;
+    const fresh = Boolean(document.getElementById(`phaseFresh${i}`)?.checked);
+    if (agent) remember(agent);
     if (hint) { hint.textContent = `Enviando a la terminal: ${command.slice(0, 80)}${command.length > 80 ? '…' : ''}`; hint.classList.remove('is-error'); }
-    send(command, true, 'slash', i);
+    send(command, true, 'slash', i, { agent, fresh });
   }
 
   function redirect(a) {
@@ -174,6 +227,11 @@
       if (blocked(null)) return;
       send(a.command, !/<[^>]+>/.test(a.command), 'shell', null);
     } else redirect(a);
+  }, true);
+
+  document.addEventListener('change', (event) => {
+    const el = event.target && event.target.closest && event.target.closest('[data-phase-agent]');
+    if (el) agentNote(Number(el.dataset.phaseAgent));
   }, true);
 
   window.renderPhaseActions = renderPhaseActions;
