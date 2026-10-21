@@ -275,6 +275,8 @@
     setTimeout(() => toast.classList.remove('is-visible'), 8000);
   }
 
+  // Capture phase: the phase drawer stops click propagation
+  // (onclick="event.stopPropagation()"), so a bubbling listener never fires.
   document.addEventListener('click', (event) => {
     const verify = event.target.closest && event.target.closest('[data-run-verify]');
     // Re-reads the status only: no audit, compile or other side effect.
@@ -294,7 +296,7 @@
         window.openDrawer(index);
       }
     }
-  });
+  }, true);
 
   window.phaseRuns = { start, onStatus, renderTracker, cardBadge, isRunning, dismiss, justUnlocked, renderDock };
   ensurePolling();

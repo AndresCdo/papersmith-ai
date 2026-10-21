@@ -155,6 +155,8 @@
     }
   }
 
+  // Capture phase: the phase drawer stops click propagation
+  // (onclick="event.stopPropagation()"), so a bubbling listener never fires.
   document.addEventListener('click', (event) => {
     const el = event.target.closest('[data-phase-action]');
     if (!el) return;
@@ -167,7 +169,7 @@
       if (blocked(null)) return;
       send(a.command, !/<[^>]+>/.test(a.command), 'shell', null);
     } else redirect(a);
-  });
+  }, true);
 
   window.renderPhaseActions = renderPhaseActions;
   window.phaseSentenceCount = phaseSentenceCount;

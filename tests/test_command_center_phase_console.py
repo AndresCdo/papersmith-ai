@@ -133,6 +133,15 @@ class PhaseConsoleTests(unittest.TestCase):
 
 
 class PageWiringTests(unittest.TestCase):
+    def test_drawer_clicks_reach_the_phase_handlers(self) -> None:
+        # The drawer stops click propagation, so a bubbling document listener
+        # never sees "Ejecutar": both scripts must listen in the capture phase.
+        self.assertIn('<div class="drawer" onclick="event.stopPropagation()">', PAGE)
+        for name in ("phase-console.js", "phase-run.js"):
+            script = (STATIC / name).read_text(encoding="utf-8")
+            start = script.index("document.addEventListener('click', (event) => {")
+            self.assertIn("}, true);", script[start:start + 2500], name)
+
     def test_the_drawer_renders_the_phase_actions(self) -> None:
         self.assertIn('<script src="./phase-console.js?v=', PAGE)
         self.assertIn("window.renderPhaseActions ? window.renderPhaseActions(p) : ''", PAGE)
