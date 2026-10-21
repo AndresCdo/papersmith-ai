@@ -111,6 +111,15 @@ class PhaseConsoleTests(unittest.TestCase):
         self.assertIn('value="opencode" selected', result["select"])
         self.assertIn("Abrirá una sesión de OpenCode", result["note"])
 
+    def test_the_note_warns_before_closing_the_open_session(self) -> None:
+        agents = {"current": "claude", "live": True,
+                  "agents": [{"id": "claude", "label": "Claude Code"}, {"id": "pi", "label": "Pi"}]}
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents, pick="pi")
+        self.assertIn("Cerrará la sesión de Claude Code y abrirá Pi", result["note"])
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents, fresh=True)
+        self.assertIn("Cerrará la sesión de Claude Code y abrirá una nueva", result["note"])
+
     def test_a_new_session_is_requested_only_when_ticked(self) -> None:
         agents = {"current": "claude", "live": True, "agents": [{"id": "claude", "label": "Claude Code"}]}
         idea = "One sentence here. And a second one."

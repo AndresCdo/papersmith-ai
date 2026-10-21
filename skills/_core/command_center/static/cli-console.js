@@ -368,7 +368,10 @@
       wanted = 'shell';
     }
     if (kind === 'slash') {
-      if (opts.agent && SLASH_AGENTS.includes(opts.agent) && available.includes(opts.agent)) wanted = opts.agent;
+      if (opts.agent && !(SLASH_AGENTS.includes(opts.agent) && available.includes(opts.agent))) {
+        throw new Error(`el agente ${agentLabel(opts.agent)} no está instalado`);
+      }
+      if (opts.agent) wanted = opts.agent;
       else if (!SLASH_AGENTS.includes(state.agent)) wanted = SLASH_AGENTS.find((id) => available.includes(id)) || null;
       if (!wanted) throw new Error('no hay un agente (claude, opencode, pi) instalado');
     }

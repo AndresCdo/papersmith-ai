@@ -140,6 +140,15 @@ class CliRoutingTests(unittest.TestCase):
         self.assertEqual(events(accepted, "close"), [["s1"]])
         self.assertIn(["s2", "/paper-ingestion x"], events(accepted, "input"))
 
+    def test_an_agent_that_is_not_installed_is_refused_not_replaced(self) -> None:
+        log = run(agent="herdr", available=["claude"],
+                  sends=[{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "pi"}}])
+        # The window opens on the current terminal to show why; no agent runs.
+        self.assertNotIn(["pi"], events(log, "open"))
+        self.assertNotIn(["claude"], events(log, "open"))
+        self.assertEqual(events(log, "input"), [])
+        self.assertIn("no está instalado", events(log, "status")[-1][0])
+
     def test_a_new_session_is_opened_only_when_asked(self) -> None:
         sends = [{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "claude"}},
                  {"text": "/plausibility again", "run": True, "kind": "slash", "opts": {"agent": "claude", "fresh": True}}]

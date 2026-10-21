@@ -84,9 +84,17 @@
           : `Abrirá una sesión de ${label(select.value)} en la terminal.`;
   }
 
+  // Re-read the terminal's agent and session (they can change from the
+  // terminal's own selector) and redraw every note from it.
+  async function refreshAgentInfo() {
+    if (typeof window.smithTerminalAgents !== 'function') return false;
+    try { agentInfo = await window.smithTerminalAgents(); } catch (_) { return false; }
+    current.forEach((a, i) => { if (a.kind === 'prompt') agentNote(i); });
+    return true;
+  }
+
   async function fillAgents() {
-    if (typeof window.smithTerminalAgents !== 'function') return;
-    try { agentInfo = await window.smithTerminalAgents(); } catch (_) { return; }
+    if (!(await refreshAgentInfo())) return;
     const choice = defaultAgent();
     current.forEach((a, i) => {
       if (a.kind !== 'prompt') return;
@@ -184,7 +192,8 @@
     return sent;
   }
 
-  function runPrompt(a, i) {
+  async function runPrompt(a, i) {
+    await refreshAgentInfo();
     const input = document.getElementById(`phaseInput${i}`);
     const hint = document.getElementById(`phaseHint${i}`);
     const text = String(input ? input.value : '').replace(/\s+/g, ' ').trim();
@@ -231,7 +240,10 @@
 
   document.addEventListener('change', (event) => {
     const el = event.target && event.target.closest && event.target.closest('[data-phase-agent]');
-    if (el) agentNote(Number(el.dataset.phaseAgent));
+    if (el) refreshAgentInfo().then(() => agentNote(Number(el.dataset.phaseAgent)));
+  }, true);
+  document.addEventListener('focusin', (event) => {
+    if (event.target && event.target.closest && event.target.closest('[data-phase-agent]')) refreshAgentInfo();
   }, true);
 
   window.renderPhaseActions = renderPhaseActions;
