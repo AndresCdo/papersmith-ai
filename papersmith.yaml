@@ -34,7 +34,8 @@ paper_writing:
   # credential.
   contact: ""
   roles:
-    discovery: []
+    discovery:
+      - banco-lia
     resolution:
       - openalex
       - crossref
