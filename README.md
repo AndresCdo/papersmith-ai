@@ -496,8 +496,8 @@ execution_profiles:
   benchmark_evaluation:  { target: "kaggle-gpu-pool", entrypoint: "papermill …/benchmark.ipynb" }
 
 paper_ingestion:
-  engine: marker
-  mode: fast            # fast (CPU) | balanced (GPU, maximum fidelity)
+  engine: auto          # route each page: pypdfium2 fast path, Docling only where needed
+  mode: fast            # fast (route pages) | balanced (every page through Docling)
   strip_references: true
   source_base: guidance
 ```
@@ -888,10 +888,29 @@ consequence that matters before it is used:
 > unrepeatable by design. Ingestion comes first, deliberation after.
 
 **What it needs first.** A single per-machine preparation: running
-`./.claude/skills/paper-ingestion/setup.sh`. It is idempotent and does two things:
-it installs the `llama-server` binary (the OCR engine; it is not a pip package) and
-creates the virtual environment with `marker-pdf` inside. The first real ingestion
-downloads the models (~1.5 GB) and caches them; from then on it works offline.
+`./.claude/skills/paper-ingestion/setup.sh`. It is idempotent and provisions the
+`papersmith` environment with `pypdfium2` (the fast path), `docling` (the heavy
+pages) and, on Apple Silicon, `mlx-vlm` (the formula model on the GPU). The first
+page that needs Docling downloads its models (about 1 GB) and caches them; from
+then on it works offline. A paper with no heavy page loads no model at all.
+
+**Page routing, and why it is fast.** Most pages of a paper are prose with an
+exact digital text layer. The default engine, `auto`, probes every page without
+loading a model — characters, fonts, images — and reads prose pages with
+**pypdfium2** in milliseconds. Only pages with a display equation, a table or no
+text layer go to **Docling**, through its page range: equations become LaTeX
+(Granite-Docling-258M on MLX on Apple Silicon, CodeFormulaV2 on CUDA), tables
+become Markdown (TableFormer, run only on pages with a table), scanned pages are
+OCR'd (RapidOCR). Every page is cached by the PDF's SHA-256, so the same PDF never
+converts twice. Measured on two arXiv papers (Apple Silicon, warm models):
+21.5 s and 28.6 s, against 6.8 s and 28.2 s for Marker, with more display
+equations as LaTeX (6 and 30, against 1 and 23); a cached re-ingestion takes 0.2 s.
+
+**Licenses.** Every default engine is license-unrestricted — no copyleft, no
+revenue or user threshold: pypdfium2 (Apache-2.0/BSD-3), Docling (MIT) and its
+models (Apache-2.0, CDLA-Permissive-2.0), RapidOCR (Apache-2.0), MLX (MIT).
+`engine: marker` stays as an explicit opt-in (`pip install marker-pdf==2.0.0`):
+its weights are free only below USD 5M in funding or revenue, and the run says so.
 
 **The stages it declares.** The flow is not the list of commands: it is what each
 stage establishes, and when it can be considered passed. This table is read
@@ -940,8 +959,8 @@ so that there is a moment of consent.
 6. The agent runs the script again with exactly the approved paths. Each path is
    validated **before** the engine loads: that it exists, that it is a `.pdf`, that
    it is still loose. That way a misspelled argument does not cost a model load.
-7. The Marker converter is built explicitly **without an LLM service** — which keeps
-   it local and keyless.
+7. The engine is built locally and keyless — no LLM service. With `auto`, each page
+   is probed and routed; Docling loads only when a page needs it.
 8. For each paper, the conversion is **transactional**: everything is staged in a
    temporary directory beside the PDF, and only when the `.md` and the figures are
    complete is the final folder created, the files moved, and **the PDF moved last**.
@@ -960,29 +979,34 @@ PDF becomes loose again for the next run.
 | File | What it does and why it exists |
 |---------|---------------------------|
 | `SKILL.md` | The behavioral contract: run `--list` first, ask for approval per paper, how to handle an unfiled PDF. The script says none of this — it only returns exit codes. |
-| `setup.sh` | Environment provisioning, idempotent: it installs `llama-server` and builds the `.venv`. It exists because the OCR needs a system binary that pip cannot install. |
-| `requirements.txt` | Pins `marker-pdf==2.0.0`. Without that pin, a new version could change the converter API and break extraction silently. |
-| `scripts/extract_pdf.py` | The complete engine: config validation, discovery, listing, filing, transactional conversion, reference stripping, figure writing, and the exit-code contract. |
+| `setup.sh` | Environment provisioning, idempotent: a thin wrapper over `scripts/setup_env.py`. |
+| `requirements.txt` | Pins `docling==2.141.0` and `mlx-vlm==0.7.10` (Apple Silicon), and lists each engine's license. Without the pin, a new version could change the converter API and break extraction silently. |
+| `scripts/extract_pdf.py` | The orchestration: config validation, discovery, listing, filing, engine selection, transactional conversion, reference stripping and capture, figure writing, the `.json` page map, and the exit-code contract. |
+| `scripts/pdf_pipeline.py` | The page probe and router, the pypdfium2 fast path, the Docling adapter (page ranges, formula model by hardware, OCR only for scans) and the verified per-page cache. |
+| `scripts/pdf_fragment.py` | One page, heading section, equation or search hit of an ingested paper, never the whole document; also the MCP tool `papersmith.ingest_fragment`. |
 
 The functions that matter, if the code is going to be read: `is_loose()` —the whole
 idempotence check, in one line—, `discover_source_roots()`, `find_loose_pdfs()`,
 `resolve_single_target()` (the validation before loading the engine),
-`build_converter()`, `ingest_loose()` (the transaction) and `file_into()` (the filing
-of a PDF with no topic).
+`build_engine()`, `RoutedEngine.render()` (routing, cache and the page map),
+`ingest_loose()` (the transaction) and `file_into()` (the filing of a PDF with no topic).
 
 **What it writes to disk.**
 
 ```
 guidance/reference-papers/<name>/
 ├── <name>.pdf                the original PDF, moved here at the end
-├── <name>.md                 text + LaTeX + tables, no bibliography
-└── _page_4_Figure_2.jpeg     the figures that the .md references
+├── <name>.md                 text + LaTeX + tables, no bibliography; <!-- page N --> per page
+├── <name>.json               page map: routes, engines, offsets, headings, equations, references by page
+└── _page_4_Figure_2.png      the figures that the .md references
 ```
 
 Keys it honors from `papersmith.yaml`, under the `paper_ingestion:` block: `engine`
-(only `marker`), `mode` (`fast` or `balanced`), `strip_references` (bool, default
-`true`), `force_ocr` (bool, default `false`; same as the `--force-ocr` flag),
-`source_base` (default `guidance`) and `source_roots`.
+(`auto` by default, `pdfium`, `docling`, or the opt-in `marker`), `mode` (`fast` or
+`balanced`), `strip_references` (bool, default `true`), `force_ocr` (bool, default
+`false`; same as the `--force-ocr` flag), `cache` (bool, default `true`),
+`formulas_on_cpu` (bool, default `false`), `source_base` (default `guidance`) and
+`source_roots`.
 
 **The safeguards.**
 
@@ -1026,7 +1050,7 @@ flowchart TD
     M -- Yes --> O["Script with the approved paths"]
     O --> P{"Does each path exist, is it a PDF and still loose?"}
     P -- No --> E
-    P -- Yes --> Q["Loads Marker without an LLM service"]
+    P -- Yes --> Q["Probes each page; loads Docling only if a page needs it"]
     Q --> R["For each paper"]
     R --> S{"Does the paper folder already exist?"}
     S -- Yes --> T["This paper is refused. The batch continues"]

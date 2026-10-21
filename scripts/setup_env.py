@@ -8,15 +8,21 @@ is present, CPU otherwise) plus the `llama-server` OCR backend — both pulled f
 conda-forge rather than Homebrew, so the same command works everywhere.
 
 What it installs
-    conda-forge: python=3.12, pip, pytest, pytest-xdist, numpy, pymupdf, pyyaml, jsonschema,
+    conda-forge: python=3.12, pip, pytest, pytest-xdist, numpy, pypdfium2, pyyaml, jsonschema,
                  kagglesdk, llama.cpp (provides llama-server), nbformat, nbclient
                  and ipykernel (remote-execution runs notebooks), fastapi,
                  uvicorn, watchfiles and pydantic (the Paper Command Center
                  server the kit ships), and torch —
                  `pytorch-gpu`+`torchvision` on CUDA machines, else
                  `pytorch-cpu`+`torchvision`.
-    pip:         this project itself, editable (`pip install -e .`), and
-                 marker-pdf==2.0.0 (the paper-ingestion engine; pip-only).
+    pip:         this project itself, editable (`pip install -e .`), and the
+                 paper-ingestion heavy engine: docling (MIT), plus mlx-vlm (MIT)
+                 on Apple Silicon so its formula model runs on the GPU. Every one
+                 is license-unrestricted. pypdfium2 (Apache-2.0/BSD-3) is the
+                 fast path and comes from conda-forge with the base packages, so
+                 `--no-ingestion` still ingests digital PDFs. Marker is no longer
+                 installed: its weights are free only below USD 5M in funding or
+                 revenue; `pip install marker-pdf==2.0.0` opts in.
 
 Usage
     python3 scripts/setup_env.py install          # detect hardware, provision
@@ -43,7 +49,10 @@ MAMBA_ROOT = PROJECT_ROOT / ".micromamba"
 
 # Only pip-only packages go here. Everything else is available on conda-forge and
 # is installed through micromamba so platform + hardware variants resolve cleanly.
-PIP_PACKAGES = ["marker-pdf==2.0.0"]
+PIP_PACKAGES = [
+    "docling==2.141.0",
+    "mlx-vlm==0.7.10; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 CONDA_BASE_PACKAGES = [
     "python=3.12",
@@ -58,7 +67,8 @@ CONDA_BASE_PACKAGES = [
     # correctly provisioned environment failed that probe.
     "requests",
     "numpy",
-    "pymupdf",
+    # The paper-ingestion fast path and page probe (Apache-2.0 / BSD-3-Clause).
+    "pypdfium2",
     "pyyaml",
     "jsonschema",
     "kagglesdk",
@@ -237,7 +247,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     # the checkout instead of freezing a copy of it. Only when PROJECT_ROOT
     # is a Python project: a workspace copy carries no `pyproject.toml` or
     # `setup.py`, so an unconditional install fails there and aborts the
-    # marker-pdf step below.
+    # ingestion-engine step below.
     if (PROJECT_ROOT / "pyproject.toml").is_file() or (PROJECT_ROOT / "setup.py").is_file():
         run(mm, ["run", "-n", args.name, "python", "-m", "pip", "install", "-e",
                  str(PROJECT_ROOT)], mamba_env())
@@ -297,7 +307,7 @@ def main() -> int:
     p_install.add_argument("--cpu", action="store_true", help="force CPU PyTorch")
     p_install.add_argument("--cuda", action="store_true", help="force CUDA PyTorch")
     p_install.add_argument("--no-ingestion", action="store_true",
-                           help="skip marker-pdf (paper-ingestion engine)")
+                           help="skip docling (the heavy ingestion engine); the pypdfium2 fast path stays")
 
     sub.add_parser("clean", help="remove the environment").add_argument(
         "--full", action="store_true", help="also delete bootstrapped micromamba")

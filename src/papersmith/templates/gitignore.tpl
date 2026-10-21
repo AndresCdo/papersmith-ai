@@ -7,6 +7,7 @@ __pycache__/
 .scratch/
 .env*
 .papersmith/runs_ledger.jsonl
+.papersmith/cache/
 skills/paper-ingestion/.venv/
 kaggle-inbox/*
 !kaggle-inbox/.gitkeep

@@ -88,6 +88,7 @@ and auto-approve sensibly.
 |---|---|---|---|---|
 | `papersmith.workspace_status` | `papersmith status --json` | ✅ | — | — |
 | `papersmith.workspace_audit` | `papersmith audit --check-drift`; reports drift, never repairs it | ✅ | — | — |
+| `papersmith.ingest_fragment` | `pdf_fragment.py`: one page, heading section, display equation (LaTeX), search hits or the outline of an ingested paper, never the whole document | ✅ | — | — |
 | `papersmith.target_list` | configured compute targets | ✅ | — | — |
 | `papersmith.target_check` | target connectivity — runs `ssh` for a remote-ssh target | ✅ | — | ✅ |
 | `papersmith.paper_status` | the paper's block table | ✅ | — | — |
@@ -109,7 +110,7 @@ and auto-approve sensibly.
 | `papersmith.workspace_init` | create a workspace under the bound root; skips npm and the environment download unless asked | — | — | ✅ |
 | `papersmith.workspace_upgrade` | sync framework files, preserving all research artifacts | — | ✅ | — |
 | `papersmith.target_set` | persist the default compute target | — | — | — |
-| `papersmith.ingest_add` | ingest a PDF or URL; long-running, may download model weights | — | — | ✅ |
+| `papersmith.ingest_add` | ingest a PDF or URL; long-running, may download model weights the first time a page needs the heavy engine | — | — | ✅ |
 | `papersmith.paper_scaffold` | create/re-enter `paper/` idempotently | — | — | — |
 | `papersmith.paper_open` | insert an empty block pair | — | — | — |
 | `papersmith.paper_substitute` | replace one block's body, or adopt a hand edit | — | ✅ | — |

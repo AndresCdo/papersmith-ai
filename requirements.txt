@@ -18,7 +18,7 @@ torch>=2.0            # the kit's own `benchmark.py` imports it, so every test t
 # without it 18 of this suite's tests fail, all of them reporting something other
 # than the missing package -- four routed a kit-built target to `env-first`, which
 # reads as a defect in the target rather than an absence in the environment.
-PyMuPDF>=1.23
+pypdfium2>=4.30  # paper-ingestion fast path (Apache-2.0 / BSD-3-Clause)
 PyYAML>=6.0
 jsonschema>=4.0
 kagglesdk==0.1.37  # published standalone since 2025-07-11; NOT vendored inside

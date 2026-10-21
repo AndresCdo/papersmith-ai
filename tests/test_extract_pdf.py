@@ -1,4 +1,4 @@
-"""Focused unit tests for the Marker-based paper-ingestion helpers.
+"""Focused unit tests for the paper-ingestion helpers (routing, config, references).
 
 These cover the deterministic, pure logic authored in ``extract_pdf.py`` —
 reference stripping, config loading, and loose-PDF discovery — without invoking
@@ -256,7 +256,7 @@ class LoadConfigTests(unittest.TestCase):
 
     def test_unknown_engine_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = self._config(tmp, "paper_ingestion:\n  engine: docling\n")
+            path = self._config(tmp, "paper_ingestion:\n  engine: nougat\n")
             with self.assertRaises(EXTRACTOR.ConfigError):
                 EXTRACTOR.load_config(path)
 
@@ -511,8 +511,8 @@ class ForceOcrTests(_BaseFixture):
             with self.assertRaises(EXTRACTOR.ConfigError):
                 EXTRACTOR.load_config(path)
 
-    def _converter_arguments(self, argv: list[str], cfg: dict) -> tuple:
-        """Run `main` up to the engine load and return what it asked for."""
+    def _engine_arguments(self, argv: list[str], cfg: dict) -> tuple:
+        """Run `main` up to the engine load and return (engine, mode, force_ocr, cache)."""
         self.topic("reference-papers", "paper.pdf")
         seen: list[tuple] = []
 
@@ -520,9 +520,9 @@ class ForceOcrTests(_BaseFixture):
             seen.append(args)
             raise EXTRACTOR.EngineError("not loaded in a unit test")
 
-        real_load, real_build = EXTRACTOR.load_config, EXTRACTOR.build_converter
+        real_load, real_build = EXTRACTOR.load_config, EXTRACTOR.build_engine
         EXTRACTOR.load_config = lambda: {**self.cfg, **cfg}
-        EXTRACTOR.build_converter = refuse
+        EXTRACTOR.build_engine = refuse
         real_argv = sys.argv
         sys.argv = ["extract_pdf.py", *argv]
         try:
@@ -531,10 +531,15 @@ class ForceOcrTests(_BaseFixture):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(EXTRACTOR.main(), 2)
         finally:
-            EXTRACTOR.load_config, EXTRACTOR.build_converter = real_load, real_build
+            EXTRACTOR.load_config, EXTRACTOR.build_engine = real_load, real_build
             sys.argv = real_argv
         self.assertEqual(len(seen), 1)
         return seen[0]
+
+    def _converter_arguments(self, argv: list[str], cfg: dict) -> tuple:
+        """The (mode, force_ocr) pair handed to the engine."""
+        arguments = self._engine_arguments(argv, cfg)
+        return arguments[1], arguments[2]
 
     def test_the_flag_forces_ocr_for_this_run(self) -> None:
         self.assertEqual(self._converter_arguments(["--force-ocr"], {}), (None, True))
@@ -545,6 +550,56 @@ class ForceOcrTests(_BaseFixture):
 
     def test_without_either_the_text_layer_stays_on(self) -> None:
         self.assertEqual(self._converter_arguments([], {}), (None, False))
+
+
+class EngineSelectionTests(_BaseFixture):
+    """Which engine a run asks for, and that the page cache follows the switches."""
+
+    _engine_arguments = ForceOcrTests._engine_arguments
+
+    def test_the_default_engine_routes_pages_and_caches_them(self) -> None:
+        engine, _mode, _ocr, cache, _cpu = self._engine_arguments([], {})
+        self.assertEqual(engine, "auto")
+        self.assertEqual(cache, EXTRACTOR.REPO_ROOT / EXTRACTOR.CACHE_DIR)
+
+    def test_the_configured_engine_is_used(self) -> None:
+        self.assertEqual(self._engine_arguments([], {"engine": "marker"})[0], "marker")
+
+    def test_the_flag_overrides_the_configured_engine(self) -> None:
+        self.assertEqual(self._engine_arguments(["--engine", "pdfium"], {"engine": "docling"})[0], "pdfium")
+
+    def test_no_cache_from_the_flag_or_the_configuration(self) -> None:
+        self.assertIsNone(self._engine_arguments(["--no-cache"], {})[3])
+        self.assertIsNone(self._engine_arguments([], {"cache": False})[3])
+
+    def test_formulas_on_cpu_reaches_the_engine(self) -> None:
+        self.assertFalse(self._engine_arguments([], {})[4])
+        self.assertTrue(self._engine_arguments([], {"formulas_on_cpu": True})[4])
+
+    def test_a_non_boolean_cache_is_a_config_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "papersmith.yaml"
+            path.write_text("paper_ingestion:\n  cache: maybe\n", encoding="utf-8")
+            with self.assertRaises(EXTRACTOR.ConfigError):
+                EXTRACTOR.load_config(path)
+
+    def test_marker_is_built_only_when_named_and_its_license_is_stated(self) -> None:
+        import io
+        from contextlib import redirect_stderr
+
+        calls = []
+        real = EXTRACTOR.build_converter
+        EXTRACTOR.build_converter = lambda mode, force_ocr: calls.append((mode, force_ocr)) or "marker"
+        try:
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertEqual(EXTRACTOR.build_engine("marker", "fast", False, None), "marker")
+                routed = EXTRACTOR.build_engine("auto", None, False, None)
+        finally:
+            EXTRACTOR.build_converter = real
+        self.assertEqual(calls, [("fast", False)])
+        self.assertIn("USD 5M", err.getvalue())
+        self.assertIsInstance(routed, EXTRACTOR.RoutedEngine)
 
 
 if __name__ == "__main__":

@@ -570,7 +570,7 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
     Measured defect: the kit ships `scripts/setup_env.py` into workspaces, and
     `cmd_install` unconditionally ran `pip install -e PROJECT_ROOT` with
     `check=True`. A workspace is not a Python project (no `pyproject.toml` or
-    `setup.py`), so pip failed and aborted provisioning before `marker-pdf`,
+    `setup.py`), so pip failed and aborted provisioning before the ingestion engine,
     leaving `OCR Engine Missing`. These load a *copy* of the real script into
     a bare dir -- exactly the workspace situation -- with the process boundary
     stubbed, so no test touches the network.
@@ -607,7 +607,7 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
     def test_workspace_without_python_project_skips_editable_install(self) -> None:
         calls = self.install_calls(self.new_bare_root())
         assert not any("-e" in call for call in calls), calls
-        assert any("marker-pdf==2.0.0" in call for call in calls), calls
+        assert any("docling==2.141.0" in call for call in calls), calls
 
     def test_checkout_with_pyproject_keeps_editable_install(self) -> None:
         root = self.new_bare_root()
