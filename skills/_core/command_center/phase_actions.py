@@ -235,16 +235,16 @@ def primary_command(stage: str) -> str:
     return "Compilar desde el tablero (pdflatex + bibtex)" if stage == "paper" else ""
 
 
-# What the server reads to decide a phase, as (label, glob) pairs relative to
-# the workspace. The run tracker shows these and watches them change.
+# The files that show a phase's work, as (label, glob) pairs relative to the
+# workspace. The run tracker lists them and watches them change; the PASS
+# verdict itself is the server's status rule for the phase.
 EVIDENCE: dict[str, tuple[tuple[str, str], ...]] = {
     "harness": (("Manifiesto del workspace", "papersmith.yaml"),
                 ("Estado del framework", ".papersmith/version")),
     "plausibility": (("Pool de candidatos", "sota-pool/candidates.json"),
                      ("Atlas SOTA", "sota-pool/atlas.json"),
                      ("Constelación HTML", "sota-pool/atlas.html")),
-    "ingestion": (("Referencias ingeridas", "guidance/reference-papers/*/*.md"),
-                  ("PDFs sin ingerir", "guidance/reference-papers/*.pdf")),
+    "ingestion": (("Referencias ingeridas", "guidance/reference-papers/*/*.md"),),
     "proposal": (("Revisiones de propuesta", "proposals/research-concept-*-r*.md"),
                  ("Cielo de la propuesta", "proposals/*.sky.json")),
     "poc_experiments": (("Protocolos experimentales", "experiments/*"),
@@ -272,11 +272,16 @@ def evidence(root: Path, stage: str) -> list[dict[str, Any]]:
     for label, pattern in EVIDENCE.get(stage, ()):
         count, newest = 0, 0
         try:
-            for path in root.glob(pattern):
-                if path.name.startswith(".") or not path.resolve().is_relative_to(root.resolve()):
+            matches = root.glob(pattern)
+            for path in matches:
+                # One unreadable entry (a broken symlink) never hides the rest.
+                try:
+                    if path.name.startswith(".") or not path.resolve().is_relative_to(root.resolve()):
+                        continue
+                    newest = max(newest, int(path.stat().st_mtime * 1000))
+                except OSError:
                     continue
                 count += 1
-                newest = max(newest, int(path.stat().st_mtime * 1000))
                 if count >= MAX_MATCHES:
                     break
         except OSError:

@@ -51,9 +51,25 @@ out.trackerAfter = window.phaseRuns.renderTracker(after.fases[1]);
 out.verified = !window.phaseRuns.isRunning('plausibility');
 out.glow = window.phaseRuns.justUnlocked('ingestion');
 out.badge = window.phaseRuns.cardBadge('plausibility');
-out.stored = JSON.parse(store.smith_phase_runs).plausibility.unlocked;
+out.stored = JSON.parse(store['smith_phase_runs@local']).plausibility.unlocked;
 window.phaseRuns.dismiss('plausibility');
 out.afterDismiss = window.phaseRuns.renderTracker(after.fases[1]);
+// Re-running a phase that already passed waits for new evidence.
+window.phaseRuns.start(after.fases[1], '/plausibility again');
+window.phaseRuns.onStatus(after);
+out.rerunWaits = window.phaseRuns.isRunning('plausibility');
+const newer = JSON.parse(JSON.stringify(after));
+newer.fases[1].evidence[0].mtime = 99;
+window.phaseRuns.onStatus(newer);
+out.rerunVerified = !window.phaseRuns.isRunning('plausibility');
+// A run nothing touches for 30 min stops being followed.
+window.phaseRuns.start(after.fases[2], '/paper-ingestion x');
+const realNow = Date.now;
+Date.now = () => realNow() + 31 * 60 * 1000;
+window.phaseRuns.onStatus(after);
+out.expired = !window.phaseRuns.isRunning('ingestion');
+out.expiredBadge = window.phaseRuns.cardBadge('ingestion');
+Date.now = realNow;
 console.log(JSON.stringify(out));
 process.exit(0);
 """
@@ -86,6 +102,14 @@ class PhaseRunTests(unittest.TestCase):
         self.assertTrue(self.out["glow"])
         self.assertIn("verificada", self.out["badge"])
         self.assertEqual(self.out["stored"], [{"stage": "ingestion", "id": "Fase 3", "name": "Fase 3 name"}])
+
+    def test_a_rerun_of_a_passed_phase_needs_new_evidence(self) -> None:
+        self.assertTrue(self.out["rerunWaits"])
+        self.assertTrue(self.out["rerunVerified"])
+
+    def test_a_quiet_run_stops_being_followed(self) -> None:
+        self.assertTrue(self.out["expired"])
+        self.assertIn("sin cambios", self.out["expiredBadge"])
 
     def test_the_command_is_escaped_and_a_dismissed_run_disappears(self) -> None:
         self.assertNotIn("<img", self.out["trackerStart"])

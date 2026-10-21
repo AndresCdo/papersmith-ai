@@ -16,7 +16,8 @@
 (function () {
   'use strict';
 
-  const KEY = 'smith_phase_runs';
+  // One store per dashboard server: two workspaces never share runs.
+  const KEY = `smith_phase_runs@${(typeof location !== 'undefined' && location.host) || 'local'}`;
   const FAST_POLL_MS = 3000;
   const QUIET_MS = 30 * 60 * 1000;
   const UNLOCK_GLOW_MS = 15000;
@@ -61,7 +62,9 @@
       unlockedBefore: fases(status).filter((f) => f.unlocked).map((f) => f.stage_id),
       changed: [],
       status: phase.status || 'PENDING',
+      startStatus: phase.status || 'PENDING',
       verifiedAt: 0,
+      expiredAt: 0,
       unlocked: [],
       lastChangeAt: now(),
     };
@@ -74,7 +77,9 @@
     const list = fases(data);
     let touched = false;
     for (const run of Object.values(runs)) {
-      if (run.verifiedAt) continue;
+      if (run.verifiedAt || run.expiredAt) continue;
+      // A run nothing has touched for QUIET_MS stops being followed.
+      if (now() - run.lastChangeAt > QUIET_MS) { run.expiredAt = now(); touched = true; continue; }
       const phase = list.find((f) => f.stage_id === run.stage);
       if (!phase) continue;
       const changed = changedEvidence(run, phase).map((e) => ({ label: e.label, path: e.path, count: e.count }));
@@ -84,7 +89,9 @@
         touched = true;
       }
       if (phase.status !== run.status) { run.status = phase.status; touched = true; }
-      if (phase.status === 'PASS') {
+      // A phase that already passed is verified again only by new evidence.
+      const fresh = run.startStatus !== 'PASS' || changed.length > 0;
+      if (phase.status === 'PASS' && fresh) {
         run.verifiedAt = now();
         run.unlocked = list
           .filter((f) => f.unlocked && !run.unlockedBefore.includes(f.stage_id))
@@ -99,13 +106,14 @@
     ensurePolling();
   }
 
+  const live = (run) => Boolean(run && !run.verifiedAt && !run.expiredAt);
+
   function isRunning(stage) {
-    const run = runs[stage];
-    return Boolean(run && !run.verifiedAt);
+    return live(runs[stage]);
   }
 
   function anyRunning() {
-    return Object.values(runs).some((r) => !r.verifiedAt);
+    return Object.values(runs).some(live);
   }
 
   function ensurePolling() {
@@ -114,7 +122,7 @@
     }
     if (!anyRunning() && fastTimer) { clearInterval(fastTimer); fastTimer = null; }
     if (anyRunning() && !tickTimer) {
-      tickTimer = setInterval(() => { for (const r of Object.values(runs)) if (!r.verifiedAt) refreshTracker(r.stage); }, 1000);
+      tickTimer = setInterval(() => { for (const r of Object.values(runs)) if (live(r)) refreshTracker(r.stage); }, 1000);
     }
     if (!anyRunning() && tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   }
@@ -144,7 +152,8 @@
     if (!run) return '';
     const verified = Boolean(run.verifiedAt);
     const term = terminalWorking(run);
-    const quiet = !verified && now() - run.lastChangeAt > QUIET_MS;
+    const quiet = !verified && Boolean(run.expiredAt);
+    const quietMin = Math.round(QUIET_MS / 60000);
     const evidence = (phase.evidence || []).map((e) => {
       const hit = run.changed.some((c) => c.path === e.path);
       return `<li class="${hit ? 'is-new' : ''}">${hit ? '✓' : '·'} ${esc(e.label)} <code>${esc(e.path)}</code>${e.count ? ` · ${e.count}` : ''}</li>`;
@@ -154,7 +163,8 @@
       : (verified ? 'No había etapas bloqueadas detrás de esta.' : 'Se habilita cuando la etapa quede verificada.');
     const head = verified
       ? `<span class="badge badge--ok">✅ Etapa verificada en ${elapsed(run.verifiedAt - run.startedAt)}</span>`
-      : `<span class="badge badge--info">⏳ En ejecución · ${elapsed(now() - run.startedAt)}</span>`;
+      : (quiet ? '<span class="badge badge--warn">⏸ Sin cambios: seguimiento detenido</span>'
+        : `<span class="badge badge--info">⏳ En ejecución · ${elapsed(now() - run.startedAt)}</span>`);
     return `<div class="run-tracker${verified ? ' is-verified' : ''}" data-run-stage="${esc(run.stage)}">
         <div class="run-tracker__head">
           <strong>Seguimiento de la ejecución</strong>${head}
@@ -166,11 +176,11 @@
           ${step(run.changed.length ? 'done' : (verified ? 'done' : 'wait'), 'Artefactos de la etapa', `<ul class="run-evidence">${evidence}</ul>`)}
           ${step(verified ? 'done' : (quiet ? 'warn' : 'wait'), 'Etapa verificada',
               verified ? 'El servidor confirmó la evidencia en disco (PASS).'
-                : (quiet ? 'Sin cambios desde hace 30 min: revisa la terminal.' : `Estado actual: ${esc(run.status)}. Se verifica en cada actualización.`))}
+                : (quiet ? `Sin cambios en ${quietMin} min: se dejó de seguir. Revisa la terminal.` : `Estado actual: ${esc(run.status)}. Se verifica en cada actualización.`))}
           ${step(run.unlocked.length ? 'done' : (verified ? 'done' : 'wait'), 'Etapas siguientes', unlocked)}
         </ol>
         <div class="run-tracker__foot">
-          ${verified ? '' : `<button class="btn btn--sm" data-run-verify="${esc(run.phaseId)}">⟳ Verificar ahora</button>`}
+          ${verified || quiet ? '' : '<button class="btn btn--sm" data-run-verify="1" title="Vuelve a leer la evidencia en disco">⟳ Verificar ahora</button>'}
           <button class="btn btn--sm" data-run-dismiss="${esc(run.stage)}">${verified ? 'Cerrar seguimiento' : 'Dejar de seguir'}</button>
         </div>
       </div>`;
@@ -186,9 +196,9 @@
   function cardBadge(stage) {
     const run = runs[stage];
     if (!run) return '';
-    return run.verifiedAt
-      ? '<span class="badge badge--ok">✅ verificada</span>'
-      : '<span class="badge badge--info run-pulse">⏳ en ejecución</span>';
+    if (run.verifiedAt) return '<span class="badge badge--ok">✅ verificada</span>';
+    if (run.expiredAt) return '<span class="badge badge--warn">⏸ sin cambios</span>';
+    return '<span class="badge badge--info run-pulse">⏳ en ejecución</span>';
   }
 
   function justUnlocked(stage) {
@@ -222,8 +232,9 @@
 
   document.addEventListener('click', (event) => {
     const verify = event.target.closest && event.target.closest('[data-run-verify]');
-    if (verify && typeof window.triggerRunPhase === 'function') {
-      window.triggerRunPhase(verify.dataset.runVerify, null);
+    // Re-reads the status only: no audit, compile or other side effect.
+    if (verify && typeof window.loadStatus === 'function') {
+      window.loadStatus();
       return;
     }
     const close = event.target.closest && event.target.closest('[data-run-dismiss]');

@@ -29,3 +29,14 @@ Branch: `feat/phase-run-tracker` · Delivery: ask-on-risk · Runners: `.venv/bin
   - "Ejecutar" sends the slash command and gives no follow-up.
 - **L3** Decision: prerequisites are linear (Fase N requires Fase N-1), except Fase 1 and the transversal Fase 11, which need nothing. Skills keep refusing on missing input, so the order stays a recommendation. A locked phase can still be run with an explicit "ejecutar sin el requisito" override.
 - **L4** (2026-10-20) Live check. In a scratch workspace from `smith init`, a tracked Fase 2 run showed "Comando enviado". It then marked `sota-pool/candidates.json` as new once that file was written (status ACTIVE). Once `sota-pool/atlas.json` was written, it showed "Etapa verificada" (PASS), named Fase 3 under "Etapas siguientes" and raised the notice "Fase 2 verificada · habilitada: Fase 3". The cards show "🔒 Requiere Fase N" for the locked phases.
+- **L5** (2026-10-20) The independent verifier found no blockers; S1–S4 pass, and the suite shows only the known `paper_preview` failure. Native review (4 lenses, high risk) was approved and acknowledged. Its advisories were fixed in one batch:
+  - Runs untouched for 30 min expire, so polling stops.
+  - The runs store is per server host.
+  - Audits are serialized with a lock.
+  - An audit that cannot run is told apart from a failed one, with `ran` false.
+  - A failure to write `audit.json` is reported, and the file is written atomically.
+  - Re-running a phase that already passed needs new evidence.
+  - "Verificar ahora" only re-reads the status.
+  - Evidence counting survives a bad entry, and "PDFs sin ingerir" is no longer listed as evidence.
+  - The harness flow text now says phases are locked, with an override.
+

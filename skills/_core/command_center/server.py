@@ -250,6 +250,7 @@ def _candidate_count(root: Path) -> int:
 
 
 AUDIT_TIMEOUT_SECONDS = 120
+_AUDIT_LOCK = threading.Lock()
 
 
 def _audit_verdict(root: Path) -> bool | None:
@@ -263,29 +264,45 @@ def _audit_verdict(root: Path) -> bool | None:
     return ok if isinstance(ok, bool) else None
 
 
-def _run_audit(root: Path) -> dict[str, Any]:
+def _run_audit(root: Path) -> dict[str, Any] | None:
     """Run `papersmith audit --check-drift` on the workspace with this
-    interpreter and record its verdict in `.papersmith/audit.json`."""
+    interpreter and record its verdict in `.papersmith/audit.json`.
+
+    One audit at a time: None means another one is still running. `ran` is
+    False when the audit could not run at all (papersmith not importable, a
+    timeout), which is not the same as an audit with findings.
+    """
     from datetime import datetime, timezone
-    command = [sys.executable, "-c",
-               "import sys; from papersmith.cli import main; sys.exit(main(sys.argv[1:]))",
-               "audit", str(root), "--check-drift"]
+    if not _AUDIT_LOCK.acquire(blocking=False):
+        return None
     try:
-        done = subprocess.run(command, cwd=str(root), capture_output=True, text=True,
-                              timeout=AUDIT_TIMEOUT_SECONDS)
-        returncode, output = done.returncode, (done.stdout + done.stderr)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        returncode, output = -1, f"{type(exc).__name__}: {exc}"
-    record = {"ok": returncode == 0, "returncode": returncode,
-              "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "command": "papersmith audit . --check-drift", "output": output[-4000:]}
-    folder = root / ".papersmith"
-    try:
-        folder.mkdir(exist_ok=True)
-        (folder / "audit.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError:
-        pass
-    return record
+        command = [sys.executable, "-c",
+                   "import sys; from papersmith.cli import main; sys.exit(main(sys.argv[1:]))",
+                   "audit", str(root), "--check-drift"]
+        ran = True
+        try:
+            done = subprocess.run(command, cwd=str(root), capture_output=True, text=True,
+                                  timeout=AUDIT_TIMEOUT_SECONDS)
+            returncode, output = done.returncode, (done.stdout + done.stderr)
+            ran = "ModuleNotFoundError" not in output or returncode == 0
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            returncode, output, ran = -1, f"{type(exc).__name__}: {exc}", False
+        record = {"ok": ran and returncode == 0, "ran": ran, "returncode": returncode,
+                  "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                  "command": f"papersmith audit {root} --check-drift", "output": output[-4000:]}
+        folder = root / ".papersmith"
+        try:
+            folder.mkdir(exist_ok=True)
+            tmp = folder / "audit.json.tmp"
+            tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(folder / "audit.json")
+            record["written"] = True
+        except OSError as exc:
+            record["written"] = False
+            record["write_error"] = str(exc)
+        return record
+    finally:
+        _AUDIT_LOCK.release()
 
 
 def _pdf_page_count(pdf: Path) -> int:
@@ -1323,9 +1340,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         response = await _phase_check(request)
         try:
             body = json.loads(bytes(response.body))
+            payload = await request.json()
         except ValueError:
             return response
-        stage = body.get("stage")
+        stage = phase_actions.stage_for(str((payload or {}).get("phase_id", "")))
         if stage:
             fases = json.loads(bytes(api_status_adapter().body)).get("fases", [])
             phase = next((f for f in fases if f.get("stage_id") == stage), {})
@@ -1443,13 +1461,23 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             
         elif stage == "audit":
             record = await asyncio.to_thread(_run_audit, root_path)
+            if record is None:
+                message, log = "Ya hay una auditoría en curso: espera su resultado.", ""
+            else:
+                if not record["ran"]:
+                    message = "La auditoría no pudo ejecutarse (papersmith no disponible o tiempo agotado)."
+                elif record["ok"]:
+                    message = "Auditoría superada: papersmith audit --check-drift sin hallazgos."
+                else:
+                    message = f"La auditoría encontró problemas (código {record['returncode']})."
+                if not record["written"]:
+                    message += f" No se pudo escribir .papersmith/audit.json: {record['write_error']}"
+                log = record["output"][-600:]
             return JSONResponse({
                 "ok": True,
                 "phase_id": phase_id, "stage": stage,
-                "message": ("Auditoría superada: papersmith audit --check-drift sin hallazgos."
-                            if record["ok"] else
-                            f"La auditoría falló (código {record['returncode']}); detalle en .papersmith/audit.json."),
-                "log": record["output"][-600:],
+                "message": message,
+                "log": log,
                 "outputs": [".papersmith/audit.json"]
             })
             
