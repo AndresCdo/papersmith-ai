@@ -220,6 +220,8 @@ class Session:
     buffer: bytearray = field(default_factory=bytearray)
     base: int = 0  # absolute offset of buffer[0]
     alive: bool = True
+    # (loop, asyncio.Event) pairs of the output streams waiting on this session.
+    waiters: set = field(default_factory=set)
 
     def append(self, chunk: bytes) -> None:
         with self.lock:
@@ -228,6 +230,17 @@ class Session:
             if overflow > 0:
                 del self.buffer[:overflow]
                 self.base += overflow
+        self.notify()
+
+    def notify(self) -> None:
+        """Wake every stream waiting on this session, from any thread."""
+        with self.lock:
+            waiters = list(self.waiters)
+        for loop, event in waiters:
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:  # the stream's loop already closed
+                pass
 
 
 def _set_size(fd: int, cols: int, rows: int) -> None:
@@ -297,6 +310,20 @@ class TerminalManager:
             data = bytes(session.buffer[start:])
             return data, session.base + len(session.buffer), session.alive
 
+    def watch(self, sid: str, loop: Any, event: Any) -> None:
+        """Set ``event`` on ``loop`` whenever session ``sid`` writes or ends."""
+        session = self.get(sid)
+        with session.lock:
+            session.waiters.add((loop, event))
+
+    def unwatch(self, sid: str, loop: Any, event: Any) -> None:
+        try:
+            session = self.get(sid)
+        except KeyError:
+            return
+        with session.lock:
+            session.waiters.discard((loop, event))
+
     # -- lifecycle -------------------------------------------------------
     def create(self, agent_id: str, cols: Any = 100, rows: Any = 30) -> Session:
         agent = self.agents_by_id.get(agent_id)
@@ -351,6 +378,7 @@ class TerminalManager:
                 session.append(chunk)
         session.alive = False
         session.process.poll()
+        session.notify()
 
     def write(self, sid: str, data: str) -> None:
         encoded = data.encode("utf-8")

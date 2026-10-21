@@ -44,6 +44,11 @@ from .watcher import EventBus, WorkspaceWatcher, is_health_path
 #: events must not multiply them.
 DEFAULT_HEALTH_TTL_SECONDS = 10.0
 
+#: A terminal output stream wakes at least this often to notice a client that
+#: left, and sends a keep-alive comment after this much silence.
+TERMINAL_WAIT_SECONDS = 1.0
+TERMINAL_PING_SECONDS = 15.0
+
 _log = logging.getLogger(__name__)
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -2185,28 +2190,48 @@ async def _terminal_stream(request: Request, terminals: "terminal.TerminalManage
     """PTY output as SSE ``output`` frames (base64), then one ``exit`` frame."""
     import base64
 
+    # The PTY reader thread sets `wake` on every chunk and when the session
+    # ends, so a quiet session costs one wake-up per TERMINAL_WAIT_SECONDS
+    # (to notice a client that left) instead of a tight polling loop.
+    loop = asyncio.get_running_loop()
+    wake = asyncio.Event()
+    try:
+        terminals.watch(sid, loop, wake)
+    except KeyError:
+        yield format_sse("exit", {"reason": "closed"})
+        return
     offset = 0
     idle = 0.0
-    while True:
-        if await request.is_disconnected():
-            break
-        try:
-            chunk, offset, alive = terminals.read_since(sid, offset)
-        except KeyError:
-            yield format_sse("exit", {"reason": "closed"})
-            break
-        if chunk:
-            idle = 0.0
-            yield format_sse("output", {"data": base64.b64encode(chunk).decode("ascii")})
-            continue
-        if not alive:
-            yield format_sse("exit", {"reason": "ended"})
-            break
-        idle += 0.012
-        if idle >= 15.0:
-            idle = 0.0
-            yield ": ping\n\n"
-        await asyncio.sleep(0.012)
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            # Cleared before reading: a chunk appended after this point sets
+            # it again, so no output is ever missed between read and wait.
+            wake.clear()
+            try:
+                chunk, offset, alive = terminals.read_since(sid, offset)
+            except KeyError:
+                yield format_sse("exit", {"reason": "closed"})
+                break
+            if chunk:
+                idle = 0.0
+                yield format_sse("output", {"data": base64.b64encode(chunk).decode("ascii")})
+                continue
+            if not alive:
+                yield format_sse("exit", {"reason": "ended"})
+                break
+            started = loop.time()
+            try:
+                await asyncio.wait_for(wake.wait(), TERMINAL_WAIT_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+            idle += loop.time() - started
+            if idle >= TERMINAL_PING_SECONDS:
+                idle = 0.0
+                yield ": ping\n\n"
+    finally:
+        terminals.unwatch(sid, loop, wake)
 
 
 async def _event_stream(request: Request, bus: EventBus, root: Path) -> AsyncIterator[str]:
