@@ -69,6 +69,21 @@ class PhaseConsoleTests(unittest.TestCase):
         self.assertEqual(result["calls"], [])
         self.assertIn("al menos 2 oraciones", result["hints"]["phaseHint0"])
 
+    def test_a_long_idea_written_as_one_run_on_sentence_is_accepted(self) -> None:
+        # The operator's own wording: one period-free paragraph with a URL.
+        idea = ("Revisa el paper https://www.mdpi.com/2227-7080/14/7/392, con base a esa idea, vamos a "
+                "construir un paper en esa misma linea pero utilizando QML hibrido, vas a explorar como "
+                "incluir una o par de capas tipo DRU al final, para clasificar tdah desde erg, buscando "
+                "aprovechar la capacidad de representación de los QML , enfocándose en un buen rendimiento, "
+                "explorar estrategias QML hibridas y preservando interpretabilidad")
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}])
+        self.assertEqual(result["calls"], [["send", "/plausibility " + idea, True, "slash"]])
+
+    def test_a_refusal_is_shown_in_a_visible_error_box(self) -> None:
+        result = run(phase("plausibility"), [{"i": 0, "type": "Una sola idea."}])
+        self.assertIn('id="phaseError0"', result["html"])
+        self.assertIn("al menos 2 oraciones", result["hints"]["phaseError0"])
+
     def test_plausibility_sends_the_idea_as_one_slash_command_line(self) -> None:
         idea = "EEG models fail across subjects.\nI propose a quantum kernel."
         result = run(phase("plausibility"), [{"i": 0, "type": idea}])

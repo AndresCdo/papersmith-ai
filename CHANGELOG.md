@@ -35,6 +35,15 @@ number is `0`, breaking changes can still arrive without a major bump.
   --check-drift` and records the verdict in `.papersmith/audit.json`. The phase
   passes only on a clean audit; nothing wrote that file before.
 - The artifacts list refreshes when files change, and lists `experiments/*.md`.
+- **A refused or stalled phase run is visible.** A long idea written as one
+  run-on sentence (commas, no full stops) counted as one sentence and was refused
+  with only a small grey hint, so nothing ran and no tracker appeared. Now a long
+  text counts one sentence per 12 words, a refusal shows a red error box, and the
+  drawer scrolls to the tracker when a run starts.
+  - A floating dock (bottom-left, every tab) shows each followed run's progress
+    and opens its phase.
+  - When the agent stops writing for 20 s, the tracker and a notice say it
+    finished its turn or is waiting for an answer in the terminal.
 
 ## 0.18.0
 
