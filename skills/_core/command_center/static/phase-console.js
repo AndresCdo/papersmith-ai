@@ -63,12 +63,15 @@
   const label = (id) => (agentInfo.agents.find((a) => a.id === id) || {}).label || id;
 
   // The default keeps the session that is already following the pipeline;
-  // without one, the agent the operator last chose, else the first installed.
+  // without one, the agent the operator last chose, else the terminal's own
+  // agent (herdr when installed), else claude, else the first installed.
   function defaultAgent() {
     const ids = agentInfo.agents.map((a) => a.id);
     if (agentInfo.live && ids.includes(agentInfo.current)) return agentInfo.current;
     const last = remembered();
     if (last && ids.includes(last)) return last;
+    if (ids.includes(agentInfo.current)) return agentInfo.current;
+    if (ids.includes('claude')) return 'claude';
     return ids[0] || '';
   }
 
@@ -78,7 +81,7 @@
     if (!select || !note) return;
     const fresh = document.getElementById(`phaseFresh${i}`)?.checked;
     const same = agentInfo.live && select.value === agentInfo.current;
-    note.textContent = !select.value ? 'No hay claude, opencode ni pi instalados.'
+    note.textContent = !select.value ? 'No hay herdr, claude, opencode ni pi instalados.'
       : same && !fresh ? `Continúa en la sesión abierta de ${label(select.value)} (no se abre otra).`
         : agentInfo.live ? `Cerrará la sesión de ${label(agentInfo.current)} y abrirá ${fresh && same ? 'una nueva' : label(select.value)}.`
           : `Abrirá una sesión de ${label(select.value)} en la terminal.`;

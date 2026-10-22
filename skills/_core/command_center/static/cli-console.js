@@ -423,13 +423,18 @@
     }
   }
 
-  // Agents that understand a harness slash command; herdr and the plain shell
-  // do not, so a slash command switches the console to the first of these.
-  const SLASH_AGENTS = ['claude', 'opencode', 'pi'];
+  // Agents a phase slash command can be typed into. herdr comes first: its
+  // workspace mirrors the agent pane, so a phase runs in the herdr session by
+  // default and only falls to a new claude/opencode/pi session without herdr.
+  // The plain shell is not one of them.
+  const SLASH_AGENTS = ['herdr', 'claude', 'opencode', 'pi'];
+  // Agents with a `!command` shell escape, so a shell phase can run inside
+  // their open session instead of closing it.
+  const SHELL_ESCAPE_AGENTS = ['claude', 'opencode', 'pi'];
 
   // Which agent runs a phase command, keeping the open session whenever it can:
   //  - slash: the agent the operator picked (options.agent), else the open
-  //    slash agent, else the first installed one;
+  //    slash agent, else the first installed one (herdr when installed);
   //  - shell: an open slash-agent session runs it as `!command` (every one of
   //    claude, opencode and pi has a shell escape), so one session follows the
   //    whole pipeline; otherwise the plain shell.
@@ -442,7 +447,7 @@
     const live = Boolean(state.sessionId);
     let wanted = state.agent;
     if (kind === 'shell') {
-      if (live && SLASH_AGENTS.includes(state.agent)) return { switched: false, prefix: '!' };
+      if (live && SHELL_ESCAPE_AGENTS.includes(state.agent)) return { switched: false, prefix: '!' };
       wanted = 'shell';
     }
     if (kind === 'slash') {
@@ -450,8 +455,10 @@
         throw new Error(`el agente ${agentLabel(opts.agent)} no está instalado`);
       }
       if (opts.agent) wanted = opts.agent;
-      else if (!SLASH_AGENTS.includes(state.agent)) wanted = SLASH_AGENTS.find((id) => available.includes(id)) || null;
-      if (!wanted) throw new Error('no hay un agente (claude, opencode, pi) instalado');
+      else if (!(SLASH_AGENTS.includes(state.agent) && available.includes(state.agent))) {
+        wanted = SLASH_AGENTS.find((id) => available.includes(id)) || null;
+      }
+      if (!wanted) throw new Error('no hay un agente (herdr, claude, opencode, pi) instalado');
     }
     const restart = wanted !== state.agent || (opts.fresh && live);
     if (!restart) return { switched: false, prefix: '' };

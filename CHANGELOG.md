@@ -11,6 +11,17 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Changed
+
+- **Phases run in the herdr session by default.** "Ejecutar" on a phase card
+  now types its slash command into the command center's herdr session when
+  herdr is installed, as RedaccionPropuestas does, instead of closing herdr and
+  opening claude/opencode/pi. Without herdr, the phase opens a new claude
+  session (or the first installed agent). The operator can still pick another
+  agent per phase.
+
 ## 0.19.0
 
 ### Changed
