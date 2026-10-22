@@ -21,6 +21,7 @@ import asyncio
 import contextlib
 import html
 import json
+import platform
 import re
 import shutil
 import subprocess
@@ -2350,11 +2351,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _is_wsl() -> bool:
+    """Identify WSL by its kernel release, not by inherited environment flags."""
+    return sys.platform == "linux" and "microsoft" in platform.release().lower()
+
+
 def open_browser(url: str) -> None:
     import webbrowser
 
-    with contextlib.suppress(Exception):
-        webbrowser.open(url)
+    try:
+        if webbrowser.open(url):
+            return
+    except Exception:  # Browser setup must not prevent the server from starting.
+        pass
+    if _is_wsl():
+        # argv keeps query strings intact (and avoids cmd.exe/shell interpolation).
+        # Do not expose the terminal login URL through child process output.
+        with contextlib.suppress(OSError):
+            subprocess.Popen(["explorer.exe", url], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             close_fds=True)
 
 
 def main(argv: list[str] | None = None) -> int:
