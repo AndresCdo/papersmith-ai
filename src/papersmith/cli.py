@@ -7,7 +7,6 @@ process exit code and raises ``PapersmithError`` for typed failures.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
 
 from . import __version__
@@ -27,7 +26,7 @@ from .errors import PapersmithError
 from .mcp import cli as mcp_command
 
 
-def build_parser(prog: str = "papersmith") -> argparse.ArgumentParser:
+def build_parser(prog: str = "smith") -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description="CLI workspace orchestrator for the papersmith-ai framework: "
@@ -65,7 +64,7 @@ def command(register):
 
 def parse_argv(parser: argparse.ArgumentParser, argv: list[str] | None):
     """Parse ``argv`` letting the chosen subcommand interleave its positionals
-    with its optionals (``papersmith run smoke --dry-run <dir>``).
+    with its optionals (``smith run smoke --dry-run <dir>``).
 
     Native argparse only mixes the two freely from 3.13 on; on 3.11/3.12 a
     trailing positional after the optionals is rejected as unrecognized, which
@@ -96,7 +95,9 @@ def parse_argv(parser: argparse.ArgumentParser, argv: list[str] | None):
 
 
 def main(argv: list[str] | None = None) -> int:
-    prog = Path(sys.argv[0]).stem if sys.argv and Path(sys.argv[0]).stem in ("smith", "papersmith") else "papersmith"
+    # `smith` is the canonical command name; the `papersmith` entry point stays
+    # installed as a compatibility alias but reports itself as `smith`.
+    prog = "smith"
     parser = build_parser(prog=prog)
     args = parse_argv(parser, argv)
     setattr(args, "_prog", prog)

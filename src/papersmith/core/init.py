@@ -156,7 +156,7 @@ def _write_workspace_seed(root: Path, *, name: str, title: str, topic: str,
     # No ``.mcp.json``: success criterion #6 (tests/test_mcp_no_mcp_json.py) is
     # that the framework never generates, reads or overwrites one. A workspace
     # that wants the server wired asks for the snippet instead --
-    # ``papersmith mcp print-config --workspace <path>`` prints it and writes
+    # ``smith mcp print-config --workspace <path>`` prints it and writes
     # nothing -- and the operator pastes it wherever their harness reads it.
     _write_text(root, "package.json", render_package_template("package.json.tpl", context))
 
@@ -184,7 +184,7 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     Fail-soft and reported in ``warnings``, exactly like ``_run_npm_install``: a
     workspace whose provisioning cannot complete is still a workspace.
 
-    **This is the step that makes ``papersmith ui`` work after init.** Without
+    **This is the step that makes ``smith ui`` work after init.** Without
     it the dashboard's backend has no interpreter that can import it: the CLI's
     own interpreter is a ``pipx`` venv with no runtime dependencies, and the
     environment ``scripts/setup_env.py`` builds is the one thing that carries
@@ -199,7 +199,7 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     report = report or progress.Reporter()
     if not script.is_file():
         return ("scripts/setup_env.py is not present, so the workspace has no "
-                "environment to run the command center; run `papersmith upgrade`")
+                "environment to run the command center; run `smith upgrade`")
     interpreter = shutil.which("python3") or sys.executable
     try:
         code, tail = progress.run_streaming(
@@ -368,7 +368,7 @@ def register(subparsers) -> None:
     parser.add_argument(
         "--no-env", action="store_true",
         help=("skip provisioning this workspace's Python environment; the "
-              "command center needs it, so `papersmith ui` will refuse until "
+              "command center needs it, so `smith ui` will refuse until "
               "`python3 scripts/setup_env.py install` has run"))
     parser.add_argument(
         "--allow-dirty-kit", action="store_true",

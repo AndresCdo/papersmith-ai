@@ -3204,7 +3204,7 @@ appends, as attribution rather than as a credential. `references/usage.md`,
 **Running these commands.** Through this skill's `scripts/implementation_cli.py`,
 which sets `IMPLEMENTATION_DOMAIN_PROFILE`; a profile you set yourself must be an
 absolute path (`IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` otherwise). The
-workspace bridge `papersmith implement --action` reaches only `env`, `name`,
+workspace bridge `smith implement --action` reaches only `env`, `name`,
 `plan`, `apply`, `admit`, `handoff`, `compose`, `probe` and `verify`, and its
 `--action materialize` is a kept alias of `apply`, not of `materialize` below.
 

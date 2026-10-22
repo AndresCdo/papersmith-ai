@@ -6,12 +6,12 @@ A phase runs one of three ways, and the drawer offers exactly these:
   projected to ``.claude/commands``, ``.opencode/commands`` and ``.pi/prompts``).
   The drawer shows a text box with the skill's input rules as a guide, and
   "Ejecutar" types ``/<skill> <text>`` into the support terminal's agent.
-* ``command`` — a real ``papersmith`` subcommand, typed into a shell session.
+* ``command`` — a real ``smith`` subcommand, typed into a shell session.
 * ``redirect`` — the work happens in another dashboard panel (the concept map,
   the math tutor, the PoC board, the PDF preview…), so the drawer opens it.
 
 Every slash command named here exists as a projected command and every shell
-command is a ``papersmith`` subcommand the CLI accepts; tests hold both.
+command is a ``smith`` subcommand the CLI accepts; tests hold both.
 """
 
 from __future__ import annotations
@@ -52,11 +52,11 @@ _WRITING_GUIDE = [
 ACTIONS: dict[str, dict[str, Any]] = {
     "harness": {
         "skills": ["upgrade-project"],
-        "agent": "papersmith CLI",
+        "agent": "smith CLI",
         "actions": [
-            _command("papersmith status .", "Ver estado del workspace",
+            _command("smith status .", "Ver estado del workspace",
                      "Resumen del workspace: kit, harnesses, etapas y artefactos."),
-            _command("papersmith audit . --check-drift", "Verificar proyecciones",
+            _command("smith audit . --check-drift", "Verificar proyecciones",
                      "Comprueba que .claude, .opencode, .pi y .agents coinciden con el kit."),
             _prompt("/upgrade-project", "Actualizar el workspace (agente)", [
                 "Úsalo cuando el workspace corre una versión anterior de papersmith.",
@@ -89,7 +89,7 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Cada PDF se archiva en su carpeta de tema y se convierte a Markdown: ecuaciones en LaTeX, tablas en Markdown, figuras como archivos.",
                 "Local y sin llaves (Marker); nada se publica.",
             ], "Ej.: ingiere guidance/reference-papers/inbox/*.pdf"),
-            _command("papersmith ingest <ruta-o-url> .", "Ingerir desde el CLI",
+            _command("smith ingest <ruta-o-url> .", "Ingerir desde el CLI",
                      "Reemplaza <ruta-o-url> por el PDF o la URL."),
             _redirect("Ver artefactos ingeridos", "artifacts", "Markdown y figuras de las referencias."),
         ],
@@ -185,9 +185,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
     },
     "audit": {
         "skills": ["skill-audit"],
-        "agent": "skill-audit & papersmith audit",
+        "agent": "skill-audit & smith audit",
         "actions": [
-            _command("papersmith audit . --verbose", "Auditar el workspace",
+            _command("smith audit . --verbose", "Auditar el workspace",
                      "Estructura y consistencia del workspace."),
             _prompt("/skill-audit", "Auditar un skill o un CLI", [
                 "Nombra el sujeto: un skill, un CLI o cualquier conjunto cerrado (operaciones, subcomandos, códigos de error).",

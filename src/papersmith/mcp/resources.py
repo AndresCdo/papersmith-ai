@@ -104,7 +104,7 @@ RESOURCES: tuple[ResourceSpec, ...] = (
     ResourceSpec(
         "papersmith://workspace/status",
         "Workspace status",
-        "Machine-readable workspace snapshot (`papersmith status --json`).",
+        "Machine-readable workspace snapshot (`smith status --json`).",
         "application/json",
         _read_status,
     ),

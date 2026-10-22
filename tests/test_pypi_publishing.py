@@ -42,7 +42,7 @@ REPO = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO / "pyproject.toml"
 WORKFLOW = REPO / ".github" / "workflows" / "publish.yml"
 
-#: Files the kit must carry into an artifact for `papersmith init` to work at
+#: Files the kit must carry into an artifact for `smith init` to work at
 #: all. `kit-manifest.json` is what `kit.resolve_and_validate` reads first, so
 #: an archive without it produces the `SOURCE_ERROR` exit 2 this file exists to
 #: prevent.
@@ -180,7 +180,7 @@ class BuiltArtifactsCarryTheKitTests(unittest.TestCase):
             self.assertIn(
                 sentinel, names,
                 f"the wheel has no {sentinel}. An install from it would reach "
-                "`papersmith init` and exit 2 with a kitless install")
+                "`smith init` and exit 2 with a kitless install")
         skills = [name for name in names if name.startswith("papersmith/_kit/skills/")]
         self.assertTrue(skills, "the wheel carries no kit skills")
 

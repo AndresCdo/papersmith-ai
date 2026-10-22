@@ -3,7 +3,7 @@
  * Each phase in GET /api/status carries `actions` (phase_actions.py):
  *   prompt   — a text box guided by the stage's rules; "Ejecutar" types
  *              `/<skill> <text>` into an agent of the support terminal;
- *   command  — a real `papersmith` command, run in the terminal's shell;
+ *   command  — a real `smith` command, run in the terminal's shell;
  *   redirect — opens the dashboard panel that owns the work.
  * Every value is escaped before insertion; handlers read the action back
  * from the rendered phase, never from markup.

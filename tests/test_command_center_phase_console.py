@@ -157,9 +157,9 @@ class PhaseConsoleTests(unittest.TestCase):
 
     def test_commands_run_in_the_shell_and_placeholders_are_only_typed(self) -> None:
         result = run(phase("harness"), [{"i": 0}])
-        self.assertEqual(result["calls"], [["send", "papersmith status .", True, "shell"]])
+        self.assertEqual(result["calls"], [["send", "smith status .", True, "shell"]])
         result = run(phase("ingestion"), [{"i": 1}])
-        self.assertEqual(result["calls"], [["send", "papersmith ingest <ruta-o-url> .", False, "shell"]])
+        self.assertEqual(result["calls"], [["send", "smith ingest <ruta-o-url> .", False, "shell"]])
 
     def test_the_concept_map_redirect_opens_its_section(self) -> None:
         result = run(phase("proposal"), [{"i": 1}])
@@ -199,7 +199,7 @@ class PageWiringTests(unittest.TestCase):
     def test_the_drawer_renders_the_phase_actions(self) -> None:
         self.assertIn('<script src="./phase-console.js?v=', PAGE)
         self.assertIn("window.renderPhaseActions ? window.renderPhaseActions(p) : ''", PAGE)
-        self.assertNotIn("papersmith run --stage", PAGE)
+        self.assertNotIn("smith run --stage", PAGE)
 
     def test_slash_commands_switch_the_terminal_to_an_agent(self) -> None:
         script = (STATIC / "cli-console.js").read_text(encoding="utf-8")

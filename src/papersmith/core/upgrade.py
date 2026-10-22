@@ -508,7 +508,7 @@ def run_cli(args) -> int:
     if result["recorded_version"] != result["version"]:
         print(f"Recorded version stays at {result['recorded_version'] or '(none)'}: "
               f"the artifact migrations for {result['version']} are not done. "
-              "Re-run `papersmith upgrade` once their cause is fixed.")
+              "Re-run `smith upgrade` once their cause is fixed.")
     if report["failures"]:
         for failure in report["failures"]:
             print(f"Migration failed: {failure}", file=sys.stderr)

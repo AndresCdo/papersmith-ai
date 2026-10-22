@@ -168,7 +168,7 @@ CAPABILITIES = ("skills", "commands", "agents", "plugins")
 #: rendered file a user is expected to edit -- their own data folders, their
 #: editor's files -- and before 0.14.0 every upgrade overwrote it whole.
 MANAGED_BLOCK_FILES = frozenset({".gitignore"})
-MANAGED_BLOCK_BEGIN = ("# >>> papersmith managed block: `papersmith upgrade` rewrites every "
+MANAGED_BLOCK_BEGIN = ("# >>> papersmith managed block: `smith upgrade` rewrites every "
                        "line up to the closing marker")
 MANAGED_BLOCK_END = ("# <<< papersmith managed block ends: lines below this marker are this "
                      "workspace's own, and upgrade keeps them")

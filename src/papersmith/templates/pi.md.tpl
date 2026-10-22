@@ -16,7 +16,7 @@ Read `papersmith.yaml`, `guidance/paper-guide/`, and the applicable
 Every top-level skill under `skills/` is also generated as a Pi prompt template
 in `.pi/prompts/<name>.md`, so it can be invoked as `/<name>`. Each template
 loads that skill's `SKILL.md` and passes your text through as `$ARGUMENTS`. The
-directory is a framework artifact that `papersmith upgrade` restores, so do not
+directory is a framework artifact that `smith upgrade` restores, so do not
 edit it by hand.
 
 ## Precedence

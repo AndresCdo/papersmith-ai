@@ -365,7 +365,7 @@ launcher) must be an absolute path: a relative one refuses
 `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any command runs. The
 commands that write the ledger take `--session <id>`, an id you choose per
 working session; `proposal-implementation`'s `references/usage.md`, "Session
-ids", defines it. The workspace bridge `papersmith implement` drives the
+ids", defines it. The workspace bridge `smith implement` drives the
 sibling's launcher, never this one: run this skill's commands through its own
 `scripts/implementation_cli.py`.
 

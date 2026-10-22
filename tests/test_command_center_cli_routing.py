@@ -107,17 +107,17 @@ class CliRoutingTests(unittest.TestCase):
 
     def test_a_shell_command_runs_inside_the_open_agent_session(self) -> None:
         sends = [{"text": "/plausibility idea", "run": True, "kind": "slash"},
-                 {"text": "papersmith status .", "run": True, "kind": "shell"}]
+                 {"text": "smith status .", "run": True, "kind": "shell"}]
         log = run(agent="claude", available=["claude", "shell"], sends=sends)
         self.assertEqual(events(log, "open"), [["claude"]])
         self.assertEqual(events(log, "confirm"), [])
-        self.assertIn(["s1", "!papersmith status ."], events(log, "input"))
+        self.assertIn(["s1", "!smith status ."], events(log, "input"))
 
     def test_without_an_agent_session_a_shell_command_uses_the_shell(self) -> None:
         log = run(agent="herdr", available=["herdr", "shell"],
-                  sends=[{"text": "papersmith status .", "run": True, "kind": "shell"}])
+                  sends=[{"text": "smith status .", "run": True, "kind": "shell"}])
         self.assertEqual(events(log, "open"), [["shell"]])
-        self.assertIn(["s1", "papersmith status ."], events(log, "input"))
+        self.assertIn(["s1", "smith status ."], events(log, "input"))
 
     def test_the_same_agent_keeps_one_session_across_phases(self) -> None:
         sends = [{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "claude"}},

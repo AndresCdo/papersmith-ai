@@ -1,4 +1,4 @@
-"""``papersmith mcp`` — serve, inspect, and print client configuration.
+"""``smith mcp`` — serve, inspect, and print client configuration.
 
 ``serve`` owns stdout: the stdio transport *is* stdout, so this module prints
 nothing on that path. ``inspect`` and ``print-config`` are ordinary CLI
@@ -62,7 +62,7 @@ def run_print_config(args) -> int:
     snippet = {
         "mcpServers": {
             "papersmith": {
-                "command": "papersmith",
+                "command": "smith",
                 "args": ["mcp", "serve", "--workspace", str(root)],
             }
         }

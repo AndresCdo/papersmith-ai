@@ -25,7 +25,7 @@ from papersmith.yamllite import loads
 class EnvironmentProvisioningTests(unittest.TestCase):
     """`init` provisions the environment the command center's backend needs.
 
-    The step is what makes `papersmith ui` work after init: the CLI's own
+    The step is what makes `smith ui` work after init: the CLI's own
     interpreter is a pipx venv with no runtime dependencies, and the environment
     `scripts/setup_env.py` builds is the one thing that carries them. These
     drive the step against a script that stands in for the real one, so no test

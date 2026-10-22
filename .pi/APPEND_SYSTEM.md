@@ -42,19 +42,19 @@ the event is unusable. It is a tripwire, not a gate. See `docs/guard-hooks.md`.
 
 ## Paper construction flow
 
-These are the eleven phases the command center (`papersmith ui`) shows under
+These are the eleven phases the command center (`smith ui`) shows under
 "Pipeline y Avance", in order. Each phase card runs its stage: a slash command
-`/<skill> <text>` typed into an agent, a `papersmith` command, or a link to the
+`/<skill> <text>` typed into an agent, a `smith` command, or a link to the
 panel that owns the work. The dashboard locks each phase until the one before
 it is verified from its evidence on disk, with an explicit override, and every
 skill refuses when its input is missing.
 
-1. **Harness**: `papersmith status .` and `papersmith audit . --check-drift`;
+1. **Harness**: `smith status .` and `smith audit . --check-drift`;
    `/upgrade-project` when the workspace runs an older release.
 2. **Plausibility**: `/plausibility <the idea in at least two sentences>`. It
    scouts about 25 SOTA references, draws `sota-pool/atlas.html` and grades the
    claims. Nothing is ingested until the operator accepts the report.
-3. **Ingestion**: `/paper-ingestion <PDF or URL>` (or `papersmith ingest`)
+3. **Ingestion**: `/paper-ingestion <PDF or URL>` (or `smith ingest`)
    turns the accepted top 5 into Markdown under `guidance/`, with equations
    as LaTeX.
 4. **Proposal deliberation**: `/proposal-deliberation` keeps managed revisions
@@ -79,7 +79,7 @@ skill refuses when its input is missing.
    `paper/Figures/<id>.pdf`.
 10. **Paper**: compile `paper/main.tex` to `paper/main.pdf` (dashboard:
     Previsualización PDF).
-11. **Audit** (transversal): `papersmith audit .` and `/skill-audit <subject>`.
+11. **Audit** (transversal): `smith audit .` and `/skill-audit <subject>`.
     Audits report; they never repair.
 
 The human gates are plausibility acceptance, proposal and experimental

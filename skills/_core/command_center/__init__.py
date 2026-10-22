@@ -2,7 +2,7 @@
 
 The package lives at ``skills/_core/command_center/`` inside a PaperSmith
 workspace. Because ``skills/`` is a kit entry every workspace receives, the
-whole command center travels with ``papersmith init``/``upgrade`` and runs
+whole command center travels with ``smith init``/``upgrade`` and runs
 standalone from the workspace root::
 
     python -m skills._core.command_center.server --port 8080

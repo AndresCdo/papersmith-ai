@@ -1,5 +1,5 @@
 """Each pipeline phase card runs its stage: a guided slash command, a real
-``papersmith`` command, or a redirect to the panel that owns the work."""
+``smith`` command, or a redirect to the panel that owns the work."""
 
 from __future__ import annotations
 
@@ -44,14 +44,14 @@ class PhaseActionCatalogueTests(unittest.TestCase):
                         self.assertTrue((REPO / folder / f"{name}.md").is_file(), folder)
                     self.assertTrue((REPO / "skills" / name / "SKILL.md").is_file())
 
-    def test_every_shell_command_is_a_papersmith_subcommand(self) -> None:
+    def test_every_shell_command_is_a_smith_subcommand(self) -> None:
         known = _subcommands()
         for stage, entry in phase_actions.ACTIONS.items():
             for action in entry["actions"]:
                 if action["kind"] == "command":
                     words = action["command"].split()
                     with self.subTest(command=action["command"]):
-                        self.assertEqual(words[0], "papersmith")
+                        self.assertEqual(words[0], "smith")
                         self.assertIn(words[1], known)
 
     def test_every_redirect_names_a_tab_and_section_that_exist(self) -> None:

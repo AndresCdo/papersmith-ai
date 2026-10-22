@@ -24,7 +24,7 @@ ENGINE_CLI = "skills/proposal-implementation/scripts/implementation_cli.py"
 #: alias does NOT reach -- it runs `apply`, the layout migration.
 DEPRECATED_ALIASES = {
     "materialize": (
-        "note: `papersmith implement --action materialize` runs the engine's "
+        "note: `smith implement --action materialize` runs the engine's "
         "`apply` (the approved layout migration), not `materialize --stage`/"
         "`--authored`/`--adopt`. Spell it `--action apply`; the old spelling "
         "keeps working. The engine's own materialize runs directly: "

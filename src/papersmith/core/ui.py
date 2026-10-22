@@ -1,4 +1,4 @@
-"""``papersmith ui``: serve the Paper Command Center for a workspace.
+"""``smith ui``: serve the Paper Command Center for a workspace.
 
 The command center itself lives inside the initialized paper folder at
 ``skills/_core/command_center/`` (a kit entry). This command resolves that
@@ -134,7 +134,7 @@ def require_runnable_backend(workspace: Path, interpreter: str) -> None:
         f"{interpreter} cannot import fastapi.\n"
         f"Provision the workspace's environment and run this again:\n"
         f"  python3 {PROVISIONING_SCRIPT} install\n"
-        f"That creates {expected}. `papersmith init` runs this step itself "
+        f"That creates {expected}. `smith init` runs this step itself "
         "unless it is given `--no-env`."
     )
 
@@ -145,7 +145,7 @@ def command_center_entry(workspace: Path) -> Path:
     if not fs.is_regular_file(entry):
         raise SourceError(
             f"{workspace} has no command center at {COMMAND_CENTER_ENTRY}; "
-            "run `papersmith upgrade` to restore the kit"
+            "run `smith upgrade` to restore the kit"
         )
     return entry
 
@@ -166,7 +166,7 @@ def find_available_port(host: str, preferred: int,
 
     A local dashboard is a convenience, not a service contract: when the
     preferred port is occupied the command center moves to the next one
-    instead of failing the operator's `papersmith ui`.
+    instead of failing the operator's `smith ui`.
     """
     for candidate in range(preferred, preferred + attempts):
         if port_is_free(host, candidate):
@@ -278,7 +278,7 @@ def run_cli(args) -> int:
     if args.port < 1 or args.port > 65535:
         raise UserError(f"port out of range: {args.port}")
     port = args.port if port_is_free(args.host, args.port) else find_available_port(args.host, args.port)
-    prog = getattr(args, "_prog", "papersmith")
+    prog = getattr(args, "_prog", "smith")
     if port != args.port:
         print(f"{prog} ui: port {args.port} is busy; using {port}", file=sys.stderr)
 
