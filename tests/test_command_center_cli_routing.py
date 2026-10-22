@@ -92,15 +92,27 @@ def events(log: list, kind: str) -> list:
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed")
 class CliRoutingTests(unittest.TestCase):
-    def test_a_slash_command_moves_herdr_to_the_first_installed_agent(self) -> None:
+    def test_a_slash_command_opens_the_herdr_session_when_herdr_is_installed(self) -> None:
         log = run(agent="herdr", available=["herdr", "opencode", "pi", "shell"],
                   sends=[{"text": "/plausibility idea", "run": True, "kind": "slash"}])
-        self.assertEqual(events(log, "open"), [["opencode"]])
+        self.assertEqual(events(log, "open"), [["herdr"]])
         self.assertEqual(events(log, "input"), [["s1", "/plausibility idea"], ["s1", "\r"]])
         self.assertEqual(events(log, "confirm"), [])
 
+    def test_the_operator_can_send_a_phase_to_herdr_explicitly(self) -> None:
+        log = run(agent="claude", available=["herdr", "claude"],
+                  sends=[{"text": "/plausibility idea", "run": True, "kind": "slash", "opts": {"agent": "herdr"}}])
+        self.assertEqual(events(log, "open"), [["herdr"]])
+        self.assertIn(["s1", "/plausibility idea"], events(log, "input"))
+
+    def test_without_herdr_a_slash_command_opens_a_new_agent_session(self) -> None:
+        log = run(agent="herdr", available=["opencode", "pi", "shell"],
+                  sends=[{"text": "/plausibility idea", "run": True, "kind": "slash"}])
+        self.assertEqual(events(log, "open"), [["opencode"]])
+        self.assertEqual(events(log, "input"), [["s1", "/plausibility idea"], ["s1", "\r"]])
+
     def test_no_installed_agent_sends_nothing_and_says_why(self) -> None:
-        log = run(agent="shell", available=["herdr", "shell"],
+        log = run(agent="shell", available=["shell"],
                   sends=[{"text": "/plausibility idea", "run": True, "kind": "slash"}])
         self.assertEqual(events(log, "input"), [])
         self.assertIn("no hay un agente", events(log, "status")[-1][0])

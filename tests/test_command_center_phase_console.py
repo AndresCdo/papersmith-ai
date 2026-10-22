@@ -111,6 +111,22 @@ class PhaseConsoleTests(unittest.TestCase):
         self.assertIn('value="opencode" selected', result["select"])
         self.assertIn("Abrirá una sesión de OpenCode", result["note"])
 
+    def test_without_history_the_terminal_herdr_session_is_the_default(self) -> None:
+        agents = {"current": "herdr", "live": False,
+                  "agents": [{"id": "herdr", "label": "Herdr"}, {"id": "claude", "label": "Claude Code"}]}
+        idea = "One sentence here. And a second one."
+        result = run(phase("plausibility"), [{"i": 0, "type": idea}], agents=agents)
+        self.assertIn('value="herdr" selected', result["select"])
+        self.assertIn("Abrirá una sesión de Herdr", result["note"])
+        self.assertEqual(result["options"][0], {"kind": "slash", "agent": "herdr", "fresh": False})
+
+    def test_without_herdr_the_default_opens_a_new_claude_session(self) -> None:
+        agents = {"current": "herdr", "live": False,
+                  "agents": [{"id": "opencode", "label": "OpenCode"}, {"id": "claude", "label": "Claude Code"}]}
+        result = run(phase("plausibility"), [], agents=agents)
+        self.assertIn('value="claude" selected', result["select"])
+        self.assertIn("Abrirá una sesión de Claude Code", result["note"])
+
     def test_the_note_warns_before_closing_the_open_session(self) -> None:
         agents = {"current": "claude", "live": True,
                   "agents": [{"id": "claude", "label": "Claude Code"}, {"id": "pi", "label": "Pi"}]}
@@ -203,7 +219,7 @@ class PageWiringTests(unittest.TestCase):
 
     def test_slash_commands_switch_the_terminal_to_an_agent(self) -> None:
         script = (STATIC / "cli-console.js").read_text(encoding="utf-8")
-        self.assertIn("const SLASH_AGENTS = ['claude', 'opencode', 'pi'];", script)
+        self.assertIn("const SLASH_AGENTS = ['herdr', 'claude', 'opencode', 'pi'];", script)
         self.assertIn("async function sendToCli(text, run, options)", script)
         # A startup question (folder trust) is never answered by the command's Enter.
         self.assertIn("const STARTUP_QUESTIONS = /trust this folder|Do you trust|Enter to confirm/i;", script)
