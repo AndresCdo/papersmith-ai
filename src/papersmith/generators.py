@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import warnings as _warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -311,11 +312,32 @@ def _build_capabilities() -> dict[str, dict[str, Capability]]:
 
 HARNESS_CAPABILITIES = _build_capabilities()
 
+#: Pi's project settings. Pi installs the packages declared here once the
+#: project is trusted, so the web tools the agent projection names are present
+#: on every machine, not only where the operator installed them personally.
+PI_SETTINGS_FILE = ".pi/settings.json"
+PI_PACKAGES = ("npm:pi-web-access",)
+
+
+def seed_pi_settings(workspace: Path) -> bool:
+    """Write :data:`PI_SETTINGS_FILE` when it is absent; return whether it did.
+
+    The file belongs to the workspace once written (``pi install -l`` adds to
+    it), so an existing one is never touched, whatever it declares.
+    """
+    path = workspace / PI_SETTINGS_FILE
+    if fs.exists(path) or path.is_symlink():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"packages": list(PI_PACKAGES)}, indent=2) + "\n",
+                    encoding="utf-8")
+    return True
+
 #: Claude tool names to Pi tool names for the `.pi/agents/` projection.
 #: Unknown names pass through lowercased rather than silently dropped, so a
-#: new Claude tool shows up verbatim instead of vanishing. Web tools depend on
-#: the separately installed pi-web-access extension; projection does not install
-#: it or configure Pi's tool settings.
+#: new Claude tool shows up verbatim instead of vanishing. Web tools come from
+#: the pi-web-access package, which the workspace declares in
+#: :data:`PI_SETTINGS_FILE` (see :func:`seed_pi_settings`).
 PI_TOOL_MAP = {
     "read": "read",
     "glob": "find",

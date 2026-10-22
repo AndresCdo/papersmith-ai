@@ -57,7 +57,8 @@ KIT_ENTRIES = (
 )
 
 # Paths ``upgrade`` must never overwrite or delete. ``papersmith.yaml`` and
-# ``package.json`` are seeded once at init (see ``init._write_workspace_seed``)
+# ``package.json`` are seeded once at init (see ``init._write_workspace_seed``),
+# like Pi's ``.pi/settings.json`` (see ``generators.seed_pi_settings``),
 # and then belong to the user like ``README.md`` does; the rest is research
 # state the user produces under the topology ``init`` scaffolds.
 PRESERVE_PATTERNS = (
@@ -70,6 +71,7 @@ PRESERVE_PATTERNS = (
     "papersmith.yaml",
     "package.json",
     "README.md",
+    ".pi/settings.json",
     ".env*",
 )
 

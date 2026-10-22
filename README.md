@@ -597,6 +597,13 @@ add the `wiring` key to its result. If a skill symlink could not be created, or
 there is a real directory where the symlink would go, they report it as a warning
 (`failed` / `blocked`) instead of silently omitting it.
 
+Pi's agents use the web tools `web_search` and `fetch_content` from the
+[`pi-web-access`](https://www.npmjs.com/package/pi-web-access) package. The
+workspace declares it in `.pi/settings.json`, which Pi reads once you trust the
+project and installs from there; nothing needs installing by hand. `init` writes
+that file, `upgrade` adds it to an older workspace that lacks it, and neither
+touches an existing one (add packages to it with `pi install -l <source>`).
+
 What the table does not promise:
 
 - **Pi:** the agents in `.pi/agents` are only read by the third-party package
@@ -3200,7 +3207,7 @@ to the current directory and has to point at an initialized workspace, except fo
 | `ui` | Serves the local Paper Command Center (DAG, gates, sections, wiring) |
 | `mcp` | Exposes the orchestrator and the paper verbs over Model Context Protocol |
 
-### `smith init <dir>`
+### `smith init [<dir>]`
 
 ```bash
 smith init ~/papers/sparse-ae \
@@ -3215,7 +3222,8 @@ smith init ~/papers/sparse-ae \
 | `--topic TEXT` | Research topic |
 | `--tools TEXT` | Runtimes to provision, comma-separated |
 | `--remote {kaggle,local,slurm}` | Default compute target (default: `kaggle`) |
-| `--import-existing` | Explicitly initialize a nonempty directory while preserving existing files; refuses any file or symlink collision before copying |
+| `<dir>` | Where the workspace goes; omitted, it is the current directory (`smith init` alone sets up the folder you are in, on every operating system) |
+| `--import-existing` | Explicitly initialize a nonempty directory while preserving existing files: keeps its `README.md`, merges papersmith's block into its `.gitignore`, and refuses any other file or symlink collision before copying |
 | `--no-npm` | Skips the best-effort `npm install` (offline/hermetic use) |
 | `--no-env` | Skips provisioning the workspace's Python environment; `smith ui` refuses until `python3 scripts/setup_env.py install` is run |
 | `--progress` | Forces a plain-text progress log with an estimate of the time left; useful in CI, where the bar is noise and the log is what matters |
@@ -3223,9 +3231,13 @@ smith init ~/papers/sparse-ae \
 | `--allow-dirty-kit` | Initializes even when the kit has uncommitted changes in its distributed paths, or when its git state cannot be read; the workspace records that it came from such a kit (see [Kit provenance](#kit-provenance)) |
 
 By default `smith init` refuses a nonempty destination. For a directory with
-existing research files, use `smith init <dir> --import-existing`: it scaffolds
-alongside them, refusing existing generated paths (including a workspace README
-or a `.gitkeep`) rather than replacing them. It is not an upgrade of an existing
+existing research files, use `smith init <dir> --import-existing` (or
+`smith init --import-existing` from inside it): it scaffolds alongside them.
+Two root files nearly every repository has are not collisions: an existing
+`README.md` is kept as it is, and an existing `.gitignore` keeps every line and
+gains papersmith's managed block on top (the same merge `smith upgrade` does).
+Any other existing generated path (`CLAUDE.md`, a `.gitkeep`, `package.json`…)
+is refused rather than replaced. It is not an upgrade of an existing
 Papersmith workspace; use `smith upgrade` for that. The merge requires filesystem
 support for no-follow, directory-relative operations and fails closed if it is
 unavailable. A failed merge attempts to remove only scaffold paths it can still
