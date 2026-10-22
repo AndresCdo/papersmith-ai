@@ -11,6 +11,28 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.19.2
+
+### Added
+
+- **Opt-in initialization in an existing directory.** `smith init --import-existing`
+  stages the framework before merging it into a nonempty directory, refuses
+  collisions, and does not overwrite existing files. The default still requires
+  an empty destination. See the init section of the README for rollback limits.
+
+### Fixed
+
+- **The dashboard opens a Windows browser from WSL** if Linux has no browser
+  handler. `--no-browser` and ordinary Linux/macOS launches are unchanged.
+- Pi agent projections map Claude's `WebSearch` and `WebFetch` to the
+  `pi-web-access` tools `web_search` and `fetch_content` when that extension
+  is installed. Generated agents no longer report misleading missing-tool
+  warnings.
+- The experimental phase's remote-execution guidance is provider-neutral;
+  the paper-ingestion audit recognizes all eight current CLI flags.
+- WSL environment provisioning includes `python-build`, and packaging checks
+  distinguish a runnable build tool from the checkout's `build/` directory.
+
 ## 0.19.1
 
 ### Changed
