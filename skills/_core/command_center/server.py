@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import hashlib
 import html
 import json
 import platform
@@ -87,6 +88,31 @@ _PLACEHOLDER_HTML = """<!doctype html>
 # --------------------------------------------------------------------------
 # static assets
 # --------------------------------------------------------------------------
+#: Translated copies of the section contracts, shipped beside the dashboard.
+#: ``SOURCES.json`` maps each file to the sha256 of the English contract it
+#: was translated from.
+SECTION_TRANSLATIONS_DIR = Path(__file__).resolve().parent / "static" / "i18n"
+SECTION_TRANSLATION_LANGS = frozenset({"es"})
+SECTION_FILE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.md")
+
+
+def section_translation(source: Path, file: str, lang: str) -> bytes | None:
+    """The ``lang`` copy of section contract ``file``, or ``None``.
+
+    ``None`` unless a copy exists and ``source`` is byte-identical to the
+    contract that copy was translated from.
+    """
+    folder = SECTION_TRANSLATIONS_DIR / lang / "sections"
+    try:
+        sources = json.loads((folder / "SOURCES.json").read_text(encoding="utf-8"))
+        current = hashlib.sha256(source.read_bytes()).hexdigest()
+        if sources.get(file) != current:
+            return None
+        return (folder / file).read_bytes()
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def resolve_static_dir(root: Path) -> Path | None:
     """Locate the dashboard build.
 
@@ -1185,6 +1211,22 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         elif ext in (".png", ".jpg", ".jpeg"):
             media_type = f"image/{ext.lstrip('.')}"
         return Response(target.read_bytes(), media_type=media_type)
+
+    @app.get("/api/section-translation")
+    def api_section_translation(file: str = "", lang: str = "es") -> Response:
+        # A translated copy of a section contract, for reading only: the
+        # contract itself stays in English because the engine checks every
+        # `quote` against its text. A copy is served only while the
+        # workspace's contract is byte-identical to the one it was made from,
+        # so an edited or newer contract shows as itself, never as a stale
+        # translation.
+        if not SECTION_FILE_RE.fullmatch(file) or lang not in SECTION_TRANSLATION_LANGS:
+            return JSONResponse({"detail": "invalid section or language"}, status_code=400)
+        source = root_path / "sections" / file
+        translated = section_translation(source, file, lang)
+        if translated is None:
+            return JSONResponse({"detail": "no current translation"}, status_code=404)
+        return Response(translated, media_type="text/plain; charset=utf-8")
 
     @app.get("/api/flow")
     def api_flow() -> Response:

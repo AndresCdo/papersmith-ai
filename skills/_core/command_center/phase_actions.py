@@ -193,7 +193,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Nombra el sujeto: un skill, un CLI o cualquier conjunto cerrado (operaciones, subcomandos, códigos de error).",
                 "La auditoría busca la brecha entre lo que el código acepta y lo que su documentación afirma.",
             ], "Ej.: audita skills/paper-writing"),
-            _redirect("Ver compuertas", "gates", "Estado de las compuertas del framework."),
+            _redirect("Ver compuertas", "pipeline",
+                      "Estado de las compuertas del framework, al final de Pipeline y Avance.",
+                      "gates"),
         ],
     },
 }

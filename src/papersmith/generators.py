@@ -173,6 +173,13 @@ MANAGED_BLOCK_BEGIN = ("# >>> papersmith managed block: `smith upgrade` rewrites
                        "line up to the closing marker")
 MANAGED_BLOCK_END = ("# <<< papersmith managed block ends: lines below this marker are this "
                      "workspace's own, and upgrade keeps them")
+#: Begin markers earlier releases wrote. 0.19.0 renamed the command in the
+#: marker to `smith upgrade`; a block opened by the old wording is still the
+#: framework's, and the next write replaces it with the current marker.
+LEGACY_BLOCK_BEGINS = frozenset({
+    "# >>> papersmith managed block: `papersmith upgrade` rewrites every "
+    "line up to the closing marker",
+})
 
 
 def _block_span(lines: list[str]) -> tuple[int, int] | None | bool:
@@ -186,7 +193,8 @@ def _block_span(lines: list[str]) -> tuple[int, int] | None | bool:
     lines and is therefore never guessed at.
     """
     stripped = [line.rstrip("\r\n") for line in lines]
-    begins = [index for index, line in enumerate(stripped) if line == MANAGED_BLOCK_BEGIN]
+    begins = [index for index, line in enumerate(stripped)
+              if line == MANAGED_BLOCK_BEGIN or line in LEGACY_BLOCK_BEGINS]
     ends = [index for index, line in enumerate(stripped) if line == MANAGED_BLOCK_END]
     if not begins and not ends:
         return None

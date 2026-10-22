@@ -11,6 +11,29 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.19.3
+
+### Changed
+
+- **The gates moved into "Pipeline y Avance".** The "Compuertas (Gates)" tab
+  is gone; its panel now closes the pipeline tab, below the phases it guards,
+  and an old `#gates` link opens it there. "Telemetría y Costos" moved to the
+  last tab, after "Artefactos".
+- **The section drawer reads in Spanish.** "Inspeccionar Reglas & Artefacto"
+  in the paper-sections tab shows each section contract translated, plus the
+  section title, its status and the contract's terms. The contracts under
+  `sections/` stay in English, because the writing engine checks their quotes
+  against their own text. A translation is shown only while the workspace's
+  contract is byte-identical to the one it was made from; an edited contract
+  shows as itself.
+
+### Fixed
+
+- `smith upgrade` again rewrites the `.gitignore` managed block of workspaces
+  created before 0.19.0. That release renamed the command in the block's
+  opening marker, so upgrade read the old marker as malformed and left the
+  file alone, reporting it as drift.
+
 ## 0.19.2
 
 ### Added
