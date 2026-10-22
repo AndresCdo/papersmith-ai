@@ -18,6 +18,8 @@ from ..generators import (
     UNSYNCHRONIZED,
     apply_generated,
     context_for_workspace,
+    merge_managed,
+    seed_pi_settings,
 )
 from ..kit import resolve_and_validate_origin
 from ..render import render_package_template
@@ -218,17 +220,41 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     return None
 
 
+#: Root files almost every existing repository already has. Import keeps the
+#: repository's ``README.md`` (the scaffold's is only a stub, and the workspace
+#: owns it after init anyway) and merges the managed block into its
+#: ``.gitignore`` (see ``generators.merge_managed``) instead of refusing.
+IMPORT_KEPT = frozenset({"README.md"})
+IMPORT_MERGED = frozenset({".gitignore"})
+
+
 def _import_staged(root: Path, staged: Path) -> None:
     """Merge a complete scaffold without replacing any existing path.
 
     Check the complete tree before writing; exclusive creates still guard against
     collisions appearing between preflight and copy. Roll back only paths this
     operation created if a copy fails (never remove a pre-existing path).
+    The root files in :data:`IMPORT_KEPT` and :data:`IMPORT_MERGED` are the
+    exception: an existing one is kept, or merged after every copy succeeded.
     """
+    def adopted(relpath: Path, names: frozenset[str]) -> bool:
+        dest = root / relpath
+        return (len(relpath.parts) == 1 and relpath.name in names
+                and fs.is_regular_file(dest) and not dest.is_symlink())
+
     directories = sorted((p for p in staged.rglob("*") if p.is_dir() and not p.is_symlink()),
                          key=lambda p: (len(p.relative_to(staged).parts), str(p)))
     entries = sorted((p for p in staged.rglob("*") if not p.is_dir() or p.is_symlink()),
                      key=str)
+    merged = [p for p in entries if adopted(p.relative_to(staged), IMPORT_MERGED)]
+    entries = [p for p in entries if p not in merged
+               and not adopted(p.relative_to(staged), IMPORT_KEPT)]
+    for source in merged:
+        dest = root / source.relative_to(staged)
+        if merge_managed(dest.name, source.read_text(encoding="utf-8"),
+                         dest.read_bytes()) is None:
+            raise UserError(f"import collision: {dest} has malformed papersmith markers "
+                            "or is not UTF-8")
     for source in directories:
         dest = root / source.relative_to(staged)
         if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
@@ -304,6 +330,8 @@ def _import_staged(root: Path, staged: Path) -> None:
                         else:
                             raise UserError(f"unsupported staged entry: {source}")
                         require_parent_unchanged(root_fd, rel, fd)
+                for source in merged:
+                    _merge_root_file(root_fd, source)
             except (OSError, UserError) as exc:
                 for rel, inode, is_directory in reversed(created):
                     try:
@@ -319,6 +347,32 @@ def _import_staged(root: Path, staged: Path) -> None:
                 raise UserError(f"import failed; newly created paths rolled back where possible: {exc}") from exc
     except OSError as exc:
         raise UserError(f"safe import unavailable: {exc}") from exc
+
+
+def _merge_root_file(root_fd: int, source: Path) -> None:
+    """Rewrite one root file as the merge of its bytes and ``source``.
+
+    Read through the anchored root descriptor without following a link, and
+    replace it with a sibling written exclusively, so a failure leaves the
+    repository's own file as it was.
+    """
+    name = source.name
+    with os.fdopen(os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd), "rb") as inp:
+        existing = inp.read()
+    content = merge_managed(name, source.read_text(encoding="utf-8"), existing)
+    if content is None:
+        raise UserError(f"import collision: {name} changed during import")
+    temporary = f".{name}.papersmith-import"
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                               os.O_NOFOLLOW, 0o666, dir_fd=root_fd), "w",
+                       encoding="utf-8", newline="") as out:
+            out.write(content)
+        os.replace(temporary, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary, dir_fd=root_fd)
+        raise
 
 
 def initialize(destination: str | Path, *, title: str = "Untitled Paper",
@@ -362,7 +416,8 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
             raise UserError(f"destination is not readable: {root}: {exc}") from None
         if populated:
             if not import_existing:
-                raise UserError(f"destination must be empty: {root}")
+                raise UserError(f"destination must be empty: {root} (use --import-existing "
+                                "to add papersmith to an existing folder)")
             # Build a complete scaffold off-target before touching user content.
             # Provisioning happens only after the collision-free merge, so a
             # rejected import never invokes npm or the environment installer.
@@ -423,6 +478,8 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     with report.step("workspace"):
         _write_workspace_seed(root, name=name, title=title.strip(), topic=topic.strip(),
                               target=target, version=version, tools=tools)
+        if "pi" in tools:
+            seed_pi_settings(root)
         stamp = config.utc_timestamp()
         workspace_config = _default_config(name, tools, target, stamp)
         config.write_json(root / ".papersmith" / "config.json", workspace_config)
@@ -484,7 +541,9 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
 
 def register(subparsers) -> None:
     parser = subparsers.add_parser("init", help="initialize a standalone paper workspace")
-    parser.add_argument("directory", metavar="<dir>")
+    parser.add_argument(
+        "directory", metavar="<dir>", nargs="?", default=".",
+        help="where to create the workspace (default: the current directory)")
     parser.add_argument("--title", default="Untitled Paper")
     parser.add_argument(
         "--tools",
@@ -494,7 +553,9 @@ def register(subparsers) -> None:
     parser.add_argument("--topic", default="unspecified")
     parser.add_argument("--remote", choices=REMOTE_CHOICES, default="kaggle")
     parser.add_argument("--import-existing", action="store_true",
-                        help="initialize a nonempty directory without overwriting existing files; refuse any collision")
+                        help=("initialize a nonempty directory without overwriting existing files: keep its "
+                              "README.md, merge papersmith's block into its .gitignore, and "
+                              "refuse any other collision"))
     parser.add_argument("--no-npm", action="store_true", help="skip the best-effort npm install")
     parser.add_argument(
         "--no-env", action="store_true",

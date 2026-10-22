@@ -9194,6 +9194,16 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                   "recipe it means. Not a loan from any research project: the "
                   "auditor names what it audits",
     },
+    "_core/command_center/phase_actions.py": {
+        "kaggle": "the experiments phase of the dashboard lists the skills it "
+                  "runs, and one of them is `kaggle-accounts`: the word is that "
+                  "skill's directory name, the slash command the operator types "
+                  "when a remote run cannot authenticate",
+    },
+    "_core/command_center/server.py": {
+        "kaggle": "one detail line of the experiments phase naming the same "
+                  "`kaggle-accounts` skill the phase panel offers",
+    },
     "kaggle-accounts/SKILL.md": {
         "kaggle": "this skill's entire subject is one hosted service's "
                   "accounts, named in its own directory name and its doctrine's "

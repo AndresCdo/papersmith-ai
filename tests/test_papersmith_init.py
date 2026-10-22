@@ -19,6 +19,7 @@ from papersmith.cli import main
 from papersmith.core import config, init as init_module, manifest
 from papersmith.kit import resolve_and_validate
 from papersmith.errors import UserError
+from papersmith.generators import MANAGED_BLOCK_BEGIN, MANAGED_BLOCK_END
 from papersmith.yamllite import loads
 
 
@@ -541,12 +542,67 @@ class InitTests(unittest.TestCase):
     def test_import_refuses_collision_without_mutating_destination(self) -> None:
         workspace = self.new_tmp() / "existing"
         workspace.mkdir()
-        original = workspace / "README.md"
-        original.write_bytes(b"my own readme")
-        with self.assertRaisesRegex(UserError, "import collision.*README.md"):
+        original = workspace / "CLAUDE.md"
+        original.write_bytes(b"my own instructions")
+        (workspace / ".gitignore").write_bytes(b"data/\n")
+        with self.assertRaisesRegex(UserError, "import collision.*CLAUDE.md"):
             init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
-        assert original.read_bytes() == b"my own readme"
-        assert sorted(p.name for p in workspace.iterdir()) == ["README.md"]
+        assert original.read_bytes() == b"my own instructions"
+        assert (workspace / ".gitignore").read_bytes() == b"data/\n"
+        assert sorted(p.name for p in workspace.iterdir()) == [".gitignore", "CLAUDE.md"]
+
+    def test_import_keeps_readme_and_merges_gitignore(self) -> None:
+        workspace = self.new_tmp() / "repo"
+        workspace.mkdir()
+        (workspace / "README.md").write_bytes(b"# My repo\n")
+        (workspace / ".gitignore").write_bytes(b"data/\n*.log\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", str(workspace), "--import-existing", "--no-npm", "--no-env"]) == 0
+        assert (workspace / "README.md").read_bytes() == b"# My repo\n"
+        ignore = (workspace / ".gitignore").read_text(encoding="utf-8")
+        assert ignore.startswith(MANAGED_BLOCK_BEGIN)
+        assert MANAGED_BLOCK_END in ignore
+        assert ignore.split(MANAGED_BLOCK_END, 1)[1].split() == ["data/", "*.log"]
+        assert not list(workspace.glob(".*.papersmith-import"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["audit", str(workspace), "--check-drift"]) == 0
+
+    def test_import_refuses_gitignore_with_malformed_markers(self) -> None:
+        workspace = self.new_tmp() / "repo"
+        workspace.mkdir()
+        broken = f"{MANAGED_BLOCK_BEGIN}\ndata/\n".encode()
+        (workspace / ".gitignore").write_bytes(broken)
+        with self.assertRaisesRegex(UserError, "import collision.*gitignore"):
+            init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert (workspace / ".gitignore").read_bytes() == broken
+        assert sorted(p.name for p in workspace.iterdir()) == [".gitignore"]
+
+    def test_cli_init_defaults_to_the_current_directory(self) -> None:
+        workspace = self.new_tmp() / "here"
+        workspace.mkdir()
+        with contextlib.chdir(workspace), contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", "--no-npm", "--no-env"]) == 0
+        assert (workspace / "papersmith.yaml").is_file()
+        assert (workspace / ".papersmith" / "manifest.json").is_file()
+
+    def test_cli_init_in_a_nonempty_current_directory_points_to_import(self) -> None:
+        workspace = self.new_tmp() / "here"
+        workspace.mkdir()
+        (workspace / "notes.md").write_text("keep")
+        with contextlib.chdir(workspace), contextlib.redirect_stderr(io.StringIO()) as err:
+            assert main(["init", "--no-npm", "--no-env"]) != 0
+        assert re.search("must be empty.*--import-existing", err.getvalue())
+        assert sorted(p.name for p in workspace.iterdir()) == ["notes.md"]
+
+    def test_init_declares_pi_web_access_for_pi_workspaces(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        settings = json.loads((workspace / ".pi" / "settings.json").read_text())
+        assert settings == {"packages": ["npm:pi-web-access"]}
+        other = tmp_path / "claude-only"
+        init_module.initialize(other, tools=("claude",), run_npm=False, run_env=False)
+        assert not (other / ".pi" / "settings.json").exists()
 
     def test_import_refuses_symlink_directory_without_following_it(self) -> None:
         parent = self.new_tmp()

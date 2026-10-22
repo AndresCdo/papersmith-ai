@@ -74,6 +74,12 @@ class PhaseActionCatalogueTests(unittest.TestCase):
                      if a["kind"] == "redirect"}
         self.assertEqual(redirects, {("modelo", "mapa"), ("modelo", "matematico")})
 
+    def test_the_experiments_phase_offers_kaggle_accounts_for_remote_runs(self) -> None:
+        entry = phase_actions.ACTIONS["poc_experiments"]
+        self.assertIn("kaggle-accounts", entry["skills"])
+        remote = next(a for a in entry["actions"] if a.get("slash") == "/remote-execution")
+        self.assertIn("/kaggle-accounts", " ".join(remote["guide"]))
+
     def test_phase_ids_resolve_to_stages(self) -> None:
         self.assertEqual(phase_actions.stage_for("Fase 8"), "writing")
         self.assertEqual(phase_actions.stage_for("Fase 10"), "paper")

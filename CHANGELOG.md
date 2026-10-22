@@ -16,20 +16,27 @@ number is `0`, breaking changes can still arrive without a major bump.
 ### Added
 
 - **Opt-in initialization in an existing directory.** `smith init --import-existing`
-  stages the framework before merging it into a nonempty directory, refuses
-  collisions, and does not overwrite existing files. The default still requires
-  an empty destination. See the init section of the README for rollback limits.
+  stages the framework before merging it into a nonempty directory and does not
+  overwrite existing files: it keeps the directory's `README.md`, merges its
+  managed block into an existing `.gitignore`, and refuses any other collision.
+  The default still requires an empty destination. See the init section of the
+  README for rollback limits.
+- **`smith init` defaults to the current directory.** `<dir>` is optional on
+  every operating system; `smith init` alone sets up the folder it runs in, and
+  a path still installs there.
+- **Pi workspaces declare `pi-web-access`.** `init` writes `.pi/settings.json`
+  with that package, and `upgrade` adds the file to a workspace that lacks it,
+  so Pi installs the web tools its agents use once the project is trusted. An
+  existing `.pi/settings.json` is never changed.
 
 ### Fixed
 
 - **The dashboard opens a Windows browser from WSL** if Linux has no browser
   handler. `--no-browser` and ordinary Linux/macOS launches are unchanged.
 - Pi agent projections map Claude's `WebSearch` and `WebFetch` to the
-  `pi-web-access` tools `web_search` and `fetch_content` when that extension
-  is installed. Generated agents no longer report misleading missing-tool
-  warnings.
-- The experimental phase's remote-execution guidance is provider-neutral;
-  the paper-ingestion audit recognizes all eight current CLI flags.
+  `pi-web-access` tools `web_search` and `fetch_content`. Generated agents no
+  longer report misleading missing-tool warnings.
+- The paper-ingestion audit recognizes all eight current CLI flags.
 - WSL environment provisioning includes `python-build`, and packaging checks
   distinguish a runnable build tool from the checkout's `build/` directory.
 

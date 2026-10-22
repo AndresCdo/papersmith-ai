@@ -14,6 +14,8 @@ from ..generators import (
     context_for_workspace,
     read_workspace_version,
     render_files,
+    PI_SETTINGS_FILE,
+    seed_pi_settings,
 )
 from ..kit import resolve_and_validate_origin
 from ..schema import validate_tools
@@ -275,6 +277,10 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     for relpath in generated:
         if relpath not in changed:
             changed.append(relpath)
+    # Workspaces made before Pi's web tools were declared get the settings
+    # file once; an existing one is the workspace's own and stays as it is.
+    if "pi" in active_tools and seed_pi_settings(root):
+        changed.append(PI_SETTINGS_FILE)
 
     # Remove previously-baselined dynamic outputs that stopped being derivable
     # (a workspace-local skill that was removed or renamed). The baseline is the
