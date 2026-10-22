@@ -30,6 +30,7 @@ from papersmith.generators import (
     yaml_double_quote,
     _translate_agent_for_antigravity,
     _translate_agent_for_opencode,
+    _translate_agent_for_pi,
 )
 from papersmith.kit import resolve_and_validate
 
@@ -427,24 +428,25 @@ class GeneratorsTests(unittest.TestCase):
         assert head.startswith("---\n")
         assert "name: sota-scout" in head
         assert "WebSearch" not in head and "WebFetch" not in head
-        # Pi has no sourced counterpart for the web tools: skipped, not renamed.
+        # pi-web-access supplies these names; the projection only declares tools,
+        # and does not install the extension or change Pi's tool settings.
         assert "mcp" not in head and "websearch" not in head and "webfetch" not in head
+        assert "  - web_search" in head and "  - fetch_content" in head
         assert "- read" in head and "- bash" in head
         assert ".claude/" not in scout
         assert "skills/plausibility/SKILL.md" in body
         # Domain metadata the skills read travels untouched.
         assert "description: " in head
 
-    def test_pi_web_tools_are_skipped_with_a_note_per_agent(self) -> None:
+    def test_pi_web_tools_map_to_pi_web_access_without_warnings(self) -> None:
         workspace = _workspace(self.new_tmp())
         sink: list[str] = []
         by_name = {a["name"]: a["text"] for a in collect_pi_agents(workspace, warnings=sink)}
         for name in ("sota-scout", "experimental-validation", "novelty-screener"):
             head = by_name[name].partition("\n---\n")[0]
-            assert "mcp" not in head and "websearch" not in head and "webfetch" not in head, name
-            notes = [w for w in sink if f"agent '{name}'" in w]
-            assert any("'WebSearch'" in w and "not granted" in w for w in notes), notes
-            assert any("'WebFetch'" in w and "not granted" in w for w in notes), notes
+            tools = yaml.safe_load(head.removeprefix("---\n"))["tools"]
+            assert "web_search" in tools and "fetch_content" in tools, name
+            assert not any(f"agent '{name}'" in w and "Web" in w for w in sink), sink
 
     def test_pi_unknown_non_web_tools_still_pass_through_lowercased(self) -> None:
         workspace = _workspace(self.new_tmp())
@@ -456,9 +458,18 @@ class GeneratorsTests(unittest.TestCase):
         sink: list[str] = []
         by_name = {a["name"]: a["text"] for a in collect_pi_agents(workspace, warnings=sink)}
         head = by_name["custom"].partition("\n---\n")[0]
-        assert "  - read\n  - notebookedit" in head
-        assert "websearch" not in head
-        assert not any("NotebookEdit" in w for w in sink), sink
+        assert "  - read\n  - notebookedit\n  - web_search" in head
+        assert not any("NotebookEdit" in w or "WebSearch" in w for w in sink), sink
+
+    def test_pi_legacy_tool_mapping_remains_unchanged(self) -> None:
+        source = ("---\nname: legacy\ndescription: x\n"
+                  "tools: Read, Glob, Grep, Write, Edit, Bash, WebFetch\n---\nbody\n")
+        entry, reason, notes = _translate_agent_for_pi(source)
+        assert reason is None and entry is not None and notes == []
+        head = entry["text"].partition("\n---\n")[0]
+        assert yaml.safe_load(head.removeprefix("---\n"))["tools"] == [
+            "read", "find", "grep", "write", "edit", "bash", "fetch_content",
+        ]
 
     def test_pi_agent_projection_skips_malformed_definitions(self) -> None:
         workspace = _workspace(self.new_tmp())

@@ -3215,11 +3215,24 @@ smith init ~/papers/sparse-ae \
 | `--topic TEXT` | Research topic |
 | `--tools TEXT` | Runtimes to provision, comma-separated |
 | `--remote {kaggle,local,slurm}` | Default compute target (default: `kaggle`) |
+| `--import-existing` | Explicitly initialize a nonempty directory while preserving existing files; refuses any file or symlink collision before copying |
 | `--no-npm` | Skips the best-effort `npm install` (offline/hermetic use) |
 | `--no-env` | Skips provisioning the workspace's Python environment; `smith ui` refuses until `python3 scripts/setup_env.py install` is run |
 | `--progress` | Forces a plain-text progress log with an estimate of the time left; useful in CI, where the bar is noise and the log is what matters |
 | `--no-progress` | Draws no progress even when the output is a terminal |
 | `--allow-dirty-kit` | Initializes even when the kit has uncommitted changes in its distributed paths, or when its git state cannot be read; the workspace records that it came from such a kit (see [Kit provenance](#kit-provenance)) |
+
+By default `smith init` refuses a nonempty destination. For a directory with
+existing research files, use `smith init <dir> --import-existing`: it scaffolds
+alongside them, refusing existing generated paths (including a workspace README
+or a `.gitkeep`) rather than replacing them. It is not an upgrade of an existing
+Papersmith workspace; use `smith upgrade` for that. The merge requires filesystem
+support for no-follow, directory-relative operations and fails closed if it is
+unavailable. A failed merge attempts to remove only scaffold paths it can still
+identify; concurrent directory moves or later npm/environment provisioning may
+leave new artifacts requiring manual cleanup. Filesystem races and external
+installers mean this is not an atomic transaction or a guarantee against other
+processes changing the destination.
 
 The step that dominates the run is environment provisioning, and until 0.9.0 it
 ran with its output captured: several minutes with no signal at all. `init` now

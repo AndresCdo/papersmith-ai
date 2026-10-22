@@ -524,6 +524,104 @@ class InitTests(unittest.TestCase):
         with self.assertRaisesRegex(UserError, "must be empty"):
             init_module.initialize(workspace, run_npm=False, run_env=False)
 
+    def test_cli_import_existing_files_preserves_originals(self) -> None:
+        workspace = self.new_tmp() / "existing"
+        (workspace / "guidance" / "reference-papers").mkdir(parents=True)
+        original = workspace / "guidance" / "reference-papers" / "source.pdf"
+        original.write_bytes(b"original paper bytes")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", str(workspace), "--import-existing", "--no-npm", "--no-env"]) == 0
+        assert original.read_bytes() == b"original paper bytes"
+        assert (workspace / ".papersmith" / "manifest.json").is_file()
+        assert (workspace / "papersmith.yaml").is_file()
+        for path in (workspace / "papersmith.yaml", workspace / ".papersmith" / "config.json",
+                     workspace / ".papersmith" / "manifest.json"):
+            assert b"papersmith-init-" not in path.read_bytes(), path
+
+    def test_import_refuses_collision_without_mutating_destination(self) -> None:
+        workspace = self.new_tmp() / "existing"
+        workspace.mkdir()
+        original = workspace / "README.md"
+        original.write_bytes(b"my own readme")
+        with self.assertRaisesRegex(UserError, "import collision.*README.md"):
+            init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert original.read_bytes() == b"my own readme"
+        assert sorted(p.name for p in workspace.iterdir()) == ["README.md"]
+
+    def test_import_refuses_symlink_directory_without_following_it(self) -> None:
+        parent = self.new_tmp()
+        workspace = parent / "existing"
+        workspace.mkdir()
+        external = parent / "outside"
+        external.mkdir()
+        (workspace / "guidance").symlink_to(external, target_is_directory=True)
+        with self.assertRaisesRegex(UserError, "import collision.*guidance"):
+            init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert list(external.iterdir()) == []
+        assert sorted(p.name for p in workspace.iterdir()) == ["guidance"]
+
+    def test_import_parent_swap_does_not_write_outside_destination(self) -> None:
+        parent = self.new_tmp()
+        workspace = parent / "existing"
+        reference = workspace / "guidance" / "reference-papers"
+        reference.mkdir(parents=True)
+        (reference / "source.pdf").write_bytes(b"original")
+        external = parent / "outside"
+        external.mkdir()
+        original_open = init_module.os.open
+        reference_inode = reference.stat().st_ino
+        swapped = False
+
+        def swap_before_open(path, *args, **kwargs):
+            nonlocal swapped
+            fd = kwargs.get("dir_fd")
+            if (path == ".gitkeep" and fd is not None and not swapped
+                    and init_module.os.fstat(fd).st_ino == reference_inode):
+                swapped = True
+                reference.rename(workspace / "parked-reference-papers")
+                reference.symlink_to(external, target_is_directory=True)
+            return original_open(path, *args, **kwargs)
+
+        with mock.patch.object(init_module.os, "open", swap_before_open):
+            with self.assertRaises(UserError):
+                init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert swapped, "the attack must reach the post-preflight file-create boundary"
+        assert list(external.iterdir()) == []
+        assert (workspace / "parked-reference-papers" / "source.pdf").read_bytes() == b"original"
+
+    def test_import_copy_failure_rolls_back_new_paths_only(self) -> None:
+        parent = self.new_tmp()
+        workspace = parent / "existing"
+        workspace.mkdir()
+        original = workspace / "notes.txt"
+        original.write_bytes(b"keep")
+        staged = parent / "stage"
+        (staged / "newdir").mkdir(parents=True)
+        (staged / "newdir" / "a.txt").write_bytes(b"a")
+        (staged / "newdir" / "b.txt").write_bytes(b"b")
+        real_copy = shutil.copyfileobj
+        calls = 0
+
+        def fail_second(inp, out):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("simulated copy failure")
+            return real_copy(inp, out)
+
+        with mock.patch.object(init_module.shutil, "copyfileobj", side_effect=fail_second):
+            with self.assertRaisesRegex(UserError, "import failed"):
+                init_module._import_staged(workspace, staged)
+        assert original.read_bytes() == b"keep"
+        assert sorted(p.name for p in workspace.iterdir()) == ["notes.txt"]
+
+    def test_cli_init_help_describes_import_opt_in(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(SystemExit) as exit_info:
+                main(["init", "--help"])
+        assert exit_info.exception.code == 0
+        assert "--import-existing" in output.getvalue()
+
     def test_cli_init_routes_flags_and_prints_summary(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "cli-paper"
@@ -588,14 +686,15 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def install_calls(self, root: Path) -> list[list[str]]:
+    def install_calls(self, root: Path, *, no_ingestion: bool = False) -> list[list[str]]:
         module = self.load_copy(root)
         calls: list[list[str]] = []
         module.find_micromamba = lambda: Path("/fake/mm")
         module.env_exists = lambda name: False
         module.detect_cuda = lambda: False
         module.run = lambda mm, args, env: calls.append(list(args))
-        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False, no_ingestion=False)
+        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False,
+                                  no_ingestion=no_ingestion)
         assert module.cmd_install(args) == 0
         return calls
 
@@ -608,6 +707,13 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         calls = self.install_calls(self.new_bare_root())
         assert not any("-e" in call for call in calls), calls
         assert any("docling==2.141.0" in call for call in calls), calls
+
+    def test_build_cli_is_provisioned_even_without_ingestion(self) -> None:
+        calls = self.install_calls(self.new_bare_root(), no_ingestion=True)
+        conda = [call for call in calls if call[0] in ("create", "install")]
+        assert len(conda) == 1, calls
+        assert "python-build" in conda[0], calls
+        assert not any("docling==2.141.0" in call for call in calls), calls
 
     def test_checkout_with_pyproject_keeps_editable_install(self) -> None:
         root = self.new_bare_root()

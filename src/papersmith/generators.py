@@ -313,8 +313,9 @@ HARNESS_CAPABILITIES = _build_capabilities()
 
 #: Claude tool names to Pi tool names for the `.pi/agents/` projection.
 #: Unknown names pass through lowercased rather than silently dropped, so a
-#: new Claude tool shows up verbatim instead of vanishing -- except the names
-#: in :data:`PI_SKIPPED_TOOLS`.
+#: new Claude tool shows up verbatim instead of vanishing. Web tools depend on
+#: the separately installed pi-web-access extension; projection does not install
+#: it or configure Pi's tool settings.
 PI_TOOL_MAP = {
     "read": "read",
     "glob": "find",
@@ -322,14 +323,9 @@ PI_TOOL_MAP = {
     "write": "write",
     "edit": "edit",
     "bash": "bash",
+    "websearch": "web_search",
+    "webfetch": "fetch_content",
 }
-
-#: Claude web tools that are dropped from the Pi `tools:` list with a note.
-#: Pi has no sourced counterpart: its documented built-ins are read, bash,
-#: edit, write, grep, find and ls, and MCP access is granted through a
-#: separate `mcp:` frontmatter field, which this projection does not emit.
-#: The names `mcp`/`mcpScript` this map once used have no primary source.
-PI_SKIPPED_TOOLS = frozenset({"websearch", "webfetch"})
 
 #: Claude tool names to the OpenCode permission keys that gate them, for the
 #: `.opencode/agents/` projection. OpenCode has no `tools:` allow-list any more
@@ -473,17 +469,13 @@ def collect_commands(workspace: Path, *,
 def _pi_tools_line(value: str) -> tuple[str, list[str]]:
     """Map a Claude `tools: A, B` line onto Pi tool names as a YAML list.
 
-    Returns ``(yaml, notes)``; tools in :data:`PI_SKIPPED_TOOLS` are left out
-    and named in ``notes``.
+    Returns ``(yaml, notes)``; web names require pi-web-access at runtime.
     """
     mapped: list[str] = []
     notes: list[str] = []
     for item in value.split(","):
         tool = item.strip()
         if not tool:
-            continue
-        if tool.lower() in PI_SKIPPED_TOOLS:
-            notes.append(f"tool '{tool}' has no Pi tool; not granted")
             continue
         mapped.append(PI_TOOL_MAP.get(tool.lower(), tool.lower()))
     return "tools:\n" + "\n".join(f"  - {name}" for name in mapped), notes
@@ -533,8 +525,7 @@ def _translate_agent_for_pi(
 
     Returns ``({"name": ..., "text": ...}, None, notes)`` or ``(None,
     skip_reason, [])`` -- never raises. Front matter travels verbatim except
-    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP` (web tools
-    in :data:`PI_SKIPPED_TOOLS` are dropped and named in ``notes``); the
+    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP`; the
     body travels verbatim except `.claude/skills/` references, which
     become harness-neutral `skills/` (a symlink in every workspace).
     """

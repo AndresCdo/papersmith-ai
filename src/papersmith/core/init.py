@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Sequence
 
@@ -215,12 +218,116 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     return None
 
 
+def _import_staged(root: Path, staged: Path) -> None:
+    """Merge a complete scaffold without replacing any existing path.
+
+    Check the complete tree before writing; exclusive creates still guard against
+    collisions appearing between preflight and copy. Roll back only paths this
+    operation created if a copy fails (never remove a pre-existing path).
+    """
+    directories = sorted((p for p in staged.rglob("*") if p.is_dir() and not p.is_symlink()),
+                         key=lambda p: (len(p.relative_to(staged).parts), str(p)))
+    entries = sorted((p for p in staged.rglob("*") if not p.is_dir() or p.is_symlink()),
+                     key=str)
+    for source in directories:
+        dest = root / source.relative_to(staged)
+        if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+            raise UserError(f"import collision: {dest}")
+    for source in entries:
+        dest = root / source.relative_to(staged)
+        if dest.exists() or dest.is_symlink():
+            raise UserError(f"import collision: {dest}")
+
+    # Do not address a destination child by its pathname after preflight: a
+    # swapped ancestor symlink could otherwise redirect even an exclusive open
+    # outside the workspace. Each lookup is relative to an open directory fd,
+    # and O_NOFOLLOW refuses swaps at every component.
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise UserError("safe import requires directory-fd and no-follow filesystem support")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+
+    @contextlib.contextmanager
+    def parent_fd(root_fd: int, relpath: Path):
+        with contextlib.ExitStack() as stack:
+            current = root_fd
+            for part in relpath.parts[:-1]:
+                child = os.open(part, directory_flags, dir_fd=current)
+                stack.callback(os.close, child)
+                current = child
+            yield current
+
+    def require_parent_unchanged(root_fd: int, rel: Path, fd: int) -> None:
+        with parent_fd(root_fd, rel) as current:
+            expected, actual = os.fstat(fd), os.fstat(current)
+            if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                raise UserError(f"destination parent changed during import: {root / rel.parent}")
+
+    created: list[tuple[Path, tuple[int, int], bool]] = []
+    try:
+        # If the root path itself changed while staging, refuse rather than
+        # opening an unrelated directory before anchoring the descriptor.
+        identity = root.stat()
+        with contextlib.ExitStack() as root_stack:
+            root_fd = os.open(root, directory_flags)
+            root_stack.callback(os.close, root_fd)
+            actual = os.fstat(root_fd)
+            if (actual.st_dev, actual.st_ino) != (identity.st_dev, identity.st_ino):
+                raise UserError("destination changed during import")
+            try:
+                for source in directories:
+                    rel = source.relative_to(staged)
+                    with parent_fd(root_fd, rel) as fd:
+                        try:
+                            os.mkdir(rel.name, dir_fd=fd)
+                        except FileExistsError:
+                            # Must be a real directory, never a symlink.
+                            child = os.open(rel.name, directory_flags, dir_fd=fd)
+                            os.close(child)
+                        else:
+                            stat = os.stat(rel.name, dir_fd=fd, follow_symlinks=False)
+                            created.append((rel, (stat.st_dev, stat.st_ino), True))
+                for source in entries:
+                    rel = source.relative_to(staged)
+                    with parent_fd(root_fd, rel) as fd:
+                        if source.is_symlink():
+                            os.symlink(os.readlink(source), rel.name, dir_fd=fd)
+                            stat = os.stat(rel.name, dir_fd=fd, follow_symlinks=False)
+                            created.append((rel, (stat.st_dev, stat.st_ino), False))
+                        elif source.is_file():
+                            with source.open("rb") as inp:
+                                with os.fdopen(os.open(rel.name, os.O_WRONLY | os.O_CREAT |
+                                                       os.O_EXCL | os.O_NOFOLLOW, 0o666,
+                                                       dir_fd=fd), "wb") as out:
+                                    stat = os.fstat(out.fileno())
+                                    created.append((rel, (stat.st_dev, stat.st_ino), False))
+                                    shutil.copyfileobj(inp, out)
+                        else:
+                            raise UserError(f"unsupported staged entry: {source}")
+                        require_parent_unchanged(root_fd, rel, fd)
+            except (OSError, UserError) as exc:
+                for rel, inode, is_directory in reversed(created):
+                    try:
+                        with parent_fd(root_fd, rel) as fd:
+                            stat = os.stat(rel.name, dir_fd=fd, follow_symlinks=False)
+                            if (stat.st_dev, stat.st_ino) == inode:
+                                if is_directory:
+                                    os.rmdir(rel.name, dir_fd=fd)
+                                else:
+                                    os.unlink(rel.name, dir_fd=fd)
+                    except OSError:
+                        pass  # changed parent or concurrent occupant: leave it untouched
+                raise UserError(f"import failed; newly created paths rolled back where possible: {exc}") from exc
+    except OSError as exc:
+        raise UserError(f"safe import unavailable: {exc}") from exc
+
+
 def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                tools: Sequence[str] = ALL_TOOLS, topic: str = "unspecified",
                remote: str = "kaggle", run_npm: bool = True,
                run_env: bool = True,
                report: progress.Reporter | None = None,
-               allow_dirty_kit: bool = False) -> dict:
+               allow_dirty_kit: bool = False,
+               import_existing: bool = False) -> dict:
     """Create a workspace and return a machine-readable operation summary.
 
     ``report`` is where the bar, the child's log and the estimate go. It
@@ -254,7 +361,29 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
         except OSError as exc:
             raise UserError(f"destination is not readable: {root}: {exc}") from None
         if populated:
-            raise UserError(f"destination must be empty: {root}")
+            if not import_existing:
+                raise UserError(f"destination must be empty: {root}")
+            # Build a complete scaffold off-target before touching user content.
+            # Provisioning happens only after the collision-free merge, so a
+            # rejected import never invokes npm or the environment installer.
+            with tempfile.TemporaryDirectory(prefix="papersmith-init-") as holder:
+                staged = Path(holder) / root.name
+                result = initialize(
+                    staged, title=title, tools=tools, topic=topic, remote=remote,
+                    run_npm=False, run_env=False, report=report,
+                    allow_dirty_kit=allow_dirty_kit)
+                _import_staged(root, staged)
+            result["workspace"] = str(root)
+            result["name"] = root.name
+            if run_npm:
+                warning = _run_npm_install(root, report)
+                if warning:
+                    result["warnings"].append(warning)
+            if run_env:
+                warning = _run_env_install(root, report)
+                if warning:
+                    result["warnings"].append(warning)
+            return result
     else:
         root.mkdir(parents=True, exist_ok=True)
 
@@ -364,6 +493,8 @@ def register(subparsers) -> None:
     )
     parser.add_argument("--topic", default="unspecified")
     parser.add_argument("--remote", choices=REMOTE_CHOICES, default="kaggle")
+    parser.add_argument("--import-existing", action="store_true",
+                        help="initialize a nonempty directory without overwriting existing files; refuse any collision")
     parser.add_argument("--no-npm", action="store_true", help="skip the best-effort npm install")
     parser.add_argument(
         "--no-env", action="store_true",
@@ -403,6 +534,7 @@ def run_cli(args) -> int:
         run_env=not args.no_env,
         report=report,
         allow_dirty_kit=args.allow_dirty_kit,
+        import_existing=args.import_existing,
     )
     report.finish()
     print(f"Initialized papersmith workspace: {result['workspace']}")
