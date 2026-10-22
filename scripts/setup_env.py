@@ -8,7 +8,7 @@ is present, CPU otherwise) plus the `llama-server` OCR backend — both pulled f
 conda-forge rather than Homebrew, so the same command works everywhere.
 
 What it installs
-    conda-forge: python=3.12, pip, pytest, pytest-xdist, numpy, pypdfium2, pyyaml, jsonschema,
+    conda-forge: python=3.12, pip, pytest, pytest-xdist, python-build, numpy, pypdfium2, pyyaml, jsonschema,
                  kagglesdk, llama.cpp (provides llama-server), nbformat, nbclient
                  and ipykernel (remote-execution runs notebooks), fastapi,
                  uvicorn, watchfiles and pydantic (the Paper Command Center
@@ -60,6 +60,9 @@ CONDA_BASE_PACKAGES = [
     "pytest",
     # `npm run test:py:par` runs the suite across workers (`--dist loadfile`).
     "pytest-xdist",
+    # PyPI artifact tests run `python -m build`; the checkout's build/ namespace
+    # is not the build distribution. Keep this available even with --no-ingestion.
+    "python-build",
     # `tests/test_remote_execution.py` imports requests at module scope, and
     # `tests/test_forge_gate.py` derives every top-level third-party import the
     # forge's own code requires and probes the gate's interpreter for each one.

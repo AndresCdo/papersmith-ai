@@ -686,14 +686,15 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def install_calls(self, root: Path) -> list[list[str]]:
+    def install_calls(self, root: Path, *, no_ingestion: bool = False) -> list[list[str]]:
         module = self.load_copy(root)
         calls: list[list[str]] = []
         module.find_micromamba = lambda: Path("/fake/mm")
         module.env_exists = lambda name: False
         module.detect_cuda = lambda: False
         module.run = lambda mm, args, env: calls.append(list(args))
-        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False, no_ingestion=False)
+        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False,
+                                  no_ingestion=no_ingestion)
         assert module.cmd_install(args) == 0
         return calls
 
@@ -706,6 +707,13 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         calls = self.install_calls(self.new_bare_root())
         assert not any("-e" in call for call in calls), calls
         assert any("docling==2.141.0" in call for call in calls), calls
+
+    def test_build_cli_is_provisioned_even_without_ingestion(self) -> None:
+        calls = self.install_calls(self.new_bare_root(), no_ingestion=True)
+        conda = [call for call in calls if call[0] in ("create", "install")]
+        assert len(conda) == 1, calls
+        assert "python-build" in conda[0], calls
+        assert not any("docling==2.141.0" in call for call in calls), calls
 
     def test_checkout_with_pyproject_keeps_editable_install(self) -> None:
         root = self.new_bare_root()
