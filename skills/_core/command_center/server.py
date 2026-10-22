@@ -713,7 +713,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     {"id": "5.4", "name": "Stage composed: Especificación de Experimentos", "status": fase5_status, "detail": "Formalización de experimentos con instrumentación"},
                     {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": fase5_status, "detail": "Superación de compuerta G-EXP-POC"},
                     {"id": "5.6", "name": "Implementación PoC y experimental", "status": fase5_status, "detail": "proposal-implementation y experimental-implementation contra el repositorio objetivo"},
-                    {"id": "5.7", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
+                    {"id": "5.7", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y credenciales del worker cuando la medición corre fuera de la máquina"}
                 ]
             },
             {

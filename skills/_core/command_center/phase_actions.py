@@ -112,7 +112,7 @@ ACTIONS: dict[str, dict[str, Any]] = {
     },
     "poc_experiments": {
         "skills": ["experimental-deliberation", "proposal-implementation",
-                   "experimental-implementation", "kaggle-accounts", "remote-execution"],
+                   "experimental-implementation", "remote-execution"],
         "agent": "experimental-deliberation & proposal/experimental-implementation",
         "actions": [
             _prompt("/experimental-deliberation", "Deliberar el diseño experimental", [
@@ -128,9 +128,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Convierte el protocolo experimental vigente en Python y corre sus mediciones declaradas.",
                 "Indica el repositorio objetivo; la verificación compara contra el protocolo y la propuesta.",
             ], "Ej.: implementa E1 y E2 y reporta las métricas.", optional=True),
-            _prompt("/remote-execution", "Ejecución remota (Kaggle / workers)", [
+            _prompt("/remote-execution", "Ejecución remota (workers)", [
                 "Envía entrypoints a un worker remoto y lee lo que regresó; el ledger es de solo anexar.",
-                "Si las cuentas no autentican, usa primero /kaggle-accounts.",
+                "Si las cuentas del worker no autentican, verifica sus credenciales antes de ejecutar.",
             ], "Ej.: envía experiments/e1.py al mejor worker disponible.", optional=True),
             _redirect("Ver el tablero PoC", "modelo", "Experimentos y veredictos de la prueba de concepto.", "poc"),
         ],
