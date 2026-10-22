@@ -50,12 +50,12 @@ class ResidueTests(unittest.TestCase):
         self.assertEqual(found[0].severity, "error")
 
     def test_a_spanish_placeholder_is_an_error(self):
-        found = manual.residue("Run `papersmith init <nombre>` first.\n")
+        found = manual.residue("Run `smith init <nombre>` first.\n")
         self.assertEqual(codes(found), ["spanish-placeholder"])
         self.assertIn("<nombre>", found[0].detail)
 
     def test_an_english_placeholder_is_not_a_finding(self):
-        self.assertEqual(manual.residue("Run `papersmith init <name>` first.\n"), [])
+        self.assertEqual(manual.residue("Run `smith init <name>` first.\n"), [])
 
     def test_a_question_that_closes_across_a_line_break_is_not_unclosed(self):
         findings = manual.residue("¿Cómo funciona\neste comando?\n")
@@ -78,11 +78,11 @@ class ResidueTests(unittest.TestCase):
     def test_a_heading_that_is_only_a_command_name_is_not_reported(self):
         # The brief never translates a command name, so a heading made of one is
         # not prose a translator was meant to rewrite.
-        text = "### `papersmith init <dir>`\n"
+        text = "### `smith init <dir>`\n"
         self.assertEqual(manual.residue(text, original=text), [])
 
     def test_a_heading_with_prose_in_it_is_still_reported(self):
-        text = "### `papersmith init <dir>` and the files it writes\n"
+        text = "### `smith init <dir>` and the files it writes\n"
         self.assertEqual(codes(manual.residue(text, original=text)),
                          ["untranslated-heading"])
 
@@ -100,7 +100,7 @@ class ResidueTests(unittest.TestCase):
 
     def test_a_short_or_url_carrying_identical_line_is_not_reported(self):
         # A command, a link and a badge survive translation byte for byte.
-        for text in ("Ver `papersmith status`.\n",
+        for text in ("Ver `smith status`.\n",
                      "Ver [the manual](docs/README.md) para el resto del detalle.\n",
                      "  [![CI](https://example.test/badge.svg)](https://example.test)\n"):
             with self.subTest(text=text):
@@ -114,7 +114,7 @@ class ResidueTests(unittest.TestCase):
 
     def test_a_prose_line_carrying_inline_code_is_still_prose(self):
         text = ("The engine writes nothing until the operator accepts it; "
-                "`papersmith status` reports where that stands.\n")
+                "`smith status` reports where that stands.\n")
         findings = manual.residue(text, original=text)
         self.assertEqual(codes(findings), ["untranslated-line"])
 
@@ -166,8 +166,8 @@ class AnchorTests(unittest.TestCase):
                          "cómputo-remoto-con-cuidado")
 
     def test_a_heading_carrying_inline_code_slugifies_without_the_backticks(self):
-        self.assertEqual(manual.slug("### `papersmith target {list,set,check}`"),
-                         "papersmith-target-listsetcheck")
+        self.assertEqual(manual.slug("### `smith target {list,set,check}`"),
+                         "smith-target-listsetcheck")
 
     def test_every_fragment_anchor_in_the_live_manual_resolves(self):
         current = (FORGE / "README.md").read_text(encoding="utf-8")

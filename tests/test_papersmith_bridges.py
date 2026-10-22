@@ -197,7 +197,7 @@ class BridgesTests(unittest.TestCase):
 
     def test_readme_names_every_engine_command_the_bridge_does_not_run(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        start = readme.index("### `papersmith implement [<dir>]`")
+        start = readme.index("### `smith implement [<dir>]`")
         section = readme[start:readme.index("\n### ", start + 1)]
         for command in sorted(_engine_commands() - implementation.REAL_COMMANDS):
             self.assertIn(f"`{command}`", section)

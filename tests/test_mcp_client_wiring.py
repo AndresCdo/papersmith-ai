@@ -43,7 +43,7 @@ def _argv(server: dict) -> list[str]:
 
 def test_print_config_names_the_serve_command_for_the_bound_workspace(workspace: Path) -> None:
     server = _snippet(workspace)
-    assert server["command"] == "papersmith"
+    assert server["command"] == "smith"
     assert server["args"] == ["mcp", "serve", "--workspace", str(workspace)]
 
 

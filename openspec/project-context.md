@@ -47,7 +47,7 @@
 - The artifact store is file-backed only (`openspec`), and `openspec/config.yaml`'s
   `store:` key is where that is declared. Changed 2026-05-18: this file named a
   memory provider as half the store, which made its own instructions
-  unexecutable on a machine that has none, and `papersmith init` ships no
+  unexecutable on a machine that has none, and `smith init` ships no
   `openspec/` at all, so that half reached nobody. `tests/test_no_personal_context_dependency.py`
   derives its expectation from the configuration key and refuses a
   provider-shaped store, a provider mirror declaration, or a provider call in

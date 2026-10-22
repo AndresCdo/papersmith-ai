@@ -118,18 +118,18 @@ def export_static(root: Path, destination: Path) -> int:
     """Copy the resolved dashboard build to ``destination`` and report."""
     source = resolve_static_dir(root)
     if source is None:
-        print("papersmith ui: no built dashboard assets found", file=sys.stderr)
+        print("smith ui: no built dashboard assets found", file=sys.stderr)
         return 2
     destination = destination.expanduser().resolve()
     if destination.exists():
         if not destination.is_dir():
-            print(f"papersmith ui: destination is not a directory: {destination}", file=sys.stderr)
+            print(f"smith ui: destination is not a directory: {destination}", file=sys.stderr)
             return 2
         if any(destination.iterdir()):
-            print(f"papersmith ui: destination is not empty: {destination}", file=sys.stderr)
+            print(f"smith ui: destination is not empty: {destination}", file=sys.stderr)
             return 2
     shutil.copytree(source, destination, dirs_exist_ok=True)
-    print(f"papersmith ui: exported {source} -> {destination}")
+    print(f"smith ui: exported {source} -> {destination}")
     return 0
 
 
@@ -205,7 +205,7 @@ class HostAllowListMiddleware:
         body = (
             f"Host header {host!r} is not allowed for this dashboard. "
             "Open it through one of its own addresses, or start the server with "
-            f"`papersmith ui --allowed-host HOST:PORT` (for example --allowed-host {host or 'localhost:5173'}).\n"
+            f"`smith ui --allowed-host HOST:PORT` (for example --allowed-host {host or 'localhost:5173'}).\n"
         ).encode()
         await send({"type": "http.response.start", "status": 421, "headers": [
             (b"content-type", b"text/plain; charset=utf-8"),
@@ -287,7 +287,7 @@ def _audit_verdict(root: Path) -> bool | None:
 
 
 def _run_audit(root: Path) -> dict[str, Any] | None:
-    """Run `papersmith audit --check-drift` on the workspace with this
+    """Run `smith audit --check-drift` on the workspace with this
     interpreter and record its verdict in `.papersmith/audit.json`.
 
     One audit at a time: None means another one is still running. `ran` is
@@ -311,7 +311,7 @@ def _run_audit(root: Path) -> dict[str, Any] | None:
             returncode, output, ran = -1, f"{type(exc).__name__}: {exc}", False
         record = {"ok": ran and returncode == 0, "ran": ran, "returncode": returncode,
                   "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                  "command": f"papersmith audit {root} --check-drift", "output": output[-4000:]}
+                  "command": f"smith audit {root} --check-drift", "output": output[-4000:]}
         folder = root / ".papersmith"
         try:
             folder.mkdir(exist_ok=True)
@@ -614,7 +614,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Estructura de workspace, proyecciones de harness (.claude, .opencode, .pi, .agents), entorno micromamba y validación de runtimes.",
                 "tools": ["read", "bash"],
                 "skills": ["harness-setup", "workspace-verifier"],
-                "cli_command": "papersmith init --harness-only",
+                "cli_command": "smith init --harness-only",
                 "outputs": [".papersmith/", "papersmith.yaml", "pyproject.toml"],
                 "status": fase1_status,
                 "progress": 1.0 if fase1_status == "PASS" else 0.0,
@@ -635,7 +635,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Exploración SOTA, validación de plausibilidad y compilación del Atlas 3D de candidatos y constelación conceptual.",
                 "tools": ["read", "write", "mcp"],
                 "skills": ["sota-scout", "semantic-scholar", "pubmed-search"],
-                "cli_command": "papersmith run --stage plausibility",
+                "cli_command": "smith run --stage plausibility",
                 "outputs": ["sota-pool/atlas.json", "sota-pool/atlas.html", "sota-pool/candidates.json"],
                 "status": fase2_status,
                 "progress": fase2_prog,
@@ -656,7 +656,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Ingestión a Markdown de artículos de referencia, normalización BibTeX de bibliografía y extracción de insumos base.",
                 "tools": ["read", "write", "marker"],
                 "skills": ["paper-ingestion", "pdf-extractor", "bibtex-parser"],
-                "cli_command": "papersmith ingest guidance/reference-papers/",
+                "cli_command": "smith ingest guidance/reference-papers/",
                 "outputs": ["guidance/reference-papers/", "paper/refs.bib", "paper/Figures/"],
                 "status": fase3_status,
                 "progress": fase3_prog,
@@ -677,7 +677,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Deliberación científica formal de la propuesta (rNN), definición de novedad, discusión del mapa conceptual y de la matemática con el tutor socrático.",
                 "tools": ["read", "write", "deliberate"],
                 "skills": ["proposal-deliberation", "peer-review-simulator"],
-                "cli_command": "papersmith deliberate proposals/",
+                "cli_command": "smith deliberate proposals/",
                 "outputs": ["proposals/"],
                 "status": fase4_status,
                 "progress": fase4_prog,
@@ -700,7 +700,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Diseño y deliberación del protocolo experimental, implementación de la prueba de concepto y de los experimentos, y ejecución local o remota de sus mediciones.",
                 "tools": ["read", "write", "validate"],
                 "skills": ["experimental-deliberation", "experimental-implementation"],
-                "cli_command": "papersmith deliberate experiments/",
+                "cli_command": "smith deliberate experiments/",
                 "outputs": ["experiments/"],
                 "status": fase5_status,
                 "progress": fase5_prog,
@@ -724,7 +724,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Andamiaje de paper/main.tex con bloques canónicos y contratos de sección bajo la clase tipográfica del journal.",
                 "tools": ["read", "write"],
                 "skills": ["scaffold-generator", "latex-contract-indexer"],
-                "cli_command": "papersmith implement scaffold",
+                "cli_command": "smith implement scaffold",
                 "outputs": ["paper/main.tex", "paper/refs.bib", "sections/*.md"],
                 "status": fase6_status,
                 "progress": fase6_prog,
@@ -745,7 +745,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Fijación de declaraciones operativas: autoría CRediT, financiación, repositorio abierto y consideraciones éticas.",
                 "tools": ["read", "write"],
                 "skills": ["credit-taxonomy", "ethics-compliance"],
-                "cli_command": "papersmith implement declarations",
+                "cli_command": "smith implement declarations",
                 "outputs": ["paper/main.tex (declarations)"],
                 "status": fase7_status,
                 "progress": fase7_prog,
@@ -788,7 +788,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Elaboración de diagramas de arquitectura, figuras vectoriales, esquemas y grounding con el texto.",
                 "tools": ["read", "write", "latexmk"],
                 "skills": ["vector-graphics", "sips-optimizer", "figure-grounding"],
-                "cli_command": "papersmith audit --figures",
+                "cli_command": "smith audit --figures",
                 "outputs": ["paper/Figures/"],
                 "status": fase9_status,
                 "progress": fase9_prog,
@@ -831,7 +831,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "desc": "Verificación estricta de las 4 compuertas del framework: readiness, acoplamiento de hechos, blindaje de estilo y figuras.",
                 "tools": ["read", "bash"],
                 "skills": ["cross-auditor", "gate-checker", "hash-verifier"],
-                "cli_command": "papersmith audit",
+                "cli_command": "smith audit",
                 "outputs": [".papersmith/audit.json"],
                 "status": fase11_status,
                 "progress": fase11_prog,
@@ -1477,7 +1477,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 if not record["ran"]:
                     message = "La auditoría no pudo ejecutarse (papersmith no disponible o tiempo agotado)."
                 elif record["ok"]:
-                    message = "Auditoría superada: papersmith audit --check-drift sin hallazgos."
+                    message = "Auditoría superada: smith audit --check-drift sin hallazgos."
                 else:
                     message = f"La auditoría encontró problemas (código {record['returncode']})."
                 if not record["written"]:

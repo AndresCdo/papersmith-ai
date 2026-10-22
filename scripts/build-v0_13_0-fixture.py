@@ -8,7 +8,7 @@ writes an artifact itself: it extracts the 0.13.0 tree (``git archive
 release has no tag) into a scratch directory and drives THAT tree's own CLI
 and engines:
 
-* ``papersmith init --no-env --no-npm``;
+* ``smith init --no-env --no-npm``;
 * proposal-deliberation: ``CREATE_INITIAL_REVISION`` and one successor
   (resolve, preview, accept on one ``--serve`` process);
 * experimental-deliberation: ``CREATE_INITIAL_REVISION``;

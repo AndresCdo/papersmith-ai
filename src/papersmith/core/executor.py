@@ -49,7 +49,7 @@ def _target_markers(profile: dict) -> set[str]:
     return {marker for marker in TARGET_PLACEHOLDERS if any(marker in text for text in texts)}
 
 
-#: How profiles written by `papersmith init` before 0.14.0 named the target.
+#: How profiles written by `smith init` before 0.14.0 named the target.
 #: `{paper_slug}` is the workspace folder name, which names no implementation
 #: unless the target happens to share it.
 LEGACY_TARGET = IMPLEMENTATIONS + "/{paper_slug}"
@@ -71,7 +71,7 @@ def _legacy_target_problem(root: Path, profile: dict) -> str | None:
             f"{IMPLEMENTATIONS}/{root.name}/ and does not exist: {{paper_slug}} is the "
             "workspace folder name, not an implementation target. Edit papersmith.yaml "
             "to name {target} instead (and {target_python} -m pytest rather than a bare "
-            "pytest), as `papersmith init` writes from 0.14.0 on")
+            "pytest), as `smith init` writes from 0.14.0 on")
 
 
 def _venv_python(directory: Path) -> Path:

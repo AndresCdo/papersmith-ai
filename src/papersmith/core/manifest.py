@@ -259,7 +259,7 @@ def link_warnings(report: LinkReport) -> list[str]:
     """One operator-facing warning per failed or blocked link path."""
     warnings = [
         f"harness skills link '{relpath}' could not be created; skills are not "
-        "linked there (re-run `papersmith upgrade` once the cause is fixed)"
+        "linked there (re-run `smith upgrade` once the cause is fixed)"
         for relpath in report.failed
     ]
     warnings.extend(

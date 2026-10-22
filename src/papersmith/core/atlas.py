@@ -1,4 +1,4 @@
-"""``papersmith atlas build``: regenerate a workspace's SOTA atlas page.
+"""``smith atlas build``: regenerate a workspace's SOTA atlas page.
 
 The same action as the dashboard's "Regenerar grafo" button. The rebuild lives
 in the workspace's command center (``skills/_core/command_center/atlas_build.py``)
@@ -27,7 +27,7 @@ def run_build(args) -> int:
         raise UserError(f"not a directory: {workspace}")
     if not fs.is_regular_file(workspace / ATLAS_BUILD_ENTRY):
         raise UserError(f"{ATLAS_BUILD_ENTRY} not found in {workspace}: "
-                        "run `papersmith upgrade` to refresh the workspace kit")
+                        "run `smith upgrade` to refresh the workspace kit")
     argv = [sys.executable, "-B", "-m", ATLAS_BUILD_MODULE, "--root", str(workspace)]
     if args.json:
         argv.append("--json")

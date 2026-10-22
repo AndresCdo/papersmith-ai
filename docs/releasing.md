@@ -170,7 +170,7 @@ working install is not a release:
 ```bash
 python3 -m venv /tmp/verify && /tmp/verify/bin/pip install \
   "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai@vX.Y.Z"
-/tmp/verify/bin/papersmith --version
+/tmp/verify/bin/smith --version
 ```
 
 One trap when reading the remote: `git ls-remote --tags origin vX.Y.Z` prints the
@@ -223,7 +223,7 @@ nothing to do with any artifact.
 
 A workspace is a paper in progress: ledgers, receipts, seals, managed
 revisions, locks and agreement holders that took weeks to accumulate. "Re-run
-`papersmith init` in a fresh workspace" throws all of that away, so it is never
+`smith init` in a fresh workspace" throws all of that away, so it is never
 the answer for a live workspace. The 0.8.0 changelog entry that said so is
 superseded by this policy (and left as written, because a changelog records
 what a release said, not what it should have said).

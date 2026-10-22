@@ -1,4 +1,4 @@
-"""MCP protocol layer for ``papersmith mcp serve``.
+"""MCP protocol layer for ``smith mcp serve``.
 
 The transport is stdio: UTF-8 JSON-RPC 2.0, newline-delimited, one message per
 line, no embedded newlines (MCP specification revision 2026-07-28). Revision

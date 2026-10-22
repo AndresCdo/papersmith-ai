@@ -13,6 +13,14 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ## Unreleased
 
+### Changed
+
+- **`smith` is the canonical command.** Help, usage and error messages, the
+  MCP client snippet (`smith mcp serve`), the command center's phase actions,
+  generated workspace docs and the README now use `smith init`,
+  `smith upgrade`, `smith status` and the rest. The `papersmith` entry point
+  stays installed as a compatibility alias and reports itself as `smith`.
+
 ### Added
 
 - **Page-routed, license-unrestricted paper ingestion.** The default engine is
