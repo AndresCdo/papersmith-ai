@@ -68,8 +68,8 @@ class PreservedPanelsTests(unittest.TestCase):
         self.assertIn("onclick=\"triggerRunPhase('${escapeHtml(p.id)}', this)\"", PAGE)
 
     def test_the_archify_flow_tab_comes_first_and_opens_by_default(self) -> None:
-        order = ["flow", "pipeline", "modelo", "sections", "gates",
-                 "telemetria", "atlas", "preview", "artifacts"]
+        order = ["flow", "pipeline", "modelo", "sections", "atlas",
+                 "preview", "artifacts", "telemetria"]
         positions = [PAGE.index(f"onclick=\"navigateTab('{tab}')\">") for tab in order]
         self.assertEqual(positions, sorted(positions))
         self.assertIn('<button class="tab-nav__btn active" onclick="navigateTab(\'flow\')">', PAGE)

@@ -2553,11 +2553,10 @@
     <button class="tab-nav__btn" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
     <button class="tab-nav__btn" onclick="navigateTab('modelo')">🧠 Mapa Conceptual &amp; Modelo</button>
     <button class="tab-nav__btn" onclick="navigateTab('sections')">Secciones del Paper</button>
-    <button class="tab-nav__btn" onclick="navigateTab('gates')">Compuertas (Gates)</button>
-    <button class="tab-nav__btn" onclick="navigateTab('telemetria')">Telemetría y Costos</button>
     <button class="tab-nav__btn" onclick="navigateTab('atlas')">Atlas de Grafos</button>
     <button class="tab-nav__btn" onclick="navigateTab('preview')">Previsualización PDF</button>
     <button class="tab-nav__btn" onclick="navigateTab('artifacts')">Artefactos</button>
+    <button class="tab-nav__btn" onclick="navigateTab('telemetria')">Telemetría y Costos</button>
   </nav>
 
   <!-- Main content area -->
@@ -2612,6 +2611,17 @@
           <span class="panel__meta">Haz clic en cualquier fase para inspeccionar detalles y dependencias</span>
         </div>
         <div class="pipeline-grid" id="pipelineGrid">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- The gates live with the phases they guard (was its own tab). -->
+      <div class="panel" id="gatesPanel">
+        <div class="panel__header">
+          <div class="panel__title">Compuertas de Revisión y Validación Formal (Gates)</div>
+          <span class="panel__meta">Revisión de calidad, consistencia y dependencias cruzadas</span>
+        </div>
+        <div class="pipeline-grid" id="gatesGrid">
           <!-- Rendered by JS -->
         </div>
       </div>
@@ -2816,19 +2826,6 @@
               <!-- Rendered by JS -->
             </tbody>
           </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 4: GATES -->
-    <div id="pane-gates" class="tab-pane">
-      <div class="panel">
-        <div class="panel__header">
-          <div class="panel__title">Compuertas de Revisión y Validación Formal (Gates)</div>
-          <span class="panel__meta">Revisión de calidad, consistencia y dependencias cruzadas</span>
-        </div>
-        <div class="pipeline-grid" id="gatesGrid">
-          <!-- Rendered by JS -->
         </div>
       </div>
     </div>
@@ -4179,6 +4176,52 @@
       }
     }
 
+    /* Spanish labels for the section drawer. The contracts and the state
+       keep their English tokens (the engine reads them); only what the
+       drawer shows is translated, and an unknown token shows as itself. */
+    const SECTION_TITLES_ES = {
+      'materials-and-methods': 'Materiales y métodos',
+      'experimental-setup': 'Configuración experimental',
+      'results-and-discussion': 'Resultados y discusión',
+      'limitations': 'Limitaciones',
+      'related-work': 'Trabajo relacionado',
+      'introduction': 'Introducción',
+      'conclusions': 'Conclusiones',
+      'abstract': 'Resumen',
+      'title-and-keywords': 'Título y palabras clave',
+      'back-matter': 'Material final',
+    };
+    const SECTION_STATUS_ES = {
+      SCAFFOLDED: 'ANDAMIADA',
+      CONTRACTED: 'CONTRATADA',
+      DRAFTING: 'EN REDACCIÓN',
+      AUDITED: 'AUDITADA',
+      SEALED: 'SELLADA',
+    };
+    const CONTRACT_TERMS_ES = {
+      // mode
+      'transposition': 'transposición', 'argument': 'argumentación', 'skeleton': 'esqueleto',
+      // citations
+      'none': 'sin citas', 'resolution': 'resolución', 'discovery': 'descubrimiento',
+      // facts and declarations
+      'author-roles': 'roles de autoría', 'classification-line': 'línea de clasificación',
+      'contributions': 'contribuciones', 'dataset': 'conjunto de datos',
+      'experimental-design': 'diseño experimental', 'formulation': 'formulación',
+      'gap': 'brecha', 'grant-code': 'código de financiación', 'grant-title': 'título de la financiación',
+      'implementation': 'implementación', 'keyword-bounds': 'límites de palabras clave',
+      'limitations': 'limitaciones', 'problem-statement': 'planteamiento del problema',
+      'repository-url': 'URL del repositorio', 'results': 'resultados',
+    };
+    function sectionTitleEs(s) {
+      return SECTION_TITLES_ES[s.section] || s.title;
+    }
+    function sectionStatusEs(status) {
+      return SECTION_STATUS_ES[status] || status;
+    }
+    function contractTermEs(token) {
+      return CONTRACT_TERMS_ES[token] || token;
+    }
+
     function openSectionDrawer(secId) {
       const sections = currentStatus?.sections || [];
       const s = sections.find(item => item.id === secId || item.id.startsWith(secId));
@@ -4190,7 +4233,7 @@
         <div style="display: flex; align-items: center; gap: 0.6rem;">
           <span style="font-size: 1.3rem;">📝</span>
           <div>
-            <div style="font-size: 1.15rem; font-weight: 700; color: var(--text);">${escapeHtml(s.title)}</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: var(--text);">${escapeHtml(sectionTitleEs(s))}</div>
             <div style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">Archivo: <code>sections/${escapeHtml(s.filename)}</code> · Pág. PDF: <strong>${s.pdf_page || 1}</strong></div>
           </div>
         </div>
@@ -4223,7 +4266,7 @@
         <!-- 1. Ficha Técnica y Acciones de la Sección -->
         <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span class="badge badge--${statusTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">Estado: ${escapeHtml(s.status)}</span>
+            <span class="badge badge--${statusTone}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">Estado: ${escapeHtml(sectionStatusEs(s.status))}</span>
             <div style="display: flex; gap: 0.5rem; font-size: 0.75rem; color: var(--text-dim);">
               <span><strong>${s.words?.toLocaleString() || 0}</strong> palabras</span> · 
               <span><strong>${s.citations || 0}</strong> citas BibTeX</span> · 
@@ -4402,7 +4445,7 @@
               <span class="badge badge--ok" style="font-size: 0.72rem; letter-spacing: 0.04em;">CONTRATO CANÓNICO</span>
               <span class="badge badge--info" style="font-size: 0.72rem; font-family: var(--font-mono);">${escapeHtml(sec)}</span>
               <span class="badge badge--warn" style="font-size: 0.72rem;">Posición: ${pos}</span>
-              <span class="badge badge--live" style="font-size: 0.72rem;">Modo: ${escapeHtml(modeVal)}</span>
+              <span class="badge badge--live" style="font-size: 0.72rem;" title="${escapeHtml(modeVal)}">Modo: ${escapeHtml(contractTermEs(modeVal))}</span>
             </div>
             ${modeQuote ? `<div class="contract-quote">“${escapeHtml(modeQuote)}”</div>` : ''}
           </div>
@@ -4428,7 +4471,7 @@
               <div class="block-card-head">
                 <span class="badge badge--primary" style="font-family: var(--font-mono); font-size: 0.72rem;">${escapeHtml(bId)}</span>
                 <span class="badge ${citations === 'none' ? 'badge--warn' : 'badge--ok'}" style="font-size: 0.65rem;">
-                  ${citations === 'none' ? 'Sin citas' : 'Citas: ' + escapeHtml(citations)}
+                  ${citations === 'none' ? 'Sin citas' : 'Citas: ' + escapeHtml(contractTermEs(citations))}
                 </span>
               </div>
           `;
@@ -4436,12 +4479,12 @@
           if (reqFacts.length > 0) {
             html += `
               <div class="block-card-section">
-                <strong>Hechos Requeridos (requires_facts):</strong>
+                <strong>Hechos requeridos:</strong>
                 <div>
                   ${reqFacts.map(rf => {
                     const val = typeof rf === 'object' ? rf.value : rf;
                     const quote = typeof rf === 'object' && rf.source ? rf.source.quote : '';
-                    return `<span class="block-pill-tag" title="${escapeHtml(quote)}">📥 ${escapeHtml(val)}</span>`;
+                    return `<span class="block-pill-tag" title="${escapeHtml(quote)}">📥 ${escapeHtml(contractTermEs(val))}</span>`;
                   }).join('')}
                 </div>
               </div>
@@ -4451,12 +4494,12 @@
           if (prodFacts.length > 0) {
             html += `
               <div class="block-card-section">
-                <strong>Hechos Producidos (produces_facts):</strong>
+                <strong>Hechos producidos:</strong>
                 <div>
                   ${prodFacts.map(pf => {
                     const val = typeof pf === 'object' ? pf.value : pf;
                     const quote = typeof pf === 'object' && pf.source ? pf.source.quote : '';
-                    return `<span class="block-pill-tag block-pill-tag--green" title="${escapeHtml(quote)}">📤 ${escapeHtml(val)}</span>`;
+                    return `<span class="block-pill-tag block-pill-tag--green" title="${escapeHtml(quote)}">📤 ${escapeHtml(contractTermEs(val))}</span>`;
                   }).join('')}
                 </div>
               </div>
@@ -4466,7 +4509,7 @@
           if (afterList.length > 0) {
             html += `
               <div class="block-card-section">
-                <strong>Precedencia (after):</strong>
+                <strong>Va después de:</strong>
                 <div>
                   ${afterList.map(af => {
                     const target = typeof af === 'object' ? af.target : af;
@@ -4650,7 +4693,15 @@
       if (statusEl) statusEl.textContent = 'Cargando reglas...';
 
       try {
-        const res = await fetch(`/api/artifact?file=sections/${encodeURIComponent(filename)}`);
+        // The Spanish copy is served only while it matches this workspace's
+        // contract; otherwise the drawer shows the contract itself.
+        let translated = false;
+        let res = await fetch(`/api/section-translation?lang=es&file=${encodeURIComponent(filename)}`);
+        if (res.ok) {
+          translated = true;
+        } else {
+          res = await fetch(`/api/artifact?file=sections/${encodeURIComponent(filename)}`);
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
 
@@ -4664,7 +4715,9 @@
           rawContainer.textContent = text;
         }
 
-        if (statusEl) statusEl.textContent = '✓ Reglas y contrato cargados';
+        if (statusEl) statusEl.textContent = translated
+          ? '✓ Reglas en español (traducción del contrato, que se mantiene en inglés)'
+          : '✓ Contrato original (sin traducción vigente para esta versión)';
       } catch (err) {
         webContainer.innerHTML = `
           <div style="padding: 1rem; color: var(--warn); line-height: 1.4;">
@@ -6103,7 +6156,11 @@
     // Hash routing on load
     window.addEventListener('load', () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash && ['pipeline', 'flow', 'modelo', 'sections', 'gates', 'telemetria', 'atlas', 'preview', 'artifacts'].includes(hash)) {
+      if (hash === 'gates') {
+        // The gates tab merged into the pipeline; old links still land on it.
+        navigateTab('pipeline');
+        document.getElementById('gatesPanel')?.scrollIntoView();
+      } else if (hash && ['pipeline', 'flow', 'modelo', 'sections', 'telemetria', 'atlas', 'preview', 'artifacts'].includes(hash)) {
         navigateTab(hash);
       }
       loadStatus();

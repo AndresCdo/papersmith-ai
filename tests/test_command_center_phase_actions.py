@@ -60,8 +60,10 @@ class PhaseActionCatalogueTests(unittest.TestCase):
                 if action["kind"] == "redirect":
                     with self.subTest(stage=stage, tab=action["tab"]):
                         self.assertIn(action["tab"], TABS)
-                        if action["section"]:
+                        if action["section"] and action["tab"] == "modelo":
                             self.assertIn(action["section"], SECTIONS)
+                        elif action["section"]:
+                            self.assertIn(f'id="{action["section"]}Panel"', PAGE)
 
     def test_plausibility_asks_for_the_idea_in_two_sentences(self) -> None:
         prompt = phase_actions.ACTIONS["plausibility"]["actions"][0]
@@ -79,6 +81,17 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         self.assertIn("kaggle-accounts", entry["skills"])
         remote = next(a for a in entry["actions"] if a.get("slash") == "/remote-execution")
         self.assertIn("/kaggle-accounts", " ".join(remote["guide"]))
+
+    def test_the_gates_live_in_the_pipeline_tab_and_telemetry_comes_last(self) -> None:
+        tabs = re.findall(r"onclick=\"navigateTab\('([a-z]+)'\)\">", PAGE)
+        self.assertNotIn("gates", tabs)
+        self.assertEqual(tabs[-2:], ["artifacts", "telemetria"])
+        pipeline = PAGE.split('<div id="pane-pipeline"', 1)[1].split('<div id="pane-', 1)[0]
+        self.assertIn('id="gatesGrid"', pipeline)
+        self.assertNotIn('id="pane-gates"', PAGE)
+        audit = phase_actions.ACTIONS["audit"]["actions"]
+        self.assertIn(("pipeline", "gates"),
+                      {(a["tab"], a["section"]) for a in audit if a["kind"] == "redirect"})
 
     def test_phase_ids_resolve_to_stages(self) -> None:
         self.assertEqual(phase_actions.stage_for("Fase 8"), "writing")
