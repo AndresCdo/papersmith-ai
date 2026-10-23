@@ -8,9 +8,11 @@
  * (POST /api/terminal/tutor/turn) whose structured answer is rendered here.
  *
  * Text that comes back from the model is never inserted as HTML: it is escaped,
- * then a tiny Markdown subset and KaTeX (trust off) are applied.
+ * then a tiny Markdown subset and KaTeX (trust off) are applied. Each formula
+ * also keeps its LaTeX source; [data-math-toggle] buttons switch the whole tab
+ * between the compiled and the source view (remembered in localStorage).
  *
- * Public surface (window): refreshMathPanel().
+ * Public surface (window): refreshMathPanel(), mathRichText(text).
  */
 (function () {
   'use strict';
@@ -27,13 +29,31 @@
     })[c]);
   }
 
-  function tex(latex, display) {
+  function compile(latex, display) {
     if (!window.katex) return `<code>${escapeHtml(latex)}</code>`;
     try {
       return window.katex.renderToString(latex, { displayMode: display, throwOnError: false, strict: 'ignore' });
     } catch (_) {
       return `<code class="math-error">${escapeHtml(latex)}</code>`;
     }
+  }
+
+  // Every formula carries its compiled form and its escaped LaTeX source; the
+  // "TeX / Compilado" toggle (data-math-view on <html>) shows one of the two.
+  function tex(latex, display) {
+    const fence = display ? '$$' : '$';
+    return `<span class="tex-dual${display ? ' tex-dual--block' : ''}"><span class="tex-dual__out">${compile(latex, display)}</span>`
+      + `<code class="tex-dual__src" translate="no">${escapeHtml(fence + latex + fence)}</code></span>`;
+  }
+
+  function setMathView(view) {
+    const source = view === 'source';
+    document.documentElement.dataset.mathView = source ? 'source' : 'rendered';
+    document.querySelectorAll('[data-math-toggle]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(source));
+      b.textContent = source ? '∑ Ver compilado' : 'TeX Ver LaTeX';
+    });
+    try { localStorage.setItem('papersmith.mathView', source ? 'source' : 'rendered'); } catch (_) { /* private mode */ }
   }
 
   // Markdown subset + math: $$…$$ (display) and $…$ (inline) are cut out first,
@@ -79,7 +99,7 @@
     const lema = $('mathLema');
     if (lema) lema.innerHTML = richText(view.lema || '');
     const source = $('mathSourceBadge');
-    if (source) source.textContent = view.source === 'none' ? 'sin matemática aún' : `fuente: ${view.source}`;
+    if (source) source.textContent = source.title = view.source === 'none' ? 'sin matemática aún' : `fuente: ${view.source}`;
     const stack = $('mathStack');
     if (!stack) return;
     if (!view.equations.length) {
@@ -265,6 +285,12 @@
       state.mode = b.dataset.tutorMode;
       document.querySelectorAll('[data-tutor-mode]').forEach((x) => x.classList.toggle('is-on', x === b));
     }));
+    document.querySelectorAll('[data-math-toggle]').forEach((b) => b.addEventListener('click', () => {
+      setMathView(document.documentElement.dataset.mathView === 'source' ? 'rendered' : 'source');
+    }));
+    let saved = 'rendered';
+    try { saved = localStorage.getItem('papersmith.mathView') || 'rendered'; } catch (_) { /* private mode */ }
+    setMathView(saved);
     renderMeter(0);
   });
 

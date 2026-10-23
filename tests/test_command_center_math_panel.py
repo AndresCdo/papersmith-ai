@@ -41,6 +41,23 @@ class PageTests(unittest.TestCase):
             self.assertIn(f'id="{module}"', PAGE)
         self.assertIn("if (window.refreshMathPanel) window.refreshMathPanel();", PAGE)
 
+    def test_math_and_concept_map_panels_offer_the_tex_source_toggle(self) -> None:
+        math = self.section()
+        start = PAGE.index('<div id="modelSecMapa"')
+        concept_map = PAGE[start:PAGE.index('<div id="modelSecMatematico"')]
+        for panel in (math, concept_map):
+            self.assertIn('data-math-toggle', panel)
+            self.assertIn('aria-pressed="false"', panel)
+        self.assertIn('[data-math-view="source"] .tex-dual__out', PAGE)
+        self.assertIn('[data-math-view="source"] .tex-dual__src', PAGE)
+
+    def test_the_banner_follows_the_theme(self) -> None:
+        start = PAGE.index('<div class="model-header-banner">')
+        banner = PAGE[start:PAGE.index('<!-- Sub-navigation Filter Bar -->')]
+        for fixed in ("color: #fff", "color: #94a3b8", "color: #f59e0b"):
+            self.assertNotIn(fixed, banner)
+        self.assertIn('[data-theme="light"] .model-header-banner', PAGE)
+
 
 class SafeRenderingTests(unittest.TestCase):
     def render(self, text: str) -> str:
@@ -64,6 +81,31 @@ class SafeRenderingTests(unittest.TestCase):
         out = self.render("Mira $k(x,x')$ y\n\n$$\\lvert a \\rvert^2$$")
         self.assertIn("<KI>k(x,x')</K>", out)
         self.assertIn("<KD>\\lvert a \\rvert^2</K>", out)
+
+    def test_every_formula_keeps_its_escaped_latex_source_beside_the_rendering(self) -> None:
+        out = self.render("Mira $a<b$ y\n\n$$\\frac{1}{2}$$")
+        self.assertIn('<span class="tex-dual"><span class="tex-dual__out"><KI>a<b</K></span>'
+                      '<code class="tex-dual__src" translate="no">$a&lt;b$</code></span>', out)
+        self.assertIn('<code class="tex-dual__src" translate="no">$$\\frac{1}{2}$$</code>', out)
+        self.assertIn('class="tex-dual tex-dual--block"', out)
+
+    def test_concept_map_text_renders_math_and_stays_escaped(self) -> None:
+        script = (
+            "const fs=require('fs');global.window={katex:{renderToString:(t,o)=>'<K>'+t+'</K>'}};"
+            "const els={};global.document={addEventListener(){},getElementById:(id)=>(els[id]=els[id]||{})};"
+            f"eval(fs.readFileSync({json.dumps(str(STATIC / 'math-panel.js'))},'utf8'));"
+            f"eval(fs.readFileSync({json.dumps(str(STATIC / 'model-panel.js'))},'utf8'));"
+            "window.renderModelModules({conceptual_map:{layers:[{layer:'L1',desc:'Mapa $x_i$ <b>'}]},"
+            "novelty:{pillars:[{name:'P',summary:'Usa $\\\\theta$'}],hypotheses:[{title:'H',statement:'$y$'}]}});"
+            "console.log(els.modelConceptLayers.innerHTML+els.modelPillarGrid.innerHTML+els.modelHypothesisGrid.innerHTML);"
+        )
+        out = subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                             cwd=tempfile.gettempdir(), check=True).stdout
+        self.assertIn("<K>x_i</K>", out)
+        self.assertIn("<K>\\theta</K>", out)
+        self.assertIn("<K>y</K>", out)
+        self.assertIn("&lt;b&gt;", out)
+        self.assertNotIn("<b>", out)
 
 
 if __name__ == "__main__":
