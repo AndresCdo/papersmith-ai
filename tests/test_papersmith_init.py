@@ -604,6 +604,36 @@ class InitTests(unittest.TestCase):
         init_module.initialize(other, tools=("claude",), run_npm=False, run_env=False)
         assert not (other / ".pi" / "settings.json").exists()
 
+    def test_init_registers_the_banco_lia_mcp_for_every_declared_harness(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        args = ["--from", "git+https://github.com/LIAUNAL/bancoProyectosPapersLIA", "banco-lia-mcp"]
+        claude = json.loads((workspace / ".mcp.json").read_text())
+        assert claude["mcpServers"]["banco-lia"] == {"type": "stdio", "command": "uvx", "args": args}
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json"):
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert servers["banco-lia"] == {"command": "uvx", "args": args}, relpath
+        opencode = json.loads((workspace / "opencode.json").read_text())
+        assert opencode["mcp"]["banco-lia"] == {
+            "type": "local", "command": ["uvx", *args], "enabled": True}
+        other = tmp_path / "claude-only"
+        init_module.initialize(other, tools=("claude",), run_npm=False, run_env=False)
+        assert (other / ".mcp.json").is_file()
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json", "opencode.json"):
+            assert not (other / relpath).exists(), relpath
+
+    def test_import_keeps_the_repository_mcp_servers_and_adds_banco_lia(self) -> None:
+        workspace = self.new_tmp() / "repo"
+        workspace.mkdir()
+        own = {"mcpServers": {"mine": {"command": "my-server", "args": []}}}
+        (workspace / ".mcp.json").write_text(json.dumps(own), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", str(workspace), "--import-existing", "--no-npm", "--no-env"]) == 0
+        servers = json.loads((workspace / ".mcp.json").read_text())["mcpServers"]
+        assert servers["mine"] == own["mcpServers"]["mine"]
+        assert servers["banco-lia"]["command"] == "uvx"
+
     def test_import_refuses_symlink_directory_without_following_it(self) -> None:
         parent = self.new_tmp()
         workspace = parent / "existing"

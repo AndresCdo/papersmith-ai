@@ -72,6 +72,9 @@ PRESERVE_PATTERNS = (
     "package.json",
     "README.md",
     ".pi/settings.json",
+    ".mcp.json",
+    ".pi/mcp.json",
+    ".agents/mcp_config.json",
     ".env*",
 )
 

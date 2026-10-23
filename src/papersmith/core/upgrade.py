@@ -15,6 +15,7 @@ from ..generators import (
     read_workspace_version,
     render_files,
     PI_SETTINGS_FILE,
+    ensure_mcp_servers,
     seed_pi_settings,
 )
 from ..kit import resolve_and_validate_origin
@@ -281,6 +282,10 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     # file once; an existing one is the workspace's own and stays as it is.
     if "pi" in active_tools and seed_pi_settings(root):
         changed.append(PI_SETTINGS_FILE)
+    # Each harness's MCP file is the workspace's own; upgrade only adds or
+    # refreshes the banco-lia entry and keeps every other server.
+    mcp_warnings: list[str] = []
+    changed.extend(ensure_mcp_servers(root, active_tools, warnings=mcp_warnings))
 
     # Remove previously-baselined dynamic outputs that stopped being derivable
     # (a workspace-local skill that was removed or renamed). The baseline is the
@@ -417,6 +422,7 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
         "stranded": stranded,
         "unsynchronized": unsynchronized,
         "link_warnings": manifest.link_warnings(link_report),
+        "mcp_warnings": mcp_warnings,
         "wiring": wiring.summarize(root, active_tools, link_report, unsynchronized),
     }
 
@@ -499,7 +505,7 @@ def run_cli(args) -> int:
     print("Harness wiring:")
     for line in wiring.format_summary(result["wiring"]):
         print(f"  {line}")
-    for warning in result["link_warnings"]:
+    for warning in result["link_warnings"] + result.get("mcp_warnings", []):
         print(f"Warning: {warning}")
 
     report = result["migrations"]

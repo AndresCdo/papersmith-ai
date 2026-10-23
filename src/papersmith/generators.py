@@ -13,7 +13,7 @@ import json
 import warnings as _warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .core import fs
 from .core.config import load_papersmith_yaml, load_workspace_config
@@ -340,6 +340,67 @@ def seed_pi_settings(workspace: Path) -> bool:
     path.write_text(json.dumps({"packages": list(PI_PACKAGES)}, indent=2) + "\n",
                     encoding="utf-8")
     return True
+
+#: The lab's article and project bank (https://github.com/LIAUNAL/bancoProyectosPapersLIA),
+#: served over stdio by ``uvx`` straight from GitHub. OpenCode registers it in
+#: the rendered ``opencode.json`` (see ``opencode.json.tpl``); the other
+#: harnesses read a file of their own, listed in :data:`MCP_CONFIG_FILES`.
+BANCO_LIA_SERVER = "banco-lia"
+BANCO_LIA_COMMAND = "uvx"
+BANCO_LIA_ARGS = ("--from", "git+https://github.com/LIAUNAL/bancoProyectosPapersLIA",
+                  "banco-lia-mcp")
+
+#: Each harness's project MCP file and the entry it takes for the bank. These
+#: files belong to the workspace: ``init`` and ``upgrade`` add or refresh only
+#: the :data:`BANCO_LIA_SERVER` entry and keep every other server.
+MCP_CONFIG_FILES = {
+    "claude": ".mcp.json",
+    "pi": ".pi/mcp.json",
+    "antigravity": ".agents/mcp_config.json",
+}
+
+
+def _banco_lia_entry(tool: str) -> dict[str, Any]:
+    entry: dict[str, Any] = {"command": BANCO_LIA_COMMAND, "args": list(BANCO_LIA_ARGS)}
+    if tool == "claude":
+        entry = {"type": "stdio", **entry}
+    return entry
+
+
+def ensure_mcp_servers(workspace: Path, tools: Sequence[str], *,
+                       warnings: list[str] | None = None) -> list[str]:
+    """Register :data:`BANCO_LIA_SERVER` in each declared harness's MCP file.
+
+    Returns the paths written. A missing file is created; an existing one keeps
+    every other server and key. A file that is not a JSON object, or whose
+    ``mcpServers`` is not an object, is left untouched and named in
+    ``warnings``, so a hand-edited config is never lost.
+    """
+    written: list[str] = []
+    for tool, relpath in MCP_CONFIG_FILES.items():
+        if tool not in tools:
+            continue
+        path = workspace / relpath
+        data: Any = {}
+        if fs.exists(path) or path.is_symlink():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8")) if fs.is_regular_file(path) else None
+            except (OSError, UnicodeDecodeError, ValueError):
+                data = None
+            if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+                if warnings is not None:
+                    warnings.append(f"{relpath} is not a JSON object with an `mcpServers` object; "
+                                    f"add the {BANCO_LIA_SERVER} server by hand")
+                continue
+        servers = data.setdefault("mcpServers", {})
+        entry = _banco_lia_entry(tool)
+        if servers.get(BANCO_LIA_SERVER) == entry:
+            continue
+        servers[BANCO_LIA_SERVER] = entry
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        written.append(relpath)
+    return written
 
 #: Claude tool names to Pi tool names for the `.pi/agents/` projection.
 #: Unknown names pass through lowercased rather than silently dropped, so a

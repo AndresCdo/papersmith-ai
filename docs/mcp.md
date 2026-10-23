@@ -13,6 +13,28 @@ reimplemented and no new runtime dependency is added.
 - An initialized workspace. The server binds to one workspace root, and every
   path argument it accepts must resolve inside that root.
 
+## The lab bank (`banco-lia`)
+
+`smith init` and `smith upgrade` register the lab's article and project bank
+([LIAUNAL/bancoProyectosPapersLIA](https://github.com/LIAUNAL/bancoProyectosPapersLIA))
+for every declared harness, served by `uvx --from
+git+https://github.com/LIAUNAL/bancoProyectosPapersLIA banco-lia-mcp`:
+
+| Harness | File | Entry |
+|---|---|---|
+| Claude Code | `.mcp.json` | `mcpServers.banco-lia` (`type: stdio`) |
+| OpenCode | `opencode.json` | `mcp.banco-lia` (`type: local`) |
+| Pi | `.pi/mcp.json` | `mcpServers.banco-lia` |
+| Antigravity / agy | `.agents/mcp_config.json` | `mcpServers.banco-lia` |
+
+`.mcp.json`, `.pi/mcp.json` and `.agents/mcp_config.json` belong to the
+workspace: upgrade adds or refreshes only the `banco-lia` entry and keeps every
+other server. A file that is not valid JSON is left untouched and reported as a
+warning. `opencode.json` is a rendered file, so upgrade rewrites it whole.
+The `papersmith` server itself is never written to any of them; use
+`smith mcp print-config` for it. `uv` must be on `PATH` for the harness to
+start the bank.
+
 ## Wiring
 
 The server is launched by the client as a subprocess; there is nothing to run

@@ -19,6 +19,8 @@ from ..generators import (
     apply_generated,
     context_for_workspace,
     merge_managed,
+    MCP_CONFIG_FILES,
+    ensure_mcp_servers,
     seed_pi_settings,
 )
 from ..kit import resolve_and_validate_origin
@@ -158,9 +160,10 @@ def _write_workspace_seed(root: Path, *, name: str, title: str, topic: str,
     }
     _write_text(root, "papersmith.yaml", render_package_template("papersmith.yaml.tpl", context))
     _write_text(root, "README.md", render_package_template("readme.md.tpl", context))
-    # No ``.mcp.json``: success criterion #6 (tests/test_mcp_no_mcp_json.py) is
-    # that the framework never generates, reads or overwrites one. A workspace
-    # that wants the server wired asks for the snippet instead --
+    # ``.mcp.json`` registers only the lab's banco-lia server (see
+    # ``generators.ensure_mcp_servers``). The papersmith server itself is never
+    # written there (success criterion #6, tests/test_mcp_no_mcp_json.py): a
+    # workspace that wants it wired asks for the snippet --
     # ``smith mcp print-config --workspace <path>`` prints it and writes
     # nothing -- and the operator pastes it wherever their harness reads it.
     _write_text(root, "package.json", render_package_template("package.json.tpl", context))
@@ -226,6 +229,9 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
 #: ``.gitignore`` (see ``generators.merge_managed``) instead of refusing.
 IMPORT_KEPT = frozenset({"README.md"})
 IMPORT_MERGED = frozenset({".gitignore"})
+#: Harness MCP files an existing repository may already have. Import keeps
+#: them and ``initialize`` then adds the banco-lia entry to each.
+IMPORT_MCP_KEPT = frozenset(MCP_CONFIG_FILES.values())
 
 
 def _import_staged(root: Path, staged: Path) -> None:
@@ -248,7 +254,10 @@ def _import_staged(root: Path, staged: Path) -> None:
                      key=str)
     merged = [p for p in entries if adopted(p.relative_to(staged), IMPORT_MERGED)]
     entries = [p for p in entries if p not in merged
-               and not adopted(p.relative_to(staged), IMPORT_KEPT)]
+               and not adopted(p.relative_to(staged), IMPORT_KEPT)
+               and not (p.relative_to(staged).as_posix() in IMPORT_MCP_KEPT
+                        and fs.is_regular_file(root / p.relative_to(staged))
+                        and not (root / p.relative_to(staged)).is_symlink())]
     for source in merged:
         dest = root / source.relative_to(staged)
         if merge_managed(dest.name, source.read_text(encoding="utf-8"),
@@ -428,6 +437,7 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                     run_npm=False, run_env=False, report=report,
                     allow_dirty_kit=allow_dirty_kit)
                 _import_staged(root, staged)
+            ensure_mcp_servers(root, tools, warnings=result["warnings"])
             result["workspace"] = str(root)
             result["name"] = root.name
             if run_npm:
@@ -480,6 +490,8 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                               target=target, version=version, tools=tools)
         if "pi" in tools:
             seed_pi_settings(root)
+        mcp_warnings: list[str] = []
+        ensure_mcp_servers(root, tools, warnings=mcp_warnings)
         stamp = config.utc_timestamp()
         workspace_config = _default_config(name, tools, target, stamp)
         config.write_json(root / ".papersmith" / "config.json", workspace_config)
@@ -495,7 +507,7 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     with report.step("generated"):
         context = context_for_workspace(root)
         generated = apply_generated(root, context, tools, skipped=unsynchronized)
-    warnings: list[str] = manifest.link_warnings(link_report)
+    warnings: list[str] = manifest.link_warnings(link_report) + mcp_warnings
     if run_npm:
         with report.step("npm"):
             warning = _run_npm_install(root, report)
