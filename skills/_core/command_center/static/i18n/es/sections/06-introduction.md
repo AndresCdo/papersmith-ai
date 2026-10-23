@@ -535,6 +535,39 @@ Es una fórmula fija:
 
 **No introduzca ningún argumento, problema, contribución, método ni resultado nuevo.**
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo la meta.
+
+**Tamaño medido.** 7–9–15 párrafos; 850–1166–1604 palabras, unas 73–102–139 líneas;
+105–123–178 palabras por párrafo; sin subsecciones, ecuaciones, figuras ni tablas;
+23–27–45 citas, 1,7–4,2 por párrafo.
+
+**Los movimientos que hacen las introducciones del grupo**, diez de diez: lo que está en
+juego en la aplicación, a menudo anclado en un objetivo de salud pública o social; las
+dificultades de los datos; las familias de métodos previos, cada una cerrada por una oración
+que abre con *However* y nombra su limitación; la brecha conjunta; la propuesta, introducida
+por la bisagra *To address these limitations, this work introduces* seguida del nombre
+completo y el acrónimo entre paréntesis; las contribuciones, como una lista anunciada por
+*The main contributions of this work are as follows:*; y la hoja de ruta de cierre, *The
+remainder of this paper is organized as follows:*.
+
+**Citas.** Numéricas, entre corchetes. La mayoría de los marcadores cita una sola obra; un
+grupo cita a lo sumo cuatro, enumeradas con comas (`[31,32,33,34]`), nunca como rango. Una
+cita cierra la oración que respalda, o sigue al nombre del método al que da crédito; nunca
+es el sujeto de una oración.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para portar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una sola vez; los procedimientos que se ejecutaron van en voz pasiva y en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla junto con su acrónimo en su primera aparición, tanto en el resumen como en el cuerpo, y en adelante se usa *the proposed* seguido del acrónimo.
+- **Presente y pretérito perfecto.** El campo *has addressed*; el problema *remains*.
+- **La novedad se afirma por contraste, no por prioridad.** *Unlike previous approaches,
+  the proposed …*; la afirmación de ser el primero aparece solo cuando se buscó
+  expresamente en el estado del arte.
+
 ## Convenciones transversales
 
 - **Ubique la cita al final de la oración que respalda.** Una oración, una

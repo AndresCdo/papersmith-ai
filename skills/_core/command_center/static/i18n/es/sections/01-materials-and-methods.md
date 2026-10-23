@@ -298,12 +298,9 @@ malinterpretado el presupuesto. Nada en este contrato lo autoriza.
 con restricciones, con sumas sobre índices) se destaca. Lo que se lee en una línea
 corrida permanece en el texto.
 
-**Numerar por referencia.** Numérela si se va a referenciar por número más adelante, si
-define una contribución o si es la combinación general. Una ecuación destacada
-que nadie volverá a nombrar se destaca sin número.
-
-Numerar por reflejo es el fallo común: produce largas series de expresiones
-numeradas que ninguna oración del artículo menciona jamás.
+**Numerar toda ecuación destacada.** Los artículos del grupo las numeran todas, de modo que
+el lector pueda nombrar cualquier expresión por su número. Numerar no es la promesa de una referencia
+posterior; lo que esta sección debe garantizar es que exista cada número que sí cita.
 
 **Las ecuaciones referenciadas se nombran por su número** entre subsecciones y entre secciones.
 Esa referencia cruzada es lo que hace verificable la cadena de notación.
@@ -369,6 +366,66 @@ la introducción y la brecha se cerró antes de esta sección. Aquí una contrib
 **define**, no se justifica. Una cláusula de propósito por contribución es suficiente; un párrafo
 que explique por qué importa el problema es material repetido.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): los ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una sola columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo el objetivo.
+
+**Tamaño medido.** 11–26–46 párrafos; 939–2007–2955 palabras, unas 84–173–266 líneas;
+51–81–143 palabras por párrafo; 3–4–6 subsecciones; 8–22–35 ecuaciones destacadas;
+4–12–21 citas, 0.2–0.9 por párrafo; 0–2–4 figuras, por lo general la arquitectura.
+
+**Forma.** La sección se titula *Materials and Methods*. Abre con el planteamiento del
+problema y su notación, o con el conjunto de datos cuando el conjunto de datos forma parte de la
+contribución; luego cada componente de la propuesta recibe su propia subsección, con su
+nombre (*The proposed method's architecture*, *Loss function*, *Optimization*), y
+la función de pérdida y su optimización van al final.
+
+**Notación.**
+
+- **Los escalares van en cursiva**: minúscula para valores e índices (*x*, *n*, *t*),
+  mayúscula para conteos y dimensiones (*N*, *C*, *T*, *K*), cada conteo emparejado con
+  su índice en minúscula. Las sumas llevan ambos límites, `\sum_{n=1}^{N}`.
+- **Los vectores van en negrita minúscula** (`\mathbf{x}`), **las matrices en negrita mayúscula**
+  (`\mathbf{X}`), y **los tensores también en negrita mayúscula**, distinguidos de las matrices por la
+  forma con que se declaran (`\mathbf{X} \in \mathbb{R}^{C \times T \times F}`).
+  Los vectores y matrices griegos usan `\boldsymbol{}`. Los artículos del grupo se dividen entre
+  negrita recta y negrita cursiva; un artículo elige una y nunca las mezcla.
+- **Toda variable se declara en su primer uso con su espacio**: *Let*
+  `\mathbf{X} \in \mathbb{R}^{C \times T}` *denote …*. Los conjuntos numéricos van en negrita de pizarra
+  (`\mathbb{R}`, `\mathbb{N}`), al igual que la esperanza y la divergencia
+  (`\mathbb{E}`, `\mathbb{D}_{\mathrm{KL}}`).
+- **Las letras caligráficas son para conjuntos, espacios, distribuciones y pérdidas**:
+  `\mathcal{D}`, `\mathcal{X}`, `\mathcal{H}`, `\mathcal{N}(\mathbf{0}, \mathbf{I})`,
+  `\mathcal{L}`. Un término de pérdida lleva un subíndice recto, `\mathcal{L}_{\mathrm{rec}}`.
+- **Los operadores van en redonda**: `\operatorname{tr}`, `\operatorname{diag}`,
+  `\operatorname{vec}`, `\operatorname{softmax}`, `\log`, `\exp`. La transpuesta es
+  `^{\top}`, nunca un superíndice *T*; producto de Hadamard `\odot`; producto de Kronecker
+  `\otimes`; normas `\lVert \cdot \rVert_2`; producto interno
+  `\langle \cdot, \cdot \rangle`; un argumento genérico es `(\cdot)`; `\arg\min` y
+  `\arg\max` llevan su variable debajo.
+- **Parámetros y acentos**: los parámetros aprendibles son `\theta`, con subíndice del
+  operador al que pertenecen (`f_{\theta}`); los hiperparámetros son letras griegas declaradas
+  con su dominio (`\gamma \geq 0`). Un sombrero marca una estimación o predicción
+  (`\hat{y}`), una tilde una cantidad transformada o intermedia
+  (`\tilde{\mathbf{Z}}`), una barra una media, un asterisco un óptimo (`\theta^{*}`).
+- **Una ecuación es parte de una oración.** La oración que la precede termina en dos puntos o
+  en *as*; la ecuación cierra con una coma o un punto; la oración que la sigue abre
+  en minúscula con *where* y define cada símbolo nuevo — de uno a cinco por cláusula,
+  cerrada con *respectively* cuando se emparejan con una lista.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para llevar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una vez; los procedimientos que se ejecutaron van en pasiva en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla con su acrónimo en el primer uso tanto en el resumen como en el cuerpo, y después se escribe *the proposed* seguido del acrónimo.
+- **Las definiciones van en presente.** *The encoder maps*, *the loss
+  penalizes* — el método se describe como es, no como se construyó.
+- **Un componente prestado se cita donde se nombra**, justo después de su nombre; las
+  ecuaciones propias de la propuesta no llevan cita.
+- **Una figura es el sujeto de su oración**: *Figure 2 illustrates the
+  architecture*. Nunca es *Fig.*, ni un paréntesis suelto.
+
 ## Entradas
 
 Nada aquí espera a un experimento. Pero sí espera a que exista el código.
@@ -433,3 +490,7 @@ Nada aquí espera a un experimento. Pero sí espera a que exista el código.
 - Un conjunto de datos descrito aquí y dejado sin referencia.
 - Un párrafo que vuelve a motivar el problema.
 - Un resultado, un número medido o una comparación.
+- Un vector, una matriz o un tensor compuesto sin negrita, o dos estilos de negrita mezclados en la sección.
+- Una variable usada antes de declarar su espacio y sus dimensiones.
+- Una ecuación destacada sin número, o una referida como *Eq.* en lugar de *Equation (n)*.
+- Una transpuesta escrita como superíndice *T* en lugar de `^{\top}`.

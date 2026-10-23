@@ -11,6 +11,22 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.19.4
+
+### Changed
+
+- **The section contracts carry the lab's house style.** Each contract that
+  governs prose (`01`–`09`) gains a `## LIA house style` section measured on the
+  group's ten Q1 method papers of 2025–2026 (SJR 2025): the paragraph, word and
+  line ranges of the section, its citation density, its rhetorical moves and
+  the wording the group uses. The methods contract adds the notation rules —
+  bold lowercase vectors, bold uppercase matrices and tensors, declared spaces,
+  calligraphic sets and losses, upright operators, `^{\top}`, punctuated
+  equations followed by a *where* clause — and now numbers every displayed
+  equation. The title range moves to 10–13 words, and the methods and results
+  contracts add disqualifiers for notation and for unreported significance or
+  bold. The Spanish copies shown in the dashboard follow.
+
 ## 0.19.3
 
 ### Changed

@@ -251,6 +251,39 @@ takes figures and may carry no table.
 Almost none — and never for a result. A citation here credits **an instrument** used
 to read the data, or a **behaviour already established** that the result agrees with.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** 9–17–38 paragraphs; 1024–2463–3495 words, about 91–213–305 lines;
+85–124–189 words per paragraph; 0–4–7 subsections; no displayed equations; 0–5–21
+citations, 0–1.3 per paragraph, used only to anchor an interpretation; 2–6–12 figures
+and 1–2–6 tables.
+
+**Subsections, one per analysis, in this order when present:** comparison with the
+state of the art (mean ± standard deviation over the folds); statistical significance;
+sensitivity to the hyperparameters; ablation; interpretability (embeddings, attention
+or relevance maps, connectivity patterns); limitations, last. Ten of ten papers report a
+significance test, and nine of ten an interpretability analysis.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+- **Results are in the past tense, their reading in the present.** *The proposed
+  model reached*; *this suggests that*.
+- **Interpretation is hedged, never superlative.** *Suggests*, *indicates*, *is
+  consistent with*; not *remarkable*, *perfect*, *cementing*.
+- **Numbers are inline**: `80.9 \pm 1.7\%`, with the same decimals across a table and
+  its text.
+- **The best value of each column is in bold, and the caption says so**: *Bold marks
+  the best result for each metric.*
+- **A figure or table is the subject of its sentence** (*Table 4 compares*, *As shown
+  in Figure 5,*), and its caption is a noun phrase followed by one to three sentences
+  that explain the panels, colours and abbreviations — about 30 to 60 words.
+
 ## Inputs
 
 ### External inputs
@@ -305,3 +338,5 @@ to read the data, or a **behaviour already established** that the result agrees 
 - A table used for a pattern, or a figure used for a comparison grid.
 - Limitations placed anywhere but last.
 - Interpretation of a result no artefact contains.
+- A comparison against the baselines with no statistical significance test.
+- A table with values in bold whose caption does not say what the bold marks.

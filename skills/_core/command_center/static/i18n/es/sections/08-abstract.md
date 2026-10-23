@@ -339,6 +339,25 @@ o una fórmula de confirmación.
 
 No introduce nada: ninguna propiedad nueva, ningún número nuevo, ninguna afirmación nueva.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo la meta.
+
+**Tamaño medido.** Un párrafo de 139–236–311 palabras, sin encabezados.
+
+**Los movimientos, en orden:** contexto; el desafío, abierto por *However* o *Yet*; la
+limitación de los métodos existentes; la propuesta, introducida por *To address …, we propose*
+o *This work introduces* con el nombre completo y el acrónimo; el mecanismo en dos a
+cuatro oraciones, con sus componentes a menudo numerados (i)–(iv); los datos y el protocolo; el
+resultado comparativo; y una implicación de cierre (*These results support …*).
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para portar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una sola vez; los procedimientos que se ejecutaron van en voz pasiva y en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla junto con su acrónimo en su primera aparición, tanto en el resumen como en el cuerpo, y en adelante se usa *the proposed* seguido del acrónimo.
+
 ## Convenciones transversales
 
 - **Un solo párrafo.** Sin saltos de línea, sin viñetas, sin encabezados.
