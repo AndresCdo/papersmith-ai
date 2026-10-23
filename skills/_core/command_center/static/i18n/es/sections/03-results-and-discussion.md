@@ -250,6 +250,39 @@ lleva figuras y puede no llevar ninguna tabla.
 Casi ninguna — y nunca para un resultado. Una cita aquí acredita **un instrumento** usado
 para leer los datos, o un **comportamiento ya establecido** con el que el resultado concuerda.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): los ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una sola columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo el objetivo.
+
+**Tamaño medido.** 9–17–38 párrafos; 1024–2463–3495 palabras, unas 91–213–305 líneas;
+85–124–189 palabras por párrafo; 0–4–7 subsecciones; sin ecuaciones destacadas; 0–5–21
+citas, 0–1.3 por párrafo, usadas solo para anclar una interpretación; 2–6–12 figuras
+y 1–2–6 tablas.
+
+**Subsecciones, una por análisis, en este orden cuando están presentes:** comparación con el
+estado del arte (media ± desviación estándar sobre las particiones); significancia estadística;
+sensibilidad a los hiperparámetros; ablación; interpretabilidad (embeddings, mapas de atención
+o de relevancia, patrones de conectividad); limitaciones, al final. Diez de diez artículos reportan una
+prueba de significancia, y nueve de diez un análisis de interpretabilidad.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para llevar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una vez; los procedimientos que se ejecutaron van en pasiva en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla con su acrónimo en el primer uso tanto en el resumen como en el cuerpo, y después se escribe *the proposed* seguido del acrónimo.
+- **Los resultados van en pasado, su lectura en presente.** *The proposed
+  model reached*; *this suggests that*.
+- **La interpretación se matiza, nunca es superlativa.** *Suggests*, *indicates*, *is
+  consistent with*; no *remarkable*, *perfect*, *cementing*.
+- **Los números van en línea**: `80.9 \pm 1.7\%`, con los mismos decimales en una tabla y
+  en su texto.
+- **El mejor valor de cada columna va en negrita, y la leyenda lo dice**: *Bold marks
+  the best result for each metric.*
+- **Una figura o tabla es el sujeto de su oración** (*Table 4 compares*, *As shown
+  in Figure 5,*), y su leyenda es un sintagma nominal seguido de una a tres oraciones
+  que explican los paneles, colores y abreviaturas — unas 30 a 60 palabras.
+
 ## Entradas
 
 ### Entradas externas
@@ -304,3 +337,5 @@ para leer los datos, o un **comportamiento ya establecido** con el que el result
 - Una tabla usada para un patrón, o una figura usada para una cuadrícula de comparación.
 - Las limitaciones ubicadas en cualquier lugar que no sea el final.
 - La interpretación de un resultado que ningún artefacto contiene.
+- Una comparación contra las líneas base sin prueba de significancia estadística.
+- Una tabla con valores en negrita cuya leyenda no dice qué marca la negrita.

@@ -320,6 +320,30 @@ por sintetizar.
 - Esta sección no está necesariamente más citada que la introducción. Lo que cambia es
   la profundidad por familia.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): los ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una sola columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo el objetivo.
+
+**Tamaño medido, en los tres artículos que conservan esta sección.** 6–13–22 párrafos;
+604–1723–2264 palabras, unas 53–149–201 líneas; 101–103–133 palabras por párrafo; 2–3–5
+subsecciones; 19–31–35 citas, 2.7–3.2 por párrafo. Los otros siete llevan el
+estado del arte dentro de la introducción.
+
+**Citas.** Numéricas, entre corchetes. La mayoría de las marcas citan un trabajo; un grupo cita
+a lo sumo cuatro, enumerados con comas (`[31,32,33,34]`), nunca como un rango. Una cita cierra
+la oración que respalda, o sigue al nombre del método que acredita; nunca es
+el sujeto de una oración (*ref. [29] presents*).
+
+**La sección puede cerrar con una tabla comparativa** que contrasta las propiedades de la propuesta
+con las familias revisadas, una fila por familia.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para llevar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una vez; los procedimientos que se ejecutaron van en pasiva en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla con su acrónimo en el primer uso tanto en el resumen como en el cuerpo, y después se escribe *the proposed* seguido del acrónimo.
+
 ## Insumos por bloque
 
 **Nada aquí depende de una medición.** La sección se escribe completa antes de que

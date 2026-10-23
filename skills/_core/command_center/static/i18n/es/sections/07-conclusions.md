@@ -172,6 +172,25 @@ El bloque cierra con la aplicabilidad que esas direcciones ampliarían.
 y no sobre el modelo, diga cuál de los dos son. Esto conlleva la misma
 disciplina de atribución que una cifra citada: indicar a qué pertenece la afirmación.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo la meta.
+
+**Tamaño medido.** 2–4–10 párrafos; 252–482–950 palabras, unas 22–43–85 líneas;
+95–127–158 palabras por párrafo; sin ecuaciones, figuras ni tablas; 0–3–4 citas, en
+las oraciones de trabajo futuro.
+
+**Forma.** Titulada *Conclusions*, o *Concluding Remarks and Future Work*. Abre
+reformulando el método en pasado (*This work introduced …, a …*), repite las cifras
+clave y cierra con el trabajo futuro enumerado como *First*, *Second*, *Third*.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para portar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una sola vez; los procedimientos que se ejecutaron van en voz pasiva y en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla junto con su acrónimo en su primera aparición, tanto en el resumen como en el cuerpo, y en adelante se usa *the proposed* seguido del acrónimo.
+
 ## Entradas
 
 Todo excepto el resumen debe existir. El resumen se escribe después de esta

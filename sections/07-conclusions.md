@@ -172,6 +172,25 @@ The block closes on the applicability those directions would widen.
 rather than about the model, say which one they are. This carries the same
 attribution discipline as a quoted figure: state what the claim belongs to.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** 2–4–10 paragraphs; 252–482–950 words, about 22–43–85 lines;
+95–127–158 words per paragraph; no equations, figures or tables; 0–3–4 citations, in
+the future-work sentences.
+
+**Shape.** Titled *Conclusions*, or *Concluding Remarks and Future Work*. It opens by
+restating the method in the past tense (*This work introduced …, a …*), repeats the
+key numbers, and closes on future work enumerated as *First*, *Second*, *Third*.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+
 ## Inputs
 
 Everything except the abstract must exist. The abstract is written after this

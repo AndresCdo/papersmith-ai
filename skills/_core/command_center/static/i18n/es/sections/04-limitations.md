@@ -211,6 +211,24 @@ en esta lista, no que la dirección sea innecesaria.
 Cuando un ítem alcanza el movimiento 5, la referencia sobre su alternativa es la misma que
 lleva la dirección de trabajo futuro correspondiente.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): los ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una sola columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo el objetivo.
+
+Nueve de los diez artículos enuncian sus limitaciones, y ninguno en una sección de primer nivel: cinco
+como la última subsección de los resultados, titulada *Limitations*, y cuatro dentro de las
+conclusiones, antes del trabajo futuro. Abren concediendo el alcance (*Despite the
+performance of the proposed …, several limitations should be acknowledged.*) y
+enumeran los ítems como *First*, *Second*, *Third*, cada uno emparejado con la dirección que
+lo abordaría.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para llevar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una vez; los procedimientos que se ejecutaron van en pasiva en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla con su acrónimo en el primer uso tanto en el resumen como en el cuerpo, y después se escribe *the proposed* seguido del acrónimo.
+
 ## Entradas
 
 ### Entradas externas

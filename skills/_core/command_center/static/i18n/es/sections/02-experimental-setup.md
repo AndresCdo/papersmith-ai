@@ -260,6 +260,41 @@ muestra el experimento. La prueba: **ningún conjunto de datos ni ninguna línea
 diagrama de métodos, y ningún componente interno de la propuesta aparece en este.** Una
 caja que aparece en ambos significa que uno de ellos está mal.
 
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): los ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una sola columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo el objetivo.
+
+**Tamaño medido.** 7–10–16 párrafos; 767–985–1318 palabras, unas 67–86–119 líneas;
+72–103–140 palabras por párrafo; 0–3–5 subsecciones; 0–0–7 ecuaciones destacadas, solo
+para una métrica que no puede suponerse conocida por el lector; 1–4–10 citas; 0–1–3 figuras y
+0–1–2 tablas.
+
+**Lo que enuncian las configuraciones del grupo, en este orden:**
+
+1. el preprocesamiento de los datos, con cada parámetro que lo determina;
+2. el esquema de validación — particiones, estratificación, y si los sujetos o registros
+   se mantienen separados entre particiones;
+3. la búsqueda de hiperparámetros — el método (optimización bayesiana, estimadores de Parzen
+   estructurados en árbol), los rangos explorados y el valor seleccionado, en una tabla;
+4. las líneas base, con la afirmación de que se ejecutaron con las mismas particiones y el mismo
+   presupuesto de ajuste;
+5. las métricas, con una ecuación solo cuando la métrica no es estándar;
+6. la prueba estadística que decide la significancia — Friedman con una prueba post hoc
+   por pares y una corrección de Holm o Bonferroni es la opción por defecto del grupo;
+7. el hardware y la plataforma, y la URL del repositorio de código.
+
+**Redacción.**
+
+- **Las oraciones promedian 21–27 palabras.** Lo bastante largas para llevar una afirmación y su matiz, nunca una cadena de tres cláusulas.
+- **Una sola voz para todo el artículo.** Primera persona del plural (*we propose*) o impersonal (*this work introduces*), elegida una vez; los procedimientos que se ejecutaron van en pasiva en pasado (*was evaluated using*).
+- **Conectores que usa el grupo** para pasar de una afirmación a otra: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Cada uno abre una oración y cumple una sola función: contraste, acotación, adición, énfasis, síntesis.
+- **El método tiene un solo nombre.** Se desarrolla con su acrónimo en el primer uso tanto en el resumen como en el cuerpo, y después se escribe *the proposed* seguido del acrónimo.
+- **Lo que se ejecutó va en pasado; lo que contiene una tabla, en presente.** *Each model
+  was trained for*; *Table 3 lists the search ranges*.
+- **Aquí no se redefine ningún símbolo.** La configuración reutiliza la notación de la sección de métodos;
+  un parámetro que fija ya debe existir allí.
+- **La sección se titula *Experimental Set-Up*.**
+
 ## Entradas
 
 ### Entradas externas

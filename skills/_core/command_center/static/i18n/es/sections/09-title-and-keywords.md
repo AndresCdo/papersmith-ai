@@ -59,7 +59,7 @@
 ---
 # Título y palabras clave
 
-**Extensión** título 11–15 palabras · palabras clave 4–8
+**Extensión** título 10–13 palabras · palabras clave 4–8
 **Incluye** ningún número, ningún porcentaje, ninguna afirmación de superioridad
 
 El título es la única afirmación irrevocable del artículo: es lo que se cita, se indexa y se
@@ -138,6 +138,16 @@ inventada para el motor de búsqueda.
 Algunas revistas exigen un código de clasificación temática después de las palabras clave. Ese es un
 requisito externo, no una decisión de estilo: tómelo de las instrucciones de la revista destino,
 junto con el número permitido de palabras clave.
+
+## Estilo de la casa LIA
+
+Medido sobre los diez artículos de método Q1 del grupo de 2025–2026 (SJR 2025): ítems A003, A006, A007, A009, A012, A013, A021, A022, A023 y A026 del banco de artículos del laboratorio. Los rangos son mínimo–mediana–máximo entre los artículos que tienen la sección; una línea compuesta tiene unas 12 palabras en un formato de una columna. Los rangos describen cómo escribe el grupo; la extensión indicada al inicio de este contrato sigue siendo la meta.
+
+**Tamaño medido.** Títulos de 7–12–13 palabras, con mayúscula inicial en cada palabra principal (*title case*); 4–5–8 palabras clave.
+
+**Los títulos del grupo** siguen *<Mechanism>-Based <Model> for <Task>* o *<Property>
+<Mechanism> for <Qualified Task>*, y nueve de cada diez omiten el acrónimo del método. El
+acrónimo aparece en el resumen y en el cuerpo.
 
 ## Insumos
 
