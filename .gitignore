@@ -28,6 +28,7 @@ skills/paper-ingestion/.venv/
 .pi/skills
 .opencode/skills
 .agents/skills
+.pi/npm/
 
 # --- Contenido específico de cada usuario ---
 # Versionamos solo el scaffold de carpetas (los `.gitkeep`); cada usuario arma
