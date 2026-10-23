@@ -16,8 +16,8 @@
   <script src="./cli-console.js?v=0.19.1"></script>
   <link rel="stylesheet" href="./vendor/katex/katex.min.css">
   <script src="./vendor/katex/katex.min.js"></script>
-  <script src="./math-panel.js?v=0.17.0"></script>
-  <script src="./model-panel.js?v=0.17.1"></script>
+  <script src="./math-panel.js?v=0.19.6"></script>
+  <script src="./model-panel.js?v=0.19.6"></script>
   <script src="./phase-console.js?v=0.19.1"></script>
   <script src="./phase-run.js?v=0.18.8"></script>
   <style>
@@ -2170,8 +2170,8 @@
       margin-top: 1rem;
     }
     .model-hypothesis-card {
-      background: rgba(15, 23, 42, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--surface-2);
+      border: 1px solid var(--border-subtle);
       border-left: 3px solid var(--accent);
       border-radius: var(--radius);
       padding: 1rem;
@@ -2209,6 +2209,12 @@
       gap: 0.85rem;
       margin-top: 0.85rem;
     }
+    .concept-node-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem; margin-top: 0.7rem; }
+    .concept-node {
+      display: flex; flex-direction: column; gap: 0.2rem; padding: 0.6rem 0.75rem; border-radius: 6px;
+      background: var(--surface); border: 1px solid var(--border-subtle); font-size: 0.8rem; color: var(--text);
+    }
+    .concept-node span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.4; }
     .concept-node-item {
       background: rgba(0, 0, 0, 0.35);
       border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2305,6 +2311,41 @@
     }
 
 
+    [data-theme="light"] .model-header-banner {
+      background: linear-gradient(135deg, var(--surface), var(--surface-2));
+      border-color: var(--border);
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+    }
+    /* Spec colours (--tone) come from the workspace; as text they are lightened
+       on dark surfaces and darkened on light ones to keep WCAG AA contrast. */
+    .tone-ink { color: color-mix(in srgb, var(--tone, var(--accent)) 72%, #fff); }
+    [data-theme="light"] .tone-ink { color: color-mix(in srgb, var(--tone, var(--accent)) 58%, #000); }
+    [data-theme="light"] #pane-modelo .badge--ok { color: #047857; }
+    [data-theme="light"] #pane-modelo .badge--warn { color: #b45309; }
+    [data-theme="light"] #pane-modelo .badge--info,
+    [data-theme="light"] #pane-modelo .math-label,
+    [data-theme="light"] #pane-modelo .eq-card__tag,
+    [data-theme="light"] #pane-modelo .model-subnav-btn.active { color: #0369a1; }
+    [data-theme="light"] #pane-modelo .tutor__status[data-tone="ok"] { color: #047857; }
+    [data-theme="light"] #pane-modelo { --text-muted: #475569; }
+    #pane-modelo h4 { color: var(--text-muted) !important; }
+
+    /* ---- TeX / compiled toggle (math-panel.js setMathView) ---- */
+    .panel__tools { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+    .panel__tools .badge { max-width: 52ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .math-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .tex-dual__src { display: none; }
+    [data-math-view="source"] .tex-dual__out { display: none; }
+    [data-math-view="source"] .tex-dual__src {
+      display: inline; font-family: var(--font-mono); font-size: 0.82em; color: var(--text);
+      background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 0.05rem 0.3rem;
+      white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+    }
+    [data-math-view="source"] .tex-dual--block .tex-dual__src {
+      display: block; margin: 0.35rem 0; padding: 0.55rem 0.75rem; font-size: 0.84rem; line-height: 1.55;
+      border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    }
+
     /* ---- Math panel + Socratic tutor (math-panel.js) ---- */
     .math-panel { --eq-radius: 14px; }
     .math-lema {
@@ -2315,11 +2356,11 @@
     .math-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 1.25rem; align-items: start; }
     @media (max-width: 1100px) { .math-layout { grid-template-columns: 1fr; } }
     .math-stack { display: flex; flex-direction: column; gap: 0.75rem; }
-    .eq-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--eq-radius); padding: 0.9rem 1.1rem; }
+    .eq-card { background: var(--surface); border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent); border-radius: var(--eq-radius); padding: 0.9rem 1.1rem; }
     .eq-card--empty { color: var(--text-muted); font-size: 0.86rem; }
     .eq-card__head { display: flex; gap: 0.55rem; align-items: baseline; font-size: 0.86rem; font-weight: 700; color: var(--text); }
     .eq-card__tag { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); }
-    .eq-card__display { overflow-x: auto; padding: 0.35rem 0; font-size: 1.15rem; }
+    .eq-card__display { overflow-x: auto; padding: 0.35rem 0; font-size: 1.15rem; line-height: 1.6; color: var(--text); }
     .eq-card__conn { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; }
     .eq-card__vars { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.75rem; margin: 0.55rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
     .eq-card__vars dt code { color: var(--text); }
@@ -2650,9 +2691,9 @@
             <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
               <span id="modelTrlBadge" class="badge badge--ok" style="font-size: 0.75rem; font-weight: 700;">FASE INICIAL</span>
               <span id="modelJournalBadge" class="badge badge--info" style="font-size: 0.75rem;">OBJETIVO EDITORIAL</span>
-              <span id="modelDomainBadge" class="badge" style="background: rgba(245, 158, 11, 0.18); color: #f59e0b; border: 1px solid #f59e0b; font-size: 0.75rem; font-weight: 700;">ESPECIFICACIÓN FORMAL</span>
+              <span id="modelDomainBadge" class="badge badge--warn" style="font-size: 0.75rem; font-weight: 700;">ESPECIFICACIÓN FORMAL</span>
             </div>
-            <h2 id="modelMainTitle" style="font-size: 1.35rem; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin-bottom: 0.3rem;">
+            <h2 id="modelMainTitle" style="font-size: 1.35rem; font-weight: 800; color: var(--text); letter-spacing: -0.01em; margin-bottom: 0.3rem;">
               🧠 Mapa Conceptual de la Propuesta &amp; Modelo Matemático Formal
             </h2>
             <p id="modelSummaryDesc" style="font-size: 0.85rem; color: var(--text-muted); max-width: 980px; line-height: 1.45;">
@@ -2669,7 +2710,7 @@
           </div>
         </div>
 
-        <div id="modelMetaStrip" style="display: flex; flex-wrap: wrap; gap: 1.25rem; font-size: 0.78rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.75rem;">
+        <div id="modelMetaStrip" style="display: flex; flex-wrap: wrap; gap: 1.25rem; font-size: 0.78rem; color: var(--text-muted); border-top: 1px solid var(--border-subtle); padding-top: 0.75rem;">
           <span>👤 <strong>Autores:</strong> <span id="modelAuthorsVal">Sin autor asignado</span></span>
           <span id="modelMetaExtra">⚡ <strong>Estado:</strong> Deliberación y andamiaje formal</span>
         </div>
@@ -2738,7 +2779,10 @@
             <div class="panel__title">
               <span>🗺️ 2. Mapa Conceptual de la Arquitectura &amp; Flujo de Datos</span>
             </div>
-            <span class="panel__meta">Capas del sistema propuesto, desde la entrada hasta el análisis</span>
+            <div class="panel__tools">
+              <span class="panel__meta">Capas del sistema propuesto, desde la entrada hasta el análisis</span>
+              <button type="button" class="btn btn--sm math-toggle" data-math-toggle aria-pressed="false" title="Alterna entre la ecuación compilada y su código LaTeX">TeX Ver LaTeX</button>
+            </div>
           </div>
           <div id="modelConceptLayers" class="concept-layers-container"></div>
         </div>
@@ -2749,7 +2793,10 @@
         <div class="panel math-panel">
           <div class="panel__header">
             <div class="panel__title"><span>📐 3. Matemática del paper</span></div>
-            <span id="mathSourceBadge" class="badge badge--info">cargando…</span>
+            <div class="panel__tools">
+              <span id="mathSourceBadge" class="badge badge--info">cargando…</span>
+              <button type="button" class="btn btn--sm math-toggle" data-math-toggle aria-pressed="false" title="Alterna entre la ecuación compilada y su código LaTeX">TeX Ver LaTeX</button>
+            </div>
           </div>
           <div id="mathLema" class="math-lema"></div>
           <div class="math-layout">
