@@ -11,6 +11,15 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.19.5
+
+### Fixed
+
+- **Pi package cache is ignored by Git.** Added `.pi/npm/` to `.gitignore` and
+  to `src/papersmith/templates/gitignore.tpl` so dynamic package resolution by
+  Pi (such as `npm:pi-web-access` declared in `.pi/settings.json`) does not
+  leave untracked files in the repository or in generated workspaces.
+
 ## 0.19.4
 
 ### Changed
