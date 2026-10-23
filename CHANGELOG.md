@@ -11,6 +11,29 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.20.0
+
+### Added
+
+- **banco-lia MCP registered for every harness.** `smith init` and
+  `smith upgrade` now register the lab's article and project bank as the
+  `banco-lia` MCP server for every declared harness (Claude Code, OpenCode, Pi,
+  Antigravity), keeping any other server already in those files. `uv` must be
+  on `PATH` to start it (see `docs/mcp.md`).
+- **TeX / compiled toggle for the dashboard's mathematics.** The "Mapa
+  Conceptual & Modelo" tab keeps each formula's LaTeX source beside its KaTeX
+  rendering; a button in the concept-map and math panel headers switches the
+  whole tab between both views and the browser remembers the choice.
+  Concept-map layers, pillars, hypotheses and proof-of-concept text now compile
+  `$…$` math, still escaped before insertion.
+
+### Fixed
+
+- **Model-tab contrast in the light theme.** The header banner follows the
+  theme, workspace spec colours are lightened or darkened to keep WCAG AA
+  contrast, and badges, hypothesis cards and secondary text no longer fall
+  below 4.5:1.
+
 ## 0.19.5
 
 ### Fixed
