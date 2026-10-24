@@ -59,6 +59,7 @@ PAPER_VERBS: tuple[str, ...] = (
 #: The orchestrator CLI's own command roster (``cli._REGISTRY``).
 CLI_COMMANDS: tuple[str, ...] = (
     "init",
+    "env",
     "upgrade",
     "status",
     "ingest",
@@ -1525,6 +1526,8 @@ CLI_DISPOSITIONS: dict[str, str] = {
     "atlas": "out",
     # The server host itself: never a tool it exposes.
     "mcp": "out",
+    # Operator environment provisioning: long-running multi-gigabyte command.
+    "env": "out",
 }
 
 PAPER_DISPOSITIONS: dict[str, str] = {

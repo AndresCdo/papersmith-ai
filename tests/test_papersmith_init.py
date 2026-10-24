@@ -99,6 +99,31 @@ class EnvironmentProvisioningTests(unittest.TestCase):
 
         assert calls == [], "`run_env=False` must be an offline-fast init"
 
+    def test_init_skips_the_step_by_default(self) -> None:
+        root = self.new_tmp() / "paper"
+        calls: list[Path] = []
+        original = init_module._run_env_install
+        init_module._run_env_install = (
+            lambda workspace, report=None: calls.append(workspace) or None)
+        self.addCleanup(setattr, init_module, "_run_env_install", original)
+
+        init_module.initialize(root, run_npm=False)
+
+        assert calls == [], "default `initialize(...)` must defer environment provisioning"
+
+    def test_cli_flags_control_provisioning(self) -> None:
+        from papersmith.cli import build_parser
+
+        parser = build_parser()
+        args_default = parser.parse_args(["init", "dest"])
+        assert getattr(args_default, "with_env", False) is False
+
+        args_with = parser.parse_args(["init", "--with-env", "dest"])
+        assert args_with.with_env is True
+
+        args_no = parser.parse_args(["init", "--no-env", "dest"])
+        assert args_no.no_env is True
+
 
 class SuiteStaysOfflineTests(unittest.TestCase):
     """No test may provision a real environment through `init`.

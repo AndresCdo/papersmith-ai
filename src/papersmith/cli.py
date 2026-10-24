@@ -15,6 +15,7 @@ from .bridges import implementation as implementation_command
 from .bridges import audit as audit_command
 from .bridges import remote as remote_command
 from .core import atlas as atlas_command
+from .core import env as env_command
 from .core import executor as executor_command
 from .core import init as init_command
 from .core import ingest as ingest_command
@@ -41,6 +42,7 @@ def build_parser(prog: str = "smith") -> argparse.ArgumentParser:
 
 _REGISTRY: list = [
     init_command.register,
+    env_command.register,
     upgrade_command.register,
     status_command.register,
     ingest_command.register,

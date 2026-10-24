@@ -82,8 +82,9 @@ def provisioned_interpreters(workspace: Path) -> tuple[Path, ...]:
         env_name = str(module.ENV_NAME)
     except Exception:                      # noqa: BLE001 -- any failure is "cannot derive"
         return ()
-    binary = root / "envs" / env_name / "bin"
-    return (binary / "python", binary / "python.exe")
+    env_dir = root / "envs" / env_name
+    binary = env_dir / "bin"
+    return (binary / "python", binary / "python.exe", env_dir / "python.exe")
 
 
 def workspace_interpreter(workspace: Path) -> str:
@@ -133,9 +134,9 @@ def require_runnable_backend(workspace: Path, interpreter: str) -> None:
         f"no interpreter in {workspace} can run the command center: "
         f"{interpreter} cannot import fastapi.\n"
         f"Provision the workspace's environment and run this again:\n"
-        f"  python3 {PROVISIONING_SCRIPT} install\n"
-        f"That creates {expected}. `smith init` runs this step itself "
-        "unless it is given `--no-env`."
+        f"  smith env install  (or python3 {PROVISIONING_SCRIPT} install)\n"
+        f"That creates {expected}. `smith init` defers environment provisioning by "
+        "default for faster setup."
     )
 
 

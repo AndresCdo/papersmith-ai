@@ -387,7 +387,7 @@ def _merge_root_file(root_fd: int, source: Path) -> None:
 def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                tools: Sequence[str] = ALL_TOOLS, topic: str = "unspecified",
                remote: str = "kaggle", run_npm: bool = True,
-               run_env: bool = True,
+               run_env: bool = False,
                report: progress.Reporter | None = None,
                allow_dirty_kit: bool = False,
                import_existing: bool = False) -> dict:
@@ -570,10 +570,13 @@ def register(subparsers) -> None:
                               "refuse any other collision"))
     parser.add_argument("--no-npm", action="store_true", help="skip the best-effort npm install")
     parser.add_argument(
+        "--with-env", action="store_true",
+        help=("provision the workspace's micromamba Python environment during init "
+              "(warning: multi-gigabyte download); by default, provisioning is deferred "
+              "until experimental runs or ingestion"))
+    parser.add_argument(
         "--no-env", action="store_true",
-        help=("skip provisioning this workspace's Python environment; the "
-              "command center needs it, so `smith ui` will refuse until "
-              "`python3 scripts/setup_env.py install` has run"))
+        help="skip provisioning this workspace's Python environment (default)")
     parser.add_argument(
         "--allow-dirty-kit", action="store_true",
         help=("initialize even when the kit source has uncommitted changes under its "
@@ -597,6 +600,7 @@ def run_cli(args) -> int:
         requested=bool(getattr(args, "progress", False)),
         suppressed=bool(getattr(args, "no_progress", False)),
     )
+    run_env = bool(getattr(args, "with_env", False)) and not bool(getattr(args, "no_env", False))
     result = initialize(
         args.directory,
         title=args.title,
@@ -604,7 +608,7 @@ def run_cli(args) -> int:
         topic=args.topic,
         remote=args.remote,
         run_npm=not args.no_npm,
-        run_env=not args.no_env,
+        run_env=run_env,
         report=report,
         allow_dirty_kit=args.allow_dirty_kit,
         import_existing=args.import_existing,
@@ -616,6 +620,10 @@ def run_cli(args) -> int:
     print("Harness wiring:")
     for line in wiring.format_summary(result["wiring"]):
         print(f"  {line}")
+    if not run_env:
+        print("\nNote: Python environment provisioning was deferred for a fast init.")
+        print("To provision the micromamba environment for experiments and ingestion:")
+        print("  smith env install  (or python3 scripts/setup_env.py install)")
     for warning in result["warnings"]:
         print(f"Warning: {warning}", file=__import__("sys").stderr)
     return 0
