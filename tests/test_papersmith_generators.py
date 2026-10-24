@@ -56,7 +56,7 @@ COMMAND_NAMES = (
     "upgrade-project",
 )
 
-#: The twenty agent definitions, in the deterministic order
+#: The twenty-one agent definitions, in the deterministic order
 #: ``collect_pi_agents`` sorts them into. Pinned literally so a new or renamed
 #: agent has to be acknowledged here -- and in the `.pi/agents/` projection
 #: the Pi harness discovers.
@@ -68,6 +68,7 @@ AGENT_NAMES = (
     "experimental-publish",
     "experimental-validation",
     "experiments-build",
+    "experiments-reviewer",
     "experiments-walk",
     "figure-auditor",
     "implementation-build",
@@ -178,7 +179,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [agent["name"] for agent in collect_pi_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         pi = render_files(workspace, tools=("pi",))
-        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 20
+        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 21
         assert ".pi/agents/sota-scout.md" in pi
         assert not any(
             path.startswith(".pi/agents/")
@@ -193,7 +194,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [a["name"] for a in collect_opencode_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         opencode = render_files(workspace, tools=("opencode",))
-        assert sum(1 for path in opencode if path.startswith(".opencode/agents/")) == 20
+        assert sum(1 for path in opencode if path.startswith(".opencode/agents/")) == 21
         assert ".opencode/agents/sota-scout.md" in opencode
         for tool in ("claude", "pi", "antigravity"):
             assert not any(
@@ -282,7 +283,7 @@ class GeneratorsTests(unittest.TestCase):
         (agents / "dir.md").mkdir()
         sink: list[str] = []
         names = [a["name"] for a in collect_opencode_agents(workspace, warnings=sink)]
-        assert len(names) == 20
+        assert len(names) == 21
         for stem in ("broken", "unclosed", "nameless", "undescribed", "unsafe", "binary", "dir"):
             assert any(f"'{stem}'" in w for w in sink), (stem, sink)
 
@@ -319,7 +320,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [a["name"] for a in collect_antigravity_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         rendered = render_files(workspace, tools=("antigravity",))
-        assert sum(1 for path in rendered if path.startswith(".agents/agents/")) == 20
+        assert sum(1 for path in rendered if path.startswith(".agents/agents/")) == 21
         assert ".agents/agents/sota-scout.md" in rendered
         for tool in ("claude", "pi", "opencode"):
             assert not any(
@@ -406,7 +407,7 @@ class GeneratorsTests(unittest.TestCase):
         (agents / "dir.md").mkdir()
         sink: list[str] = []
         names = [a["name"] for a in collect_antigravity_agents(workspace, warnings=sink)]
-        assert len(names) == 20
+        assert len(names) == 21
         for stem in ("broken", "unclosed", "nameless", "undescribed", "unsafe", "binary", "dir"):
             assert any(f"'{stem}'" in w for w in sink), (stem, sink)
 
@@ -478,7 +479,7 @@ class GeneratorsTests(unittest.TestCase):
         names = [agent["name"] for agent in collect_pi_agents(workspace, warnings=sink)]
         assert "broken" not in names
         assert any("broken" in warning for warning in sink), sink
-        assert len(names) == 20
+        assert len(names) == 21
 
     def test_unsupported_runtime_generator_still_raises(self) -> None:
         workspace = _workspace(self.new_tmp())

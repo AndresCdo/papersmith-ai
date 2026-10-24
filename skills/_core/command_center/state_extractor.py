@@ -155,6 +155,7 @@ AGENT_STAGES = {
     "experimental-validation": "experimental-deliberation",
     "experiments-build": "experimental-implementation",
     "experiments-walk": "experimental-implementation",
+    "experiments-reviewer": "experimental-implementation",
     "implementation-build": "implementation",
     "implementation-walk": "implementation",
     "insumos-observer": "writing",
