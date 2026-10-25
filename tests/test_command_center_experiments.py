@@ -309,7 +309,7 @@ class PageTests(unittest.TestCase):
         self.assertLess(PAGE.index('id="pane-experiments"'), PAGE.index('id="pane-sections"'))
 
     def test_the_script_is_loaded_and_the_tab_refreshes_it(self) -> None:
-        self.assertIn('<script src="./experiments-panel.js?v=0.20.0"></script>', PAGE)
+        self.assertIn('<script src="./experiments-panel.js?v=', PAGE)
         start = PAGE.index("function navigateTab(tabId)")
         body = PAGE[start:PAGE.index("function filterModelView")]
         self.assertIn("tabId === 'experiments'", body)

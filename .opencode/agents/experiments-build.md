@@ -50,6 +50,18 @@ blocker is a detour and never a destination.
 Do not decide anything the operator has not decided. Do not run the flow,
 submit anything, or authorize a launch — that is another stretch.
 
+## Whether to split a campaign
+
+Before generating jobs for more than one unit, load
+`skills/remote-parallelism/SKILL.md`, run its `assess` with measured
+inputs only (a pilot's per-unit duration, a rehearsal's setup minutes, each
+validated account's sessions, session limit and recorded quota) and record it
+with `--record` into the experiments tree. Instrument what its checklist
+demands so a split can be checked: each unit seeded from its unit id, and
+every field `stamp-fields` prints written into each shard's stamp. Report the
+verdict and every checklist item still unmet. The verdict is never launch
+authorization.
+
 ## What you return
 
 Your report is not shown to the operator. It reaches the orchestrator, which

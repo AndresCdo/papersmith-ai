@@ -128,7 +128,8 @@ ACTIONS: dict[str, dict[str, Any]] = {
     },
     "poc_experiments": {
         "skills": ["experimental-deliberation", "proposal-implementation", "datasets",
-                   "experimental-implementation", "kaggle-accounts", "remote-execution"],
+                   "experimental-implementation", "kaggle-accounts", "remote-execution",
+                   "remote-parallelism"],
         "agent": "experimental-deliberation & proposal/experimental-implementation",
         "actions": [
             _prompt("/experimental-deliberation", "Deliberar el diseño experimental", [

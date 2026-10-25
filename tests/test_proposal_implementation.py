@@ -9226,6 +9226,18 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                   "service's MCP URL, client binary and mount path so that no "
                   "other file of the skill has to",
     },
+    "_core/command_center/remote_services.py": {
+        "kaggle": "it probes that one hosted service's official MCP, CLI, "
+                  "token and the accounts skill for the Experimentos table; "
+                  "the service is the module's subject, not a loan from any "
+                  "research project",
+    },
+    "remote-parallelism/SKILL.md": {
+        "kaggle": "the account policy requires that only operator-owned "
+                  "accounts validated through the `kaggle-accounts` skill take "
+                  "part, and that skill's directory name carries the service; "
+                  "naming it references a shipped skill, not a research project",
+    },
     "_core/command_center/server.py": {
         "kaggle": "one detail line of the experiments phase naming the same "
                   "`kaggle-accounts` skill the phase panel offers",

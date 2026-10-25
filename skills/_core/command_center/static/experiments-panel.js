@@ -5,7 +5,9 @@
  * deliberation), every product folder under implementations/ with its
  * convergence histories, figures, tables, significance tests, pinned
  * artifacts and remote runs, the datasets registry (toy and full sets with
- * their license, qc and remote state), plus a remote-accounts readiness hint. Convergence is
+ * their license, qc and remote state), the remote-services table (one row
+ * per service with its state and activating action), plus a remote-accounts
+ * readiness hint. Convergence is
  * always drawn (inline SVG); when nothing produces it yet, the empty state
  * says which file does. Every value is escaped before insertion.
  *
@@ -265,6 +267,35 @@
     </section>`;
   }
 
+  // ------------------------------------------------------- remote services
+  // One offline row per service (experiments_view's `remote_services`). The
+  // action is a server-side constant, run in the CLI assistant like the MCP box.
+  const SERVICE_STATE = {
+    active: ['badge--ok', 'activo'], inactive: ['badge--warn', 'inactivo'],
+    missing: ['badge--warn', 'no instalado'], unverified: ['badge--info', 'sin verificar'],
+  };
+
+  function remoteServices(state) {
+    const rows = state && Array.isArray(state.rows) ? state.rows : [];
+    if (!rows.length) return '';
+    const body = rows.map((row) => {
+      const [cls, label] = SERVICE_STATE[row.state] || SERVICE_STATE.unverified;
+      const action = row.action && row.action.command
+        ? cliButton(row.action.command, row.action.label || 'Ejecutar')
+        : '<span class="exp-muted">—</span>';
+      return `<tr><td><strong>${esc(row.service)}</strong></td><td>${esc(row.purpose)}</td>`
+        + `<td><span class="badge ${esc(cls)}">${esc(label)}</span>${row.detail ? ` <small>${esc(row.detail)}</small>` : ''}</td>`
+        + `<td>${action}</td></tr>`;
+    }).join('');
+    return `<section class="panel exp-services" id="expRemoteServices">
+      <h3 class="panel__title">Servicios de Kaggle</h3>
+      ${state.note ? `<p class="exp-intro">${esc(state.note)}</p>` : ''}
+      <div class="table-responsive"><table class="table exp-table"><thead><tr><th>Servicio</th><th>Para qué</th><th>Estado</th><th>Acción</th></tr></thead>
+      <tbody>${body}</tbody></table></div>
+      <div class="exp-mcp__actions"><button type="button" class="btn" data-exp-refresh="1">Recargar estado</button></div>
+    </section>`;
+  }
+
   // ---------------------------------------------------------------- help
   function help(accounts) {
     const k = accounts || {};
@@ -370,6 +401,7 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
     const other = products.filter((p) => p.kind !== 'poc' && p.kind !== 'full');
     return [
       mcpActivation(v.remote_mcp),
+      remoteServices(v.remote_services),
       help(v.remote_accounts),
       datasets(v.datasets),
       group('Prueba de concepto', 'Productos de /proposal-implementation (AGREED.md): convergencia, figuras y tablas principales.',
@@ -420,5 +452,5 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
   }
 
   window.refreshExperimentsPanel = refreshExperimentsPanel;
-  window.ExperimentsPanel = { render, mcpActivation, datasets };
+  window.ExperimentsPanel = { render, mcpActivation, remoteServices, datasets };
 })();

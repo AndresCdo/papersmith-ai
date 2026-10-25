@@ -11,6 +11,37 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **Remote services table in the Experimentos tab.** A short table states, for
+  the official MCP server, the official CLI, the token, the worker accounts,
+  the remote rehearsals and the weekly GPU quota, whether each is active,
+  inactive, not installed or unverified, with the one command that activates
+  it run through the CLI assistant. Offline on every poll; the CLI version is
+  cached and the quota is read only on `smith mcp kaggle status --verify`.
+- **`remote-parallelism` skill.** `assess` decides from measured inputs (unit
+  duration, units, accounts, sessions per account, session limit, weekly
+  quota, setup cost) whether a proof of concept or a campaign is worth
+  spreading over several remote GPU accounts: serial, single-account and
+  parallel makespans, speed-up, quota per account and a verdict
+  (`parallelize`, `single-account`, `split-first`). `checklist` and
+  `stamp-fields` state the reproducibility rules: split only along the
+  declared axis and never by arm, seed from the unit id, identical commit,
+  environment and accelerator on every account, a per-shard environment
+  stamp declared identical across shards, deterministic flags, one rehearsal
+  per account. The walk, build, reviewer and replicator agents run it before
+  generating jobs for more than one unit; the verdict never authorizes a
+  launch.
+
+### Fixed
+
+- **A stopped or expired phase run no longer stays stuck.** The tracker reads
+  the server's verdict before its quiet expiry, and a run that was stopped or
+  stopped being followed reads verified once its phase passes, instead of
+  showing "detenida" for a phase that is already PASS.
+
 ## 0.21.1
 
 ### Added

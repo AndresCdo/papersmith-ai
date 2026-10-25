@@ -41,6 +41,7 @@ SKILL_NAMES = (
     "proposal-deliberation",
     "proposal-implementation",
     "remote-execution",
+    "remote-parallelism",
     "skill-audit",
     "upgrade-project",
 )
