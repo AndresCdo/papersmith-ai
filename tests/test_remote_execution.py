@@ -19583,6 +19583,39 @@ class DoctrinePinTests(unittest.TestCase):
         installed = importlib.metadata.version("kagglesdk")
         self._assert_pin_matches_installed(self, pinned, installed)
 
+    def test_the_provisioned_environment_installs_the_pinned_version(self) -> None:
+        """`scripts/setup_env.py` builds the environment the suites run in.
+        A bare `kagglesdk` there installs whatever conda-forge published
+        last, so the check above failed on every fresh environment once
+        0.1.38 reached conda-forge (2026-10-22).
+        """
+        pinned = self._pinned_version()
+        setup_env = REPOSITORY_ROOT / "scripts" / "setup_env.py"
+        tree = ast.parse(setup_env.read_text(encoding="utf-8"), filename=str(setup_env))
+        specs = []
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, (ast.List, ast.Tuple))
+                and any(
+                    isinstance(target, ast.Name) and target.id == "CONDA_BASE_PACKAGES"
+                    for target in node.targets
+                )
+            ):
+                specs += [
+                    element.value
+                    for element in node.value.elts
+                    if isinstance(element, ast.Constant)
+                    and isinstance(element.value, str)
+                    and re.match(r"kagglesdk(?:[=<>!~\s]|$)", element.value)
+                ]
+        self.assertEqual(
+            specs,
+            [f"kagglesdk=={pinned}"],
+            f"requirements.txt pins kagglesdk=={pinned}, so scripts/setup_env.py "
+            f"must install exactly that version; it lists {specs}",
+        )
+
     def test_drifted_installation_fails_naming_both_versions(self) -> None:
         """This exercises the SAME comparison
         `test_pin_matches_installed_kaggle_version` runs, against a
