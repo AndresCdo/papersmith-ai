@@ -170,6 +170,21 @@ class ManagedBlockTests(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8"),
                          "# above the block\nabove/\n" + rendered + "below/\n")
 
+    def test_upgrade_rewrites_a_block_opened_by_the_pre_0_19_marker(self) -> None:
+        # 0.19.0 renamed the command in the begin marker; a workspace made
+        # before it carries the old wording and must still be upgraded.
+        workspace = self.workspace()
+        path = workspace / ".gitignore"
+        rendered = path.read_text(encoding="utf-8")
+        legacy = MANAGED_BLOCK_BEGIN.replace("`smith upgrade`", "`papersmith upgrade`")
+        self.assertNotEqual(legacy, MANAGED_BLOCK_BEGIN)
+        path.write_text(rendered.replace(MANAGED_BLOCK_BEGIN, legacy) + "mine/\n",
+                        encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            _quiet_upgrade(workspace)
+        self.assertNotIn(".gitignore", err.getvalue())
+        self.assertEqual(path.read_text(encoding="utf-8"), rendered + "mine/\n")
+
     def test_user_lines_are_not_drift_and_an_edit_inside_the_block_is(self) -> None:
         workspace = self.workspace()
         path = workspace / ".gitignore"

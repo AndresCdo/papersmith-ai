@@ -1,7 +1,7 @@
 """From-scratch skill series: every shipped skill, exercised inside the workspace.
 
 Layer purpose. The bridge suites prove each engine against fixtures; this module
-proves the *shipped copy* — the skill tree a ``papersmith init`` workspace
+proves the *shipped copy* — the skill tree a ``smith init`` workspace
 carries — declares itself, answers its front door, and runs its offline verbs
 against the workspace it lives in. A skill that only works in the repository
 checkout is not a shipped skill.
@@ -29,16 +29,20 @@ from workspace_series import (
 )
 
 SKILL_NAMES = (
+    "datasets",
     "experimental-deliberation",
     "experimental-implementation",
     "figure-review",
+    "hyperparameter-search",
     "kaggle-accounts",
+    "math-tutor",
     "paper-ingestion",
     "paper-writing",
     "plausibility",
     "proposal-deliberation",
     "proposal-implementation",
     "remote-execution",
+    "remote-parallelism",
     "skill-audit",
     "upgrade-project",
 )

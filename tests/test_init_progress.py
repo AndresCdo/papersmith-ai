@@ -5,7 +5,7 @@ invisible until it hurts. The bar and the estimate are rendered from an
 injected clock, so the arithmetic is asserted rather than watched. The child's
 output is streamed AND kept, because the failure messages downstream read the
 tail. And the default mode writes nothing at all, because the MCP server spawns
-`papersmith init` as a child and reads its stdout.
+`smith init` as a child and reads its stdout.
 
 Stdlib only.
 """

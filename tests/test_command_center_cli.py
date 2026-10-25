@@ -1,4 +1,4 @@
-"""`papersmith ui` resolves the workspace backend, picks a port, and spawns it."""
+"""`smith ui` resolves the workspace backend, picks a port, and spawns it."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ class ProvisionerAgreementTests(unittest.TestCase):
         assert created.is_file(), "the provisioning stand-in created nothing"
         assert ui_command.provisioned_interpreters(root)[0] == created, (
             "the resolver derives a different path than the provisioner "
-            "creates -- the disagreement that made `papersmith ui` fail for "
+            "creates -- the disagreement that made `smith ui` fail for "
             "every pipx user")
         assert ui_command.workspace_interpreter(root) == str(created)
 
@@ -99,12 +99,12 @@ class ProvisionerAgreementTests(unittest.TestCase):
         assert calls == [root.resolve()], calls
         assert ui_command.provisioned_interpreters(root), (
             "a freshly initialized workspace declares no interpreter path, so "
-            "`papersmith ui` would fall back to an interpreter with no "
+            "`smith ui` would fall back to an interpreter with no "
             "runtime dependencies")
 
 
 class LiveServerEndToEndTests(unittest.TestCase):
-    """`papersmith ui` must reach a running dashboard in a workspace it created.
+    """`smith ui` must reach a running dashboard in a workspace it created.
 
     The row this closes: every piece of evidence for the interpreter fix was
     stub-level -- a hand-seeded `setup_env.py`, a `#!/bin/sh` file at the derived
@@ -165,12 +165,12 @@ class LiveServerEndToEndTests(unittest.TestCase):
             code = None
 
         assert payload is not None, (
-            "`papersmith ui` never served `/api/state` in a workspace this "
+            "`smith ui` never served `/api/state` in a workspace this "
             f"framework created. Exit {process.returncode}, output tail:\n{output}")
         for key in ("workspace", "sections", "gates", "pipeline_stages"):
             assert key in payload, (key, sorted(payload))
         assert payload["workspace"]["root"] == str(workspace), payload["workspace"]
-        assert code == 0, f"`papersmith ui` exited {code} after SIGTERM"
+        assert code == 0, f"`smith ui` exited {code} after SIGTERM"
 
 
 class CommandCenterResolutionTests(unittest.TestCase):
@@ -312,7 +312,7 @@ class WorkspaceInterpreterTests(unittest.TestCase):
 
     def test_the_provisioned_environment_outranks_a_venv(self) -> None:
         """The path nothing creates used to be preferred over the one the shipped
-        script builds, which is how `papersmith ui` failed for every
+        script builds, which is how `smith ui` failed for every
         `pipx install .` user while passing in this repository's own checkout."""
         root = self.new_dir()
         self.seed_venv(root)

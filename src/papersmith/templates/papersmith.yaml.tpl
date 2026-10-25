@@ -26,6 +26,12 @@ compute_targets:
       max_parallel_jobs: 2
       scratch_dir: ".scratch/runs"
 
+    # The remote-execution adapter does not read `accelerator`: it always
+    # requests one GPU through machine_shape "NvidiaTeslaT4" (a bare GPU
+    # request can land on a P100, which fails). `max_timeout_hours` is a
+    # local cap you declare for planning, not Kaggle's own limit: the session
+    # and weekly GPU limits are the ones the account's settings or the MCP's
+    # get_accelerator_quota show.
     kaggle-gpu-pool:
       provider: "kaggle"
       account_pool: "default"
@@ -74,6 +80,7 @@ execution_profiles:
   benchmark_evaluation:
     target: "kaggle-gpu-pool"
     entrypoint: "papermill {target}/nb/benchmark.ipynb kaggle-inbox/{job_id}/benchmark_out.ipynb"
+    # Not read by the adapter either (see kaggle-gpu-pool above).
     resources:
       accelerator: "GPU_P100"
     artifacts:
@@ -84,7 +91,11 @@ execution_profiles:
 # The paper-ingestion skill owns this block. The orchestrator intentionally
 # leaves its keys opaque while keeping the block in the same workspace file.
 paper_ingestion:
-  engine: marker
+  # auto: route each page -- digital prose through pypdfium2 in milliseconds,
+  # only equation, table and scanned pages through Docling. All
+  # license-unrestricted. Also: pdfium (fast path only), docling (every page),
+  # marker (opt-in; weights free only below USD 5M in funding or revenue).
+  engine: auto
   mode: fast
   strip_references: true
   source_base: guidance

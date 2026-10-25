@@ -1,7 +1,7 @@
 """Shared fixtures for the from-scratch workspace e2e series.
 
 Every module in the series begins by generating a workspace with the real
-``papersmith init`` command, so what the tests exercise is the product a user
+``smith init`` command, so what the tests exercise is the product a user
 receives, never the repository's own checkout. Boundaries are faked the same
 way the paper journey does it (see ``test_cli_paper_e2e.py``): stubbed
 download/extract, a symlinked ``node_modules`` instead of ``npm install``, a
