@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -600,6 +601,24 @@ class EngineSelectionTests(_BaseFixture):
         self.assertEqual(calls, [("fast", False)])
         self.assertIn("USD 5M", err.getvalue())
         self.assertIsInstance(routed, EXTRACTOR.RoutedEngine)
+
+    def test_a_missing_marker_is_an_engine_error_naming_the_opt_in(self) -> None:
+        """Marker is opt-in, so an interpreter without it gets the install hint,
+        never a bare ModuleNotFoundError, from either Marker entry point."""
+        blocked = dict.fromkeys(
+            ("marker", "marker.converters.pdf", "marker.models", "marker.config.parser", "marker.output")
+        )
+        entry_points = {
+            "build_converter": lambda: EXTRACTOR.build_converter("fast"),
+            "render_paper": lambda: EXTRACTOR.render_paper(
+                lambda path: None, Path("paper.pdf"), False, Path("staging")
+            ),
+        }
+        for name, call in entry_points.items():
+            with self.subTest(name), mock.patch.dict(sys.modules, blocked):
+                with self.assertRaises(EXTRACTOR.EngineError) as caught:
+                    call()
+                self.assertIn("pip install marker-pdf", str(caught.exception))
 
 
 if __name__ == "__main__":
