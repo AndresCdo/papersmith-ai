@@ -378,6 +378,13 @@ class NetworkExposureTests(unittest.TestCase):
             with self.subTest(host=host):
                 assert not server.is_loopback_bind(host)
 
+    def test_the_terminal_is_offered_on_exactly_the_loopback_binds(self) -> None:
+        # main() refuses a network bind and withholds the terminal by one rule,
+        # so neither can drift from the other.
+        for host in (*self.LOOPBACK, *self.NETWORK, ""):
+            with self.subTest(host=host):
+                assert server.terminal_allowed(host) == server.is_loopback_bind(host)
+
     def test_a_network_bind_is_refused_without_the_flag(self) -> None:
         for host in self.NETWORK:
             with self.subTest(host=host):
