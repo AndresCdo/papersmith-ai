@@ -142,7 +142,7 @@ take it, which is the failure this shape exists to prevent.
 | --- | --- | --- | --- | --- |
 | Build | this skill delegates to the `implementation-build` agent | the object-to-module map is approved | the operator decides what to do with the findings | `verify` — `__implementation__` carries `revision` and `premises`, which is what `materialize --stage objects` refuses without |
 | Walk | this skill delegates to the `implementation-walk` agent | each step's placement is decided | the launch the operator must authorize | `verify` — `undeclaredPlacement` is empty, so every step says where it runs |
-| Replicate | this skill delegates to the `paper-replicator` agent | code was authorized, the repository is standing, and the referenced paper is ingested under `guidance/` with no public repository of its own | the operator decides whether the replication is faithful enough to serve | `guidance/` holds the paper's Markdown with its equations as LaTeX, and a search for its code found none |
+| Replicate | this skill delegates to the `paper-replicator` agent | code was authorized, the repository is standing, and the referenced comparison or baseline paper is ingested under `guidance/` | the operator decides whether the adopted or replicated method is faithful enough to serve | `guidance/` holds the paper's Markdown with its equations as LaTeX; the agent searches for published code itself and records the search |
 
 **The last column is what stops a wasted delegation.** Each agent also refuses
 from inside when it finds itself before its own start — that is the backstop,
@@ -156,23 +156,26 @@ documented today for pi, OpenCode, or Antigravity — see the workspace's own
 run whichever stretch, Build, Walk or Replicate, in-process, as one step, in the same
 order, holding to the same measure-before-delegating gate before starting.
 The tool boundary each agent would have enforced differs by row —
-`implementation-build`'s and `paper-replicator`'s grant (`Read, Write,
-Edit, Bash, Glob, Grep`) versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
+`implementation-build`'s grant (`Read, Write, Edit, Bash, Glob, Grep`),
+`paper-replicator`'s (the same plus `WebSearch, WebFetch` for its code search) versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
 `Write`/`Edit`) — and either becomes the orchestrator's own discipline to
 hold for whichever stretch is running, not a structural guarantee: treat
 any action that would have needed a scoped-out tool as a stop, not a
 workaround.
 
-### Replicating a method that has no public code
+### Bringing in a comparison method: published code first, replication second
 
-A paper the proposal compares against or builds on sometimes ships no
-repository: the method exists only as prose, equations and a table of results.
-That is the Replicate row above, and it is the only case it covers. When the
-method has public code, port that code and cite it; replication from the paper
-is the fallback, never the first choice, because every choice the paper leaves
-unstated becomes a choice somebody made here.
+Every method the proposal compares against or builds on goes through the
+Replicate row above, and the agent's first act is a recorded search for the
+paper's published code. When code exists and its license allows reuse, the
+agent adopts it pinned to a commit and audits it: each equation and stated
+hyperparameter is matched to the line that implements it (`match`,
+`deviation`, `unspecified`), the repository's own tests run, and the same
+invariant tests and toy-set smoke run as a replication follow. Only when no
+usable code exists does it reimplement the method from the paper, because every
+choice the paper leaves unstated becomes a choice somebody made here.
 
-Ingest first. The agent reads the paper as `paper-ingestion` leaves it under
+For a replication, ingest first. The agent reads the paper as `paper-ingestion` leaves it under
 `guidance/` (equations as LaTeX), plus the two or three cited papers the method
 depends on when they are ingested too, and refuses on a bare PDF. It then plans
 (modules, data shapes, configuration), analyses each equation into a function
@@ -180,9 +183,11 @@ with its shapes and assumptions, writes the code into the target's existing
 layout, and verifies it with invariant tests (shapes, gradients, known cases)
 and a short smoke run on the proof of concept's toy set before any GPU run.
 
-Its product is code plus `REPLICATION.md`, a provenance table where every
-hyperparameter and architecture choice cites the paper's section or equation or
-is marked `unspecified` with the default chosen and why. Read the `unspecified`
+Its product is code plus `REPLICATION.md`: the code search and the route
+taken, then a correspondence table where every hyperparameter and architecture
+choice cites the paper's section or equation or is marked `unspecified` with the
+default chosen and why, and, for adopted code, what the code does and its
+verdict. Read the `unspecified`
 rows before trusting the replication: they are where it can differ from the
 paper without anything failing. The agent reports no number it did not produce
 and launches nothing remote.

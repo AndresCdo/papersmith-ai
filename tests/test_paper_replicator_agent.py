@@ -48,7 +48,16 @@ class PaperReplicatorAgentTests(unittest.TestCase):
         self.assertIsNotNone(tools)
         declared = {tool.strip() for tool in tools.group(1).split(",")}
         self.assertEqual(declared,
-                         {"Read", "Write", "Edit", "Bash", "Glob", "Grep"})
+                         {"Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"})
+
+    def test_published_code_is_searched_adopted_and_audited_before_any_reimplementation(self) -> None:
+        body = self.body()
+        self.assertIn("Act zero: look for published code first", body)
+        self.assertLess(body.index("Act zero"), body.index("**Plan.**"))
+        for rule in ("exact commit", "license", "`match`", "`deviation`", "`unspecified`",
+                     "repository's own tests", "never a silent fix"):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, body)
 
     def test_the_agent_names_its_pipeline_stages(self) -> None:
         body = self.body()
@@ -90,7 +99,7 @@ class PaperReplicatorAgentTests(unittest.TestCase):
         doc = flat(IMPLEMENTATION.read_text(encoding="utf-8"))
         self.assertIn("delegates to the `paper-replicator` agent", doc)
         self.assertIn("`.claude/agents/paper-replicator.md`", doc)
-        self.assertIn("Replicating a method that has no public code", doc)
+        self.assertIn("Bringing in a comparison method: published code first, replication second", doc)
 
 
 if __name__ == "__main__":
