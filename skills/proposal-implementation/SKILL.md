@@ -128,7 +128,7 @@ nothing in it as on one mid-campaign.
 
 ## What this skill delegates, and to whom
 
-Two stretches of this flow are mechanical from end to end — they carry out
+Three stretches of this flow are mechanical from end to end — they carry out
 decisions already taken and take none of their own — and each runs in an agent
 of its own rather than in the conversation. What moves is EXECUTION, never
 doctrine: every rule stays here, and each agent's first instruction is to load
@@ -142,6 +142,7 @@ take it, which is the failure this shape exists to prevent.
 | --- | --- | --- | --- | --- |
 | Build | this skill delegates to the `implementation-build` agent | the object-to-module map is approved | the operator decides what to do with the findings | `verify` — `__implementation__` carries `revision` and `premises`, which is what `materialize --stage objects` refuses without |
 | Walk | this skill delegates to the `implementation-walk` agent | each step's placement is decided | the launch the operator must authorize | `verify` — `undeclaredPlacement` is empty, so every step says where it runs |
+| Replicate | this skill delegates to the `paper-replicator` agent | code was authorized, the repository is standing, and the referenced paper is ingested under `guidance/` with no public repository of its own | the operator decides whether the replication is faithful enough to serve | `guidance/` holds the paper's Markdown with its equations as LaTeX, and a search for its code found none |
 
 **The last column is what stops a wasted delegation.** Each agent also refuses
 from inside when it finds itself before its own start — that is the backstop,
@@ -152,15 +153,42 @@ tell "it could not start" from "it started and failed".
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
 `.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
-run whichever stretch, Build or Walk, in-process, as one step, in the same
+run whichever stretch, Build, Walk or Replicate, in-process, as one step, in the same
 order, holding to the same measure-before-delegating gate before starting.
 The tool boundary each agent would have enforced differs by row —
-`implementation-build`'s grant (`Read, Write, Edit, Bash, Glob, Grep`)
-versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
+`implementation-build`'s and `paper-replicator`'s grant (`Read, Write,
+Edit, Bash, Glob, Grep`) versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
 `Write`/`Edit`) — and either becomes the orchestrator's own discipline to
 hold for whichever stretch is running, not a structural guarantee: treat
 any action that would have needed a scoped-out tool as a stop, not a
 workaround.
+
+### Replicating a method that has no public code
+
+A paper the proposal compares against or builds on sometimes ships no
+repository: the method exists only as prose, equations and a table of results.
+That is the Replicate row above, and it is the only case it covers. When the
+method has public code, port that code and cite it; replication from the paper
+is the fallback, never the first choice, because every choice the paper leaves
+unstated becomes a choice somebody made here.
+
+Ingest first. The agent reads the paper as `paper-ingestion` leaves it under
+`guidance/` (equations as LaTeX), plus the two or three cited papers the method
+depends on when they are ingested too, and refuses on a bare PDF. It then plans
+(modules, data shapes, configuration), analyses each equation into a function
+with its shapes and assumptions, writes the code into the target's existing
+layout, and verifies it with invariant tests (shapes, gradients, known cases)
+and a short smoke run on the proof of concept's toy set before any GPU run.
+
+Its product is code plus `REPLICATION.md`, a provenance table where every
+hyperparameter and architecture choice cites the paper's section or equation or
+is marked `unspecified` with the default chosen and why. Read the `unspecified`
+rows before trusting the replication: they are where it can differ from the
+paper without anything failing. The agent reports no number it did not produce
+and launches nothing remote.
+
+It runs as a subagent of the active session (Claude Code, OpenCode or Pi) on
+that session's own model: no API key, no external LLM service.
 
 ### `remote-execution` is driven, not delegated to
 
@@ -197,7 +225,8 @@ been delegated is one whose ends somebody had to name.
 
 Each stretch this skill delegates is defined in full by its own agent file:
 `.claude/agents/implementation-build.md`,
-`.claude/agents/implementation-walk.md`. When an agent cannot be spawned — the
+`.claude/agents/implementation-walk.md`,
+`.claude/agents/paper-replicator.md`. When an agent cannot be spawned — the
 harness has no sub-agent mechanism, the agent is not registered in this
 session, or the spawn itself fails — perform the stretch inline: read that
 agent's definition file and follow it as written, from the beginning it states

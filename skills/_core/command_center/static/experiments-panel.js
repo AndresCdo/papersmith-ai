@@ -4,7 +4,8 @@
  * the latest experiments protocol (expected reports approved in
  * deliberation), every product folder under implementations/ with its
  * convergence histories, figures, tables, significance tests, pinned
- * artifacts and remote runs, plus a remote-accounts readiness hint. Convergence is
+ * artifacts and remote runs, the datasets registry (toy and full sets with
+ * their license, qc and remote state), plus a remote-accounts readiness hint. Convergence is
  * always drawn (inline SVG); when nothing produces it yet, the empty state
  * says which file does. Every value is escaped before insertion.
  *
@@ -319,6 +320,47 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
     </details>`;
   }
 
+  // ---------------------------------------------------------------- datasets
+  const DATASET_LICENSE = {
+    allowed: ['badge--ok', 'permitida'], overridden: ['badge--warn', 'aceptada por el operador'],
+    refused: ['badge--warn', 'rechazada'],
+  };
+  const DATASET_QC = { pass: ['badge--ok', 'QC ok'], warn: ['badge--warn', 'QC con avisos'], fail: ['badge--warn', 'QC falla'] };
+  const badge = (pair, fallback) => {
+    const [cls, label] = pair || ['badge--info', fallback];
+    return `<span class="badge ${esc(cls)}">${esc(label)}</span>`;
+  };
+
+  function datasets(state) {
+    const d = state || {};
+    const items = Array.isArray(d.items) ? d.items : [];
+    const intro = '<p class="exp-intro">Registro de <code>datasets/registry.json</code> (skill <code>/datasets</code>): el conjunto toy para la prueba de concepto y los datasets completos con su licencia, control de calidad, preparación oficial y estado remoto.</p>';
+    if (!items.length) {
+      return `<section class="panel exp-datasets"><h3 class="panel__title">Datasets (toy y completos)</h3>${intro}`
+        + empty('Sin datasets registrados: /datasets synth crea el conjunto toy con semilla; /datasets search busca datasets reales y deja datasets/search-<fecha>.json.')
+        + '</section>';
+    }
+    const rows = items.map((item) => {
+      const remote = item.remote_ref
+        ? `<code>${esc(item.remote_ref)}</code> ${badge(item.visibility === 'public' ? ['badge--warn', 'público'] : ['badge--ok', 'privado'])}${item.remote_version != null ? ` <small>v${esc(item.remote_version)}</small>` : ''}`
+        : '<span class="badge badge--info">sin publicar</span>';
+      const prep = item.prepared
+        ? `<span class="badge badge--ok">preparado${item.preparation_version != null ? ` v${esc(item.preparation_version)}` : ''}</span>`
+        : '<span class="badge badge--info">sin preparar</span>';
+      return `<tr><td><code>${esc(item.slug)}</code></td>`
+        + `<td>${badge(item.role === 'toy' ? ['badge--info', 'toy'] : ['badge--info', 'completo'])}</td>`
+        + `<td>${esc(item.title)}</td>`
+        + `<td>${badge(DATASET_LICENSE[item.license], 'sin licencia')}${item.host_license ? ` <small>${esc(item.host_license)}</small>` : ''}</td>`
+        + `<td>${badge(DATASET_QC[item.qc], 'sin QC')}</td><td>${prep}</td><td>${remote}</td></tr>`;
+    }).join('');
+    const searches = (d.searches || []).length
+      ? `<p class="exp-intro">Búsquedas: ${(d.searches || []).map((f) => `<a href="${artifactUrl(f)}" target="_blank" rel="noopener"><code>${esc(f)}</code></a>`).join(', ')}</p>`
+      : '';
+    return `<section class="panel exp-datasets"><h3 class="panel__title">Datasets (toy y completos)</h3>${intro}
+      <div class="table-responsive"><table class="table exp-table"><thead><tr><th>Slug</th><th>Rol</th><th>Título</th><th>Licencia</th><th>QC</th><th>Preparación</th><th>Remoto</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>${searches}</section>`;
+  }
+
   // ---------------------------------------------------------------- page
   function render(view) {
     const v = view || {};
@@ -329,6 +371,7 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
     return [
       mcpActivation(v.remote_mcp),
       help(v.remote_accounts),
+      datasets(v.datasets),
       group('Prueba de concepto', 'Productos de /proposal-implementation (AGREED.md): convergencia, figuras y tablas principales.',
         poc, 'Sin pruebas de concepto: /proposal-implementation crea implementations/<repo>/<Nombre>/ con AGREED.md; sus curvas salen de Results/history*.json|csv.'),
       group('Experimentos completos', 'Productos de /experimental-implementation (Experimental_AGREED.md): convergencia, tablas, figuras y significancia.',
@@ -377,5 +420,5 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
   }
 
   window.refreshExperimentsPanel = refreshExperimentsPanel;
-  window.ExperimentsPanel = { render, mcpActivation };
+  window.ExperimentsPanel = { render, mcpActivation, datasets };
 })();
