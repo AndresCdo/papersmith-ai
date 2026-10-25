@@ -41,8 +41,11 @@ refusal prints the flow, so a blocked session knows which stage it is behind.
 1. **The launch.** Nothing here submits. The launch stays behind
    `remote-execution`'s consent token and the implementation skills' `gate`;
    a `parallelize` verdict authorizes nothing.
-2. **Which accounts take part.** Only accounts the operator owns and controls,
-   validated through the `kaggle-accounts` skill, count toward `--accounts`.
+2. **Which owners take part.** One account per person per service: each
+   participating account is owned and operated by a distinct team member
+   registered with `smith team add --attest`, and only distinct owners count
+   toward `--owners`. Kaggle accounts are also validated through the
+   `kaggle-accounts` skill; Colab owners sign in with `smith colab login`.
 
 ## Measured inputs
 
@@ -53,7 +56,11 @@ refuses (`missing-input`) rather than assume one:
 |---|---|
 | `--unit-minutes` | the pilot: the `step` command's `lastRun` for one unit, or the remote ledger's measured duration for a rehearsal — never an estimate |
 | `--units` / `--units-file` | the unit list along the declared axis (one seed, fold or subject block per unit); `--units-file` is a JSON list of ids or `{id, minutes}` objects when units differ in length |
-| `--accounts` | the number of validated, operator-owned accounts |
+| `--owners` | the number of distinct team owners taking part (`smith team list`), each holding one validated account on the campaign's service — parallelism counts owners, never accounts |
+| `--accounts` | optional: the accounts those owners hold; any beyond one per owner never add parallelism, and fewer than `--owners` is refused |
+| `--service` | optional: the campaign's service (`kaggle` or `colab`); a comma list means mixed services, which the verdict refuses unless `--stamps-identical` |
+| `--tiers` | required with `colab`: one compute tier per Colab owner (`free`, `pro`, `payg`, `enterprise`), as `smith team list` records it; `free` owners are excluded from the split |
+| `--stamps-identical` | optional: the shards of a mixed-service campaign declare identical environment stamps (accelerator model, CUDA, torch); `verify --shards` still has to confirm them |
 | `--sessions-per-account` | concurrent GPU sessions one account may run (the `capacity` the adapter reports) |
 | `--session-limit-hours` | one session's wall-time limit |
 | `--quota-hours` | one account's weekly GPU quota, operator-supplied or read from the remote service's official MCP accelerator-quota tool; record where with `--quota-source` and when with `--quota-date` |
@@ -75,7 +82,8 @@ its first minute.
 | Verdict | When |
 |---|---|
 | `split-first` | a unit plus the setup exceeds one session's limit: split it along the declared axis (more units, never by arm) and assess again |
-| `parallelize` | more than one account, `speedup >= 1.5`, `savedMinutes >= 30`, and no account exceeds its quota |
+| `do-not-mix` | `--service` names more than one service and `--stamps-identical` is not declared: run the campaign on one service |
+| `parallelize` | more than one eligible owner, `speedup >= 1.5`, `savedMinutes >= 30`, and no account exceeds its quota |
 | `single-account` | anything else; every unmet condition is named in `reasons` |
 
 The thresholds travel in every output (`thresholds`), so a verdict is read
@@ -116,14 +124,36 @@ A split that misses any item is several experiments that share a table:
   over from another account; `smoke` each one before the campaign.
 - **Never pool timing across machines.** Wall time and memory are
   `perEnvironment`; accuracy pools, seconds do not.
+- **One account per person per service** (`one-account-per-person`): see
+  "Accounts and terms" below.
+- **One service per campaign** (`one-service-per-campaign`): Kaggle and
+  Colab shards do not share a campaign unless their environment stamps are
+  declared identical and `verify --shards` confirms them.
 
 ## Accounts and terms
 
-Only accounts the operator owns and controls take part, each validated through
-the accounts skill. Respect the platform's terms: several accounts are a way
-to run one person's own work in parallel, never a way around per-user limits
-on behalf of other people, and never someone else's account. If the terms of
-the service do not allow it, the verdict does not matter.
+The team rule: **one account per person per service.** Several accounts take
+part only when each one is owned and operated by a distinct team member, who
+attests it with `smith team add --owner <slug> --attest` (the registry,
+`.papersmith/team.json`, is git-ignored and holds no secret). Parallelism
+therefore counts **distinct owners**, never accounts: `--owners` is the
+input, and `--accounts` beyond one per owner never add a session.
+
+- **Colab: only paid compute joins a split campaign.** The Colab FAQ
+  (https://research.google.com/colaboratory/faq.html, verified 2026-10-25)
+  disallows "using multiple accounts to work around access or resource usage
+  restrictions" and, on free runtimes without compute units, "running
+  distributed computing workers". A `free` account runs interactive or
+  proof-of-concept work in one session; it is never a worker of a split. A
+  campaign split across owners on Colab needs every participating account on
+  `pro`, `payg` (Pay-As-You-Go compute units) or `enterprise`; `assess
+  --service colab --tiers ...` excludes the free ones and says why.
+- **Kaggle: the same rule until its terms are verified.** Kaggle's terms
+  could not be read when this rule was written, so one account per person
+  applies there too.
+- **Never someone else's account,** and never several of one person's to get
+  around per-user limits. If the terms of the service do not allow it, the
+  verdict does not matter.
 
 ## Accepted operations
 
@@ -133,7 +163,7 @@ python3 skills/remote-parallelism/scripts/parallelism_cli.py [--root <workspace>
 
 | Verb | What it does |
 |---|---|
-| `assess` | `--units N --unit-minutes M --accounts A --sessions-per-account S --session-limit-hours H --quota-hours Q --setup-minutes O [--units-file units.json] [--axis <name>] [--quota-source <text>] [--quota-date YYYY-MM-DD] [--record <dir>]`: JSON `{inputs, thresholds, serialMinutes, singleAccountMinutes, parallelMinutes, speedup, savedMinutes, accountsUsed, recommendedAccounts, perAccount[{account, units, gpuHours, overQuota}], quotaOk, unitsOverSessionLimit, verdict, reasons, unitSeeds?, reproducibilityChecklist, stampFields, launchAuthorization: false}`. `--record <dir>` writes `<dir>/.remote-parallelism/assessment-<date>.json` (a second one the same day gets `-2`, never an overwrite); `<dir>` must resolve inside the workspace, through no symlink that leaves it |
+| `assess` | `--units N --unit-minutes M --owners N --sessions-per-account S --session-limit-hours H --quota-hours Q --setup-minutes O [--accounts A] [--service kaggle\|colab[,...]] [--tiers free,pro,...] [--stamps-identical] [--units-file units.json] [--axis <name>] [--quota-source <text>] [--quota-date YYYY-MM-DD] [--record <dir>]`: JSON `{inputs, thresholds, serialMinutes, singleAccountMinutes, parallelMinutes, speedup, savedMinutes, accountsUsed, recommendedAccounts, perAccount[{account, units, gpuHours, overQuota}], quotaOk, unitsOverSessionLimit, eligibleOwners, excludedOwners[{owner, tier}], verdict, reasons, unitSeeds?, reproducibilityChecklist, stampFields, launchAuthorization: false}`; each `perAccount` entry is one eligible owner's account. `--record <dir>` writes `<dir>/.remote-parallelism/assessment-<date>.json` (a second one the same day gets `-2`, never an overwrite); `<dir>` must resolve inside the workspace, through no symlink that leaves it |
 | `checklist` | the reproducibility checklist as JSON |
 | `stamp-fields` | the shard stamp fields to declare `identicalAcrossShards` |
 

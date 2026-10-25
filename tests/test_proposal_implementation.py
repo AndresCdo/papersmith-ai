@@ -9233,10 +9233,11 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                   "research project",
     },
     "remote-parallelism/SKILL.md": {
-        "kaggle": "the account policy requires that only operator-owned "
-                  "accounts validated through the `kaggle-accounts` skill take "
-                  "part, and that skill's directory name carries the service; "
-                  "naming it references a shipped skill, not a research project",
+        "kaggle": "the team rule names the services a campaign may run on and "
+                  "requires every account to be validated through the "
+                  "`kaggle-accounts` skill, whose directory name carries the "
+                  "service; naming it references a shipped skill and a service "
+                  "value, not a research project",
     },
     "_core/command_center/server.py": {
         "kaggle": "one detail line of the experiments phase naming the same "

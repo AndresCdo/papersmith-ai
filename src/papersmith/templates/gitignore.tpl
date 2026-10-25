@@ -8,6 +8,8 @@ __pycache__/
 .env*
 .papersmith/runs_ledger.jsonl
 .papersmith/cache/
+# The team registry names people and their accounts (no secrets, still personal data).
+.papersmith/team.json
 skills/paper-ingestion/.venv/
 kaggle-inbox/*
 !kaggle-inbox/.gitkeep

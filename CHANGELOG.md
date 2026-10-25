@@ -15,6 +15,26 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **Google Colab beside Kaggle, under a team model.** Several accounts per
+  service, one per person: `smith team add|list|remove` keeps
+  `.papersmith/team.json` (owners, their Kaggle username and Colab tier; no
+  secrets, git-ignored) and refuses a member without `--attest` or an
+  account already owned by someone else. `smith colab login|status` signs
+  each owner in with the official `google-colab-cli` (pinned 0.6.0) under a
+  private per-owner `HOME`, the only thing that isolates its token; papersmith
+  never opens a file inside it. The remote-execution Colab backend exposes one
+  worker per owner and refuses a free-tier account as a worker of a split
+  campaign, quoting the Colab FAQ, which disallows "using multiple accounts to
+  work around access or resource usage restrictions" and distributed workers
+  on free runtimes. Kaggle's own terms could not be read, so the same
+  one-account-per-person rule applies. `smith init` and `smith upgrade`
+  register Google's official Colab MCP server (pinned commit) for every
+  harness; it drives a notebook open in the browser, for interactive work.
+  `remote-parallelism` now counts distinct owners, excludes free Colab tiers
+  from splits and refuses mixing services in one campaign unless the shard
+  stamps are declared identical. The Experimentos tab adds Colab rows to the
+  services table, a team table and a Colab activation box with
+  environment-specific steps.
 - **Remote services table in the Experimentos tab.** A short table states, for
   the official MCP server, the official CLI, the token, the worker accounts,
   the remote rehearsals and the weekly GPU quota, whether each is active,

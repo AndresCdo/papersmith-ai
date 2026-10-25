@@ -53,10 +53,10 @@ class Run:
         self.error = json.loads(self.err) if self.err.strip().startswith("{") else None
 
 
-def assess_argv(units=40, unit_minutes=30, accounts=3, sessions=1, limit=12,
+def assess_argv(units=40, unit_minutes=30, owners=3, sessions=1, limit=12,
                 quota=30, setup=10, *extra) -> list[str]:
     return ["assess", "--units", str(units), "--unit-minutes", str(unit_minutes),
-            "--accounts", str(accounts), "--sessions-per-account", str(sessions),
+            "--owners", str(owners), "--sessions-per-account", str(sessions),
             "--session-limit-hours", str(limit), "--quota-hours", str(quota),
             "--setup-minutes", str(setup), *extra]
 
@@ -104,7 +104,7 @@ class VerdictTests(Base):
         self.assertTrue(any("30" in reason for reason in run.json["reasons"]))
 
     def test_one_account_available_never_parallelizes(self) -> None:
-        run = self.assess(accounts=1)
+        run = self.assess(owners=1)
         self.assertEqual(run.code, 0, run.err)
         self.assertEqual(run.json["verdict"], "single-account")
         self.assertEqual(run.json["speedup"], 1.0)
@@ -128,7 +128,7 @@ class VerdictTests(Base):
         self.assertEqual(run.json["verdict"], "split-first")
 
     def test_quota_overflow_refuses_to_parallelize(self) -> None:
-        run = self.assess(units=40, unit_minutes=60, accounts=2, quota=5, setup=0)
+        run = self.assess(units=40, unit_minutes=60, owners=2, quota=5, setup=0)
         self.assertEqual(run.code, 0, run.err)
         self.assertFalse(run.json["quotaOk"])
         self.assertEqual(run.json["verdict"], "single-account")
@@ -139,7 +139,7 @@ class VerdictTests(Base):
     def test_concurrent_sessions_per_account_are_counted(self) -> None:
         # Two sessions on one account already halve the campaign, so the
         # single-account baseline uses both of them.
-        run = self.assess(accounts=1, sessions=2)
+        run = self.assess(owners=1, sessions=2)
         self.assertEqual(run.json["singleAccountMinutes"], 610)
         self.assertEqual(run.json["serialMinutes"], 1220)
 
@@ -169,7 +169,7 @@ class UnitsFileTests(Base):
         path = self.write_units([{"id": "fold-0", "minutes": 30},
                                  {"id": "fold-1", "minutes": 900}])
         run = Run(["--root", str(self.root), "assess", "--units-file", str(path),
-                   "--unit-minutes", "30", "--accounts", "2", "--sessions-per-account", "1",
+                   "--unit-minutes", "30", "--owners", "2", "--sessions-per-account", "1",
                    "--session-limit-hours", "12", "--quota-hours", "30",
                    "--setup-minutes", "10"])
         self.assertEqual(run.code, 0, run.err)
@@ -209,7 +209,7 @@ class RefusalTests(Base):
     def test_a_non_positive_measurement_is_refused(self) -> None:
         run = self.assess(unit_minutes=0)
         self.assertEqual(run.error["error"], "bad-argument")
-        run = self.assess(accounts="two")
+        run = self.assess(owners="two")
         self.assertEqual(run.error["error"], "bad-argument")
 
     def test_splitting_by_arm_is_refused(self) -> None:
@@ -222,6 +222,92 @@ class RefusalTests(Base):
         self.assertEqual(ok.json["inputs"]["axis"], "seed")
 
 
+# ------------------------------------------------------------- team policy
+class TeamPolicyTests(Base):
+    """Parallelism counts distinct owners; free Colab never joins a split;
+    services do not mix inside one campaign by default."""
+
+    def test_accounts_beyond_one_per_owner_never_add_parallelism(self) -> None:
+        run = self.assess(40, 30, 1, 1, 12, 30, 10, "--accounts", "3")
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["verdict"], "single-account")
+        self.assertEqual(run.json["inputs"]["owners"], 1)
+        self.assertEqual(run.json["inputs"]["accounts"], 3)
+        self.assertEqual(run.json["accountsUsed"], 1)
+        self.assertTrue(any("one per owner" in reason for reason in run.json["reasons"]))
+        # Same campaign with three distinct owners does parallelize.
+        self.assertEqual(self.assess(40, 30, 3, 1, 12, 30, 10, "--accounts", "3").json["verdict"],
+                         "parallelize")
+
+    def test_accounts_without_owners_is_refused(self) -> None:
+        run = Run(["--root", str(self.root), "assess", "--units", "40", "--unit-minutes", "30",
+                   "--accounts", "3", "--sessions-per-account", "1", "--session-limit-hours", "12",
+                   "--quota-hours", "30", "--setup-minutes", "10"])
+        self.assertEqual(run.code, 2)
+        self.assertEqual(run.error["error"], "missing-input")
+        self.assertIn("--owners", run.error["message"])
+
+    def test_fewer_accounts_than_owners_is_refused(self) -> None:
+        run = self.assess(40, 30, 3, 1, 12, 30, 10, "--accounts", "2")
+        self.assertEqual(run.error["error"], "bad-argument")
+
+    def test_free_colab_owners_are_excluded_from_a_split(self) -> None:
+        run = self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "colab", "--tiers", "pro,free,payg")
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["inputs"]["service"], ["colab"])
+        self.assertEqual(run.json["eligibleOwners"], 2)
+        self.assertEqual(run.json["excludedOwners"], [{"owner": 2, "tier": "free"}])
+        self.assertEqual(len(run.json["perAccount"]), 2)
+        self.assertEqual(run.json["verdict"], "parallelize")
+        self.assertTrue(any("running distributed computing workers" in reason
+                            and "https://research.google.com/colaboratory/faq.html" in reason
+                            for reason in run.json["reasons"]))
+
+    def test_only_free_colab_owners_never_parallelize(self) -> None:
+        run = self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "colab", "--tiers", "free,free,free")
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["verdict"], "single-account")
+        self.assertEqual(run.json["eligibleOwners"], 0)
+        self.assertTrue(any("running distributed computing workers" in reason
+                            for reason in run.json["reasons"]))
+
+    def test_colab_needs_one_known_tier_per_owner(self) -> None:
+        self.assertEqual(self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "colab").error["error"],
+                         "missing-input")
+        self.assertEqual(self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "colab",
+                                     "--tiers", "pro,pro").error["error"], "bad-argument")
+        self.assertEqual(self.assess(40, 30, 2, 1, 12, 30, 10, "--service", "colab",
+                                     "--tiers", "pro,gold").error["error"], "bad-argument")
+
+    def test_tiers_without_colab_are_refused(self) -> None:
+        run = self.assess(40, 30, 2, 1, 12, 30, 10, "--service", "other", "--tiers", "pro,pro")
+        self.assertEqual(run.error["error"], "bad-argument")
+
+    def test_a_non_colab_service_keeps_the_one_per_person_rule(self) -> None:
+        run = self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "other")
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["verdict"], "parallelize")
+        self.assertEqual(run.json["eligibleOwners"], 3)
+
+    def test_mixing_services_is_refused_by_default(self) -> None:
+        run = self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "other,colab", "--tiers", "pro")
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["verdict"], "do-not-mix")
+        self.assertTrue(any("identical" in reason for reason in run.json["reasons"]))
+        self.assertIsNone(run.json["parallelMinutes"])
+
+    def test_mixing_with_declared_identical_stamps_is_assessed(self) -> None:
+        run = self.assess(40, 30, 3, 1, 12, 30, 10, "--service", "other,colab", "--tiers", "free",
+                          "--stamps-identical")
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["eligibleOwners"], 2)
+        self.assertEqual(run.json["verdict"], "parallelize")
+        self.assertTrue(any("verify --shards" in reason for reason in run.json["reasons"]))
+
+    def test_the_script_names_no_service_on_the_vocabulary_floor(self) -> None:
+        self.assertNotIn("kaggle", CLI_PATH.read_text(encoding="utf-8").lower())
+
+
 # ------------------------------------------------------------- checklist
 class ChecklistTests(Base):
     def test_the_checklist_holds_every_reproducibility_rule(self) -> None:
@@ -232,7 +318,8 @@ class ChecklistTests(Base):
                          "pin-environment", "pin-accelerator", "stamp-environment",
                          "deterministic-flags", "same-dataset-version",
                          "rehearse-each-account", "no-pooled-timing",
-                         "owned-accounts-only", "launch-is-the-operator-s"):
+                         "one-account-per-person", "one-service-per-campaign",
+                         "launch-is-the-operator-s"):
             self.assertIn(expected, ids)
         text = json.dumps(run.json)
         for fragment in ("torch.manual_seed", "torch.use_deterministic_algorithms(True)",
@@ -373,7 +460,10 @@ class DoctrineTests(unittest.TestCase):
                          "identicalAcrossShards", "machine_shape", "never by arm",
                          "torch.use_deterministic_algorithms(True)",
                          "CUBLAS_WORKSPACE_CONFIG=:4096:8",
-                         "never launch authorization", "terms"):
+                         "never launch authorization", "terms",
+                         "one account per person per service", "distinct owners",
+                         "https://research.google.com/colaboratory/faq.html",
+                         "running distributed computing workers", "`--owners`"):
             self.assertIn(fragment, self.flat, fragment)
 
     def test_the_skill_delegates_to_no_agent(self) -> None:

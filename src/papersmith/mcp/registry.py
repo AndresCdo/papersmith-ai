@@ -72,6 +72,8 @@ CLI_COMMANDS: tuple[str, ...] = (
     "ui",
     "atlas",
     "mcp",
+    "team",
+    "colab",
 )
 
 
@@ -1528,6 +1530,12 @@ CLI_DISPOSITIONS: dict[str, str] = {
     "mcp": "out",
     # Operator environment provisioning: long-running multi-gigabyte command.
     "env": "out",
+    # The team registry records people and their own attestation that they
+    # own one account per service: a person's declaration, never an agent's.
+    "team": "out",
+    # `colab login` runs an interactive Google consent for one person's own
+    # account; `status` probes that sign-in. Both are an operator's acts.
+    "colab": "out",
 }
 
 PAPER_DISPOSITIONS: dict[str, str] = {

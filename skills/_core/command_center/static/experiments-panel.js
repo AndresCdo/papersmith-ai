@@ -7,7 +7,8 @@
  * artifacts and remote runs, the datasets registry (toy and full sets with
  * their license, qc and remote state), the remote-services table (one row
  * per service with its state and activating action), plus a remote-accounts
- * readiness hint. Convergence is
+ * readiness hint, the team table (one account per person and service) and the
+ * Colab box (official CLI headless, official MCP interactive). Convergence is
  * always drawn (inline SVG); when nothing produces it yet, the empty state
  * says which file does. Every value is escaped before insertion.
  *
@@ -230,8 +231,10 @@
   // ---------------------------------------------------------- MCP activation
   // The commands run in the dashboard's CLI assistant (window.sendToCli, shell
   // kind): the token is typed there into a hidden prompt, never into this page.
-  function cliButton(command, label) {
-    return `<button type="button" class="btn" data-exp-cli="${esc(command)}">${esc(label)}</button>`;
+  // run=false types a template (placeholders such as <slug>) without pressing
+  // Enter, so the person edits it in the terminal before running it.
+  function cliButton(command, label, run = true) {
+    return `<button type="button" class="btn" data-exp-cli="${esc(command)}"${run ? '' : ' data-exp-cli-run="0"'}>${esc(label)}</button>`;
   }
 
   function mcpActivation(state) {
@@ -267,6 +270,60 @@
     </section>`;
   }
 
+  // ---------------------------------------------------------- Colab
+  // experiments_view's `remote_colab`: the commands are server constants; the
+  // templates keep their placeholders literal and are typed, never run.
+  const COLAB_ENV_NOTE = {
+    windows: 'En Windows nativo el asistente CLI del tablero no está disponible: ejecuta estos comandos en PowerShell.',
+    wsl: 'En WSL instala la CLI y ejecuta smith dentro de la distribución; si el consentimiento OAuth no abre el navegador, copia la URL en el navegador de Windows.',
+  };
+
+  function colabActivation(state) {
+    if (!state || !state.commands) return '';
+    const c = state.commands;
+    const env = state.environment || {};
+    const sysLabel = { macos: 'macOS', linux: 'Linux', wsl: 'Windows (WSL)', windows: 'Windows' }[env.system] || 'desconocido';
+    const shellLabel = env.shell === 'powershell' ? 'PowerShell' : (env.shell || 'sh');
+    const tiers = (state.paid_tiers || []).map((t) => `<code>${esc(t)}</code>`).join(', ');
+    const faq = esc(state.faq || 'https://research.google.com/colaboratory/faq.html');
+    const registered = (state.registered || []).length
+      ? `<span class="badge badge--ok">registrado</span> en ${(state.registered || []).map((f) => `<code>${esc(f)}</code>`).join(', ')}`
+      : '<span class="badge badge--warn">no registrado</span> en este proyecto: ejecuta <code>smith upgrade</code>';
+    const note = COLAB_ENV_NOTE[env.system];
+    return `<section class="panel exp-mcp" id="expColabActivation">
+      <h3 class="panel__title">Conectar Google Colab (CLI y MCP)</h3>
+      <p class="exp-intro">MCP oficial <code>${esc(state.server || 'colab')}</code>: ${registered}.</p>
+      ${env.system ? `<p class="exp-intro">Entorno detectado: <strong>${esc(sysLabel)}</strong> · shell <code>${esc(shellLabel)}</code>.</p>` : ''}
+      ${note ? `<p class="exp-intro"><span class="badge badge--warn">${esc(sysLabel)}</span> ${esc(note)}</p>` : ''}
+      <ol>
+        <li>Instala la CLI oficial de Colab con la versión fijada: <code>${esc(c.install)}</code>.</li>
+        <li>Cada persona del equipo registra su propia cuenta: <code>${esc(c.team_add)}</code>. Reemplaza <code>&lt;slug&gt;</code>, <code>&lt;Nombre&gt;</code> y <code>&lt;tier&gt;</code> (<code>free</code>, ${tiers}) en la terminal: el botón escribe el comando sin ejecutarlo.</li>
+        <li>Cada persona inicia sesión con su cuenta en el asistente CLI: <code>${esc(c.login)}</code>. El estado de la CLI queda en <code>~/.config/papersmith/colab/&lt;slug&gt;/</code> (permisos 0700); papersmith nunca lee ni copia esos archivos.</li>
+        <li>Comprueba con <code>${esc(c.status)}</code>; <code>${esc(c.team_list)}</code> muestra el equipo.</li>
+        <li>El MCP oficial de Colab es para trabajo interactivo: necesita un cuaderno de Colab abierto en el navegador, al que se conecta el agente (Claude, OpenCode o Pi). Las ejecuciones sin interfaz van por la CLI y <code>/remote-execution</code>.</li>
+      </ol>
+      <h4 class="exp-h4">Regla del equipo</h4>
+      <ul>
+        <li>Una cuenta por persona y servicio. La <a href="${faq}" target="_blank" rel="noopener">FAQ de Colab</a> no permite "using multiple accounts to work around access or resource usage restrictions" y, en entornos gratuitos sin unidades de cómputo, "running distributed computing workers".</li>
+        <li>Por eso las campañas en Colab corren solo en niveles de pago (${tiers}); una cuenta <code>free</code> sirve para la prueba de concepto interactiva en una sesión, nunca como worker de una campaña repartida.</li>
+        <li>El paralelismo cuenta personas distintas, no cuentas.</li>
+      </ul>
+      <h4 class="exp-h4">GPU por nivel</h4>
+      <ul>
+        <li>Gratuito: una GPU básica, sujeta a disponibilidad.</li>
+        <li>De pago (Pro, Pay-As-You-Go, Enterprise): L4, A100 o H100 según las unidades de cómputo, con <code>--gpu</code> en la CLI.</li>
+      </ul>
+      <div class="exp-mcp__actions">
+        ${cliButton(c.install, 'Instalar la CLI')}
+        ${cliButton(c.team_add, 'Registrar persona (editar)', false)}
+        ${cliButton(c.login, 'Iniciar sesión (editar)', false)}
+        ${cliButton(c.status, 'Comprobar')}
+        ${cliButton(c.team_list, 'Ver equipo')}
+        <button type="button" class="btn" data-exp-refresh="1">Recargar estado</button>
+      </div>
+    </section>`;
+  }
+
   // ------------------------------------------------------- remote services
   // One offline row per service (experiments_view's `remote_services`). The
   // action is a server-side constant, run in the CLI assistant like the MCP box.
@@ -279,7 +336,8 @@
     const rows = state && Array.isArray(state.rows) ? state.rows : [];
     if (!rows.length) return '';
     const body = rows.map((row) => {
-      const [cls, label] = SERVICE_STATE[row.state] || SERVICE_STATE.unverified;
+      const [cls, stateLabel] = SERVICE_STATE[row.state] || SERVICE_STATE.unverified;
+      const label = row.badge || stateLabel;
       const action = row.action && row.action.command
         ? cliButton(row.action.command, row.action.label || 'Ejecutar')
         : '<span class="exp-muted">—</span>';
@@ -288,12 +346,48 @@
         + `<td>${action}</td></tr>`;
     }).join('');
     return `<section class="panel exp-services" id="expRemoteServices">
-      <h3 class="panel__title">Servicios de Kaggle</h3>
+      <h3 class="panel__title">Servicios remotos (Kaggle y Colab)</h3>
       ${state.note ? `<p class="exp-intro">${esc(state.note)}</p>` : ''}
       <div class="table-responsive"><table class="table exp-table"><thead><tr><th>Servicio</th><th>Para qué</th><th>Estado</th><th>Acción</th></tr></thead>
       <tbody>${body}</tbody></table></div>
       <div class="exp-mcp__actions"><button type="button" class="btn" data-exp-refresh="1">Recargar estado</button></div>
     </section>`;
+  }
+
+  // ---------------------------------------------------------------- team
+  // remote_services' `team`: owner slugs and presence flags only.
+  const TEAM_TIER = { free: 'badge--info', pro: 'badge--ok', payg: 'badge--ok', enterprise: 'badge--ok' };
+
+  function team(state) {
+    if (!state) return '';
+    const members = Array.isArray(state.members) ? state.members : [];
+    const title = '<h3 class="panel__title">Equipo (una cuenta por persona y servicio)</h3>';
+    const intro = `<p class="exp-intro">Leído de <code>${esc(state.file || '.papersmith/team.json')}</code>: cada persona opera su propia cuenta de cada servicio. Solo se muestran presencias, nunca credenciales.</p>`;
+    if (state.problem) {
+      return `<section class="panel exp-team" id="expTeam">${title}${intro}`
+        + `<p class="exp-intro"><span class="badge badge--warn">no se pudo leer</span> revisa el archivo con <code>smith team list</code>.</p></section>`;
+    }
+    if (!members.length) {
+      return `<section class="panel exp-team" id="expTeam">${title}${intro}`
+        + empty(`Sin miembros: cada persona se registra con ${state.add_command || 'smith team add'}`) + '</section>';
+    }
+    const rows = members.map((m) => {
+      const kaggle = m.kaggle_username
+        ? `<code>${esc(m.kaggle_username)}</code> ${m.kaggle_validated ? '<span class="badge badge--ok">validada</span>' : '<span class="badge badge--warn">sin validar</span>'}`
+        : '<span class="exp-muted">—</span>';
+      const colab = m.colab_tier
+        ? `<span class="badge ${esc(TEAM_TIER[m.colab_tier] || 'badge--warn')}">${esc(m.colab_tier)}</span> ${m.colab_config_present ? '<small>sesión configurada</small>' : '<small>sin iniciar sesión</small>'}`
+        : '<span class="exp-muted">—</span>';
+      const names = { kaggle: 'Kaggle', colab: 'Colab' };
+      const eligible = (m.eligible || []).length
+        ? (m.eligible || []).map((s) => `<span class="badge badge--ok">${esc(names[s] || s)}</span>`).join(' ')
+        : '<span class="badge">no</span>';
+      return `<tr><td><code>${esc(m.owner)}</code></td><td>${esc(m.display_name || '')}</td><td>${kaggle}</td><td>${colab}</td><td>${eligible}</td></tr>`;
+    }).join('');
+    const skipped = state.skipped ? `<p class="exp-intro"><span class="badge badge--warn">${esc(state.skipped)} entrada(s) ignorada(s)</span> (propietario inválido o repetido).</p>` : '';
+    return `<section class="panel exp-team" id="expTeam">${title}${intro}${skipped}
+      <div class="table-responsive"><table class="table exp-table"><thead><tr><th>Propietario</th><th>Nombre</th><th>Kaggle</th><th>Colab</th><th>Elegible para campañas repartidas</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></section>`;
   }
 
   // ---------------------------------------------------------------- help
@@ -303,7 +397,7 @@
       ${k.accounts_store_present ? '<span class="badge badge--ok">presente</span>' : '<span class="badge badge--warn">ausente</span>'}
       · credenciales en <code>${esc(k.inbox || 'kaggle-inbox')}/</code>: <strong>${esc(k.inbox_count ?? 0)}</strong></p>`;
     return `<details class="panel exp-help">
-      <summary class="panel__title">Ayuda: lanzar y monitorear en Kaggle (CLI o MCP)</summary>
+      <summary class="panel__title">Ayuda: lanzar y monitorear en Kaggle (CLI o MCP) y Colab</summary>
       ${status}
       <h4 class="exp-h4">1. Flujo: prueba de concepto vs. experimentos completos</h4>
       <ol>
@@ -340,7 +434,14 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
         <li>Reparte shards entre cuentas con <code>distribute</code>.</li>
         <li>Cachea épocas preprocesadas en <code>Data/</code>; fija semillas.</li>
       </ul>
-      <h4 class="exp-h4">6. Qué prueba estadística reportar</h4>
+      <h4 class="exp-h4">6. Google Colab (CLI o MCP)</h4>
+      <ul>
+        <li>Sin interfaz: el backend Colab de <code>/remote-execution</code> usa la CLI oficial <code>colab</code> con los mismos verbos (<code>readiness</code> → <code>smoke</code> → <code>generate-job</code> → <code>submit</code> → <code>status</code> / <code>poll</code> → <code>fetch</code>); un worker por persona del equipo, cada una tras <code>smith colab login --owner &lt;slug&gt;</code>.</li>
+        <li>Interactivo: el MCP oficial de Colab maneja un cuaderno abierto en el navegador; sirve para explorar y para la prueba de concepto, y no escribe el ledger que lee este panel.</li>
+        <li>Regla del equipo: una cuenta por persona y servicio; las campañas repartidas en Colab solo con niveles de pago (pro, payg, enterprise); una cuenta gratuita nunca es worker de una campaña.</li>
+        <li>Reproducibilidad: No mezcles shards de Kaggle y Colab en una misma campaña salvo que los sellos de entorno de cada shard sean idénticos (modelo de acelerador, CUDA, torch); por defecto, no se mezclan.</li>
+      </ul>
+      <h4 class="exp-h4">7. Qué prueba estadística reportar</h4>
       <ul>
         <li>2 modelos en validación cruzada: t-test de remuestreo corregido (Nadeau–Bengio) o 5x2cv.</li>
         <li>≥ 3 modelos: Friedman + post-hoc Nemenyi o Holm.</li>
@@ -401,7 +502,9 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
     const other = products.filter((p) => p.kind !== 'poc' && p.kind !== 'full');
     return [
       mcpActivation(v.remote_mcp),
+      colabActivation(v.remote_colab),
       remoteServices(v.remote_services),
+      team(v.remote_services && v.remote_services.team),
       help(v.remote_accounts),
       datasets(v.datasets),
       group('Prueba de concepto', 'Productos de /proposal-implementation (AGREED.md): convergencia, figuras y tablas principales.',
@@ -438,7 +541,11 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
       const cli = closest('[data-exp-cli]');
       if (cli) {
         if (typeof window.sendToCli === 'function') {
-          window.sendToCli(cli.getAttribute('data-exp-cli'), true, { kind: 'shell' });
+          if (cli.getAttribute('data-exp-cli-run') === '0') {
+            window.sendToCli(cli.getAttribute('data-exp-cli'), false, { kind: 'shell' });
+          } else {
+            window.sendToCli(cli.getAttribute('data-exp-cli'), true, { kind: 'shell' });
+          }
         }
         return;
       }
@@ -452,5 +559,5 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
   }
 
   window.refreshExperimentsPanel = refreshExperimentsPanel;
-  window.ExperimentsPanel = { render, mcpActivation, remoteServices, datasets };
+  window.ExperimentsPanel = { render, mcpActivation, colabActivation, remoteServices, team, datasets };
 })();
