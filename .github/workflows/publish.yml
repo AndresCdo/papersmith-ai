@@ -67,8 +67,8 @@ jobs:
         run: |
           python3 -m venv /tmp/probe
           /tmp/probe/bin/pip install --quiet dist/*.whl
-          /tmp/probe/bin/papersmith --version
-          /tmp/probe/bin/papersmith init /tmp/probe-ws --no-npm --no-env
+          /tmp/probe/bin/smith --version
+          /tmp/probe/bin/smith init /tmp/probe-ws --no-npm --no-env
           test -f /tmp/probe-ws/.papersmith/version
           test -d /tmp/probe-ws/skills/upgrade-project
           test -f /tmp/probe-ws/.claude/commands/upgrade-project.md

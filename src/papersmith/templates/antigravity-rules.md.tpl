@@ -19,3 +19,5 @@ Generated from `.claude/` by `papersmith` {{version}}.
 ## Available agents
 
 {{agents}}
+
+{{paper_flow}}

@@ -3,6 +3,8 @@ build/
 dist/
 *.egg-info/
 src/papersmith/_kit/
+# paper-ingestion's per-page cache (skills/paper-ingestion/scripts/pdf_pipeline.py)
+.papersmith/cache/
 
 # Local Pi runtime state
 .atl/
@@ -26,6 +28,7 @@ skills/paper-ingestion/.venv/
 .pi/skills
 .opencode/skills
 .agents/skills
+.pi/npm/
 
 # --- Contenido específico de cada usuario ---
 # Versionamos solo el scaffold de carpetas (los `.gitkeep`); cada usuario arma

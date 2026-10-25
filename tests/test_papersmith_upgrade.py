@@ -126,6 +126,54 @@ class UpgradeTests(unittest.TestCase):
         assert generated.read_text(encoding="utf-8") != "drift\n"
         assert "CLAUDE.md" in result["changed_files"]
 
+    def test_upgrade_declares_pi_web_access_once_and_keeps_the_workspace_file(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        settings = workspace / ".pi" / "settings.json"
+        settings.unlink()
+        result = upgrade_module.upgrade(workspace)
+        assert json.loads(settings.read_text()) == {"packages": ["npm:pi-web-access"]}
+        assert ".pi/settings.json" in result["changed_files"]
+        own = '{"packages": ["npm:pi-web-access", "npm:pi-btw"]}\n'
+        settings.write_text(own, encoding="utf-8")
+        result = upgrade_module.upgrade(workspace)
+        assert settings.read_text(encoding="utf-8") == own
+        assert ".pi/settings.json" not in result["changed_files"]
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["audit", str(workspace), "--check-drift"]) == 0
+
+    def test_upgrade_adds_banco_lia_and_keeps_the_workspace_mcp_servers(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        claude = workspace / ".mcp.json"
+        own = {"mcpServers": {"mine": {"command": "my-server", "args": ["--flag"]}}}
+        claude.write_text(json.dumps(own), encoding="utf-8")
+        (workspace / ".pi" / "mcp.json").unlink()
+        (workspace / ".agents" / "mcp_config.json").unlink()
+        result = upgrade_module.upgrade(workspace)
+        servers = json.loads(claude.read_text())["mcpServers"]
+        assert servers["mine"] == own["mcpServers"]["mine"]
+        assert servers["banco-lia"]["args"][-1] == "banco-lia-mcp"
+        for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
+            assert relpath in result["changed_files"], relpath
+            assert "banco-lia" in json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert "kaggle" in json.loads((workspace / relpath).read_text())["mcpServers"]
+        result = upgrade_module.upgrade(workspace)
+        for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
+            assert relpath not in result["changed_files"], relpath
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["audit", str(workspace), "--check-drift"]) == 0
+
+    def test_upgrade_leaves_a_malformed_mcp_config_untouched_and_warns(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        claude = workspace / ".mcp.json"
+        claude.write_text("{not json", encoding="utf-8")
+        result = upgrade_module.upgrade(workspace)
+        assert claude.read_text(encoding="utf-8") == "{not json"
+        assert ".mcp.json" not in result["changed_files"]
+        assert any(".mcp.json" in warning for warning in result["mcp_warnings"])
+
     def test_upgrade_tools_updates_active_tool_configuration(self) -> None:
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)

@@ -221,7 +221,10 @@ def _runtime_status(root: Path) -> dict[str, Any]:
     import os
     import sys
     node = shutil.which("node") is not None
-    micromamba = fs.is_regular_file(root / ".micromamba" / "bin" / "micromamba") or shutil.which("micromamba") is not None
+    mamba_name = "micromamba.exe" if os.name == "nt" else "micromamba"
+    mamba_local = root / ".micromamba" / "bin" / mamba_name
+    fallback_local = root / ".micromamba" / "bin" / "micromamba"
+    micromamba = fs.is_regular_file(mamba_local) or fs.is_regular_file(fallback_local) or shutil.which("micromamba") is not None
     llama = shutil.which("llama-server") is not None or os.environ.get("LLAMA_CPP_BINARY") is not None
     return {
         "node": node,

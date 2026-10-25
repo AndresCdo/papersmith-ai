@@ -37,12 +37,13 @@ import tomllib
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO / "pyproject.toml"
 WORKFLOW = REPO / ".github" / "workflows" / "publish.yml"
 
-#: Files the kit must carry into an artifact for `papersmith init` to work at
+#: Files the kit must carry into an artifact for `smith init` to work at
 #: all. `kit-manifest.json` is what `kit.resolve_and_validate` reads first, so
 #: an archive without it produces the `SOURCE_ERROR` exit 2 this file exists to
 #: prevent.
@@ -55,6 +56,29 @@ KIT_SENTINELS = (
 def pyproject() -> dict:
     with PYPROJECT.open("rb") as handle:
         return tomllib.load(handle)
+
+
+def build_is_runnable() -> bool:
+    """Check the build CLI, not `import build` (the checkout has a build/ namespace)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "build", "--help"],
+        cwd=REPO, capture_output=True, text=True)
+    return result.returncode == 0
+
+
+class BuildAvailabilityProbeTests(unittest.TestCase):
+    @mock.patch("subprocess.run")
+    def test_namespace_import_does_not_count_as_runnable_build(self, run) -> None:
+        run.return_value.returncode = 1
+        self.assertFalse(build_is_runnable())
+        run.assert_called_once_with(
+            [sys.executable, "-m", "build", "--help"],
+            cwd=REPO, capture_output=True, text=True)
+
+    @mock.patch("subprocess.run")
+    def test_runnable_build_enables_artifact_proof(self, run) -> None:
+        run.return_value.returncode = 0
+        self.assertTrue(build_is_runnable())
 
 
 class PublishingMetadataTests(unittest.TestCase):
@@ -146,12 +170,10 @@ class BuiltArtifactsCarryTheKitTests(unittest.TestCase):
                 "the generated kit is absent from this checkout; run "
                 "`python scripts/build-kit.py` first. This is a skip rather "
                 "than a failure because the kit is gitignored by design")
-        probe = subprocess.run(
-            [sys.executable, "-c", "import build"], capture_output=True)
-        if probe.returncode != 0:
+        if not build_is_runnable():
             raise unittest.SkipTest(
-                "`build` is not importable by this interpreter, so no artifact "
-                "can be produced to inspect")
+                "`python -m build` is not runnable by this interpreter, so no "
+                "artifact can be produced to inspect")
 
         cls._tmp = tempfile.mkdtemp(prefix="papersmith-dist-")
         result = subprocess.run(
@@ -180,7 +202,7 @@ class BuiltArtifactsCarryTheKitTests(unittest.TestCase):
             self.assertIn(
                 sentinel, names,
                 f"the wheel has no {sentinel}. An install from it would reach "
-                "`papersmith init` and exit 2 with a kitless install")
+                "`smith init` and exit 2 with a kitless install")
         skills = [name for name in names if name.startswith("papersmith/_kit/skills/")]
         self.assertTrue(skills, "the wheel carries no kit skills")
 

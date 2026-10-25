@@ -11,6 +11,423 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **`smith mcp kaggle activate|status|deactivate`.** Activates the official
+  Kaggle MCP server for this user: a hidden prompt (or `--token-stdin`) takes
+  a `KGAT_` token, a read-only `get_accelerator_quota` call verifies it
+  (`--no-verify` skips the call), and it is stored outside every workspace in
+  `$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token` (`0600`). The dashboard's CLI
+  assistant passes it as `KAGGLE_API_TOKEN` to the sessions it starts unless
+  that variable is already exported; a symlinked or group-readable file is
+  never used. The Experimentos tab shows the activation state and has buttons
+  that run `smith mcp kaggle activate` and `status --verify` in the CLI
+  assistant, which also offers both as quick commands.
+- **Kaggle's official MCP server in every workspace.** `smith init` and
+  `smith upgrade` register `kaggle` (https://www.kaggle.com/mcp) beside
+  `banco-lia`: streamable HTTP in `.mcp.json` and `opencode.json`, the pinned
+  `mcp-remote@0.14.3` stdio bridge in `.pi/mcp.json` and
+  `.agents/mcp_config.json`. Public tools answer without a token; account
+  tools (`save_notebook` with `enableGpu`/`machineShape`, session status,
+  outputs, accelerator quota) read a `KGAT_` token from `KAGGLE_API_TOKEN`,
+  which no file holds. Other servers in those files are kept.
+- **Significance tests chosen by experiment type.** `experimental-deliberation`
+  gains a "Choosing the significance test by experiment type" section: a table
+  mapping each design (two models on shared folds, three or more variants, one
+  fixed test set, an ordered factor, an exponential decay, repeated measures
+  per subject) to its recommended test, plus multiple-comparison corrections,
+  effect sizes and the optional Bayesian signed-rank with ROPE. Every
+  experiment now names its test, correction, effect size and confidence
+  interval, and declares convergence curves and a significance table among its
+  expected outputs. It also states that a paired Wilcoxon over n = 5 folds
+  cannot reach p < 0.05 (smallest two-sided exact p is 0.0625). The
+  `experimental-validation` agent suggests a test per experiment type, backed
+  by a source it actually searched.
+- **`experiments-reviewer` agent.** A read-only review stretch of
+  `experimental-implementation`, between instrumentation and the rehearsal:
+  code quality, optimisation (batched simulation, exact-gradient simulators,
+  data caching, mixed precision), remote GPU use (whether a job that requests
+  a GPU actually runs on CUDA, and when CPU is faster), and whether the
+  protocol's statistical tests are implemented and fit the design. It returns
+  findings and never repairs.
+- **Results layout documented.** `experimental-implementation` states where
+  measurements land so the dashboard can show them: `Results/history*`,
+  `Results/figures/`, `Results/tables/`, `Results/summary.json` and
+  `Results/significance*.json`, with the significance record's keys.
+- **Experiments tab in the command center.** A new "Experimentos" tab, placed
+  before "Secciones del Paper", reads `GET /api/experiments`: proof-of-concept
+  products (`AGREED.md`) and full-experiment products
+  (`Experimental_AGREED.md`) with convergence charts that are always shown
+  (empty state when no history exists), figures, tables, the significance
+  table, artifacts pinned in `Results/panel.json`, run status folded from each
+  product's remote ledger, and the expected reports the latest experiments
+  revision declares. A help box explains how to launch and monitor proof of
+  concept and full experiments remotely (papersmith CLI, the service's own CLI
+  and its MCP server), GPU use, optimisation, and which significance test to
+  report. `/api/artifact` now serves `.svg` as `image/svg+xml` under a
+  sandboxing Content-Security-Policy.
+
+## 0.20.0
+
+### Added
+
+- **banco-lia MCP registered for every harness.** `smith init` and
+  `smith upgrade` now register the lab's article and project bank as the
+  `banco-lia` MCP server for every declared harness (Claude Code, OpenCode, Pi,
+  Antigravity), keeping any other server already in those files. `uv` must be
+  on `PATH` to start it (see `docs/mcp.md`).
+- **TeX / compiled toggle for the dashboard's mathematics.** The "Mapa
+  Conceptual & Modelo" tab keeps each formula's LaTeX source beside its KaTeX
+  rendering; a button in the concept-map and math panel headers switches the
+  whole tab between both views and the browser remembers the choice.
+  Concept-map layers, pillars, hypotheses and proof-of-concept text now compile
+  `$…$` math, still escaped before insertion.
+
+### Fixed
+
+- **Model-tab contrast in the light theme.** The header banner follows the
+  theme, workspace spec colours are lightened or darkened to keep WCAG AA
+  contrast, and badges, hypothesis cards and secondary text no longer fall
+  below 4.5:1.
+
+## 0.19.5
+
+### Fixed
+
+- **Pi package cache is ignored by Git.** Added `.pi/npm/` to `.gitignore` and
+  to `src/papersmith/templates/gitignore.tpl` so dynamic package resolution by
+  Pi (such as `npm:pi-web-access` declared in `.pi/settings.json`) does not
+  leave untracked files in the repository or in generated workspaces.
+
+## 0.19.4
+
+### Changed
+
+- **The section contracts carry the lab's house style.** Each contract that
+  governs prose (`01`–`09`) gains a `## LIA house style` section measured on the
+  group's ten Q1 method papers of 2025–2026 (SJR 2025): the paragraph, word and
+  line ranges of the section, its citation density, its rhetorical moves and
+  the wording the group uses. The methods contract adds the notation rules —
+  bold lowercase vectors, bold uppercase matrices and tensors, declared spaces,
+  calligraphic sets and losses, upright operators, `^{\top}`, punctuated
+  equations followed by a *where* clause — and now numbers every displayed
+  equation. The title range moves to 10–13 words, and the methods and results
+  contracts add disqualifiers for notation and for unreported significance or
+  bold. The Spanish copies shown in the dashboard follow.
+
+## 0.19.3
+
+### Changed
+
+- **The gates moved into "Pipeline y Avance".** The "Compuertas (Gates)" tab
+  is gone; its panel now closes the pipeline tab, below the phases it guards,
+  and an old `#gates` link opens it there. "Telemetría y Costos" moved to the
+  last tab, after "Artefactos".
+- **The section drawer reads in Spanish.** "Inspeccionar Reglas & Artefacto"
+  in the paper-sections tab shows each section contract translated, plus the
+  section title, its status and the contract's terms. The contracts under
+  `sections/` stay in English, because the writing engine checks their quotes
+  against their own text. A translation is shown only while the workspace's
+  contract is byte-identical to the one it was made from; an edited contract
+  shows as itself.
+
+### Fixed
+
+- `smith upgrade` again rewrites the `.gitignore` managed block of workspaces
+  created before 0.19.0. That release renamed the command in the block's
+  opening marker, so upgrade read the old marker as malformed and left the
+  file alone, reporting it as drift.
+
+## 0.19.2
+
+### Added
+
+- **Opt-in initialization in an existing directory.** `smith init --import-existing`
+  stages the framework before merging it into a nonempty directory and does not
+  overwrite existing files: it keeps the directory's `README.md`, merges its
+  managed block into an existing `.gitignore`, and refuses any other collision.
+  The default still requires an empty destination. See the init section of the
+  README for rollback limits.
+- **`smith init` defaults to the current directory.** `<dir>` is optional on
+  every operating system; `smith init` alone sets up the folder it runs in, and
+  a path still installs there.
+- **Pi workspaces declare `pi-web-access`.** `init` writes `.pi/settings.json`
+  with that package, and `upgrade` adds the file to a workspace that lacks it,
+  so Pi installs the web tools its agents use once the project is trusted. An
+  existing `.pi/settings.json` is never changed.
+
+### Fixed
+
+- **The dashboard opens a Windows browser from WSL** if Linux has no browser
+  handler. `--no-browser` and ordinary Linux/macOS launches are unchanged.
+- Pi agent projections map Claude's `WebSearch` and `WebFetch` to the
+  `pi-web-access` tools `web_search` and `fetch_content`. Generated agents no
+  longer report misleading missing-tool warnings.
+- The paper-ingestion audit recognizes all eight current CLI flags.
+- WSL environment provisioning includes `python-build`, and packaging checks
+  distinguish a runnable build tool from the checkout's `build/` directory.
+
+## 0.19.1
+
+### Changed
+
+- **Phases run in the herdr session by default.** "Ejecutar" on a phase card
+  now types its slash command into the command center's herdr session when
+  herdr is installed, as RedaccionPropuestas does, instead of closing herdr and
+  opening claude/opencode/pi. Without herdr, the phase opens a new claude
+  session (or the first installed agent). The operator can still pick another
+  agent per phase.
+
+## 0.19.0
+
+### Changed
+
+- **`smith` is the canonical command.** Help, usage and error messages, the
+  MCP client snippet (`smith mcp serve`), the command center's phase actions,
+  generated workspace docs and the README now use `smith init`,
+  `smith upgrade`, `smith status` and the rest. The `papersmith` entry point
+  stays installed as a compatibility alias and reports itself as `smith`.
+
+### Added
+
+- **Page-routed, license-unrestricted paper ingestion.** The default engine is
+  now `auto`: each page is probed without a model and digital prose is read by
+  pypdfium2 in milliseconds; only display-equation, table and scanned pages go
+  to Docling through its page range (formulas as LaTeX with Granite-Docling on
+  MLX on Apple Silicon or CodeFormulaV2 on CUDA, TableFormer only on table pages,
+  RapidOCR only on scans). Every page is cached by the PDF's SHA-256 and
+  verified before reuse (`--verify-cache`). Each paper gains a `<stem>.json`
+  page map with references kept by page, and `pdf_fragment.py` / the MCP tool
+  `papersmith.ingest_fragment` return one page, section, equation or search hit
+  without the whole document. New flags `--engine` and `--no-cache`; new keys
+  `cache` and `formulas_on_cpu`.
+
+- **2D constellation and a lighter SOTA sky.** `atlas.html` opens a canvas
+  2D view of the same scene when the 3D sky cannot or should not run (no
+  WebGL, a software renderer, under 4 GB of memory or 4 cores, or under 20 fps
+  in its first seconds) and says why; a view button and `?view=2d|3d` switch
+  by hand. System names replace the overlapping title sprites and appear only
+  where they fit. The home view fits every planet in the frame, the canvas
+  keeps one pixel per CSS pixel on zoomed-out displays, orbit rings and family
+  ties are one draw call each, an idle sky is not redrawn, and either view
+  stops drawing while the page is hidden. New toolbar controls turn, tilt and
+  pause rotation. Playwright checks in `ui/e2e/atlas.spec.ts`.
+
+- **Live run tracker for pipeline phases.** "Ejecutar" opens a tracker in the
+  phase drawer and marks the card as running. It follows the run through five
+  steps: command sent, agent working (the terminal's output), the phase's
+  evidence files appearing or changing, the server's verdict, and the phases the
+  verdict unlocked. It polls every 3 s while a run is open and shows a notice
+  when a phase is verified.
+- **Evidence and prerequisites per phase.** `/api/status` lists, for each phase,
+  the files it is judged by (count and last change), whether it is unlocked, and
+  which phase blocks it. A phase is locked until the one before it passes (Fase
+  1 and the transversal Fase 11 are never locked). A locked phase can still be
+  run with an explicit override, since each skill still refuses missing input.
+- **The operator picks the agent, and one session follows the pipeline.**
+  - Each guided prompt has an agent selector (claude, opencode or pi).
+  - It proposes the agent of the session already open, else the last one chosen.
+  - It says whether the phase continues in that session or opens one.
+  - Later phases reuse the same session. A new one opens only when the operator
+    picks another agent or ticks "Nueva sesión", always after a confirmation.
+  - A phase's `papersmith` command runs inside the open agent session as
+    `!command` instead of replacing it with a shell.
+  - The chosen agent is remembered across reloads.
+- `POST /api/phase/run` answers with the phase's verdict (`status`, `verified`,
+  `evidence`).
+- **Follow a running phase from any tab.**
+  - A click on the run dock (bottom left) opens the run's tracking panel in
+    place, with the same checkpoints as the drawer. The operator stays on the tab
+    they were on.
+  - The panel opens the agent's terminal and says when the phase's session is no
+    longer open. "Abrir en Pipeline" still leads to the drawer.
+  - **"Detener proceso"** interrupts the agent's turn (Esc, or Ctrl-C in the
+    shell) after a confirmation. It keeps the session and marks the run as
+    stopped.
+- `GET /api/terminal/sessions/{id}` reports a session's agent and whether it is
+  alive, so a reloaded page can reattach to it.
+
+### Changed
+
+- **Marker is no longer the default ingestion engine nor installed by default.**
+  Its model weights are free only below USD 5M in funding or revenue; every
+  default engine now carries no copyleft and no revenue or user threshold.
+  `engine: marker` still works as an explicit opt-in after
+  `pip install marker-pdf==2.0.0`, and says why. The installer drops PyMuPDF
+  (AGPL, unused) for pypdfium2, and `--no-ingestion` keeps the fast path.
+
+- **A lighter dashboard, with the same views.**
+  - `/api/status` reuses the module constants, YAML and PDF page count it
+    parsed, until the file changes. On a real workspace a call went from
+    about 31 ms to about 10 ms, and phase evidence is still read on every call.
+  - A terminal output stream waits for the agent's output instead of waking
+    every 12 ms. Its keep-alive ping is unchanged.
+  - Closing the terminal window drops its stream only when no phase is
+    running. During a run, the tracker keeps reading the agent's activity.
+    Opening the window again reattaches the session.
+  - The 3D atlas loads the first time its tab opens, and stops drawing while
+    another tab is shown (new `atlas-command` `pause` / `resume`). Atlases
+    regenerated with "Regenerar grafo" pick this up.
+  - The browser's own PDF viewer fetches the PDF only when it is shown.
+  - The run dock updates its clock in place instead of rebuilding itself
+    every second.
+
+### Fixed
+
+- **A reload no longer kills the agent of a running phase.** While a phase run is
+  live, the page keeps the CLI session on unload and reattaches to it on load.
+- **A terminal reconnect no longer draws its output twice.** The stream replays
+  the session from its start, so the screen is cleared before the replay.
+- **Fase 11 can pass.** Verifying the audit phase runs `papersmith audit
+  --check-drift` and records the verdict in `.papersmith/audit.json`. The phase
+  passes only on a clean audit; nothing wrote that file before.
+- The artifacts list refreshes when files change, and lists `experiments/*.md`.
+- **"Ejecutar" in a phase drawer did nothing.** The drawer stops click
+  propagation, so the phase console's document listener never received the
+  click. The phase console and the run tracker now listen in the capture phase.
+- When the agent opens with a startup question, the phase drawer now says
+  which one. For Claude's folder-trust prompt it tells the operator to choose
+  "Yes, I trust this folder" in the terminal and run again. The dashboard never
+  answers that prompt itself.
+- **A refused or stalled phase run is visible.** A long idea written as one
+  run-on sentence (commas, no full stops) counted as one sentence and was refused
+  with only a small grey hint, so nothing ran and no tracker appeared. Now a long
+  text counts one sentence per 12 words, a refusal shows a red error box, and the
+  drawer scrolls to the tracker when a run starts.
+  - A floating dock (bottom-left, every tab) shows each followed run's progress
+    and opens its phase.
+  - When the agent stops writing for 20 s, the tracker and a notice say it
+    finished its turn or is waiting for an answer in the terminal.
+
+## 0.18.0
+
+### Added
+
+- **Runnable pipeline phases.** Each card of *Fases del Pipeline Metodológico
+  de Redacción* opens a console. A guided text box shows the stage's rules and
+  sends its slash command to an agent of the support terminal: for example
+  `/plausibility <idea>`, which needs at least two sentences. The console also
+  offers the phase's real `papersmith` command (run in the shell) and links to
+  the panel that owns the work (concept map, math tutor, PoC board, sections,
+  PDF preview, gates).
+  - A slash command switches the terminal from herdr or shell to claude,
+    opencode or pi.
+  - The console never answers an agent's startup question (folder trust) with
+    the command's Enter.
+- **Paper construction flow in every harness.** The eleven phases, including the
+  concept-map and mathematics discussion with `/math-tutor` and the
+  proof-of-concept and experiment stages, are written into `CLAUDE.md`,
+  `OPENCODE.md`, `.pi/APPEND_SYSTEM.md` and `.agents/AGENTS.md` from one
+  template.
+- **The archify flow draws the dashboard.** A new lane covers `/math-tutor`,
+  `papersmith ui`'s phase console, `/api/model/math` and the tutor's thread.
+
+### Changed
+
+- The dashboard opens on *Flujo Archify*; *Pipeline y Avance* follows.
+- Phase commands shown in the dashboard are commands that exist. `papersmith
+  run --stage …`, `papersmith audit --figures` and `papersmith init
+  --harness-only` never did.
+
+### Fixed
+
+- `POST /api/phase/run` routes by stage. It used to send *Fase 8* (writing) to the
+  figures check, and *Fase 10* to the audit message. *Fase 10* now compiles the
+  PDF only when `paper/main.tex` exists, and an unknown phase gets a 422.
+
+## 0.17.1
+
+### Fixed
+
+- **A new workspace inherits nothing from older projects.** The dashboard no
+  longer ships another project's specification, novelty graph, hypotheses,
+  concept map, proof-of-concept results, candidate counts, phase messages,
+  titles or an absolute flow-diagram path. The *Mapa Conceptual & Modelo* tab is
+  drawn from the workspace's own `.papersmith/model_spec.json` (and, new,
+  `.papersmith/novelty_graph.json`) or shows neutral pending states; phase
+  actions report what is on disk; the framework's flow diagram ships with the
+  dashboard. A guard test scans every shipped kit file and a fresh workspace's
+  dashboard for traces of earlier projects.
+- **Math tutor uploads and sources.** A polyglot image (a valid header followed
+  by HTML or script) is refused; a proposal revision resolving outside the
+  workspace is ignored; an invalid `model_spec.json` is not named as the math
+  panel's source.
+
+## 0.17.0
+
+### Added
+
+- **Math panel in LaTeX.** *Mapa Conceptual & Modelo → Matemática & Tutor* shows
+  the paper's own equations rendered by KaTeX 0.16.22 (vendored, offline) as
+  minimalist cards — heading, display equation, one-line *Conexión*, variables —
+  under a lema, built by `GET /api/model/math` from the latest
+  `proposals/research-concept-<slug>-rNN.md` (`$$`-fenced blocks with
+  `\tag{N}`, outside code fences) and its `.sky.json`, else
+  `.papersmith/model_spec.json`. Every equation the panel can show is compiled
+  by KaTeX in strict mode in the test suite. The old hand-typed Unicode
+  pseudo-math is gone.
+- **Idea y novedad card**: central idea, novelty, problem, contributions and the
+  key equation, beside the equations.
+- **`math-tutor` skill and agent (Socratic tutor).** Drop, paste or pick photos
+  of hand-written pages in the panel; each turn runs the agent headless with the
+  user's own `claude -p` (only `Read`, JSON schema, no MCP, local settings only,
+  stdin closed) or `pi -p`, reads the page back as LaTeX, asks one question,
+  rates understanding 0–4 with quoted evidence and ties every step to the
+  paper's novelty. Uploads and the thread live in `.papersmith/math-tutor/`;
+  routes under `/api/terminal/tutor/` behind the terminal secret. Also
+  available as `/math-tutor` in every harness.
+
+## 0.16.1
+
+### Changed
+
+- **Smith CLI assistant.** The dashboard console becomes a round button at the
+  bottom right with Smith's face (status badge, pulse) that opens a 780×520
+  floating terminal, maximizable and hidden rather than closed. **herdr** is the
+  default agent: the session focuses or creates the herdr workspace labelled
+  after the project, so the console mirrors your herdr panes; `claude`,
+  `opencode`, `pi` and a login shell remain, found also in `~/.local/bin`,
+  `~/.npm-global/bin`, Homebrew and `~/.cargo/bin`, and the choice is remembered.
+  **🖥️ Ghostty/WezTerm** opens herdr on the project in a native terminal
+  (`GET /api/terminal/tools`, `POST /api/terminal/launch-external`). The server
+  answers the capability queries full-screen TUIs send on the PTY itself,
+  keystrokes are coalesced, and the console repaints when the tab regains focus.
+  Only the herdr agent drops inherited `HERDR*` variables.
+- **LabIA UNAL branding.** The laboratory logo now ships with the dashboard and
+  appears only in the bottom-centre footer; the header keeps Smith's avatar and
+  the laboratory line. The footer shows the workspace's framework version
+  (`/api/status` → `framework_version`).
+
+## 0.16.0
+
+### Added
+
+- **Graph toolbar: "⚡ Regenerar grafo" and "🧩 Disposición de grupos".**
+  The dashboard's *Atlas* tab regenerates the SOTA atlas from
+  `sota-pool/atlas.json` through `POST /api/atlas/build` (the workspace's own
+  `check_atlas.py`, then `render_atlas.py`; a failing atlas never replaces a good
+  page), and asks the atlas frame to regroup its systems by family cluster and
+  back. The atlas page carries the same toggle; its default sky is unchanged.
+- **`smith atlas build [<dir>] [--json]`.** The same rebuild from a terminal.
+- **Cross-panel links.** Clicking a planet reports it to the dashboard, which
+  offers *Ver en PDF* (finds the node in the compiled PDF and jumps to the page)
+  and *Ver artefacto* (opens `sota-pool/atlas.json`).
+- **Live PDF preview.** pdf.js 3.11.174 now ships with the dashboard;
+  `/api/pdf` revalidates with an `ETag`, `/api/status` reports
+  `run_details.pdf_mtime`, and an open preview reloads on recompile keeping the
+  page being read (a reload that catches `main.pdf` mid-write keeps the current
+  document and retries).
+- **Support terminal ("CLI de apoyo").** A floating xterm.js console on a PTY in
+  the workspace root (shell, `claude`, `opencode`, `pi`), with quick commands and
+  *Enviar a CLI* on every phase card. Loopback only, a per-server secret set by
+  the printed login URL as an HttpOnly SameSite=Strict cookie, same-origin
+  guards, at most four live sessions; `smith ui --no-terminal` turns it off.
+- **`smith` alias and dynamic dashboard state.** `smith` is installed next to
+  `papersmith`, and the command center reads the project's model and novelty
+  data from the workspace instead of hardcoded values.
+
 ## 0.15.0
 
 ### Added

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Sequence
 
@@ -15,6 +18,10 @@ from ..generators import (
     UNSYNCHRONIZED,
     apply_generated,
     context_for_workspace,
+    merge_managed,
+    MCP_CONFIG_FILES,
+    ensure_mcp_servers,
+    seed_pi_settings,
 )
 from ..kit import resolve_and_validate_origin
 from ..render import render_package_template
@@ -153,10 +160,11 @@ def _write_workspace_seed(root: Path, *, name: str, title: str, topic: str,
     }
     _write_text(root, "papersmith.yaml", render_package_template("papersmith.yaml.tpl", context))
     _write_text(root, "README.md", render_package_template("readme.md.tpl", context))
-    # No ``.mcp.json``: success criterion #6 (tests/test_mcp_no_mcp_json.py) is
-    # that the framework never generates, reads or overwrites one. A workspace
-    # that wants the server wired asks for the snippet instead --
-    # ``papersmith mcp print-config --workspace <path>`` prints it and writes
+    # ``.mcp.json`` registers only the lab's banco-lia server (see
+    # ``generators.ensure_mcp_servers``). The papersmith server itself is never
+    # written there (success criterion #6, tests/test_mcp_no_mcp_json.py): a
+    # workspace that wants it wired asks for the snippet --
+    # ``smith mcp print-config --workspace <path>`` prints it and writes
     # nothing -- and the operator pastes it wherever their harness reads it.
     _write_text(root, "package.json", render_package_template("package.json.tpl", context))
 
@@ -184,7 +192,7 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     Fail-soft and reported in ``warnings``, exactly like ``_run_npm_install``: a
     workspace whose provisioning cannot complete is still a workspace.
 
-    **This is the step that makes ``papersmith ui`` work after init.** Without
+    **This is the step that makes ``smith ui`` work after init.** Without
     it the dashboard's backend has no interpreter that can import it: the CLI's
     own interpreter is a ``pipx`` venv with no runtime dependencies, and the
     environment ``scripts/setup_env.py`` builds is the one thing that carries
@@ -199,7 +207,7 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     report = report or progress.Reporter()
     if not script.is_file():
         return ("scripts/setup_env.py is not present, so the workspace has no "
-                "environment to run the command center; run `papersmith upgrade`")
+                "environment to run the command center; run `smith upgrade`")
     interpreter = shutil.which("python3") or sys.executable
     try:
         code, tail = progress.run_streaming(
@@ -215,12 +223,174 @@ def _run_env_install(root: Path, report: progress.Reporter | None = None) -> str
     return None
 
 
+#: Root files almost every existing repository already has. Import keeps the
+#: repository's ``README.md`` (the scaffold's is only a stub, and the workspace
+#: owns it after init anyway) and merges the managed block into its
+#: ``.gitignore`` (see ``generators.merge_managed``) instead of refusing.
+IMPORT_KEPT = frozenset({"README.md"})
+IMPORT_MERGED = frozenset({".gitignore"})
+#: Harness MCP files an existing repository may already have. Import keeps
+#: them and ``initialize`` then adds the banco-lia entry to each.
+IMPORT_MCP_KEPT = frozenset(MCP_CONFIG_FILES.values())
+
+
+def _import_staged(root: Path, staged: Path) -> None:
+    """Merge a complete scaffold without replacing any existing path.
+
+    Check the complete tree before writing; exclusive creates still guard against
+    collisions appearing between preflight and copy. Roll back only paths this
+    operation created if a copy fails (never remove a pre-existing path).
+    The root files in :data:`IMPORT_KEPT` and :data:`IMPORT_MERGED` are the
+    exception: an existing one is kept, or merged after every copy succeeded.
+    """
+    def adopted(relpath: Path, names: frozenset[str]) -> bool:
+        dest = root / relpath
+        return (len(relpath.parts) == 1 and relpath.name in names
+                and fs.is_regular_file(dest) and not dest.is_symlink())
+
+    directories = sorted((p for p in staged.rglob("*") if p.is_dir() and not p.is_symlink()),
+                         key=lambda p: (len(p.relative_to(staged).parts), str(p)))
+    entries = sorted((p for p in staged.rglob("*") if not p.is_dir() or p.is_symlink()),
+                     key=str)
+    merged = [p for p in entries if adopted(p.relative_to(staged), IMPORT_MERGED)]
+    entries = [p for p in entries if p not in merged
+               and not adopted(p.relative_to(staged), IMPORT_KEPT)
+               and not (p.relative_to(staged).as_posix() in IMPORT_MCP_KEPT
+                        and fs.is_regular_file(root / p.relative_to(staged))
+                        and not (root / p.relative_to(staged)).is_symlink())]
+    for source in merged:
+        dest = root / source.relative_to(staged)
+        if merge_managed(dest.name, source.read_text(encoding="utf-8"),
+                         dest.read_bytes()) is None:
+            raise UserError(f"import collision: {dest} has malformed papersmith markers "
+                            "or is not UTF-8")
+    for source in directories:
+        dest = root / source.relative_to(staged)
+        if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+            raise UserError(f"import collision: {dest}")
+    for source in entries:
+        dest = root / source.relative_to(staged)
+        if dest.exists() or dest.is_symlink():
+            raise UserError(f"import collision: {dest}")
+
+    # Do not address a destination child by its pathname after preflight: a
+    # swapped ancestor symlink could otherwise redirect even an exclusive open
+    # outside the workspace. Each lookup is relative to an open directory fd,
+    # and O_NOFOLLOW refuses swaps at every component.
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise UserError("safe import requires directory-fd and no-follow filesystem support")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+
+    @contextlib.contextmanager
+    def parent_fd(root_fd: int, relpath: Path):
+        with contextlib.ExitStack() as stack:
+            current = root_fd
+            for part in relpath.parts[:-1]:
+                child = os.open(part, directory_flags, dir_fd=current)
+                stack.callback(os.close, child)
+                current = child
+            yield current
+
+    def require_parent_unchanged(root_fd: int, rel: Path, fd: int) -> None:
+        with parent_fd(root_fd, rel) as current:
+            expected, actual = os.fstat(fd), os.fstat(current)
+            if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                raise UserError(f"destination parent changed during import: {root / rel.parent}")
+
+    created: list[tuple[Path, tuple[int, int], bool]] = []
+    try:
+        # If the root path itself changed while staging, refuse rather than
+        # opening an unrelated directory before anchoring the descriptor.
+        identity = root.stat()
+        with contextlib.ExitStack() as root_stack:
+            root_fd = os.open(root, directory_flags)
+            root_stack.callback(os.close, root_fd)
+            actual = os.fstat(root_fd)
+            if (actual.st_dev, actual.st_ino) != (identity.st_dev, identity.st_ino):
+                raise UserError("destination changed during import")
+            try:
+                for source in directories:
+                    rel = source.relative_to(staged)
+                    with parent_fd(root_fd, rel) as fd:
+                        try:
+                            os.mkdir(rel.name, dir_fd=fd)
+                        except FileExistsError:
+                            # Must be a real directory, never a symlink.
+                            child = os.open(rel.name, directory_flags, dir_fd=fd)
+                            os.close(child)
+                        else:
+                            stat = os.stat(rel.name, dir_fd=fd, follow_symlinks=False)
+                            created.append((rel, (stat.st_dev, stat.st_ino), True))
+                for source in entries:
+                    rel = source.relative_to(staged)
+                    with parent_fd(root_fd, rel) as fd:
+                        if source.is_symlink():
+                            os.symlink(os.readlink(source), rel.name, dir_fd=fd)
+                            stat = os.stat(rel.name, dir_fd=fd, follow_symlinks=False)
+                            created.append((rel, (stat.st_dev, stat.st_ino), False))
+                        elif source.is_file():
+                            with source.open("rb") as inp:
+                                with os.fdopen(os.open(rel.name, os.O_WRONLY | os.O_CREAT |
+                                                       os.O_EXCL | os.O_NOFOLLOW, 0o666,
+                                                       dir_fd=fd), "wb") as out:
+                                    stat = os.fstat(out.fileno())
+                                    created.append((rel, (stat.st_dev, stat.st_ino), False))
+                                    shutil.copyfileobj(inp, out)
+                        else:
+                            raise UserError(f"unsupported staged entry: {source}")
+                        require_parent_unchanged(root_fd, rel, fd)
+                for source in merged:
+                    _merge_root_file(root_fd, source)
+            except (OSError, UserError) as exc:
+                for rel, inode, is_directory in reversed(created):
+                    try:
+                        with parent_fd(root_fd, rel) as fd:
+                            stat = os.stat(rel.name, dir_fd=fd, follow_symlinks=False)
+                            if (stat.st_dev, stat.st_ino) == inode:
+                                if is_directory:
+                                    os.rmdir(rel.name, dir_fd=fd)
+                                else:
+                                    os.unlink(rel.name, dir_fd=fd)
+                    except OSError:
+                        pass  # changed parent or concurrent occupant: leave it untouched
+                raise UserError(f"import failed; newly created paths rolled back where possible: {exc}") from exc
+    except OSError as exc:
+        raise UserError(f"safe import unavailable: {exc}") from exc
+
+
+def _merge_root_file(root_fd: int, source: Path) -> None:
+    """Rewrite one root file as the merge of its bytes and ``source``.
+
+    Read through the anchored root descriptor without following a link, and
+    replace it with a sibling written exclusively, so a failure leaves the
+    repository's own file as it was.
+    """
+    name = source.name
+    with os.fdopen(os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd), "rb") as inp:
+        existing = inp.read()
+    content = merge_managed(name, source.read_text(encoding="utf-8"), existing)
+    if content is None:
+        raise UserError(f"import collision: {name} changed during import")
+    temporary = f".{name}.papersmith-import"
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                               os.O_NOFOLLOW, 0o666, dir_fd=root_fd), "w",
+                       encoding="utf-8", newline="") as out:
+            out.write(content)
+        os.replace(temporary, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary, dir_fd=root_fd)
+        raise
+
+
 def initialize(destination: str | Path, *, title: str = "Untitled Paper",
                tools: Sequence[str] = ALL_TOOLS, topic: str = "unspecified",
                remote: str = "kaggle", run_npm: bool = True,
-               run_env: bool = True,
+               run_env: bool = False,
                report: progress.Reporter | None = None,
-               allow_dirty_kit: bool = False) -> dict:
+               allow_dirty_kit: bool = False,
+               import_existing: bool = False) -> dict:
     """Create a workspace and return a machine-readable operation summary.
 
     ``report`` is where the bar, the child's log and the estimate go. It
@@ -254,7 +424,31 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
         except OSError as exc:
             raise UserError(f"destination is not readable: {root}: {exc}") from None
         if populated:
-            raise UserError(f"destination must be empty: {root}")
+            if not import_existing:
+                raise UserError(f"destination must be empty: {root} (use --import-existing "
+                                "to add papersmith to an existing folder)")
+            # Build a complete scaffold off-target before touching user content.
+            # Provisioning happens only after the collision-free merge, so a
+            # rejected import never invokes npm or the environment installer.
+            with tempfile.TemporaryDirectory(prefix="papersmith-init-") as holder:
+                staged = Path(holder) / root.name
+                result = initialize(
+                    staged, title=title, tools=tools, topic=topic, remote=remote,
+                    run_npm=False, run_env=False, report=report,
+                    allow_dirty_kit=allow_dirty_kit)
+                _import_staged(root, staged)
+            ensure_mcp_servers(root, tools, warnings=result["warnings"])
+            result["workspace"] = str(root)
+            result["name"] = root.name
+            if run_npm:
+                warning = _run_npm_install(root, report)
+                if warning:
+                    result["warnings"].append(warning)
+            if run_env:
+                warning = _run_env_install(root, report)
+                if warning:
+                    result["warnings"].append(warning)
+            return result
     else:
         root.mkdir(parents=True, exist_ok=True)
 
@@ -294,6 +488,10 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     with report.step("workspace"):
         _write_workspace_seed(root, name=name, title=title.strip(), topic=topic.strip(),
                               target=target, version=version, tools=tools)
+        if "pi" in tools:
+            seed_pi_settings(root)
+        mcp_warnings: list[str] = []
+        ensure_mcp_servers(root, tools, warnings=mcp_warnings)
         stamp = config.utc_timestamp()
         workspace_config = _default_config(name, tools, target, stamp)
         config.write_json(root / ".papersmith" / "config.json", workspace_config)
@@ -309,7 +507,7 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
     with report.step("generated"):
         context = context_for_workspace(root)
         generated = apply_generated(root, context, tools, skipped=unsynchronized)
-    warnings: list[str] = manifest.link_warnings(link_report)
+    warnings: list[str] = manifest.link_warnings(link_report) + mcp_warnings
     if run_npm:
         with report.step("npm"):
             warning = _run_npm_install(root, report)
@@ -355,7 +553,9 @@ def initialize(destination: str | Path, *, title: str = "Untitled Paper",
 
 def register(subparsers) -> None:
     parser = subparsers.add_parser("init", help="initialize a standalone paper workspace")
-    parser.add_argument("directory", metavar="<dir>")
+    parser.add_argument(
+        "directory", metavar="<dir>", nargs="?", default=".",
+        help="where to create the workspace (default: the current directory)")
     parser.add_argument("--title", default="Untitled Paper")
     parser.add_argument(
         "--tools",
@@ -364,12 +564,19 @@ def register(subparsers) -> None:
     )
     parser.add_argument("--topic", default="unspecified")
     parser.add_argument("--remote", choices=REMOTE_CHOICES, default="kaggle")
+    parser.add_argument("--import-existing", action="store_true",
+                        help=("initialize a nonempty directory without overwriting existing files: keep its "
+                              "README.md, merge papersmith's block into its .gitignore, and "
+                              "refuse any other collision"))
     parser.add_argument("--no-npm", action="store_true", help="skip the best-effort npm install")
     parser.add_argument(
+        "--with-env", action="store_true",
+        help=("provision the workspace's micromamba Python environment during init "
+              "(warning: multi-gigabyte download); by default, provisioning is deferred "
+              "until experimental runs or ingestion"))
+    parser.add_argument(
         "--no-env", action="store_true",
-        help=("skip provisioning this workspace's Python environment; the "
-              "command center needs it, so `papersmith ui` will refuse until "
-              "`python3 scripts/setup_env.py install` has run"))
+        help="skip provisioning this workspace's Python environment (default)")
     parser.add_argument(
         "--allow-dirty-kit", action="store_true",
         help=("initialize even when the kit source has uncommitted changes under its "
@@ -393,6 +600,7 @@ def run_cli(args) -> int:
         requested=bool(getattr(args, "progress", False)),
         suppressed=bool(getattr(args, "no_progress", False)),
     )
+    run_env = bool(getattr(args, "with_env", False)) and not bool(getattr(args, "no_env", False))
     result = initialize(
         args.directory,
         title=args.title,
@@ -400,9 +608,10 @@ def run_cli(args) -> int:
         topic=args.topic,
         remote=args.remote,
         run_npm=not args.no_npm,
-        run_env=not args.no_env,
+        run_env=run_env,
         report=report,
         allow_dirty_kit=args.allow_dirty_kit,
+        import_existing=args.import_existing,
     )
     report.finish()
     print(f"Initialized papersmith workspace: {result['workspace']}")
@@ -411,6 +620,10 @@ def run_cli(args) -> int:
     print("Harness wiring:")
     for line in wiring.format_summary(result["wiring"]):
         print(f"  {line}")
+    if not run_env:
+        print("\nNote: Python environment provisioning was deferred for a fast init.")
+        print("To provision the micromamba environment for experiments and ingestion:")
+        print("  smith env install  (or python3 scripts/setup_env.py install)")
     for warning in result["warnings"]:
         print(f"Warning: {warning}", file=__import__("sys").stderr)
     return 0

@@ -57,7 +57,8 @@ KIT_ENTRIES = (
 )
 
 # Paths ``upgrade`` must never overwrite or delete. ``papersmith.yaml`` and
-# ``package.json`` are seeded once at init (see ``init._write_workspace_seed``)
+# ``package.json`` are seeded once at init (see ``init._write_workspace_seed``),
+# like Pi's ``.pi/settings.json`` (see ``generators.seed_pi_settings``),
 # and then belong to the user like ``README.md`` does; the rest is research
 # state the user produces under the topology ``init`` scaffolds.
 PRESERVE_PATTERNS = (
@@ -70,6 +71,10 @@ PRESERVE_PATTERNS = (
     "papersmith.yaml",
     "package.json",
     "README.md",
+    ".pi/settings.json",
+    ".mcp.json",
+    ".pi/mcp.json",
+    ".agents/mcp_config.json",
     ".env*",
 )
 
@@ -259,7 +264,7 @@ def link_warnings(report: LinkReport) -> list[str]:
     """One operator-facing warning per failed or blocked link path."""
     warnings = [
         f"harness skills link '{relpath}' could not be created; skills are not "
-        "linked there (re-run `papersmith upgrade` once the cause is fixed)"
+        "linked there (re-run `smith upgrade` once the cause is fixed)"
         for relpath in report.failed
     ]
     warnings.extend(

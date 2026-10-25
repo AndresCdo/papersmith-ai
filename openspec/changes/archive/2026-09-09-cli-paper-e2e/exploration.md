@@ -1,6 +1,6 @@
 ## Exploration: cli-paper-e2e
 
-Full end-to-end validation — drive the `papersmith` CLI to create a paper FROM SCRATCH
+Full end-to-end validation — drive the `smith` CLI to create a paper FROM SCRATCH
 and prove each skill and subagent path works (paper-ingestion, proposal-deliberation,
 proposal-implementation, remote-execution, kaggle-accounts, skill-audit, plus the CLI
 surface itself).
@@ -11,7 +11,7 @@ user's decision). All six `skills/*/SKILL.md` read first. No implementation file
 
 ### Current State
 
-The `papersmith` CLI (`src/papersmith/cli.py`, entry `papersmith.cli:main`) registers
+The `smith` CLI (`src/papersmith/cli.py`, entry `papersmith.cli:main`) registers
 10 subcommands: `init`, `upgrade`, `status`, `ingest`, `deliberate`, `implement`, `run`
 (executor), `remote`, `target`, `audit`. Thin argparse layer — every handler resolves a
 workspace dir and forwards to either `core/` logic or a `bridges/` subprocess call:
@@ -25,10 +25,10 @@ workspace dir and forwards to either `core/` logic or a `bridges/` subprocess ca
 | `run <profile>` | dispatches local / `remote_cli.py submit` / ssh-sbatch per `compute_targets`; appends to `.papersmith/runs_ledger.jsonl` | `core/executor.py` |
 | `audit [--check-drift]` | `skills/skill-audit/scripts/audit_cli.py roster` **hardcoded to `--subject skills/skill-audit`** + generator/manifest drift | `bridges/audit.py` |
 | `init/target/status/upgrade` | workspace topology + kit copy + manifest (`core/init.py`), target listing/checks, status snapshot | `core/` directly |
-| kaggle-accounts | **No `papersmith` subcommand.** Reachable only as `python3 skills/kaggle-accounts/scripts/accounts_cli.py` (`validate/remove/list/discover/materialize`) or indirectly via `target check` (`list --json`) and the remote adapter's `workers()` subprocess | none |
+| kaggle-accounts | **No `smith` subcommand.** Reachable only as `python3 skills/kaggle-accounts/scripts/accounts_cli.py` (`validate/remove/list/discover/materialize`) or indirectly via `target check` (`list --json`) and the remote adapter's `workers()` subprocess | none |
 
 A from-scratch paper run (per `README.md` + `core/init.py`) is:
-`pipx install .` → `setup_env install` → `setup:harnesses` → `papersmith init <dir> --title
+`pipx install .` → `setup_env install` → `setup:harnesses` → `smith init <dir> --title
 --topic --remote` → `status --json` → `ingest <pdf|url>` → `deliberate --action status`
 → (`deliberate --action init`, successors, `implement …`, `remote pack/push/pull`,
 `run`, `audit --check-drift`, `target`). `init` creates `.papersmith/`,
@@ -41,7 +41,7 @@ all five (`publish`, `move-copy`, `semantic-modify`, `successor-acceptance`,
 `papersmith` binary. Python side (18 `tests/test_*.py`) covers bridges/executor/
 remote/ingest/init with subprocess doubles, `FakeAdapter`, and a fake `kaggle`
 executable — no network, no real account, no multi-command workspace journey.
-**No test today runs `papersmith init` … `audit` in one workspace.** The skill-audit
+**No test today runs `smith init` … `audit` in one workspace.** The skill-audit
 `walkthrough` move drives a documented flow against a shared box, but only for audit
 subjects — not for the CLI journey.
 
@@ -57,7 +57,7 @@ subjects — not for the CLI journey.
 - `tests/` + `openspec/config.yaml` — where the new e2e layer registers (`npm run test:all` must keep passing under `strict_tdd: true`)
 
 ### Approaches
-1. **Shell-driven journey script** — one bash script: tmp workspace, `papersmith init --no-npm`, tiny fixture PDF, offline flags, `FakeAdapter` backend; asserts exit codes + artifact existence step by step
+1. **Shell-driven journey script** — one bash script: tmp workspace, `smith init --no-npm`, tiny fixture PDF, offline flags, `FakeAdapter` backend; asserts exit codes + artifact existence step by step
    - Pros: closest to real user path; exercises the installed binary; cheap to run manually/CI smoke
    - Cons: weak assertions; outside `npm test`/`pytest` runners; flaky env deps (npm, micromamba, node) leak in
    - Effort: Low
@@ -84,7 +84,7 @@ node_modules).
 - Heavy first-run costs (Surya ~1.5 GB, `npm install` 180s, Marker 3600s timeout) — e2e must fake or fixture all three or it is not a gate anyone runs
 - Live credentials/quota: any e2e touching real Kaggle spends money — hard-require FakeAdapter/fake executable, forbid network
 - Consent + gate-authorization interplay (`submit --consent`, `gate` record, smoke vs campaign exemptions) is the most likely journey stall point
-- Known CLI gaps the journey will expose rather than fix: no `papersmith` subcommand for kaggle-accounts; `audit` hardcoded to the skill-audit subject (general skill audit unreachable via CLI)
+- Known CLI gaps the journey will expose rather than fix: no `smith` subcommand for kaggle-accounts; `audit` hardcoded to the skill-audit subject (general skill audit unreachable via CLI)
 - `init` npm path vs `--no-npm` path diverge; journey must pin one and document the other as manual
 - Review budget: keep the new suite under ~800 lines or split per-leg follow-ups
 

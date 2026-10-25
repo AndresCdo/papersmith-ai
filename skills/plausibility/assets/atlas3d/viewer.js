@@ -2,17 +2,36 @@
 //
 // Built into ../atlas3d.bundle.js by scripts/build-atlas-viewer.mjs and
 // inlined verbatim into every sota-pool/atlas.html, so the page opens with no
-// network. The viewer never lays anything out: every position, orbital frame,
-// edge and family tie arrives precomputed in the scene (see README.md), which
-// keeps "same atlas, same sky" a property of the Python renderer alone.
+// network. The default layout ('sky') is never computed here: every position,
+// orbital frame, edge and family tie arrives precomputed in the scene (see
+// README.md), which keeps "same atlas, same sky" a property of the Python
+// renderer alone. The one exception is opt-in: setLayout('groups') rigidly
+// translates whole systems so each family packs into its own cluster on a flat
+// grid — deterministic (sorted family labels, then system ids), never
+// persisted, and setLayout('sky') restores the precomputed positions exactly.
 //
 // Public surface: window.AtlasViewer.mount(container, scene, hooks) -> handle
 //   hooks.onSelect(key)        click on a planet ("<system>.<planet>")
 //   hooks.onHover(key | null)  pointer enters / leaves a planet
 //   handle.setDim(keep | null) dim every planet not in the Set `keep`
 //   handle.zoom(factor)        dolly toward the orbit target (>1 = closer)
-//   handle.reset()             restore the framed home view
+//   handle.reset()             restore the current layout's home view, undim
 //   handle.focus(key)          fly the orbit target to one planet
+//   handle.setLayout(mode)     animate to 'sky' (default) or 'groups'; returns the mode
+//   handle.layout()            the current mode, 'sky' or 'groups'
+//   handle.rotating()          whether auto-rotation is on
+//   handle.rotate(on?)         set or toggle auto-rotation; returns the new state
+//   handle.spin(angle)         turn the camera around the vertical axis (radians)
+//   handle.tilt(angle)         raise or lower the camera around the target (radians)
+//   handle.project(keys)       screen positions [{x, y, z, on} | null] in CSS pixels,
+//                              so the page can place its own non-overlapping names
+//   handle.refresh()           draw one frame after an outside change
+//   handle.pause() / resume()  stop and restart drawing (hidden tab, hidden page)
+//   handle.dispose()           release the WebGL context, geometries and textures
+//
+// System names are not drawn as sprites: every one renders at once and they
+// overlap, so the page draws its own names where they fit. A planet may carry
+// a short `tip`, shown on hover in place of "label [slot]".
 
 import {
   AdditiveBlending,
@@ -24,7 +43,6 @@ import {
   InstancedMesh,
   LineBasicMaterial,
   LineDashedMaterial,
-  LineLoop,
   LineSegments,
   MeshBasicMaterial,
   Object3D,
@@ -50,8 +68,15 @@ const PLANET_RADIUS = 10;
 // field of glowing points from afar and resolves into spheres up close.
 const SUN_HALO_PX = 30;
 const PLANET_HALO_PX = 15;
-const LABEL_SCREEN_HEIGHT = 0.026;
 const CURVE_STEPS = 18;
+// Group layout: systems of one family pack on a small golden spiral, families
+// sit on a flat grid far enough apart that clusters never touch.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const GROUP_MEMBER_STEP = 720;
+const SYSTEM_EXTENT = 300;
+const GROUP_GAP = 1600;
+const FAMILY_LABEL_HEIGHT = 0.034;
+const LAYOUT_SECONDS = 0.8;
 
 function glowTexture() {
   const size = 128;
@@ -116,6 +141,50 @@ function starfield(center, radius) {
   }));
 }
 
+// The group a system belongs to: its first family planet's non-blank label,
+// the same rule as _family_of in render_atlas.py; none gathers under ''.
+function familyOf(system) {
+  for (const planet of system.planets || []) {
+    if (planet && planet.slot === 'family' && typeof planet.label === 'string' && planet.label.trim()) {
+      return planet.label.trim();
+    }
+  }
+  return '';
+}
+
+// Where each system's center goes in the group layout, and each family's
+// cluster center: a pure function of sorted family labels and system ids.
+function groupLayout(systems, frames) {
+  const byFamily = new Map();
+  const ids = systems.map((s) => s.id).filter((id) => frames[id]).sort();
+  const bySystem = new Map(systems.map((s) => [s.id, s]));
+  for (const id of ids) {
+    const family = familyOf(bySystem.get(id));
+    if (!byFamily.has(family)) byFamily.set(family, []);
+    byFamily.get(family).push(id);
+  }
+  const families = [...byFamily.keys()].sort();
+  const largest = Math.max(1, ...families.map((f) => byFamily.get(f).length));
+  const spacing = 2 * (GROUP_MEMBER_STEP * Math.sqrt(largest - 1) + SYSTEM_EXTENT) + GROUP_GAP;
+  const cols = Math.ceil(Math.sqrt(families.length));
+  const rows = Math.ceil(families.length / cols);
+  const centers = new Map();
+  const clusters = [];
+  families.forEach((family, f) => {
+    const col = f % cols;
+    const row = Math.floor(f / cols);
+    const fc = new Vector3((col - (cols - 1) / 2) * spacing, ((rows - 1) / 2 - row) * spacing, 0);
+    const members = byFamily.get(family);
+    members.forEach((id, m) => {
+      const r = GROUP_MEMBER_STEP * Math.sqrt(m);
+      const a = m * GOLDEN_ANGLE;
+      centers.set(id, new Vector3(fc.x + r * Math.cos(a), fc.y + r * Math.sin(a), 0));
+    });
+    clusters.push({ family, center: fc, radius: GROUP_MEMBER_STEP * Math.sqrt(members.length - 1) + SYSTEM_EXTENT });
+  });
+  return { centers, clusters };
+}
+
 function curvePoints(a, b, lift) {
   const mid = a.clone().add(b).multiplyScalar(0.5);
   mid.z += lift;
@@ -140,8 +209,12 @@ function mount(container, data, hooks = {}) {
     container.textContent = 'This atlas needs WebGL, which this browser could not start.';
     return null;
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // At least one canvas pixel per CSS pixel: a zoomed-out browser (devicePixelRatio < 1)
+  // would otherwise shrink points and lines to a faint fraction of their size.
+  renderer.setPixelRatio(Math.min(Math.max(window.devicePixelRatio || 1, 1), 2));
   renderer.setClearColor(BACKGROUND, 1);
+  // Set by anything that changes the picture; the loop renders only then.
+  let dirty = true;
   container.style.position = container.style.position || 'relative';
   container.appendChild(renderer.domElement);
   renderer.domElement.style.display = 'block';
@@ -160,14 +233,28 @@ function mount(container, data, hooks = {}) {
   }
   const keys = Object.keys(data.positions).sort();
   const index = new Map(keys.map((key, i) => [key, i]));
-  const points = keys.map((key) => new Vector3(...data.positions[key]));
+  // `points` are the drawn positions; `basePoints` keep the precomputed sky so
+  // the group layout can always return to it exactly.
+  const basePoints = keys.map((key) => new Vector3(...data.positions[key]));
+  const points = basePoints.map((p) => p.clone());
+  const owner = keys.map((key) => planets.get(key)?.system.id);
 
   // Frame: the bounding sphere around the bounding-box center of every planet.
-  const low = new Vector3(Infinity, Infinity, Infinity);
-  const high = new Vector3(-Infinity, -Infinity, -Infinity);
-  points.forEach((p) => { low.min(p); high.max(p); });
-  const center = points.length ? low.clone().add(high).multiplyScalar(0.5) : new Vector3();
-  const radius = Math.max(400, ...points.map((p) => p.distanceTo(center)));
+  function bounds(list) {
+    const low = new Vector3(Infinity, Infinity, Infinity);
+    const high = new Vector3(-Infinity, -Infinity, -Infinity);
+    list.forEach((p) => { low.min(p); high.max(p); });
+    const mid = list.length ? low.clone().add(high).multiplyScalar(0.5) : new Vector3();
+    return { center: mid, radius: Math.max(400, ...list.map((p) => p.distanceTo(mid))) };
+  }
+  const { center, radius } = bounds(points);
+  // The home view aims at the centroid of the planets: the bounding-box center
+  // sits off the mass when a few systems lie far from the rest.
+  function centroidOf(list) {
+    const sum = new Vector3();
+    list.forEach((p) => sum.add(p));
+    return sum.multiplyScalar(1 / Math.max(1, list.length));
+  }
   scene.fog = new FogExp2(BACKGROUND, 0.35 / radius);
   scene.add(starfield(center, radius));
 
@@ -209,27 +296,34 @@ function mount(container, data, hooks = {}) {
   }
   const halos = [halo((i) => isSun[i], SUN_HALO_PX), halo((i) => !isSun[i], PLANET_HALO_PX)];
 
-  // Orbit rings in each system's own tilted plane.
-  const ringMaterial = new LineBasicMaterial({ color: 0x2a3350, transparent: true, opacity: 0.55 });
+  // Orbit rings in each system's own tilted plane, all in one LineSegments
+  // geometry: one draw call for every ring of every system, instead of one per
+  // ring, which on a 200-system sky was most of each frame's cost. `ringBase`
+  // keeps the precomputed vertices and `ringSpans` each system's range, so the
+  // group layout moves a system's rings by offsetting its range alone.
+  const ringSpans = [];
+  const ringList = [];
   for (const [sid, frame] of Object.entries(data.frames)) {
     const system = data.atlas.systems.find((s) => s.id === sid);
     const orbits = [...new Set(system.planets.map((p) => p.orbit))].filter((o) => o > 0).sort();
     const c = new Vector3(...frame.center);
     const u = new Vector3(...frame.u);
     const v = new Vector3(...frame.v);
+    const start = ringList.length / 3;
     for (const orbit of orbits) {
       const r = data.orbit_radii[String(orbit)] || 250;
-      const ring = [];
-      for (let k = 0; k < 96; k++) {
+      const at = (k) => {
         const a = (k / 96) * Math.PI * 2;
-        ring.push(c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(v, r * Math.sin(a)));
-      }
-      scene.add(new LineLoop(new BufferGeometry().setFromPoints(ring), ringMaterial));
+        return c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(v, r * Math.sin(a));
+      };
+      for (let k = 0; k < 96; k++) ringList.push(...at(k).toArray(), ...at(k + 1).toArray());
     }
-    const label = labelSprite(String(system.title || sid).slice(0, 64), LABEL_SCREEN_HEIGHT);
-    label.position.copy(c);
-    scene.add(label);
+    ringSpans.push({ sid, start, end: ringList.length / 3 });
   }
+  const ringBase = new Float32Array(ringList);
+  const ringGeometry = new BufferGeometry();
+  ringGeometry.setAttribute('position', new BufferAttribute(ringBase.slice(), 3));
+  scene.add(new LineSegments(ringGeometry, new LineBasicMaterial({ color: 0x2a3350, transparent: true, opacity: 0.55 })));
 
   // Edges: intra-system straight, inter-system arcs lifted out of the plane.
   const edgeVerts = [];
@@ -248,7 +342,7 @@ function mount(container, data, hooks = {}) {
       edgeVerts.push(...path[k].toArray(), ...path[k + 1].toArray());
       edgeColors.push(...color.toArray(), ...color.toArray());
     }
-    edgeSpans.push({ from: edge.from, to: edge.to, start, end: edgeColors.length / 3, color, inter: edge.inter });
+    edgeSpans.push({ from: edge.from, to: edge.to, i, j, start, end: edgeColors.length / 3, color, inter: edge.inter });
   }
   const edgeGeometry = new BufferGeometry();
   edgeGeometry.setAttribute('position', new BufferAttribute(new Float32Array(edgeVerts), 3));
@@ -257,31 +351,83 @@ function mount(container, data, hooks = {}) {
     vertexColors: true, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false,
   })));
 
-  // Family ties: dashed arcs chaining planets that share a family name.
+  // Family ties: dashed arcs chaining planets that share a family name, all
+  // in one LineSegments geometry (one draw call), `CURVE_STEPS` segments each.
+  const ties = [];
   for (const tie of data.ties) {
     const i = index.get(tie.from);
     const j = index.get(tie.to);
-    if (i === undefined || j === undefined) continue;
-    const path = curvePoints(points[i], points[j], points[i].distanceTo(points[j]) * 0.35);
-    const segments = [];
-    for (let k = 0; k < path.length - 1; k++) segments.push(path[k], path[k + 1]);
-    const line = new LineSegments(new BufferGeometry().setFromPoints(segments), new LineDashedMaterial({
-      color: 0x9b7ede, dashSize: 40, gapSize: 28, transparent: true, opacity: 0.6, depthWrite: false,
-    }));
-    line.computeLineDistances();
-    scene.add(line);
+    if (i !== undefined && j !== undefined) ties.push({ i, j });
   }
+  const tieGeometry = new BufferGeometry();
+  tieGeometry.setAttribute('position', new BufferAttribute(new Float32Array(ties.length * CURVE_STEPS * 6), 3));
+  const tieLine = new LineSegments(tieGeometry, new LineDashedMaterial({
+    color: 0x9b7ede, dashSize: 40, gapSize: 28, transparent: true, opacity: 0.6, depthWrite: false,
+  }));
+  scene.add(tieLine);
+  function placeTies() {
+    const attr = tieGeometry.getAttribute('position');
+    let k = 0;
+    for (const { i, j } of ties) {
+      const path = curvePoints(points[i], points[j], points[i].distanceTo(points[j]) * 0.35);
+      for (let s = 0; s < path.length - 1; s++) {
+        attr.setXYZ(k++, path[s].x, path[s].y, path[s].z);
+        attr.setXYZ(k++, path[s + 1].x, path[s + 1].y, path[s + 1].z);
+      }
+    }
+    attr.needsUpdate = true;
+    tieLine.computeLineDistances();
+    tieGeometry.computeBoundingSphere();
+  }
+  placeTies();
 
   const FOV = 50;
   const camera = new PerspectiveCamera(FOV, 1, radius / 500, radius * 40);
   camera.up.set(0, 0, 1);
-  // The sky is flatter than its bounding sphere, so frame a little inside
-  // the sphere-fit distance; the full sphere would leave most of the view empty.
-  const distance = (radius / Math.sin((FOV / 2) * Math.PI / 180)) * 0.8;
-  const home = {
-    position: center.clone().add(new Vector3(0, -0.85, 0.53).setLength(distance)),
-    target: center.clone(),
-  };
+  // Fit the view to the planets themselves, not to a bounding sphere: seen from
+  // above at an angle, the near side of a flat sky projects larger than the far
+  // side, so a sphere fit either crops the bottom or leaves the top empty. The
+  // camera keeps its viewing direction; the distance is the least that keeps
+  // every planet inside both the vertical and the (aspect-dependent) horizontal
+  // field of view, and the target moves to center the projected extent.
+  const VIEW_DIRECTION = new Vector3(0, -0.85, 0.53).normalize();
+  const FIT_MARGIN = 0.92;
+  function homeOf(list) {
+    const aspect = (container.clientWidth || 800) / (container.clientHeight || 600);
+    const tanV = Math.tan((FOV / 2) * Math.PI / 180) * FIT_MARGIN;
+    const tanH = tanV * aspect;
+    const forward = VIEW_DIRECTION.clone().negate();
+    const right = new Vector3().crossVectors(forward, new Vector3(0, 0, 1)).normalize();
+    const up = new Vector3().crossVectors(right, forward);
+    const target = list.length ? centroidOf(list) : new Vector3();
+    const q = new Vector3();
+    let distance = 1;
+    for (let pass = 0; pass < 3; pass++) {
+      distance = 1;
+      list.forEach((p) => {
+        q.copy(p).sub(target);
+        const back = q.dot(VIEW_DIRECTION);
+        distance = Math.max(distance, back + Math.abs(q.dot(right)) / tanH, back + Math.abs(q.dot(up)) / tanV);
+      });
+      if (pass === 2) break;
+      // Center the projected extent: shift the target by the midpoint of the
+      // screen-space bounds, measured at the target's depth.
+      let lowX = Infinity, highX = -Infinity, lowY = Infinity, highY = -Infinity;
+      list.forEach((p) => {
+        q.copy(p).sub(target);
+        const depth = distance - q.dot(VIEW_DIRECTION);
+        const x = q.dot(right) / (depth * tanH);
+        const y = q.dot(up) / (depth * tanV);
+        lowX = Math.min(lowX, x); highX = Math.max(highX, x);
+        lowY = Math.min(lowY, y); highY = Math.max(highY, y);
+      });
+      target.addScaledVector(right, ((lowX + highX) / 2) * distance * tanH);
+      target.addScaledVector(up, ((lowY + highY) / 2) * distance * tanV);
+    }
+    return { position: target.clone().addScaledVector(VIEW_DIRECTION, distance), target };
+  }
+  const skyHome = homeOf(points);
+  let home = skyHome;
   camera.position.copy(home.position);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(home.target);
@@ -300,7 +446,8 @@ function mount(container, data, hooks = {}) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
-  new ResizeObserver(resize).observe(container);
+  const resizer = new ResizeObserver(() => { resize(); dirty = true; });
+  resizer.observe(container);
   resize();
 
   // Dimming recolors instances, halos and edge vertices in place.
@@ -325,6 +472,7 @@ function mount(container, data, hooks = {}) {
       for (let k = span.start; k < span.end; k++) colors.setXYZ(k, c.r, c.g, c.b);
     }
     colors.needsUpdate = true;
+    dirty = true;
   }
 
   // Screen-space picking: the nearest planet within a few pixels.
@@ -355,7 +503,7 @@ function mount(container, data, hooks = {}) {
     renderer.domElement.style.cursor = key ? 'pointer' : 'grab';
     if (hit) {
       const entry = planets.get(key);
-      tooltip.textContent = `${entry.planet.label} [${entry.planet.slot}]`;
+      tooltip.textContent = entry.planet.tip || `${entry.planet.label} [${entry.planet.slot}]`;
       tooltip.style.left = `${hit.sx}px`;
       tooltip.style.top = `${hit.sy}px`;
       tooltip.style.display = 'block';
@@ -390,26 +538,221 @@ function mount(container, data, hooks = {}) {
     if (hit) focus(hit.key);
   });
 
-  function animate() {
+  // Group layout: one translation per system, animated from wherever the
+  // systems are now to the chosen layout, then the camera reframes it.
+  const layoutPlan = groupLayout(data.atlas.systems, data.frames);
+  const groupOffsets = new Map();
+  for (const [sid, frame] of Object.entries(data.frames)) {
+    const target = layoutPlan.centers.get(sid);
+    groupOffsets.set(sid, target ? target.clone().sub(new Vector3(...frame.center)) : new Vector3());
+  }
+  const familyLabels = layoutPlan.clusters.map(({ family, center: fc, radius: fr }) => {
+    const sprite = labelSprite(String(family || '(no family)').slice(0, 64), FAMILY_LABEL_HEIGHT);
+    sprite.position.set(fc.x, fc.y, fr * 0.8);
+    sprite.material.opacity = 1;
+    sprite.visible = false;
+    scene.add(sprite);
+    return sprite;
+  });
+  const offsets = new Map([...groupOffsets.keys()].map((sid) => [sid, new Vector3()]));
+  let mode = 'sky';
+  let transition = null;
+  const zero = new Vector3();
+
+  function offsetsFor(which) {
+    return new Map([...offsets.keys()].map((sid) => [sid, which === 'groups' ? groupOffsets.get(sid).clone() : new Vector3()]));
+  }
+
+  // Move every drawn thing that depends on planet positions.
+  function place() {
+    points.forEach((p, i) => p.copy(basePoints[i]).add(offsets.get(owner[i]) || zero));
+    keys.forEach((key, i) => {
+      dummy.position.copy(points[i]);
+      dummy.scale.setScalar(isSun[i] ? SUN_RADIUS : PLANET_RADIUS);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    for (const { cloud, chosen } of halos) {
+      const attr = cloud.geometry.getAttribute('position');
+      chosen.forEach((i, j) => attr.setXYZ(j, points[i].x, points[i].y, points[i].z));
+      attr.needsUpdate = true;
+      cloud.geometry.computeBoundingSphere();
+    }
+    const verts = edgeGeometry.getAttribute('position');
+    for (const span of edgeSpans) {
+      const a = points[span.i];
+      const b = points[span.j];
+      const path = span.inter ? curvePoints(a, b, a.distanceTo(b) * 0.25) : [a, b];
+      let k = span.start;
+      for (let s = 0; s < path.length - 1; s++) {
+        verts.setXYZ(k++, path[s].x, path[s].y, path[s].z);
+        verts.setXYZ(k++, path[s + 1].x, path[s + 1].y, path[s + 1].z);
+      }
+    }
+    verts.needsUpdate = true;
+    edgeGeometry.computeBoundingSphere();
+    placeTies();
+    const rings = ringGeometry.getAttribute('position');
+    for (const { sid, start, end } of ringSpans) {
+      const o = offsets.get(sid) || zero;
+      for (let k = start; k < end; k++) {
+        rings.setXYZ(k, ringBase[k * 3] + o.x, ringBase[k * 3 + 1] + o.y, ringBase[k * 3 + 2] + o.z);
+      }
+    }
+    rings.needsUpdate = true;
+    ringGeometry.computeBoundingSphere();
+    dirty = true;
+  }
+
+  function frameLayout() {
+    const fit = bounds(points);
+    home = mode === 'sky' ? skyHome : homeOf(points);
+    camera.far = Math.max(radius, fit.radius) * 40;
+    camera.updateProjectionMatrix();
+    controls.autoRotate = false;
+    flight = { target: home.target.clone(), position: home.position.clone(), t: 0 };
+  }
+
+  function setLayout(next) {
+    if (next !== 'sky' && next !== 'groups') return mode;
+    if (next === mode) return mode;
+    mode = next;
+    const from = new Map([...offsets].map(([sid, o]) => [sid, o.clone()]));
+    transition = { from, to: offsetsFor(mode), start: performance.now() };
+    familyLabels.forEach((sprite) => { sprite.visible = false; });
+    return mode;
+  }
+
+  function stepLayout(now) {
+    if (!transition) return;
+    const t = Math.min(1, (now - transition.start) / (LAYOUT_SECONDS * 1000));
+    const e = t * t * (3 - 2 * t);
+    for (const [sid, o] of offsets) o.lerpVectors(transition.from.get(sid), transition.to.get(sid), e);
+    if (t >= 1) {
+      // Land exactly: 'sky' restores the precomputed positions bit for bit.
+      for (const [sid, o] of offsets) o.copy(transition.to.get(sid));
+      transition = null;
+    }
+    place();
+    if (!transition) {
+      familyLabels.forEach((sprite) => { sprite.visible = mode === 'groups'; });
+      frameLayout();
+    }
+  }
+
+  // The dashboard pauses the loop while the atlas tab is not shown: nothing
+  // would be seen, so nothing is drawn until it resumes. While shown, a frame
+  // is only drawn when something changed or the camera moved by about a tenth
+  // of a pixel: OrbitControls' own threshold is far finer than a pixel on a sky
+  // thousands of units wide, so its damping would keep a still view redrawing
+  // for seconds. An idle sky costs one cheap controls.update() per frame.
+  let paused = false;
+  let looping = false;
+  let disposed = false;
+  const SUBPIXEL = 1e-4; // of the camera distance; one pixel is about 1e-3 at this FOV
+  const drawnPosition = new Vector3();
+  const drawnTarget = new Vector3();
+  function cameraMoved() {
+    const step = SUBPIXEL * camera.position.distanceTo(controls.target);
+    return camera.position.distanceTo(drawnPosition) > step || controls.target.distanceTo(drawnTarget) > step;
+  }
+
+  function animate(now) {
+    if (paused || disposed) {
+      looping = false;
+      return;
+    }
+    looping = true;
+    stepLayout(now === undefined ? performance.now() : now);
     if (flight) {
       flight.t = Math.min(1, flight.t + 0.06);
       controls.target.lerp(flight.target, flight.t);
       camera.position.lerp(flight.position, flight.t);
       if (flight.t >= 1) flight = null;
+      dirty = true;
     }
     controls.update();
-    renderer.render(scene, camera);
+    if (dirty || cameraMoved()) {
+      dirty = false;
+      drawnPosition.copy(camera.position);
+      drawnTarget.copy(controls.target);
+      renderer.render(scene, camera);
+    }
     requestAnimationFrame(animate);
   }
   animate();
 
+  // Orbit the camera around the target by `angle` about `axis` (through the target).
+  function orbit(axis, angle) {
+    controls.autoRotate = false;
+    const offset = camera.position.clone().sub(controls.target).applyAxisAngle(axis, angle);
+    camera.position.copy(controls.target).add(offset);
+    dirty = true;
+  }
+
   return {
+    pause() { paused = true; },
+    resume() {
+      if (disposed) return;
+      paused = false;
+      dirty = true;
+      if (looping) return;
+      looping = true; // claimed now, so a second resume cannot start a second loop
+      requestAnimationFrame(animate);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      resizer.disconnect();
+      controls.dispose();
+      scene.traverse((object) => {
+        if (object.geometry) object.geometry.dispose();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.forEach((material) => {
+          if (!material) return;
+          if (material.map) material.map.dispose();
+          material.dispose();
+        });
+      });
+      renderer.dispose();
+      renderer.forceContextLoss();
+      renderer.domElement.remove();
+      tooltip.remove();
+    },
+    rotating() { return controls.autoRotate; },
+    rotate(on) {
+      controls.autoRotate = on === undefined ? !controls.autoRotate : !!on;
+      dirty = true;
+      return controls.autoRotate;
+    },
+    spin(angle) { orbit(new Vector3(0, 0, 1), angle); },
+    tilt(angle) {
+      const offset = camera.position.clone().sub(controls.target);
+      orbit(new Vector3().crossVectors(offset, new Vector3(0, 0, 1)).normalize(), angle);
+    },
+    project(list) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const v = new Vector3();
+      return list.map((key) => {
+        const i = index.get(key);
+        if (i === undefined) return null;
+        v.copy(points[i]).project(camera);
+        return {
+          x: (v.x + 1) / 2 * rect.width, y: (1 - v.y) / 2 * rect.height,
+          z: v.z, on: v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1,
+        };
+      });
+    },
+    refresh() { dirty = true; },
     setDim: paint,
     focus,
     zoom(factor) {
       controls.autoRotate = false;
       const offset = camera.position.clone().sub(controls.target).multiplyScalar(1 / factor);
       camera.position.copy(controls.target).add(offset);
+      dirty = true;
     },
     reset() {
       flight = null;
@@ -417,6 +760,8 @@ function mount(container, data, hooks = {}) {
       camera.position.copy(home.position);
       paint(null);
     },
+    setLayout,
+    layout() { return mode; },
   };
 }
 

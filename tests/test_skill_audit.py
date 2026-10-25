@@ -8981,8 +8981,9 @@ class NewlyCoveredSubjectRosterTests(unittest.TestCase):
     #: so a new verb that reached the CLI and not this number would be the
     #: drift this table exists to report, not a stale expectation to relax.
     _CASES = (
-        # 4 -> 5: `--force-ocr` (0.14.0), measured from the usage line.
-        ("paper-ingestion", 5),
+        # Eight public flags, including filing, engine, and cache controls,
+        # measured from argparse's current usage line.
+        ("paper-ingestion", 8),
         # 9 -> 10: the adoption operation (0.14.0), the shared host's own
         # widening, measured from its refusal.
         ("experimental-deliberation", 10),
@@ -9007,6 +9008,13 @@ class NewlyCoveredSubjectRosterTests(unittest.TestCase):
                     payload["code"], [],
                     "an empty roster is an inability to look wearing a "
                     "comparison's shape")
+                if name == "paper-ingestion":
+                    self.assertEqual(
+                        {member.split()[0] for member in payload["code"]},
+                        {"--engine", "--file", "--force-ocr", "--into", "--list",
+                         "--mode", "--no-cache", "--verify-cache"},
+                        "the usage-line probe must return the real flags, not "
+                        "argparse's closing bracket")
                 self.assertEqual(
                     len(payload["code"]), expected_count,
                     f"{name}'s own refusal named a different set today: "

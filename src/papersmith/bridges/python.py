@@ -21,7 +21,10 @@ def interpreter_for(workspace: Path, *, prefer_micromamba: bool = False) -> list
     environment when it exists. Pure-stdlib skill commands can use the host
     interpreter, which keeps status/audit usable before environment setup.
     """
-    mamba = workspace / ".micromamba" / "bin" / "micromamba"
+    mamba_name = "micromamba.exe" if os.name == "nt" else "micromamba"
+    mamba = workspace / ".micromamba" / "bin" / mamba_name
+    if not fs.is_regular_file(mamba) and os.name == "nt":
+        mamba = workspace / ".micromamba" / "bin" / "micromamba"
     env_dir = workspace / ".micromamba" / "envs" / "papersmith"
     if prefer_micromamba and fs.is_regular_file(mamba) and fs.is_dir(env_dir):
         return [str(mamba), "run", "-n", "papersmith", "python"]
