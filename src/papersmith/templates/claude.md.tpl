@@ -22,5 +22,7 @@ their instructions manually.
 Every top-level skill under `skills/` is also generated as a slash command in
 `.claude/commands/<name>.md`, so it can be invoked directly. Each command body
 loads that skill's `SKILL.md` and passes your text through as `$ARGUMENTS`. The
-directory is a framework artifact: `papersmith audit --check-drift` reports drift
-and `papersmith upgrade` restores it, so do not edit it by hand.
+directory is a framework artifact: `smith audit --check-drift` reports drift
+and `smith upgrade` restores it, so do not edit it by hand.
+
+{{paper_flow}}

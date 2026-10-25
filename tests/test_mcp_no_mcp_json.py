@@ -1,4 +1,4 @@
-"""Success criterion #6: no `.mcp.json` is generated, read, or overwritten."""
+"""Success criterion #6: the MCP server never generates, reads, or overwrites `.mcp.json`."""
 
 from __future__ import annotations
 
@@ -30,10 +30,14 @@ def test_the_repo_discovery_scaffold_is_never_rewritten(workspace: Path) -> None
     assert scaffold.read_bytes() == before
 
 
-def test_no_mcp_json_is_created_in_the_workspace(workspace: Path) -> None:
-    assert not (workspace / ".mcp.json").exists()
+def test_the_mcp_server_never_rewrites_the_workspace_mcp_json(workspace: Path) -> None:
+    # `init` registers the lab's banco-lia server there; the papersmith MCP
+    # server itself never writes it.
+    config = workspace / ".mcp.json"
+    before = config.read_bytes()
     call_many(workspace, [tool_call("papersmith.workspace_status")])
-    assert not (workspace / ".mcp.json").exists()
+    assert config.read_bytes() == before
+    assert "papersmith" not in json.loads(before)["mcpServers"]
 
 
 def test_print_config_prints_a_snippet_and_writes_nothing(workspace: Path) -> None:
@@ -42,6 +46,6 @@ def test_print_config_prints_a_snippet_and_writes_nothing(workspace: Path) -> No
     assert completed.returncode == 0
     snippet = json.loads(completed.stdout)
     server = snippet["mcpServers"]["papersmith"]
-    assert server["command"] == "papersmith"
+    assert server["command"] == "smith"
     assert server["args"][:3] == ["mcp", "serve", "--workspace"]
     assert sorted(path.name for path in workspace.iterdir()) == before

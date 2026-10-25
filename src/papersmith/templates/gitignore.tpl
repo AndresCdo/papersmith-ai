@@ -7,6 +7,7 @@ __pycache__/
 .scratch/
 .env*
 .papersmith/runs_ledger.jsonl
+.papersmith/cache/
 skills/paper-ingestion/.venv/
 kaggle-inbox/*
 !kaggle-inbox/.gitkeep
@@ -18,6 +19,7 @@ kaggle-inbox/*
 .opencode/skills
 .pi/skills
 .agents/skills
+.pi/npm/
 
 # Research content: the folder travels, its contents stay home. Every entry
 # here mirrors this framework's own root .gitignore — a workspace is meant to

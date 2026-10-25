@@ -58,7 +58,7 @@ jobs:
         # provision THAT environment, not a `.venv` no script in this
         # repository creates. `.venv` is linked to it because the skill-audit
         # self-guarded-facts probe runs `<repo>/.venv/bin/python` directly, and
-        # `--no-ingestion` skips only `PIP_PACKAGES` (`marker-pdf`), which the
+        # `--no-ingestion` skips only `PIP_PACKAGES` (`docling`, `mlx-vlm`), which the
         # gate's own derivation declares skippable.
         run: |
           python3 scripts/setup_env.py install --no-ingestion
