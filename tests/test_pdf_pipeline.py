@@ -386,9 +386,22 @@ class RoutedEngineTests(_Tmp):
         self.assertEqual(heavy.calls, [(2, 3, False, False)])
         self.assertEqual([p["engine"] for p in sidecar["pages"]], ["pdfium", "docling", "docling"])
 
+    def test_auto_names_every_page_docling_left_out_of_a_run(self) -> None:
+        text, sidecar = self.render(self.engine(heavy=_StubHeavy(drop=frozenset({2, 3}))),
+                                    self.pdf(TEXT_PAGE, MATH_PAGE, MATH_PAGE))
+        self.assertEqual([p["engine"] for p in sidecar["pages"]], ["pdfium", "pdfium", "pdfium"])
+        for row in sidecar["pages"][1:]:
+            self.assertIn("Docling did not convert this page", row["reason"])
+        self.assertIn("Docling did not convert pages 2, 3", self.stderr)
+
     def test_engine_docling_fails_a_paper_whose_page_docling_left_out(self) -> None:
+        pdf = self.pdf(TEXT_PAGE, TEXT_PAGE)
         with self.assertRaisesRegex(RuntimeError, "Docling did not convert page 2"):
-            self.render(self.engine("docling", _StubHeavy(drop=frozenset({2}))), self.pdf(TEXT_PAGE, TEXT_PAGE))
+            self.render(self.engine("docling", _StubHeavy(drop=frozenset({2}))), pdf)
+        # Page 1 was cached before page 2 failed, but a run is only reused whole.
+        heavy = _StubHeavy()
+        self.render(self.engine("docling", heavy), pdf)
+        self.assertEqual(heavy.calls, [(1, 2, False, False)])
 
     def test_engine_docling_without_docling_is_an_environment_error(self) -> None:
         with self.assertRaises(extract_pdf.EngineError):
