@@ -255,8 +255,10 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
       <p class="exp-intro">El CLI directo no escribe el ledger: el panel no verá esas corridas.</p>
       <h4 class="exp-h4">4. MCP</h4>
       <ul>
-        <li>Kaggle publica un servidor MCP remoto oficial en <code>https://www.kaggle.com/mcp</code>, útil para explorar datasets, notebooks y competencias.</li>
-        <li>El push de kernels con GPU vía MCP no está verificado; existen servidores comunitarios.</li>
+        <li>papersmith registra el servidor MCP oficial de Kaggle (<code>https://www.kaggle.com/mcp</code>) como <code>kaggle</code> en <code>.mcp.json</code>, <code>opencode.json</code>, <code>.pi/mcp.json</code> y <code>.agents/mcp_config.json</code> al hacer <code>smith init</code> o <code>smith upgrade</code>.</li>
+        <li>Las herramientas públicas (<code>search_datasets</code>, <code>search_notebooks</code>) responden sin token. Las de cuenta piden un token <code>KGAT_…</code> (Kaggle → Settings → API): <code>export KAGGLE_API_TOKEN=KGAT_…</code> antes de abrir el agente; nunca lo escribas en un archivo del proyecto.</li>
+        <li>Lanzar con GPU: <code>save_notebook</code> con <code>enableGpuNullable: true</code> y <code>machineShapeNullable: "NvidiaTeslaT4"</code>; monitorear con <code>get_notebook_session_status</code>, <code>list_notebook_session_output</code> y <code>download_notebook_output</code>; cuota semanal con <code>get_accelerator_quota</code>; cancelar con <code>cancel_notebook_session</code>.</li>
+        <li>Úsalo para pruebas de concepto rápidas y para monitorear; solo el operador autoriza un lanzamiento.</li>
         <li>Para lanzar, prefiere la ruta CLI de papersmith: registra el ledger (<code>.remote-execution/ledger.jsonl</code>) que este panel lee.</li>
       </ul>
       <h4 class="exp-h4">5. Optimización</h4>

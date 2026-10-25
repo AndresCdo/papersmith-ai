@@ -15,6 +15,14 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **Kaggle's official MCP server in every workspace.** `smith init` and
+  `smith upgrade` register `kaggle` (https://www.kaggle.com/mcp) beside
+  `banco-lia`: streamable HTTP in `.mcp.json` and `opencode.json`, the pinned
+  `mcp-remote@0.14.3` stdio bridge in `.pi/mcp.json` and
+  `.agents/mcp_config.json`. Public tools answer without a token; account
+  tools (`save_notebook` with `enableGpu`/`machineShape`, session status,
+  outputs, accelerator quota) read a `KGAT_` token from `KAGGLE_API_TOKEN`,
+  which no file holds. Other servers in those files are kept.
 - **Significance tests chosen by experiment type.** `experimental-deliberation`
   gains a "Choosing the significance test by experiment type" section: a table
   mapping each design (two models on shared folds, three or more variants, one
