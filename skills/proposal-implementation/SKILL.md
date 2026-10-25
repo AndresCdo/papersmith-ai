@@ -128,7 +128,7 @@ nothing in it as on one mid-campaign.
 
 ## What this skill delegates, and to whom
 
-Two stretches of this flow are mechanical from end to end — they carry out
+Three stretches of this flow are mechanical from end to end — they carry out
 decisions already taken and take none of their own — and each runs in an agent
 of its own rather than in the conversation. What moves is EXECUTION, never
 doctrine: every rule stays here, and each agent's first instruction is to load
@@ -142,6 +142,7 @@ take it, which is the failure this shape exists to prevent.
 | --- | --- | --- | --- | --- |
 | Build | this skill delegates to the `implementation-build` agent | the object-to-module map is approved | the operator decides what to do with the findings | `verify` — `__implementation__` carries `revision` and `premises`, which is what `materialize --stage objects` refuses without |
 | Walk | this skill delegates to the `implementation-walk` agent | each step's placement is decided | the launch the operator must authorize | `verify` — `undeclaredPlacement` is empty, so every step says where it runs |
+| Replicate | this skill delegates to the `paper-replicator` agent | code was authorized, the repository is standing, and the referenced comparison or baseline paper is ingested under `guidance/` | the operator decides whether the adopted or replicated method is faithful enough to serve | `guidance/` holds the paper's Markdown with its equations as LaTeX; the agent searches for published code itself and records the search |
 
 **The last column is what stops a wasted delegation.** Each agent also refuses
 from inside when it finds itself before its own start — that is the backstop,
@@ -152,15 +153,47 @@ tell "it could not start" from "it started and failed".
 **On a harness with no Task-tool delegation** (no sub-agent mechanism is
 documented today for pi, OpenCode, or Antigravity — see the workspace's own
 `.pi/APPEND_SYSTEM.md`, `OPENCODE.md` and `.agents/AGENTS.md`):
-run whichever stretch, Build or Walk, in-process, as one step, in the same
+run whichever stretch, Build, Walk or Replicate, in-process, as one step, in the same
 order, holding to the same measure-before-delegating gate before starting.
 The tool boundary each agent would have enforced differs by row —
-`implementation-build`'s grant (`Read, Write, Edit, Bash, Glob, Grep`)
-versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
+`implementation-build`'s grant (`Read, Write, Edit, Bash, Glob, Grep`),
+`paper-replicator`'s (the same plus `WebSearch, WebFetch` for its code search) versus `implementation-walk`'s (`Read, Bash, Glob, Grep`, with no
 `Write`/`Edit`) — and either becomes the orchestrator's own discipline to
 hold for whichever stretch is running, not a structural guarantee: treat
 any action that would have needed a scoped-out tool as a stop, not a
 workaround.
+
+### Bringing in a comparison method: published code first, replication second
+
+Every method the proposal compares against or builds on goes through the
+Replicate row above, and the agent's first act is a recorded search for the
+paper's published code. When code exists and its license allows reuse, the
+agent adopts it pinned to a commit and audits it: each equation and stated
+hyperparameter is matched to the line that implements it (`match`,
+`deviation`, `unspecified`), the repository's own tests run, and the same
+invariant tests and toy-set smoke run as a replication follow. Only when no
+usable code exists does it reimplement the method from the paper, because every
+choice the paper leaves unstated becomes a choice somebody made here.
+
+For a replication, ingest first. The agent reads the paper as `paper-ingestion` leaves it under
+`guidance/` (equations as LaTeX), plus the two or three cited papers the method
+depends on when they are ingested too, and refuses on a bare PDF. It then plans
+(modules, data shapes, configuration), analyses each equation into a function
+with its shapes and assumptions, writes the code into the target's existing
+layout, and verifies it with invariant tests (shapes, gradients, known cases)
+and a short smoke run on the proof of concept's toy set before any GPU run.
+
+Its product is code plus `REPLICATION.md`: the code search and the route
+taken, then a correspondence table where every hyperparameter and architecture
+choice cites the paper's section or equation or is marked `unspecified` with the
+default chosen and why, and, for adopted code, what the code does and its
+verdict. Read the `unspecified`
+rows before trusting the replication: they are where it can differ from the
+paper without anything failing. The agent reports no number it did not produce
+and launches nothing remote.
+
+It runs as a subagent of the active session (Claude Code, OpenCode or Pi) on
+that session's own model: no API key, no external LLM service.
 
 ### `remote-execution` is driven, not delegated to
 
@@ -197,7 +230,8 @@ been delegated is one whose ends somebody had to name.
 
 Each stretch this skill delegates is defined in full by its own agent file:
 `.claude/agents/implementation-build.md`,
-`.claude/agents/implementation-walk.md`. When an agent cannot be spawned — the
+`.claude/agents/implementation-walk.md`,
+`.claude/agents/paper-replicator.md`. When an agent cannot be spawned — the
 harness has no sub-agent mechanism, the agent is not registered in this
 session, or the spawn itself fails — perform the stretch inline: read that
 agent's definition file and follow it as written, from the beginning it states
@@ -658,6 +692,30 @@ exactly what stops a launcher from being able to claim it implements anything.
 | `search` reports `incomplete` | A value is chosen by outcome and the search does not say enough about itself to be an experiment: report before quoting anything it chose |
 | `distribution` reports `incomplete` | A run is split and does not say enough about the split to still be one run: report before merging anything |
 | Target outside `implementations/`, or dirty tree | Refuse and report the guard |
+
+## Estimating the processing time before the pilot and before the full run
+
+Report the processing-time estimate to the operator before asking for a
+pilot, and again before asking for a launch of the full run. It comes from
+`remote-parallelism`'s `estimate` verb
+(`skills/remote-parallelism/SKILL.md`, **Estimate before you scale**), read
+over the timing probe's record.
+
+- **The timing record.** A short timing probe — one epoch of one fold per
+  arm, on the target's own interpreter, with the device recorded — writes
+  `Results/timing.json` in the product folder `<Name>/`. `Results/` is
+  declared among the step's `produces` roots, so the record is committed with
+  the step's product like any other output. `scales` is copied from the
+  approved protocol (the experiments revision, once one exists) and the
+  declared pilot; nothing guesses it.
+- **The estimate.** `estimate --timing <Name>/Results/timing.json --record
+  <Name>` gives each stage (`poc`, `full`) a range per host, from the one
+  formula that verb defines. A remote GPU host reads `unmeasured` until a
+  measured rehearsal on that host adds its own timing; local timings never
+  stand in for it.
+- **What it is.** A measurement-derived range (±20%, single-probe
+  extrapolation), never a promise, and never authorization: the pilot and the
+  launch stay the operator's to approve after reading it.
 
 ## Where to start: the repository is the memory
 

@@ -22,7 +22,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PY="$ROOT/.venv/bin/python"
+# The repository's own environments first: the micromamba env `smith env`
+# provisions, then a plain venv, and only then whatever python is on PATH.
+PY="$ROOT/.micromamba/envs/papersmith/bin/python"
+if [[ ! -x "$PY" ]]; then
+  PY="$ROOT/.venv/bin/python"
+fi
 if [[ ! -x "$PY" ]]; then
   PY="$(command -v python3 || command -v python)"
 fi

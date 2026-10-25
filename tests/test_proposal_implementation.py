@@ -9213,6 +9213,32 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                   "service is the subject of both, not a loan from any research "
                   "project",
     },
+    "datasets/SKILL.md": {
+        "kaggle": "this skill publishes datasets to that one hosted service, so "
+                  "its doctrine names the official client's exact command lines "
+                  "(`datasets create`/`version`), the token convention `smith mcp "
+                  "kaggle activate` writes and the notebook mount path; the "
+                  "service is the subject, not a loan from any research project",
+    },
+    "datasets/scripts/hosts/kaggle.py": {
+        "kaggle": "the skill's one host module for that service, the same seam "
+                  "as `remote-execution/scripts/adapters/kaggle.py`: it names the "
+                  "service's MCP URL, client binary and mount path so that no "
+                  "other file of the skill has to",
+    },
+    "_core/command_center/remote_services.py": {
+        "kaggle": "it probes that one hosted service's official MCP, CLI, "
+                  "token and the accounts skill for the Experimentos table; "
+                  "the service is the module's subject, not a loan from any "
+                  "research project",
+    },
+    "remote-parallelism/SKILL.md": {
+        "kaggle": "the team rule names the services a campaign may run on and "
+                  "requires every account to be validated through the "
+                  "`kaggle-accounts` skill, whose directory name carries the "
+                  "service; naming it references a shipped skill and a service "
+                  "value, not a research project",
+    },
     "_core/command_center/server.py": {
         "kaggle": "one detail line of the experiments phase naming the same "
                   "`kaggle-accounts` skill the phase panel offers",

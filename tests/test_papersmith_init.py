@@ -668,6 +668,24 @@ class InitTests(unittest.TestCase):
             "headers": {"Authorization": "Bearer {env:KAGGLE_API_TOKEN}"}, "enabled": True}
         assert "banco-lia" in opencode["mcp"]
 
+    def test_init_registers_the_colab_mcp_for_every_declared_harness(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        args = ["git+https://github.com/googlecolab/colab-mcp@b9ab3899e0f1fa493390b1fd6d54aa2e464ecdf1"]
+        claude = json.loads((workspace / ".mcp.json").read_text())
+        assert claude["mcpServers"]["colab"] == {
+            "type": "stdio", "command": "uvx", "args": args, "timeout": 30000}
+        assert {"banco-lia", "kaggle"} <= set(claude["mcpServers"])
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json"):
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert servers["colab"] == {"command": "uvx", "args": args}, relpath
+            assert {"banco-lia", "kaggle"} <= set(servers), relpath
+        opencode = json.loads((workspace / "opencode.json").read_text())
+        assert opencode["mcp"]["colab"] == {
+            "type": "local", "command": ["uvx", *args], "enabled": True}
+        assert {"banco-lia", "kaggle"} <= set(opencode["mcp"])
+
     def test_import_keeps_the_repository_mcp_servers_and_adds_banco_lia(self) -> None:
         workspace = self.new_tmp() / "repo"
         workspace.mkdir()

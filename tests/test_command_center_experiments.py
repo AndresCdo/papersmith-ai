@@ -227,6 +227,66 @@ class ViewTests(unittest.TestCase):
         self.assertIn("remote_accounts", view)
 
 
+REGISTRY = [
+    {"slug": "toy-eeg", "role": "toy", "title": "Toy eeg set (toy-eeg)",
+     "source": {"kind": "synthetic", "url": "", "retrieved": "2026-10-24"},
+     "license": {"source_name": "generated", "decision": "allowed", "host_license": "CC0-1.0"},
+     "files": ["datasets/toy-eeg/toy-eeg.csv"], "qc": {"status": "pass", "report": "datasets/toy-eeg/qc.json"},
+     "preparation": {"manifest": "datasets/toy-eeg/PREPARATION.md", "version": 2},
+     "remote": {"ref": "someone/toy-eeg", "visibility": "private", "version": 1}},
+    {"slug": "bci-iv", "role": "full", "title": "<script>alert(1)</script>",
+     "source": {"kind": "external", "url": "https://example.org", "retrieved": "2026-10-24"},
+     "license": {"source_name": "CC BY-NC 4.0", "decision": "refused", "host_license": "CC-BY-NC-4.0"},
+     "files": [], "qc": None, "preparation": None, "remote": None},
+]
+
+
+class DatasetsViewTests(unittest.TestCase):
+    def setUp(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        self.root = Path(holder.name).resolve()
+
+    def test_registry_summary_is_read(self) -> None:
+        _write(self.root / "datasets" / "registry.json", json.dumps(REGISTRY))
+        _write(self.root / "datasets" / "search-2026-10-24.json", "{}")
+        view = experiments_view.get_experiments_view(self.root)
+        datasets = view["datasets"]
+        self.assertEqual(datasets["registry"], "datasets/registry.json")
+        self.assertEqual(datasets["searches"], ["datasets/search-2026-10-24.json"])
+        items = {item["slug"]: item for item in datasets["items"]}
+        self.assertEqual(list(items), ["bci-iv", "toy-eeg"])
+        toy = items["toy-eeg"]
+        self.assertEqual(toy, {"slug": "toy-eeg", "role": "toy", "title": "Toy eeg set (toy-eeg)",
+                               "license": "allowed", "host_license": "CC0-1.0", "qc": "pass",
+                               "prepared": True, "preparation_version": 2,
+                               "remote_ref": "someone/toy-eeg", "visibility": "private",
+                               "remote_version": 1})
+        self.assertIsNone(items["bci-iv"]["qc"])
+        self.assertIsNone(items["bci-iv"]["remote_ref"])
+
+    def test_absent_or_malformed_registry_never_raises(self) -> None:
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual(view["datasets"]["items"], [])
+        self.assertIsNone(view["datasets"]["registry"])
+        _write(self.root / "datasets" / "registry.json", "{not json")
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual(view["datasets"]["items"], [])
+        self.assertTrue(any("registry.json" in w for w in view["warnings"]))
+        _write(self.root / "datasets" / "registry.json", json.dumps([{"no": "slug"}, "junk", REGISTRY[0]]))
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual([item["slug"] for item in view["datasets"]["items"]], ["toy-eeg"])
+
+    def test_a_symlinked_registry_escaping_the_workspace_is_not_read(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        secret = _write(Path(outside.name) / "registry.json", json.dumps(REGISTRY))
+        (self.root / "datasets").mkdir()
+        os.symlink(secret, self.root / "datasets" / "registry.json")
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual(view["datasets"]["items"], [])
+
+
 class RouteTests(unittest.TestCase):
     def test_route_returns_the_view_and_artifact_serves_svg_and_csv(self) -> None:
         ws = Workspace(self)
@@ -249,12 +309,123 @@ class PageTests(unittest.TestCase):
         self.assertLess(PAGE.index('id="pane-experiments"'), PAGE.index('id="pane-sections"'))
 
     def test_the_script_is_loaded_and_the_tab_refreshes_it(self) -> None:
-        self.assertIn('<script src="./experiments-panel.js?v=0.20.0"></script>', PAGE)
+        self.assertIn('<script src="./experiments-panel.js?v=', PAGE)
         start = PAGE.index("function navigateTab(tabId)")
         body = PAGE[start:PAGE.index("function filterModelView")]
         self.assertIn("tabId === 'experiments'", body)
         self.assertIn("window.refreshExperimentsPanel?.()", body)
         self.assertIn("'experiments'", PAGE[PAGE.index("// Hash routing on load"):])
+
+
+def _hpo_summary(study: str, **over) -> dict:
+    arm, _, fold = study.partition("-fold")
+    summary = {
+        "schema": 1, "study": study, "arm": arm, "fold": int(fold) if fold else None,
+        "objective": {"metric": "val_balanced_accuracy", "direction": "maximize"},
+        "sampler": {"name": "TPESampler", "seed": 42}, "pruner": "MedianPruner",
+        "nTrials": 40, "complete": 31, "pruned": 8, "failed": 1, "bestValue": 0.8125,
+        "bestParams": {"lr": 0.001, "layers": 3},
+        "space": [{"name": "lr", "kind": "float", "low": 1e-4, "high": 1e-1, "log": True}],
+        "importance": {"evaluator": "fanova", "seed": 7, "values": {"lr": 0.72, "layers": 0.28}},
+        "importanceCheck": {"evaluator": "ped-anova", "values": {"lr": 0.6, "layers": 0.4}},
+        "contourParams": ["lr", "layers"],
+        "figures": {"contour": "contour.png", "importance": "importance.png", "history": "history.png"},
+        "optunaVersion": "5.0.0", "generatedAt": "2026-10-25T00:00:00Z",
+    }
+    summary.update(over)
+    return summary
+
+
+class HpoViewTests(unittest.TestCase):
+    """``Results/hpo/<study>/summary.json`` (schema 1) becomes ``product["hpo"]``."""
+
+    def setUp(self) -> None:
+        self.ws = Workspace(self)
+        self.full = self.ws.root / "implementations" / "repo" / "FullModel"
+        self.hpo = self.full / "Results" / "hpo"
+        study = self.hpo / "hybrid-fold1"
+        _write(study / "summary.json", json.dumps(_hpo_summary("hybrid-fold1")))
+        for name in ("contour.png", "importance.png", "history.png"):
+            _write(study / name, "png")
+        _write(self.hpo / "linear-fold1" / "summary.json", json.dumps(_hpo_summary(
+            "linear-fold1", complete=1, pruned=0, failed=0, bestValue=0.5,
+            figures={"contour": None, "importance": None, "history": "history.png"},
+            notes=["contour: fewer than two complete trials"])))
+        _write(self.hpo / "linear-fold1" / "history.png", "png")
+        _write(self.hpo / "broken-fold1" / "summary.json", "{not json")
+        _write(self.hpo / "old-fold1" / "summary.json", json.dumps(_hpo_summary("old-fold1", schema=2)))
+        # A summary whose study folder links outside the workspace is never read.
+        outside = self.ws.outside / "esc-fold1"
+        _write(outside / "summary.json", json.dumps(_hpo_summary("esc-fold1")))
+        os.symlink(self.ws.outside / "esc-fold1" / "summary.json", self.hpo / "esc-summary-link.json")
+        _write(self.hpo / "leaky-fold1" / "summary.json", json.dumps(_hpo_summary(
+            "leaky-fold1", figures={"contour": "../../../../../../../escape.png", "importance": "/etc/x.png",
+                                     "history": None})))
+        os.symlink(outside / "summary.json", self.hpo / "leaky-fold1" / "linked.json")
+        (self.hpo / "linked-fold1").mkdir()
+        os.symlink(outside / "summary.json", self.hpo / "linked-fold1" / "summary.json")
+        self.view = experiments_view.get_experiments_view(self.ws.root)
+        self.product = next(p for p in self.view["products"] if p["name"] == "FullModel")
+        self.studies = {h["study"]: h for h in self.product["hpo"]}
+
+    def test_summaries_are_read_with_workspace_relative_figures(self) -> None:
+        entry = self.studies["hybrid-fold1"]
+        base = "implementations/repo/FullModel/Results/hpo/hybrid-fold1"
+        self.assertEqual(entry["figures"], {"contour": f"{base}/contour.png",
+                                            "importance": f"{base}/importance.png",
+                                            "history": f"{base}/history.png"})
+        self.assertEqual((entry["arm"], entry["fold"]), ("hybrid", 1))
+        self.assertEqual((entry["nTrials"], entry["complete"], entry["pruned"], entry["failed"]),
+                         (40, 31, 8, 1))
+        self.assertEqual(entry["bestValue"], 0.8125)
+        self.assertEqual(entry["bestParams"], {"lr": 0.001, "layers": 3})
+        self.assertEqual(entry["objective"], {"metric": "val_balanced_accuracy", "direction": "maximize"})
+        self.assertEqual(entry["importance"], {"evaluator": "fanova", "values": {"lr": 0.72, "layers": 0.28}})
+        self.assertEqual(entry["importanceCheck"]["evaluator"], "ped-anova")
+        self.assertEqual(entry["contourParams"], ["lr", "layers"])
+        self.assertEqual(entry["file"], f"{base}/summary.json")
+        self.assertEqual(entry["notes"], [])
+
+    def test_hpo_figures_are_not_repeated_in_the_generic_lists(self) -> None:
+        payload = json.dumps(self.product["figures"]) + json.dumps(self.product["tables"]) \
+            + json.dumps(self.product["convergence"])
+        self.assertNotIn("Results/hpo", payload)
+
+    def test_a_null_figure_keeps_its_notes(self) -> None:
+        entry = self.studies["linear-fold1"]
+        self.assertIsNone(entry["figures"]["contour"])
+        self.assertIsNone(entry["figures"]["importance"])
+        self.assertTrue(entry["figures"]["history"].endswith("hpo/linear-fold1/history.png"))
+        self.assertEqual(entry["notes"], ["contour: fewer than two complete trials"])
+
+    def test_malformed_or_other_schema_summaries_become_warnings(self) -> None:
+        self.assertNotIn("broken-fold1", self.studies)
+        self.assertNotIn("old-fold1", self.studies)
+        text = "\n".join(self.product["warnings"])
+        self.assertIn("broken-fold1/summary.json: malformed JSON", text)
+        self.assertIn("old-fold1/summary.json: not a schema-1 hyperparameter summary", text)
+
+    def test_links_escaping_the_workspace_are_ignored(self) -> None:
+        self.assertNotIn("esc-fold1", self.studies)
+        self.assertNotIn("linked-fold1", self.studies)
+        leaky = self.studies["leaky-fold1"]
+        self.assertEqual(leaky["figures"], {"contour": None, "importance": None, "history": None})
+        payload = json.dumps(self.view)
+        self.assertNotIn(str(self.ws.outside), payload)
+        self.assertNotIn("escape.png", payload)
+
+    def test_the_number_of_studies_is_capped(self) -> None:
+        for k in range(experiments_view.MAX_HPO_STUDIES + 3):
+            _write(self.hpo / f"arm{k:03d}-fold1" / "summary.json",
+                   json.dumps(_hpo_summary(f"arm{k:03d}-fold1")))
+        view = experiments_view.get_experiments_view(self.ws.root)
+        product = next(p for p in view["products"] if p["name"] == "FullModel")
+        self.assertEqual(len(product["hpo"]), experiments_view.MAX_HPO_STUDIES)
+        self.assertIn(f"capped at {experiments_view.MAX_HPO_STUDIES}", "\n".join(product["warnings"]))
+
+    def test_a_product_without_a_search_has_an_empty_list(self) -> None:
+        poc = next(p for p in self.view["products"] if p["name"] == "PocModel")
+        self.assertEqual(poc["hpo"], [])
 
 
 @unittest.skipUnless(shutil.which("node"), "node is required to run the panel renderer")
@@ -286,6 +457,57 @@ class RenderTests(unittest.TestCase):
         self.assertIn("wilcoxon", out)
         self.assertIn("pendiente", out.lower())
         self.assertNotIn("<img src=x", out)
+
+    def test_renders_the_datasets_section_with_badges_and_escapes(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        _write(Path(holder.name) / "datasets" / "registry.json", json.dumps(REGISTRY))
+        view = experiments_view.get_experiments_view(holder.name)
+        out = self.render(view)
+        self.assertIn("Datasets (toy y completos)", out)
+        self.assertIn("toy-eeg", out)
+        self.assertIn("someone/toy-eeg", out)
+        self.assertIn("privado", out)
+        self.assertIn("badge--ok", out)
+        self.assertIn("rechazada", out)
+        self.assertNotIn("<script>alert(1)</script>", out)
+        self.assertIn("&lt;script&gt;", out)
+
+    def test_datasets_empty_state_names_the_verbs(self) -> None:
+        out = self.render({"protocol": None, "products": [], "warnings": [], "remote_accounts": {},
+                           "datasets": {"items": [], "registry": None, "searches": []}})
+        self.assertIn("Datasets (toy y completos)", out)
+        self.assertIn("/datasets synth", out)
+        self.assertIn("/datasets search", out)
+
+    def test_renders_the_hyperparameter_search_section_and_escapes(self) -> None:
+        ws = Workspace(self)
+        study = ws.root / "implementations" / "repo" / "FullModel" / "Results" / "hpo" / "hybrid-fold1"
+        _write(study / "summary.json", json.dumps(_hpo_summary(
+            "hybrid-fold1", bestParams={"<b>lr</b>": "<script>alert(1)</script>"},
+            figures={"contour": None, "importance": "importance.png", "history": "history.png"},
+            notes=["contour: <i>one parameter</i>"])))
+        for name in ("importance.png", "history.png"):
+            _write(study / name, "png")
+        out = self.render(experiments_view.get_experiments_view(ws.root))
+        self.assertIn("Búsqueda de hiperparámetros (Optuna)", out)
+        self.assertEqual(out.count("Búsqueda de hiperparámetros (Optuna)</h4>"), 1)
+        self.assertIn("hybrid-fold1", out)
+        self.assertIn("31 / 8", out)
+        self.assertIn("val_balanced_accuracy", out)
+        self.assertIn("maximizar", out)
+        self.assertIn("fANOVA", out)
+        self.assertIn("exp-hpo-bar", out)
+        self.assertIn("hpo%2Fhybrid-fold1%2Fimportance.png", out)
+        self.assertIn("hpo%2Fhybrid-fold1%2Fhistory.png", out)
+        self.assertIn("contour: &lt;i&gt;one parameter&lt;/i&gt;", out)
+        self.assertNotIn("<script>alert(1)</script>", out)
+        self.assertNotIn("<b>lr</b>", out)
+        self.assertIn("/hyperparameter-search plan|report|status", out)
+
+    def test_the_search_section_is_absent_without_studies(self) -> None:
+        out = self.render(experiments_view.get_experiments_view(Workspace(self).root))
+        self.assertNotIn("Búsqueda de hiperparámetros (Optuna)</h4>", out)
 
     def test_empty_view_names_what_produces_the_charts(self) -> None:
         out = self.render({"protocol": None, "products": [], "warnings": [], "remote_accounts": {}})

@@ -14,6 +14,7 @@ Branch: feat/experiments-panel · Delivery: ask-on-risk · Runners: `npm run tes
 
 - S8 (Kaggle MCP): "primero revisa el mcp de kaggle, con cual podemos hacer pruebas, para que quede parte del proyecto paper smith y se instale al instalar paper smith y al iniciar un proyecto". Decision: the official remote server https://www.kaggle.com/mcp, registered by init/upgrade for every harness; token from `KAGGLE_API_TOKEN`.
 - S9 (activation from the dashboard): "aesgurate que en el panel de experimentos del tablero, queden las instrucciones de como activar kaggle por mcp y que se pueda hacer dicha activacion con el asistente cli smith que aprece en el tablero". Decision: `smith mcp kaggle activate|status|deactivate`, token stored per user outside workspaces (0600), injected by the dashboard into CLI-assistant sessions; panel box with buttons that run the commands in the assistant.
+- S10 (environment-aware): "queden actualizables segun el usuario que este trabajahdo, el entorno windows sobre wsl o mac, o linux, y que no quedne estaticas, deben actualizarse segun el entorno, revisa si vale la pane verificar todo esto al dar init o al instalar smith con pip". Decision: detect system/shell/user live; token at ~/.kaggle/access_token (official client); offline summary at init/upgrade; pip has no post-install hook.
 
 Assumption: the panel classifies a product folder that holds `Experimental_AGREED.md` as full experiments and one that holds `AGREED.md` as proof of concept.
 
@@ -26,6 +27,7 @@ Assumption: the panel classifies a product folder that holds `Experimental_AGREE
 
 - T5 [S8] Kaggle MCP registration (generators.py, opencode.json.tpl, tests, README, panel help, CHANGELOG) — route: inline — done
 - T6 [S9] Kaggle MCP activation (src/papersmith/core/kaggle_mcp.py, mcp/cli.py, terminal.py, experiments_view.py, experiments-panel.js, tests, README, CHANGELOG) — route: inline; branch feat/kaggle-mcp-activation — RED import error → GREEN 30 passed
+- T7 [S10] environment-aware activation — route: inline; branch feat/kaggle-mcp-environment — RED 15 failed → GREEN 40 passed
 
 ## Log
 
@@ -36,3 +38,5 @@ Assumption: the panel classifies a product folder that holds `Experimental_AGREE
 - L5 (2026-10-24, user verbatim): "primero revisa el mcp de kaggle, con cual podemos hacer pruebas, para que quede parte del proyecto paper smith y se instale al instalar paper smith y al iniciar un proyecto, luego comit, mergea y push a papersmith con los cambios, actualizar el proyecto QQMLEEG co los cambios, reinicia el tabler y redacta v02 para discutirlos con experimental deliberation"
 - L6 Evidence: official MCP answers initialize as `Kaggle.Web` with 76 tools; `save_notebook` takes `enableGpuNullable` and `machineShapeNullable`; `search_datasets` works unauthenticated (found `danizo/eeg-dataset-for-adhd`), `get_accelerator_quota` returns `Unauthenticated` without a token; `mcp-remote@0.14.3` bridge verified end to end. RED 2 failed → GREEN 74 passed.
 - L7 (2026-10-24, user verbatim): "sostenemos los 5 folds agrupados, sigue con la deliberación, y aesgurate que en el panel de experimentos del tablero, queden las instrucciones de como activar kaggle por mcp y que se pueda hacer dicha activacion con el asistente cli smith que aprece en el tablero"
+- L8 (2026-10-24, user verbatim): "verifica que estas instrucciones [...] queden actualizables segun el usuario que este trabajahdo, el entorno windows sobre wsl o mac, o linux, y que no quedne estaticas, deben actualizarse segun el entorno, revisa si vale la pane verificar todo esto al dar init o al instalar smith con pip. revisa que funcione correctamente, comit, mergea y push al proyecto principal papers smith, actualiza el proyecto actual qmleeg, y vuelve a presentar los analisis de la deliberacion"
+- L9 Evidence: Kaggle/kaggle-api PR 863: "Generate New Token" in the Account tab; client reads KAGGLE_API_TOKEN or ~/.kaggle/access_token (optionally .txt).

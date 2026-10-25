@@ -82,6 +82,35 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         remote = next(a for a in entry["actions"] if a.get("slash") == "/remote-execution")
         self.assertIn("/kaggle-accounts", " ".join(remote["guide"]))
 
+    def test_the_experiments_phase_offers_the_estimate_step_before_remote_runs(self) -> None:
+        actions = phase_actions.ACTIONS["poc_experiments"]["actions"]
+        labels = [a["label"] for a in actions]
+        estimate = actions[labels.index("Estimar tiempo y elegir dónde correr")]
+        self.assertEqual((estimate["kind"], estimate["tab"]), ("redirect", "experiments"))
+        self.assertIn("Results/timing.json", estimate["desc"])
+        remote = next(i for i, a in enumerate(actions) if a.get("slash") == "/remote-execution")
+        poc = labels.index("Implementar la prueba de concepto")
+        full = next(i for i, a in enumerate(actions) if a.get("slash") == "/experimental-implementation")
+        # The estimate runs before the pilot and again before the full run.
+        self.assertLess(poc, labels.index("Estimar tiempo y elegir dónde correr"))
+        self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), full)
+        self.assertLess(full, remote)
+
+    def test_the_experiments_phase_offers_an_optional_hyperparameter_search(self) -> None:
+        entry = phase_actions.ACTIONS["poc_experiments"]
+        self.assertIn("hyperparameter-search", entry["skills"])
+        actions = entry["actions"]
+        labels = [a["label"] for a in actions]
+        search = actions[labels.index("Búsqueda de hiperparámetros (Optuna)")]
+        self.assertEqual((search["kind"], search["slash"], search["optional"]),
+                         ("prompt", "/hyperparameter-search", True))
+        self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), labels.index(search["label"]))
+        self.assertLess(labels.index(search["label"]), labels.index("Implementar y medir los experimentos"))
+        guide = " ".join(search["guide"]).lower()
+        for phrase in ("deliberación", "fold externo", "mismo presupuesto", "variable independiente",
+                       "semilla", "ped-anova", "contornos", "solo el operador"):
+            self.assertIn(phrase, guide)
+
     def test_the_gates_live_in_the_pipeline_tab_and_telemetry_comes_last(self) -> None:
         tabs = re.findall(r"onclick=\"navigateTab\('([a-z]+)'\)\">", PAGE)
         self.assertNotIn("gates", tabs)
@@ -92,6 +121,22 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         audit = phase_actions.ACTIONS["audit"]["actions"]
         self.assertIn(("pipeline", "gates"),
                       {(a["tab"], a["section"]) for a in audit if a["kind"] == "redirect"})
+
+    def test_the_experiments_phase_offers_data_and_replication_steps(self) -> None:
+        entry = phase_actions.ACTIONS["poc_experiments"]
+        data = next(a for a in entry["actions"] if a.get("slash") == "/datasets")
+        self.assertTrue(data["label"].startswith("Datos: toy set siempre y dataset oficial"))
+        guide = " ".join(data["guide"])
+        for verb in ("synth", "search", "license", "qc", "prepare", "publish"):
+            self.assertIn(verb, guide)
+        self.assertIn("dataset-scout", guide)
+        self.assertIn("dataset-curator", guide)
+        self.assertIn("consentimiento", guide)
+        replica = next(a for a in entry["actions"] if a.get("label") == "Réplica de métodos de comparación")
+        self.assertEqual(replica["slash"], "/proposal-implementation")
+        guide = " ".join(replica["guide"])
+        self.assertIn("paper-replicator", guide)
+        self.assertIn("código publicado", guide)
 
     def test_phase_ids_resolve_to_stages(self) -> None:
         self.assertEqual(phase_actions.stage_for("Fase 8"), "writing")
@@ -141,6 +186,32 @@ class ServerPhaseTests(unittest.TestCase):
                 self.assertTrue(phase["actions"])
                 self.assertNotIn("--stage", phase["cli_command"])
         self.assertEqual(status["fases"][1]["cli_command"], "/plausibility <texto>")
+
+    def test_phase_five_lists_data_and_replication_sub_phases_in_order(self) -> None:
+        status = json.loads(bytes(self.route("/api/status")().body))
+        fase5 = next(f for f in status["fases"] if f["stage_id"] == "poc_experiments")
+        ids = [s["id"] for s in fase5["subfases"]]
+        self.assertEqual(ids, [f"5.{i}" for i in range(1, len(ids) + 1)])
+        names = [s["name"] for s in fase5["subfases"]]
+        data = names.index("Datos: toy set siempre y dataset oficial")
+        replica = names.index("Réplica de métodos de comparación")
+        build = names.index("Prueba de concepto")
+        self.assertLess(data, build)
+        self.assertLess(replica, build)
+        self.assertIn("paper-replicator", fase5["subfases"][replica]["detail"])
+        estimate = names.index("Estimar tiempo y elegir dónde correr")
+        full = names.index("Experimentos completos")
+        remote = names.index("Ensayo remoto y autorización del lanzamiento (operador)")
+        self.assertLess(build, estimate)
+        self.assertLess(estimate, full)
+        self.assertLess(full, remote)
+        self.assertIn("Results/timing.json", fase5["subfases"][estimate]["detail"])
+        self.assertEqual(fase5["subfases"][remote]["id"], "5.13")
+        search = names.index("Búsqueda de hiperparámetros (Optuna, opcional)")
+        self.assertLess(estimate, search)
+        self.assertLess(search, full)
+        self.assertIn("/hyperparameter-search", fase5["subfases"][search]["detail"])
+        self.assertIn("/datasets", fase5["subfases"][data]["detail"])
 
     def test_each_phase_runs_its_own_check(self) -> None:
         self.assertIn("bloques en paper/main.tex", self.run_phase("Fase 8")["message"])

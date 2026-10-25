@@ -29,9 +29,11 @@ from workspace_series import (
 )
 
 SKILL_NAMES = (
+    "datasets",
     "experimental-deliberation",
     "experimental-implementation",
     "figure-review",
+    "hyperparameter-search",
     "kaggle-accounts",
     "math-tutor",
     "paper-ingestion",
@@ -40,6 +42,7 @@ SKILL_NAMES = (
     "proposal-deliberation",
     "proposal-implementation",
     "remote-execution",
+    "remote-parallelism",
     "skill-audit",
     "upgrade-project",
 )

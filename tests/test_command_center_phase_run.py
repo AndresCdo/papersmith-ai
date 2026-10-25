@@ -78,6 +78,12 @@ Date.now = () => realNow() + 31 * 60 * 1000;
 window.phaseRuns.onStatus(after);
 out.expired = !window.phaseRuns.isRunning('ingestion');
 out.expiredBadge = window.phaseRuns.cardBadge('ingestion');
+// The phase passes later (closed dashboard, another session): the server's
+// verdict reconciles the expired run instead of leaving it stuck.
+const later = JSON.parse(JSON.stringify(after));
+later.fases[2].status = 'PASS';
+window.phaseRuns.onStatus(later);
+out.expiredReconciled = window.phaseRuns.cardBadge('ingestion');
 Date.now = realNow;
 console.log(JSON.stringify(out));
 process.exit(0);
@@ -130,6 +136,43 @@ class PhaseRunTests(unittest.TestCase):
     def test_the_command_is_escaped_and_a_dismissed_run_disappears(self) -> None:
         self.assertNotIn("<img", self.out["trackerStart"])
         self.assertEqual(self.out["afterDismiss"], "")
+
+
+STOPPED_HARNESS = r"""
+const fs = require('fs');
+const store = { 'smith_phase_runs@local': JSON.stringify({ plausibility: {
+  stage: 'plausibility', phaseId: 'Fase 2', command: '/plausibility x', startedAt: 1, lastChangeAt: 1,
+  startStatus: 'ACTIVE', status: 'ACTIVE', stoppedAt: 2, verifiedAt: 0, expiredAt: 0,
+  baseline: {}, changed: [], unlocked: [], unlockedBefore: [] } }) };
+const els = {};
+function el(id) { return els[id] || (els[id] = { id, dataset: {}, innerHTML: '', textContent: '', classList: { add() {}, remove() {} }, setAttribute() {}, querySelectorAll: () => [] }); }
+global.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+let made = 0;
+global.document = { getElementById: (id) => els[id] || null, addEventListener() {}, createElement: () => el('made' + (made++)), body: { appendChild(n) { els[n.id] = n; } } };
+global.window = { smithTerminalActivity: () => ({ agent: 'claude', lastOutputAt: Date.now() }) };
+eval(fs.readFileSync(process.argv[1], 'utf8'));
+const out = { before: window.phaseRuns.cardBadge('plausibility') };
+window.phaseRuns.onStatus({ fases: [{ stage_id: 'plausibility', id: 'Fase 2', name: 'Fase 2 name', status: 'PASS', unlocked: true, evidence: [] }] });
+out.after = window.phaseRuns.cardBadge('plausibility');
+console.log(JSON.stringify(out));
+process.exit(0);
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class StoppedRunReconciliationTests(unittest.TestCase):
+    def test_a_stopped_run_whose_phase_passed_reads_verified(self) -> None:
+        done = subprocess.run(["node", "-e", STOPPED_HARNESS, str(STATIC / "phase-run.js")],
+                              capture_output=True, text=True, cwd=tempfile.gettempdir(), timeout=60, check=True)
+        out = json.loads(done.stdout)
+        self.assertIn("detenida", out["before"])
+        self.assertIn("verificada", out["after"])
+
+    def test_an_expired_run_whose_phase_passed_reads_verified(self) -> None:
+        done = subprocess.run(["node", "-e", HARNESS, str(STATIC / "phase-run.js")],
+                              input=json.dumps({"idea": "x"}), capture_output=True, text=True,
+                              cwd=tempfile.gettempdir(), timeout=60, check=True)
+        self.assertIn("verificada", json.loads(done.stdout)["expiredReconciled"])
 
 
 class PageWiringTests(unittest.TestCase):

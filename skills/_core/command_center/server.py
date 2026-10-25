@@ -36,7 +36,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, atlas_build, decisions, experiments_view, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
+from . import agents_view, atlas, atlas_build, decisions, experiments_view, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state, memo_by_file
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -337,6 +337,81 @@ def _audit_verdict(root: Path) -> bool | None:
     return ok if isinstance(ok, bool) else None
 
 
+#: The first bytes of every managed revision the deliberation engine publishes
+#: (``experimental-deliberation/profile.ts`` ``artifact.marker``); a file
+#: without them is not a published revision, whatever its name.
+MANAGED_ARTIFACT_MARKER = b"<!-- proposal-workspace:artifact:v1 -->\n"
+_EXPERIMENTS_REVISION = re.compile(r"^experiments-.+-v\d+\.md$")
+MAX_PHASE5_NAMES = 200
+
+
+def _starts_with_marker(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(len(MANAGED_ARTIFACT_MARKER)) == MANAGED_ARTIFACT_MARKER
+    except OSError:
+        return False
+
+
+def _dirs(folder: Path) -> list[Path]:
+    try:
+        return sorted(p for p in folder.iterdir() if p.is_dir() and not p.is_symlink()
+                      and not p.name.startswith("."))[:MAX_PHASE5_NAMES]
+    except OSError:
+        return []
+
+
+def _phase5_evidence(root: Path) -> dict[str, Any]:
+    """What Phase 5 has on disk, from evidence rather than file names; bounded
+    and never raises.
+
+    ``revisions`` counts managed ``experiments/experiments-<slug>-vNN.md``
+    files that open with the artifact marker; a product folder
+    ``implementations/<repo>/<Name>/`` is a proof of concept when it holds
+    ``AGREED.md`` and a full experiment when it holds ``Experimental_AGREED.md``,
+    and it counts as done only with a ``Results/`` directory beside the marker.
+    """
+    from . import remote_services
+    out: dict[str, Any] = {"files": 0, "revisions": 0, "toy": False, "registry": False,
+                           "replications": 0, "poc": 0, "poc_results": 0, "full": 0, "full_results": 0,
+                           "timing": 0, "hpo": 0}
+    exp_dir = root / "experiments"
+    try:
+        names = [f for f in exp_dir.iterdir() if f.is_file() and not f.name.startswith(".")] \
+            if exp_dir.is_dir() else []
+    except OSError:
+        names = []
+    out["files"] = len(names)
+    out["revisions"] = sum(1 for f in names[:MAX_PHASE5_NAMES]
+                           if _EXPERIMENTS_REVISION.match(f.name) and _starts_with_marker(f))
+    registry = root / "datasets" / "registry.json"
+    try:
+        if registry.is_file() and registry.stat().st_size <= 2 * 1024 * 1024:
+            out["registry"] = True
+            data = json.loads(registry.read_text(encoding="utf-8"))
+            out["toy"] = isinstance(data, list) and any(
+                isinstance(e, dict) and e.get("role") == "toy" for e in data)
+    except (OSError, ValueError):
+        pass
+    for repo in _dirs(root / "implementations"):
+        for product in _dirs(repo):
+            if (product / "REPLICATION.md").is_file():
+                out["replications"] += 1
+            results = (product / "Results").is_dir()
+            if (product / "Experimental_AGREED.md").is_file():
+                out["full"] += 1
+                out["full_results"] += results
+            elif (product / "AGREED.md").is_file():
+                out["poc"] += 1
+                out["poc_results"] += results
+            if (product / "Results" / "timing.json").is_file():
+                out["timing"] += 1
+            if any((study / "summary.json").is_file() for study in _dirs(product / "Results" / "hpo")):
+                out["hpo"] += 1
+    out.update(remote_services.launch_evidence(root))
+    return out
+
+
 def _run_audit(root: Path) -> dict[str, Any] | None:
     """Run `smith audit --check-drift` on the workspace with this
     interpreter and record its verdict in `.papersmith/audit.json`.
@@ -565,9 +640,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         guidance_loose_pdfs = list((root_path / "guidance").glob("*.pdf")) + (list(guidance_ref_dir.glob("*.pdf")) if guidance_ref_dir.is_dir() else [])
 
         has_deliberated_prop = any(re.search(r"-r\d+\.md$", p) for p in prop_files)
-        exp_dir = root_path / "experiments"
-        exp_files = [f for f in exp_dir.iterdir() if f.is_file() and not f.name.startswith(".")] if exp_dir.is_dir() else []
-        has_poc = any("protocol" in f.name.lower() or "poc" in f.name.lower() or "validation" in f.name.lower() for f in exp_files)
+        p5 = _phase5_evidence(root_path)
 
         has_scaffold = tex_file.is_file()
         has_decl = False
@@ -606,13 +679,22 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         else:
             fase4_status, fase4_prog, fase4_det = "PENDING", 0.0, "Sin propuesta en proposals/"
 
-        # Fase 5
-        if has_poc:
-            fase5_status, fase5_prog, fase5_det = "PASS", 1.0, f"{len(exp_files)} protocolo(s) experimental(es) deliberado(s)"
-        elif exp_files:
-            fase5_status, fase5_prog, fase5_det = "ACTIVE", 0.5, f"{len(exp_files)} archivo(s) en experiments/"
+        # Fase 5: a published protocol revision, a proof of concept with
+        # results and a full experiment with results; never a file name.
+        p5_done = [p5["revisions"] > 0, p5["poc_results"] > 0, p5["full_results"] > 0]
+        fase5_det = (f"Protocolo publicado: {'sí' if p5_done[0] else 'no'} · PoC con Results/: {p5['poc_results']}"
+                     f" · experimentos completos con Results/: {p5['full_results']}")
+        if all(p5_done):
+            fase5_status, fase5_prog = "PASS", 1.0
+        elif any(p5_done) or p5["files"] or p5["poc"] or p5["full"]:
+            fase5_status, fase5_prog = "ACTIVE", round(sum(p5_done) / 3, 3)
         else:
-            fase5_status, fase5_prog, fase5_det = "PENDING", 0.0, "Sin protocolos experimentales en experiments/"
+            fase5_status, fase5_prog = "PENDING", 0.0
+
+        def _p5(done: bool, started: bool = False) -> str:
+            return "PASS" if done else ("ACTIVE" if started else "PENDING")
+
+        p5_protocol = _p5(p5["revisions"] > 0, p5["files"] > 0)
 
         # Fase 6
         if has_scaffold:
@@ -745,25 +827,31 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             {
                 "id": "Fase 5",
                 "stage_id": "poc_experiments",
-                "name": "Fase 5: Deliberación & Planeación Experimental (PoC)",
+                "name": f"Fase 5: {phase_actions.PHASE_LABELS['poc_experiments']}",
                 "gate": "G-EXP-POC",
-                "agent": "experimental-deliberation & experimental-validation",
-                "desc": "Diseño y deliberación del protocolo experimental, implementación de la prueba de concepto y de los experimentos, y ejecución local o remota de sus mediciones.",
+                "agent": phase_actions.ACTIONS["poc_experiments"]["agent"],
+                "desc": "Deliberación del protocolo experimental, toy set, réplica de los métodos de comparación, prueba de concepto, estimación de tiempo, búsqueda de hiperparámetros opcional, experimentos completos, revisión del código, ensayo remoto y lanzamiento autorizado por el operador, en local o en un servicio remoto (CLI o MCP).",
                 "tools": ["read", "write", "validate"],
-                "skills": ["experimental-deliberation", "experimental-implementation"],
-                "cli_command": "smith deliberate experiments/",
-                "outputs": ["experiments/"],
+                "skills": ["experimental-deliberation", "datasets", "proposal-implementation", "experimental-implementation"],
+                "cli_command": "/experimental-deliberation <texto>",
+                "outputs": ["experiments/", "datasets/registry.json", "implementations/"],
                 "status": fase5_status,
                 "progress": fase5_prog,
                 "detail": fase5_det,
                 "subfases": [
-                    {"id": "5.1", "name": "Stage bound: Anclaje de Claims & Métricas", "status": fase5_status, "detail": "Criterios de éxito y métricas cuantificables"},
-                    {"id": "5.2", "name": "Stage validated: Baselines & SOTA", "status": fase5_status, "detail": "Contraste contra sistemas y modelos de referencia"},
-                    {"id": "5.3", "name": "Stage deliberated: Diseño Metrológico & Protocolos", "status": fase5_status, "detail": "Protocolos de ensayo y validación"},
-                    {"id": "5.4", "name": "Stage composed: Especificación de Experimentos", "status": fase5_status, "detail": "Formalización de experimentos con instrumentación"},
-                    {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": fase5_status, "detail": "Superación de compuerta G-EXP-POC"},
-                    {"id": "5.6", "name": "Implementación PoC y experimental", "status": fase5_status, "detail": "proposal-implementation y experimental-implementation contra el repositorio objetivo"},
-                    {"id": "5.7", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
+                    {"id": "5.1", "name": "Stage bound: Anclaje de Claims & Métricas", "status": p5_protocol, "detail": "Criterios de éxito y métricas cuantificables (pasa con la revisión publicada)"},
+                    {"id": "5.2", "name": "Stage validated: Baselines & SOTA", "status": p5_protocol, "detail": "experimental-validation contrasta protocolo, métricas y baselines con búsquedas fechadas"},
+                    {"id": "5.3", "name": "Stage deliberated: Diseño Metrológico & Protocolos", "status": p5_protocol, "detail": "Protocolos de ensayo y validación"},
+                    {"id": "5.4", "name": "Stage composed: Especificación de Experimentos", "status": p5_protocol, "detail": "Formalización de experimentos con instrumentación"},
+                    {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": p5_protocol, "detail": f"experimental-publish deja experiments/experiments-<slug>-vNN.md con el marcador de artefacto ({p5['revisions']} revisión(es) publicada(s))"},
+                    {"id": "5.6", "name": "Datos: toy set siempre y dataset oficial", "status": _p5(p5["toy"], p5["registry"]), "detail": "/datasets synth|search|license|qc|prepare|publish con dataset-scout y dataset-curator; pasa con un toy set en datasets/registry.json; publicación privada solo con consentimiento del operador"},
+                    {"id": "5.7", "name": "Réplica de métodos de comparación", "status": _p5(p5["replications"] > 0), "detail": f"/proposal-implementation → paper-replicator: primero el código publicado, adoptado y auditado; si no existe, reimplementación ({p5['replications']} REPLICATION.md)"},
+                    {"id": "5.8", "name": "Prueba de concepto", "status": _p5(p5["poc_results"] > 0, p5["poc"] > 0), "detail": f"/proposal-implementation (implementation-build): carpeta con AGREED.md y Results/ ({p5['poc_results']} de {p5['poc']})"},
+                    {"id": "5.9", "name": "Estimar tiempo y elegir dónde correr", "status": _p5(p5["timing"] > 0), "detail": "Antes del piloto y otra vez antes de la corrida completa: sonda de tiempo corta (una época de un fold por brazo) en Results/timing.json; la pestaña Experimentos estima la PoC y la corrida completa (±20%) y lista las opciones local y remotas"},
+                    {"id": "5.10", "name": "Búsqueda de hiperparámetros (Optuna, opcional)", "status": _p5(p5["hpo"] > 0), "detail": f"Solo si la deliberación la estimó conveniente: /hyperparameter-search plan|report|status, anidada dentro de cada fold externo, mismo presupuesto por brazo, evaluador de importancia declarado; contornos e importancia en Results/hpo/ ({p5['hpo']} producto(s) con estudios)"},
+                    {"id": "5.11", "name": "Experimentos completos", "status": _p5(p5["full_results"] > 0, p5["full"] > 0), "detail": f"/experimental-implementation (experiments-build): carpeta con Experimental_AGREED.md y Results/ ({p5['full_results']} de {p5['full']})"},
+                    {"id": "5.12", "name": "Revisión del código (experiments-reviewer) antes del ensayo", "status": "PENDING", "detail": "Calidad del código, optimización, uso de GPU y pruebas estadísticas declaradas; el informe va al operador y no deja archivo, así que esta subfase no se verifica desde el disco"},
+                    {"id": "5.13", "name": "Ensayo remoto y autorización del lanzamiento (operador)", "status": _p5(p5["launched"] > 0, p5["jobs"] > 0 or p5["smokes"] > 0), "detail": f"Solo para corridas remotas (local corre directo). /kaggle-accounts validate y smith team add --attest (una cuenta por persona y servicio); luego generate-job → submit --smoke → fetch --smoke y smoke record → readiness → gate (operador) → submit → status / poll → fetch. Ensayos aprobados: {p5['rehearsals_passed']}; ledgers con envíos: {p5['launched']}"}
                 ]
             },
             {
@@ -895,6 +983,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 ]
             }
         ]
+        # The phase drawer renders a sub-phase's ``desc``; every sub-phase states it as ``detail``.
+        for phase in fases:
+            for sub in phase.get("subfases") or []:
+                sub.setdefault("desc", sub.get("detail", ""))
         phase_actions.attach(fases, root_path)
 
         artifacts = []
@@ -1102,7 +1194,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": "Proof-of-Concept & Experimental Design Gate",
                 "status": "PASS" if fase5_status == "PASS" else ("ACTIVE" if fase5_status == "ACTIVE" else "PENDING"),
                 "criteria": "Validación empírica y diseño experimental: reproducibilidad de pruebas, especificación de baseline y criterios de éxito cuantitativos.",
-                "reviewer": "experimental-auditor",
+                "reviewer": "experiments-reviewer",
                 "phase": "Fase 5"
             },
             {
@@ -1144,7 +1236,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             "Fase 2": {"fase": "Fase 2: Plausibilidad & SOTA Atlas 3D", "gate": "G-SOTA", "tool_uses": 16, "duracion": "3m 45s", "tokens": "32,800"},
             "Fase 3": {"fase": "Fase 3: Ingestión de Referencias & Tesis Principal", "gate": "G-INGEST", "tool_uses": 24, "duracion": "5m 20s", "tokens": "48,500"},
             "Fase 4": {"fase": "Fase 4: Deliberación de Propuesta & Modelo Conceptual", "gate": "G-PROP", "tool_uses": 14, "duracion": "2m 30s", "tokens": "26,100"},
-            "Fase 5": {"fase": "Fase 5: Deliberación & Planeación de Prueba de Concepto (PoC)", "gate": "G-EXP-POC", "tool_uses": 15, "duracion": "2m 55s", "tokens": "29,400"},
+            "Fase 5": {"fase": "Fase 5: Prueba de concepto y experimentos", "gate": "G-EXP-POC", "tool_uses": 15, "duracion": "2m 55s", "tokens": "29,400"},
             "Fase 6": {"fase": "Fase 6: Andamiaje de Manuscrito & Contratos", "gate": "G-SCAFFOLD", "tool_uses": 10, "duracion": "1m 50s", "tokens": "18,900"},
             "Fase 7": {"fase": "Fase 7: Declaraciones Operativas & Coautoría", "gate": "G-DECLARATIONS", "tool_uses": 7, "duracion": "1m 10s", "tokens": "12,400"},
             "Fase 8": {"fase": "Fase 8: Redacción Técnica & Transposición", "gate": "G-WRITING", "tool_uses": 19, "duracion": "4m 15s", "tokens": "38,200"},
@@ -1267,6 +1359,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if flow_path.is_file():
             return HTMLResponse(flow_path.read_text(encoding="utf-8"))
         return JSONResponse({"detail": "flow diagram not found"}, status_code=404)
+
+    @app.get("/api/agents")
+    def api_agents() -> JSONResponse:
+        # The agents table under the Flujo Archify diagram.
+        return JSONResponse(agents_view.get_agents_view(root_path))
 
     @app.get("/api/state")
     def api_state() -> JSONResponse:
