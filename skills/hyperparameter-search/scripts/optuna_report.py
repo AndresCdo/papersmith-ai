@@ -27,18 +27,23 @@ from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-import matplotlib  # noqa: E402
+# Guarded: the forge's own interpreter never carries these, and the gate
+# (tests/test_forge_gate.py) reads a guarded import as optional.
+try:
+    import matplotlib
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import optuna  # noqa: E402
-from optuna.importance import (  # noqa: E402
-    FanovaImportanceEvaluator,
-    MeanDecreaseImpurityImportanceEvaluator,
-    PedAnovaImportanceEvaluator,
-    get_param_importances,
-)
-from optuna.trial import TrialState  # noqa: E402
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import optuna
+    from optuna.importance import (
+        FanovaImportanceEvaluator,
+        MeanDecreaseImpurityImportanceEvaluator,
+        PedAnovaImportanceEvaluator,
+        get_param_importances,
+    )
+    from optuna.trial import TrialState
+except ImportError as exc:
+    sys.exit(f"optuna_report.py needs optuna and matplotlib in this interpreter: {exc}")
 
 warnings.filterwarnings("ignore", category=optuna.exceptions.ExperimentalWarning)
 optuna.logging.set_verbosity(optuna.logging.WARNING)
