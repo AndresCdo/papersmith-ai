@@ -171,7 +171,7 @@ class Phase5NamesAndOrderTests(_Status):
         keys = [a.get("slash") or a["label"] for a in actions]
         order = ["/experimental-deliberation", "/datasets", "Réplica de métodos de comparación",
                  "Implementar la prueba de concepto", "Estimar tiempo y elegir dónde correr",
-                 "/experimental-implementation", "/remote-parallelism", "/kaggle-accounts", "/remote-execution"]
+                 "/hyperparameter-search", "/experimental-implementation", "/remote-parallelism", "/kaggle-accounts", "/remote-execution"]
         index = []
         for key in order:
             index.append(next(i for i, a in enumerate(actions)

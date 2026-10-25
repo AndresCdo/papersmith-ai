@@ -96,6 +96,21 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), full)
         self.assertLess(full, remote)
 
+    def test_the_experiments_phase_offers_an_optional_hyperparameter_search(self) -> None:
+        entry = phase_actions.ACTIONS["poc_experiments"]
+        self.assertIn("hyperparameter-search", entry["skills"])
+        actions = entry["actions"]
+        labels = [a["label"] for a in actions]
+        search = actions[labels.index("Búsqueda de hiperparámetros (Optuna)")]
+        self.assertEqual((search["kind"], search["slash"], search["optional"]),
+                         ("prompt", "/hyperparameter-search", True))
+        self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), labels.index(search["label"]))
+        self.assertLess(labels.index(search["label"]), labels.index("Implementar y medir los experimentos"))
+        guide = " ".join(search["guide"]).lower()
+        for phrase in ("deliberación", "fold externo", "mismo presupuesto", "variable independiente",
+                       "semilla", "ped-anova", "contornos", "solo el operador"):
+            self.assertIn(phrase, guide)
+
     def test_the_gates_live_in_the_pipeline_tab_and_telemetry_comes_last(self) -> None:
         tabs = re.findall(r"onclick=\"navigateTab\('([a-z]+)'\)\">", PAGE)
         self.assertNotIn("gates", tabs)
@@ -191,7 +206,11 @@ class ServerPhaseTests(unittest.TestCase):
         self.assertLess(estimate, full)
         self.assertLess(full, remote)
         self.assertIn("Results/timing.json", fase5["subfases"][estimate]["detail"])
-        self.assertEqual(fase5["subfases"][remote]["id"], "5.12")
+        self.assertEqual(fase5["subfases"][remote]["id"], "5.13")
+        search = names.index("Búsqueda de hiperparámetros (Optuna, opcional)")
+        self.assertLess(estimate, search)
+        self.assertLess(search, full)
+        self.assertIn("/hyperparameter-search", fase5["subfases"][search]["detail"])
         self.assertIn("/datasets", fase5["subfases"][data]["detail"])
 
     def test_each_phase_runs_its_own_check(self) -> None:

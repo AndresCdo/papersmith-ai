@@ -128,8 +128,8 @@ ACTIONS: dict[str, dict[str, Any]] = {
     },
     "poc_experiments": {
         "skills": ["experimental-deliberation", "datasets", "proposal-implementation",
-                   "remote-parallelism", "experimental-implementation", "kaggle-accounts",
-                   "remote-execution"],
+                   "remote-parallelism", "hyperparameter-search", "experimental-implementation",
+                   "kaggle-accounts", "remote-execution"],
         "agent": ("experimental-validation → experimental-publish → dataset-scout / dataset-curator → "
                   "paper-replicator → implementation-build → experiments-build → experiments-reviewer → "
                   "experiments-walk"),
@@ -160,6 +160,14 @@ ACTIONS: dict[str, dict[str, Any]] = {
                       "época de un fold por brazo) en Results/timing.json; la pestaña Experimentos estima la "
                       "PoC y la corrida completa (±20%), muestra el entorno local y las opciones de corrida "
                       "local, Kaggle y Colab."),
+            _prompt("/hyperparameter-search", "Búsqueda de hiperparámetros (Optuna)", [
+                "Solo si la deliberación lo estimó conveniente: el protocolo declara la búsqueda y su espacio.",
+                "Anidada dentro de los sujetos de entrenamiento de cada fold externo, sin ver los sujetos de prueba.",
+                "Mismo presupuesto de trials para cada brazo y baseline; nunca ajusta una variable independiente que el experimento prueba.",
+                "Sampler con semilla y evaluador de importancia declarado (Optuna 5 usa PED-ANOVA por defecto).",
+                "report escribe contornos e importancia que la pestaña Experimentos muestra.",
+                "Corre en remoto como la corrida completa y solo el operador la lanza.",
+            ], "Ej.: plan para los brazos hybrid y linear con 40 trials y fANOVA como evaluador.", optional=True),
             _prompt("/experimental-implementation", "Implementar y medir los experimentos", [
                 "Convierte el protocolo experimental vigente en Python y corre sus mediciones declaradas.",
                 "Indica el repositorio objetivo; la verificación compara contra el protocolo y la propuesta.",

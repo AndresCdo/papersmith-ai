@@ -68,6 +68,7 @@ skill refuses when its input is missing.
    `/experimental-deliberation` writes the protocol in `experiments/`; a toy
    set (`/datasets synth`); replication of the comparison methods;
    the proof of concept (`/proposal-implementation`); a timing estimate;
+   an optional hyperparameter search (`/hyperparameter-search`);
    the full experiments (`/experimental-implementation`); the code review
    (`experiments-reviewer`); the remote rehearsal; and the operator's launch.
    - **Data**: `/datasets synth|search|license|qc|prepare|publish` gives both
@@ -84,6 +85,12 @@ skill refuses when its input is missing.
      Experimentos tab lists the local, Kaggle and Colab options, and
      `/remote-parallelism` (`estimate`, then `assess --owners <distinct
      owners>`) decides whether to split a campaign.
+   - **Hyperparameter search** (only when the deliberation judged it
+     worthwhile): `/hyperparameter-search plan|report|status` runs an
+     Optuna search nested inside each outer fold, with the same trial
+     budget for every arm and a declared importance evaluator; its contour
+     and importance plots land in `Results/hpo/` and the Experimentos tab
+     shows them. It runs remotely like the full runs.
    - **Remote runs**: one account per person and service
      (`smith team add … --attest`), `/kaggle-accounts validate`, then
      `/remote-execution`: generate-job → submit --smoke → fetch --smoke /

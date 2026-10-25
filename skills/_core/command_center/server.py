@@ -350,7 +350,7 @@ def _phase5_evidence(root: Path) -> dict[str, Any]:
     from . import remote_services
     out: dict[str, Any] = {"files": 0, "revisions": 0, "toy": False, "registry": False,
                            "replications": 0, "poc": 0, "poc_results": 0, "full": 0, "full_results": 0,
-                           "timing": 0}
+                           "timing": 0, "hpo": 0}
     exp_dir = root / "experiments"
     try:
         names = [f for f in exp_dir.iterdir() if f.is_file() and not f.name.startswith(".")] \
@@ -382,6 +382,8 @@ def _phase5_evidence(root: Path) -> dict[str, Any]:
                 out["poc_results"] += results
             if (product / "Results" / "timing.json").is_file():
                 out["timing"] += 1
+            if any((study / "summary.json").is_file() for study in _dirs(product / "Results" / "hpo")):
+                out["hpo"] += 1
     out.update(remote_services.launch_evidence(root))
     return out
 
@@ -804,7 +806,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": f"Fase 5: {phase_actions.PHASE_LABELS['poc_experiments']}",
                 "gate": "G-EXP-POC",
                 "agent": phase_actions.ACTIONS["poc_experiments"]["agent"],
-                "desc": "Deliberación del protocolo experimental, toy set, réplica de los métodos de comparación, prueba de concepto, estimación de tiempo, experimentos completos, revisión del código, ensayo remoto y lanzamiento autorizado por el operador, en local o en un servicio remoto (CLI o MCP).",
+                "desc": "Deliberación del protocolo experimental, toy set, réplica de los métodos de comparación, prueba de concepto, estimación de tiempo, búsqueda de hiperparámetros opcional, experimentos completos, revisión del código, ensayo remoto y lanzamiento autorizado por el operador, en local o en un servicio remoto (CLI o MCP).",
                 "tools": ["read", "write", "validate"],
                 "skills": ["experimental-deliberation", "datasets", "proposal-implementation", "experimental-implementation"],
                 "cli_command": "/experimental-deliberation <texto>",
@@ -822,9 +824,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     {"id": "5.7", "name": "Réplica de métodos de comparación", "status": _p5(p5["replications"] > 0), "detail": f"/proposal-implementation → paper-replicator: primero el código publicado, adoptado y auditado; si no existe, reimplementación ({p5['replications']} REPLICATION.md)"},
                     {"id": "5.8", "name": "Prueba de concepto", "status": _p5(p5["poc_results"] > 0, p5["poc"] > 0), "detail": f"/proposal-implementation (implementation-build): carpeta con AGREED.md y Results/ ({p5['poc_results']} de {p5['poc']})"},
                     {"id": "5.9", "name": "Estimar tiempo y elegir dónde correr", "status": _p5(p5["timing"] > 0), "detail": "Antes del piloto y otra vez antes de la corrida completa: sonda de tiempo corta (una época de un fold por brazo) en Results/timing.json; la pestaña Experimentos estima la PoC y la corrida completa (±20%) y lista las opciones local y remotas"},
-                    {"id": "5.10", "name": "Experimentos completos", "status": _p5(p5["full_results"] > 0, p5["full"] > 0), "detail": f"/experimental-implementation (experiments-build): carpeta con Experimental_AGREED.md y Results/ ({p5['full_results']} de {p5['full']})"},
-                    {"id": "5.11", "name": "Revisión del código (experiments-reviewer) antes del ensayo", "status": "PENDING", "detail": "Calidad del código, optimización, uso de GPU y pruebas estadísticas declaradas; el informe va al operador y no deja archivo, así que esta subfase no se verifica desde el disco"},
-                    {"id": "5.12", "name": "Ensayo remoto y autorización del lanzamiento (operador)", "status": _p5(p5["launched"] > 0, p5["jobs"] > 0 or p5["smokes"] > 0), "detail": f"Solo para corridas remotas (local corre directo). /kaggle-accounts validate y smith team add --attest (una cuenta por persona y servicio); luego generate-job → submit --smoke → fetch --smoke y smoke record → readiness → gate (operador) → submit → status / poll → fetch. Ensayos aprobados: {p5['rehearsals_passed']}; ledgers con envíos: {p5['launched']}"}
+                    {"id": "5.10", "name": "Búsqueda de hiperparámetros (Optuna, opcional)", "status": _p5(p5["hpo"] > 0), "detail": f"Solo si la deliberación la estimó conveniente: /hyperparameter-search plan|report|status, anidada dentro de cada fold externo, mismo presupuesto por brazo, evaluador de importancia declarado; contornos e importancia en Results/hpo/ ({p5['hpo']} producto(s) con estudios)"},
+                    {"id": "5.11", "name": "Experimentos completos", "status": _p5(p5["full_results"] > 0, p5["full"] > 0), "detail": f"/experimental-implementation (experiments-build): carpeta con Experimental_AGREED.md y Results/ ({p5['full_results']} de {p5['full']})"},
+                    {"id": "5.12", "name": "Revisión del código (experiments-reviewer) antes del ensayo", "status": "PENDING", "detail": "Calidad del código, optimización, uso de GPU y pruebas estadísticas declaradas; el informe va al operador y no deja archivo, así que esta subfase no se verifica desde el disco"},
+                    {"id": "5.13", "name": "Ensayo remoto y autorización del lanzamiento (operador)", "status": _p5(p5["launched"] > 0, p5["jobs"] > 0 or p5["smokes"] > 0), "detail": f"Solo para corridas remotas (local corre directo). /kaggle-accounts validate y smith team add --attest (una cuenta por persona y servicio); luego generate-job → submit --smoke → fetch --smoke y smoke record → readiness → gate (operador) → submit → status / poll → fetch. Ensayos aprobados: {p5['rehearsals_passed']}; ledgers con envíos: {p5['launched']}"}
                 ]
             },
             {
