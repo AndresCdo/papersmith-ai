@@ -3940,9 +3940,11 @@ Context Protocol client over `stdio` (JSON-RPC 2.0).
 - `inspect` — prints the capability catalogue as JSON (the source of truth).
 - `print-config [--workspace <dir>]` — emits the configuration fragment for the host being configured (Claude Code, OpenCode).
 
-- `kaggle activate [--token-stdin] [--no-verify] [--workspace <dir>]` — activates Kaggle's official MCP server (`https://www.kaggle.com/mcp`, registered as `kaggle` by `init` and `upgrade`). It reads a `KGAT_` token from a hidden prompt, verifies it with a read-only `get_accelerator_quota` call, and stores it once per user in `$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token` (default `~/.config`, directory `0700`, file `0600`), never inside a workspace. The dashboard injects it as `KAGGLE_API_TOKEN` into the sessions its CLI assistant starts, unless that variable is already exported; a stored file that is a symlink or readable by others is never used.
-- `kaggle status [--verify]` — reports whether the token comes from the environment or the stored file, never its value.
-- `kaggle deactivate` — removes the stored token.
+- `kaggle activate [--token-stdin] [--no-verify] [--replace] [--workspace <dir>]` — activates Kaggle's official MCP server (`https://www.kaggle.com/mcp`, registered as `kaggle` by `init` and `upgrade`). It reads a `KGAT_` token (kaggle.com/settings → Account → API → Generate New Token) from a hidden prompt, verifies it with a read-only `get_accelerator_quota` call, and stores it where Kaggle's own client reads it, `~/.kaggle/access_token` (directory `0700`, file `0600` on POSIX), so the same token serves the `kaggle` CLI and `kagglesdk`. A different token already there is kept unless `--replace`. A token the official client left in `access_token` or `access_token.txt` is used as is, and the location 0.20 used (`$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token`) still reads. The dashboard injects it as `KAGGLE_API_TOKEN` into the sessions its CLI assistant starts, unless that variable is already exported; on POSIX a stored file that is a symlink or readable by others is never used.
+- `kaggle status [--verify]` — reports where the token comes from, never its value, plus the detected environment (macOS, Linux, WSL or Windows; zsh, bash, fish or PowerShell) and the exact command and profile file to export it outside the dashboard.
+- `kaggle deactivate` — removes the stored token files (the official client reads the same file, so this signs out the `kaggle` CLI too).
+
+`smith init` and `smith upgrade` print one offline line about the activation state (no network call) and warn when Pi or Antigravity are wired but `npx`, which their `mcp-remote` bridge needs, is missing. `pip install` runs no post-install step, so nothing is checked there.
 
 The dashboard's Experimentos tab shows the activation state and runs `smith mcp kaggle activate` in the CLI assistant.
 

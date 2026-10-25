@@ -15,6 +15,16 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **Kaggle MCP instructions follow the environment.** The activation box and
+  `smith mcp kaggle status` detect macOS, Linux, WSL or Windows, the login
+  shell (zsh, bash, fish, PowerShell) and the user, and print the export
+  command and profile file for that combination instead of fixed text; WSL and
+  Windows get a note on where the token lives. The token now lives where
+  Kaggle's own client keeps it, `~/.kaggle/access_token`, so one token serves
+  the MCP server, the `kaggle` CLI and `kagglesdk`; a token already there is
+  reused, a different one is never overwritten without `--replace`, and the
+  0.20 location still reads. `smith init` and `smith upgrade` print an offline
+  activation line and warn when `npx` is missing for Pi or Antigravity.
 - **`smith mcp kaggle activate|status|deactivate`.** Activates the official
   Kaggle MCP server for this user: a hidden prompt (or `--token-stdin`) takes
   a `KGAT_` token, a read-only `get_accelerator_quota` call verifies it

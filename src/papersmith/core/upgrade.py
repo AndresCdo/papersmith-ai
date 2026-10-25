@@ -20,6 +20,7 @@ from ..generators import (
 )
 from ..kit import resolve_and_validate_origin
 from ..schema import validate_tools
+from . import kaggle_mcp
 from . import config, fs, manifest, migrations, provenance, wiring
 from .exit_codes import EXECUTION_ERROR
 
@@ -507,6 +508,8 @@ def run_cli(args) -> int:
         print(f"  {line}")
     for warning in result["link_warnings"] + result.get("mcp_warnings", []):
         print(f"Warning: {warning}")
+    for line in kaggle_mcp.summary_lines(_active_tools_of(result)):
+        print(line)
 
     report = result["migrations"]
     lines = _migration_lines(report)
@@ -526,3 +529,13 @@ def run_cli(args) -> int:
             print(f"Migration failed: {failure}", file=sys.stderr)
         return EXECUTION_ERROR
     return 0
+
+
+def _active_tools_of(result: dict) -> list[str]:
+    """The harnesses this run wired, for the offline Kaggle MCP summary."""
+    wiring = result.get("wiring")
+    if isinstance(wiring, dict):
+        return [str(tool) for tool in wiring]
+    if isinstance(wiring, list):
+        return [str(item.get("tool")) for item in wiring if isinstance(item, dict) and item.get("tool")]
+    return []
