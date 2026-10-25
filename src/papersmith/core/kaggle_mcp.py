@@ -179,6 +179,18 @@ def detect_environment() -> dict[str, str]:
             "export_command": export, "profile_file": profile, "note": note}
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Leave a redirect unfollowed, so the token reaches :data:`KAGGLE_MCP_URL` only.
+
+    urllib's default opener follows a 301, 302 or 303 as a GET to whatever host
+    the answer names, ``Authorization`` header included, and the caller then
+    reads that host's reply as Kaggle's.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def verify_token(token: str) -> tuple[bool, str]:
     """Call :data:`VERIFY_TOOL` with the token; ``(ok, detail)``, never the token."""
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -188,10 +200,13 @@ def verify_token(token: str) -> tuple[bool, str]:
         "Accept": "application/json, text/event-stream",
         "Authorization": f"Bearer {token}",
     })
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with urllib.request.urlopen(request, timeout=VERIFY_TIMEOUT_SECONDS) as response:
+        with opener.open(request, timeout=VERIFY_TIMEOUT_SECONDS) as response:
             text = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
+        if 300 <= exc.code < 400:
+            return False, f"HTTP {exc.code}: a redirect, not followed"
         return False, f"HTTP {exc.code}"
     except (urllib.error.URLError, OSError) as exc:
         return False, f"unreachable: {getattr(exc, 'reason', exc)}"

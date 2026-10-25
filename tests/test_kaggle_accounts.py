@@ -14,13 +14,16 @@ import argparse
 import contextlib
 import importlib.util
 import inspect
+import http.server
 import io
 import json
+import os
 import re
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock
 from collections import Counter
@@ -420,6 +423,72 @@ class ValidateTests(unittest.TestCase):
         unreachable = ACCOUNTS.CredentialError("could not reach Kaggle to validate it")
         with self.assertRaises(ACCOUNTS.CredentialError):
             self.run_validate(unreachable)
+
+
+def _serve(test: unittest.TestCase, status: int, headers: dict[str, str] | None = None,
+           body: bytes = b"") -> tuple[str, list[dict[str, str | None]]]:
+    """Answer every request on 127.0.0.1 with one reply; return its URL and the requests seen."""
+    seen: list[dict[str, str | None]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def answer(self) -> None:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            seen.append({"method": self.command, "authorization": self.headers.get("Authorization")})
+            self.send_response(status)
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_GET = do_POST = answer
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    test.addCleanup(server.server_close)
+    test.addCleanup(server.shutdown)
+    return f"http://127.0.0.1:{server.server_address[1]}", seen
+
+
+class AttemptTests(unittest.TestCase):
+    """The one authenticated request, against local stand-ins for Kaggle."""
+
+    def setUp(self) -> None:
+        # The servers are local: no proxy from the environment may stand in front of them.
+        patcher = unittest.mock.patch.dict(os.environ, {"no_proxy": "*", "NO_PROXY": "*"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def attempt(self, url: str) -> None:
+        with unittest.mock.patch.object(ACCOUNTS, "VALIDATION_URL", url):
+            ACCOUNTS._attempt("Bearer", "KGAT_x")
+
+    def test_a_200_from_kaggle_proves_the_credential(self) -> None:
+        kaggle, seen = _serve(self, 200, body=b"[]")
+        self.attempt(kaggle + "/api/v1/competitions/list")
+        self.assertEqual(seen, [{"method": "GET", "authorization": "Bearer KGAT_x"}])
+
+    def test_a_redirect_is_not_followed_with_the_credential(self) -> None:
+        for code in (301, 302, 303, 307, 308):
+            with self.subTest(code=code):
+                elsewhere, reached = _serve(self, 200, body=b"[]")
+                kaggle, _ = _serve(self, code, {"Location": elsewhere + "/list"})
+                with self.assertRaisesRegex(ACCOUNTS.CredentialError, f"HTTP {code}, a redirect"):
+                    self.attempt(kaggle + "/api/v1/competitions/list")
+                self.assertEqual(reached, [])
+
+    def test_validate_does_not_retry_a_redirect_as_bearer(self) -> None:
+        # Only a 401 earns the Bearer retry; a redirect is a verdict on the first attempt.
+        elsewhere, reached = _serve(self, 200, body=b"[]")
+        kaggle, seen = _serve(self, 302, {"Location": elsewhere + "/list"})
+        with unittest.mock.patch.object(ACCOUNTS, "VALIDATION_URL", kaggle + "/api/v1/competitions/list"):
+            with self.assertRaisesRegex(ACCOUNTS.CredentialError, "HTTP 302, a redirect"):
+                ACCOUNTS.validate("someone", "0123456789abcdef0123456789abcdef")
+        self.assertEqual([request["authorization"].split()[0] for request in seen], ["Basic"])
+        self.assertEqual(reached, [])
 
 
 class DiscoverCommandTests(unittest.TestCase):

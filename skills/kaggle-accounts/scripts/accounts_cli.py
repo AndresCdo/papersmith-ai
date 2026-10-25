@@ -467,6 +467,18 @@ def discover_credentials(folders: list[str] | None = None) -> list[dict]:
     return found
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Leave a redirect unfollowed, so the credential reaches `VALIDATION_URL` only.
+
+    urllib's default opener follows a redirect to whatever host it names,
+    `Authorization` header included, and a 200 from that host would then read
+    as Kaggle accepting the credential.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _attempt(scheme: str, credential: str) -> None:
     """One authenticated request. Raises `CredentialError`, or returns on 200."""
     request = urllib.request.Request(
@@ -476,8 +488,9 @@ def _attempt(scheme: str, credential: str) -> None:
             "User-Agent": "papersmith-kaggle-accounts",
         },
     )
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with urllib.request.urlopen(request, timeout=VALIDATION_TIMEOUT) as response:
+        with opener.open(request, timeout=VALIDATION_TIMEOUT) as response:
             if response.status != 200:
                 raise CredentialError(f"Kaggle answered HTTP {response.status}")
     except urllib.error.HTTPError as exc:
@@ -485,6 +498,9 @@ def _attempt(scheme: str, credential: str) -> None:
             raise CredentialError("Kaggle rejected it (HTTP 401) — wrong username or expired token")
         if exc.code == 403:
             raise CredentialError("authenticated but forbidden (HTTP 403) — the account is restricted")
+        if 300 <= exc.code < 400:
+            raise CredentialError(f"Kaggle answered HTTP {exc.code}, a redirect; it is not "
+                                  "followed with the credential — not saved")
         raise CredentialError(f"Kaggle answered HTTP {exc.code}")
     except urllib.error.URLError as exc:
         raise CredentialError(f"could not reach Kaggle to validate it ({exc.reason}) — not saved")

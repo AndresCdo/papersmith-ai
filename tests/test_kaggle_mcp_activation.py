@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+import http.server
 import io
 import json
 import os
 import stat
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -331,6 +333,66 @@ class EnvironmentTests(_Env):
         self.assertIn("activated", text)
         self.assertNotIn("npx", text)
         self.assertNotIn(TOKEN, text)
+
+
+def _serve(test: unittest.TestCase, status: int, headers: dict[str, str] | None = None,
+           body: bytes = b"") -> tuple[str, list[dict[str, str | None]]]:
+    """Answer every request on 127.0.0.1 with one reply; return its URL and the requests seen."""
+    seen: list[dict[str, str | None]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def answer(self) -> None:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            seen.append({"method": self.command, "authorization": self.headers.get("Authorization")})
+            self.send_response(status)
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_GET = do_POST = answer
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    test.addCleanup(server.server_close)
+    test.addCleanup(server.shutdown)
+    return f"http://127.0.0.1:{server.server_address[1]}", seen
+
+
+QUOTA = json.dumps({"jsonrpc": "2.0", "id": 1,
+                    "result": {"content": [{"type": "text", "text": "quota"}]}}).encode()
+
+
+class VerifyTokenTests(unittest.TestCase):
+    """`verify_token` against local stand-ins for Kaggle's MCP endpoint."""
+
+    def setUp(self) -> None:
+        # The servers are local: no proxy from the environment may stand in front of them.
+        patcher = mock.patch.dict(os.environ, {"no_proxy": "*", "NO_PROXY": "*"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def verify(self, url: str) -> tuple[bool, str]:
+        with mock.patch.object(kaggle_mcp, "KAGGLE_MCP_URL", url):
+            return kaggle_mcp.verify_token(TOKEN)
+
+    def test_the_token_goes_to_kaggle_and_its_answer_is_read(self) -> None:
+        kaggle, seen = _serve(self, 200, {"Content-Type": "application/json"}, QUOTA)
+        self.assertEqual(self.verify(kaggle + "/mcp"), (True, "accelerator quota read"))
+        self.assertEqual(seen, [{"method": "POST", "authorization": f"Bearer {TOKEN}"}])
+
+    def test_a_redirect_is_not_followed_with_the_token(self) -> None:
+        for code in (301, 302, 303, 307, 308):
+            with self.subTest(code=code):
+                elsewhere, reached = _serve(self, 200, {"Content-Type": "application/json"}, QUOTA)
+                kaggle, _ = _serve(self, code, {"Location": elsewhere + "/mcp"})
+                self.assertEqual(self.verify(kaggle + "/mcp"),
+                                 (False, f"HTTP {code}: a redirect, not followed"))
+                self.assertEqual(reached, [])
 
 
 if __name__ == "__main__":
