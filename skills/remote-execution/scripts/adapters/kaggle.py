@@ -80,7 +80,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, NamedTuple
 
 
 def _load_adapter_seam():
@@ -166,6 +166,144 @@ def _account_names_on_disk(
             f"{accounts_cli} list --json did not print JSON: {exc}"
         ) from exc
     return [account["username"] for account in payload.get("accounts", [])]
+
+
+# The TEAM registry: which person owns which Kaggle account. Git-ignored,
+# no secrets, written by the operator's own tooling (`smith team`); this
+# module only reads it, and only two fields per member — `owner` and
+# `accounts.kaggle.username`. Never a token path, never anything a token
+# file holds: the credential still travels only as a `CredentialHandle`.
+# The default location is the workspace root this file ships inside
+# (`<workspace>/skills/remote-execution/scripts/adapters/kaggle.py`), the
+# same resolution the Colab adapter uses, read at call time so a caller
+# (or a test) can point it elsewhere.
+TEAM_REGISTRY_RELATIVE = Path(".papersmith") / "team.json"
+DEFAULT_TEAM_REGISTRY = Path(__file__).resolve().parents[4] / TEAM_REGISTRY_RELATIVE
+TEAM_REGISTRY_SCHEMA = 1
+_OWNER_RE = re.compile(r"^[a-z0-9-]{1,40}$")
+
+# The rule the exclusion cites. Kaggle staff, verified 2026-10-25: the one
+# account per person rule is site-wide, so a second account under distinct
+# email addresses is still the same person's second account — it is never
+# a campaign worker, whatever address it was registered with.
+KAGGLE_ONE_ACCOUNT_RULE_URL = "https://www.kaggle.com/discussions/general/192527"
+KAGGLE_ONE_ACCOUNT_RULE = "the one account per person applies to all Kaggle site use"
+TEAM_UNMAPPED_REASON = (
+    "not mapped to a team owner: one account per person — Kaggle staff: "
+    f"'{KAGGLE_ONE_ACCOUNT_RULE}' ({KAGGLE_ONE_ACCOUNT_RULE_URL})"
+)
+
+
+def load_kaggle_team(path: str | Path) -> dict[str, str] | None:
+    """`{username: owner}` for every owner the registry at `path` maps to a
+    Kaggle username, or `None` when there is no registry or it maps none —
+    the plain-listing behaviour, unchanged.
+
+    Fail-closed on every shape it cannot honestly read: not JSON, not a
+    schema-1 object, no `members` list, an owner slug outside
+    `[a-z0-9-]{1,40}` or repeated, a username that is not a non-empty
+    string, or the SAME username under two owners (one account cannot
+    belong to two people).
+    """
+    registry = Path(path)
+    try:
+        text = registry.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise KaggleAdapterError(f"cannot read the team registry {registry}: {exc}") from exc
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise KaggleAdapterError(
+            f"the team registry {registry} is not JSON ({exc}); refusing to "
+            "guess which accounts it maps"
+        ) from exc
+    if not isinstance(document, dict) or document.get("schema") != TEAM_REGISTRY_SCHEMA:
+        raise KaggleAdapterError(
+            f"the team registry {registry} is not a schema-{TEAM_REGISTRY_SCHEMA} "
+            "object; refusing to guess which accounts it maps"
+        )
+    members = document.get("members")
+    if not isinstance(members, list):
+        raise KaggleAdapterError(f"the team registry {registry} carries no 'members' list")
+
+    owner_by_username: dict[str, str] = {}
+    owners_seen: set[str] = set()
+    for index, member in enumerate(members):
+        if not isinstance(member, dict):
+            raise KaggleAdapterError(f"{registry}: member #{index} is not an object")
+        owner = member.get("owner")
+        if not isinstance(owner, str) or _OWNER_RE.match(owner) is None:
+            raise KaggleAdapterError(
+                f"{registry}: member #{index} owner {owner!r} is not a slug "
+                "of 1-40 characters in [a-z0-9-]"
+            )
+        if owner in owners_seen:
+            raise KaggleAdapterError(
+                f"{registry}: owner {owner!r} appears more than once; an owner "
+                "is one person and is listed once"
+            )
+        owners_seen.add(owner)
+        services = member.get("accounts")
+        entry = services.get("kaggle") if isinstance(services, dict) else None
+        if entry is None:
+            continue
+        username = entry.get("username") if isinstance(entry, dict) else None
+        if not isinstance(username, str) or not username.strip():
+            raise KaggleAdapterError(
+                f"{registry}: owner {owner!r} accounts.kaggle.username is not "
+                "a non-empty string"
+            )
+        if username in owner_by_username:
+            raise KaggleAdapterError(
+                f"{registry}: Kaggle username {username!r} is mapped to both "
+                f"{owner_by_username[username]!r} and {owner!r}; one account "
+                "belongs to one person"
+            )
+        owner_by_username[username] = owner
+    return owner_by_username or None
+
+
+class KaggleTeamReport(NamedTuple):
+    """What the team registry did to the listed accounts.
+
+    `workers` — the listed usernames an owner maps, in listing order, one per
+    owner. `excluded` — `(username, reason)` for every listed account no
+    owner maps; it stays listed, it is never a worker. `not_validated` —
+    `(owner, username, reason)` for every mapping whose username the listing
+    does not hold; no worker exists for it until it is validated.
+    """
+
+    workers: tuple[str, ...]
+    excluded: tuple[tuple[str, str], ...]
+    not_validated: tuple[tuple[str, str, str], ...]
+
+
+def _team_report(names: list[str], team: Mapping[str, str]) -> KaggleTeamReport:
+    workers: list[str] = []
+    excluded: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        if name in team:
+            workers.append(name)
+        else:
+            excluded.append((name, TEAM_UNMAPPED_REASON))
+    not_validated = tuple(
+        (
+            owner,
+            username,
+            f"owner {owner!r} maps Kaggle username {username!r}, which the "
+            "kaggle-accounts listing does not hold: not validated, so it is no "
+            "worker until that account is taken in and validated",
+        )
+        for username, owner in team.items()
+        if username not in seen
+    )
+    return KaggleTeamReport(tuple(workers), tuple(excluded), not_validated)
 
 # `adapters/kaggle_driver.py`, this module's own sibling — the one file in
 # this skill permitted to import the Kaggle SDK package. `submit()`/
@@ -578,8 +716,12 @@ class KaggleAdapter(ADAPTER.Adapter):
         timeout: float = SUBPROCESS_TIMEOUT_SECONDS,
         fetch_timeout: float = KAGGLE_FETCH_TIMEOUT_SECONDS,
         driver_script: Path | str | None = None,
+        team_registry: Path | str | None = None,
     ) -> None:
         self._credential_provider = self._normalize_credentials(credentials)
+        # The registry's PATH, read lazily by `_team()`; `None` means the
+        # module default, resolved at read time.
+        self._team_registry = Path(team_registry) if team_registry is not None else None
         self._accounts_cli = Path(accounts_cli) if accounts_cli else DEFAULT_ACCOUNTS_CLI
         self._kaggle_executable = kaggle_executable
         self._timeout = timeout
@@ -771,9 +913,33 @@ class KaggleAdapter(ADAPTER.Adapter):
         normally even when whatever file backs `accounts_cli`'s own answer
         is unreadable to THIS process directly — this process never tries
         to read it at all.
+
+        Under the TEAM model (`<workspace>/.papersmith/team.json` maps at
+        least one owner to a Kaggle username) only the owner-mapped listed
+        accounts are workers, one per owner; `team_report()` states why
+        every other listed account is excluded and which mappings are not
+        validated. With no registry, or one mapping no Kaggle account, the
+        list is every listed account, exactly as before.
         """
         names = _account_names_on_disk(self._accounts_cli, self._run)
+        team = self._team()
+        if team is not None:
+            names = list(_team_report(names, team).workers)
         return [ADAPTER.Worker(id=name, capacity=KAGGLE_WORKER_CAPACITY) for name in names]
+
+    def _team(self) -> dict[str, str] | None:
+        path = self._team_registry if self._team_registry is not None else DEFAULT_TEAM_REGISTRY
+        return load_kaggle_team(path)
+
+    def team_report(self) -> KaggleTeamReport | None:
+        """The team registry's effect on the listed accounts, or `None` when
+        no registry maps a Kaggle account (every listed account is a
+        worker). Not one of the seam's six operations: an ordinary method a
+        planner or an operator-facing report can ask."""
+        team = self._team()
+        if team is None:
+            return None
+        return _team_report(_account_names_on_disk(self._accounts_cli, self._run), team)
 
     def submit(self, job: "ADAPTER.Job") -> "ADAPTER.Submission":
         """Push a kernel version and report back the ref this adapter will
@@ -906,6 +1072,16 @@ class KaggleAdapter(ADAPTER.Adapter):
                 f"{job.entrypoint} carries a non-empty run_config but "
                 f"{metadata_path} is absent: refusing to push a kernel "
                 "the service would reject for missing metadata"
+            )
+
+        # Under the team model a listed account no owner maps is never
+        # spent, even when named explicitly — refused from the registry
+        # alone, before any credential is asked for or any child runs.
+        team = self._team()
+        if team is not None and job.worker not in team:
+            raise KaggleAdapterError(
+                f"worker {job.worker!r} is {TEAM_UNMAPPED_REASON}; submit to "
+                f"an owner-mapped account ({', '.join(sorted(team))})"
             )
 
         handle = self._credential_for(job.worker)
@@ -1247,6 +1423,14 @@ def _declared_capacity() -> tuple[int, int] | None:
             DEFAULT_ACCOUNTS_CLI, _run_accounts_cli_for_declared_capacity)
     except (KaggleAdapterError, subprocess.TimeoutExpired, OSError):
         return None
+    # Under the team model only owner-mapped accounts are workers, so only
+    # they count; a registry this process cannot read declares nothing.
+    try:
+        team = load_kaggle_team(DEFAULT_TEAM_REGISTRY)
+    except KaggleAdapterError:
+        return None
+    if team is not None:
+        names = list(_team_report(names, team).workers)
     return (len(names), KAGGLE_WORKER_CAPACITY)
 
 

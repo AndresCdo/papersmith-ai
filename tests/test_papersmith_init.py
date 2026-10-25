@@ -19,13 +19,14 @@ from papersmith.cli import main
 from papersmith.core import config, init as init_module, manifest
 from papersmith.kit import resolve_and_validate
 from papersmith.errors import UserError
+from papersmith.generators import MANAGED_BLOCK_BEGIN, MANAGED_BLOCK_END
 from papersmith.yamllite import loads
 
 
 class EnvironmentProvisioningTests(unittest.TestCase):
     """`init` provisions the environment the command center's backend needs.
 
-    The step is what makes `papersmith ui` work after init: the CLI's own
+    The step is what makes `smith ui` work after init: the CLI's own
     interpreter is a pipx venv with no runtime dependencies, and the environment
     `scripts/setup_env.py` builds is the one thing that carries them. These
     drive the step against a script that stands in for the real one, so no test
@@ -97,6 +98,31 @@ class EnvironmentProvisioningTests(unittest.TestCase):
         init_module.initialize(root, run_npm=False, run_env=False)
 
         assert calls == [], "`run_env=False` must be an offline-fast init"
+
+    def test_init_skips_the_step_by_default(self) -> None:
+        root = self.new_tmp() / "paper"
+        calls: list[Path] = []
+        original = init_module._run_env_install
+        init_module._run_env_install = (
+            lambda workspace, report=None: calls.append(workspace) or None)
+        self.addCleanup(setattr, init_module, "_run_env_install", original)
+
+        init_module.initialize(root, run_npm=False)
+
+        assert calls == [], "default `initialize(...)` must defer environment provisioning"
+
+    def test_cli_flags_control_provisioning(self) -> None:
+        from papersmith.cli import build_parser
+
+        parser = build_parser()
+        args_default = parser.parse_args(["init", "dest"])
+        assert getattr(args_default, "with_env", False) is False
+
+        args_with = parser.parse_args(["init", "--with-env", "dest"])
+        assert args_with.with_env is True
+
+        args_no = parser.parse_args(["init", "--no-env", "dest"])
+        assert args_no.no_env is True
 
 
 class SuiteStaysOfflineTests(unittest.TestCase):
@@ -524,6 +550,227 @@ class InitTests(unittest.TestCase):
         with self.assertRaisesRegex(UserError, "must be empty"):
             init_module.initialize(workspace, run_npm=False, run_env=False)
 
+    def test_cli_import_existing_files_preserves_originals(self) -> None:
+        workspace = self.new_tmp() / "existing"
+        (workspace / "guidance" / "reference-papers").mkdir(parents=True)
+        original = workspace / "guidance" / "reference-papers" / "source.pdf"
+        original.write_bytes(b"original paper bytes")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", str(workspace), "--import-existing", "--no-npm", "--no-env"]) == 0
+        assert original.read_bytes() == b"original paper bytes"
+        assert (workspace / ".papersmith" / "manifest.json").is_file()
+        assert (workspace / "papersmith.yaml").is_file()
+        for path in (workspace / "papersmith.yaml", workspace / ".papersmith" / "config.json",
+                     workspace / ".papersmith" / "manifest.json"):
+            assert b"papersmith-init-" not in path.read_bytes(), path
+
+    def test_import_refuses_collision_without_mutating_destination(self) -> None:
+        workspace = self.new_tmp() / "existing"
+        workspace.mkdir()
+        original = workspace / "CLAUDE.md"
+        original.write_bytes(b"my own instructions")
+        (workspace / ".gitignore").write_bytes(b"data/\n")
+        with self.assertRaisesRegex(UserError, "import collision.*CLAUDE.md"):
+            init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert original.read_bytes() == b"my own instructions"
+        assert (workspace / ".gitignore").read_bytes() == b"data/\n"
+        assert sorted(p.name for p in workspace.iterdir()) == [".gitignore", "CLAUDE.md"]
+
+    def test_import_keeps_readme_and_merges_gitignore(self) -> None:
+        workspace = self.new_tmp() / "repo"
+        workspace.mkdir()
+        (workspace / "README.md").write_bytes(b"# My repo\n")
+        (workspace / ".gitignore").write_bytes(b"data/\n*.log\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", str(workspace), "--import-existing", "--no-npm", "--no-env"]) == 0
+        assert (workspace / "README.md").read_bytes() == b"# My repo\n"
+        ignore = (workspace / ".gitignore").read_text(encoding="utf-8")
+        assert ignore.startswith(MANAGED_BLOCK_BEGIN)
+        assert MANAGED_BLOCK_END in ignore
+        assert ignore.split(MANAGED_BLOCK_END, 1)[1].split() == ["data/", "*.log"]
+        assert not list(workspace.glob(".*.papersmith-import"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["audit", str(workspace), "--check-drift"]) == 0
+
+    def test_import_refuses_gitignore_with_malformed_markers(self) -> None:
+        workspace = self.new_tmp() / "repo"
+        workspace.mkdir()
+        broken = f"{MANAGED_BLOCK_BEGIN}\ndata/\n".encode()
+        (workspace / ".gitignore").write_bytes(broken)
+        with self.assertRaisesRegex(UserError, "import collision.*gitignore"):
+            init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert (workspace / ".gitignore").read_bytes() == broken
+        assert sorted(p.name for p in workspace.iterdir()) == [".gitignore"]
+
+    def test_cli_init_defaults_to_the_current_directory(self) -> None:
+        workspace = self.new_tmp() / "here"
+        workspace.mkdir()
+        with contextlib.chdir(workspace), contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", "--no-npm", "--no-env"]) == 0
+        assert (workspace / "papersmith.yaml").is_file()
+        assert (workspace / ".papersmith" / "manifest.json").is_file()
+
+    def test_cli_init_in_a_nonempty_current_directory_points_to_import(self) -> None:
+        workspace = self.new_tmp() / "here"
+        workspace.mkdir()
+        (workspace / "notes.md").write_text("keep")
+        with contextlib.chdir(workspace), contextlib.redirect_stderr(io.StringIO()) as err:
+            assert main(["init", "--no-npm", "--no-env"]) != 0
+        assert re.search("must be empty.*--import-existing", err.getvalue())
+        assert sorted(p.name for p in workspace.iterdir()) == ["notes.md"]
+
+    def test_init_declares_pi_web_access_for_pi_workspaces(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        settings = json.loads((workspace / ".pi" / "settings.json").read_text())
+        assert settings == {"packages": ["npm:pi-web-access"]}
+        other = tmp_path / "claude-only"
+        init_module.initialize(other, tools=("claude",), run_npm=False, run_env=False)
+        assert not (other / ".pi" / "settings.json").exists()
+
+    def test_init_registers_the_banco_lia_mcp_for_every_declared_harness(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        args = ["--from", "git+https://github.com/LIAUNAL/bancoProyectosPapersLIA", "banco-lia-mcp"]
+        claude = json.loads((workspace / ".mcp.json").read_text())
+        assert claude["mcpServers"]["banco-lia"] == {"type": "stdio", "command": "uvx", "args": args}
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json"):
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert servers["banco-lia"] == {"command": "uvx", "args": args}, relpath
+        opencode = json.loads((workspace / "opencode.json").read_text())
+        assert opencode["mcp"]["banco-lia"] == {
+            "type": "local", "command": ["uvx", *args], "enabled": True}
+        other = tmp_path / "claude-only"
+        init_module.initialize(other, tools=("claude",), run_npm=False, run_env=False)
+        assert (other / ".mcp.json").is_file()
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json", "opencode.json"):
+            assert not (other / relpath).exists(), relpath
+
+    def test_init_registers_the_kaggle_mcp_for_every_declared_harness(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        claude = json.loads((workspace / ".mcp.json").read_text())
+        assert claude["mcpServers"]["kaggle"] == {
+            "type": "http", "url": "https://www.kaggle.com/mcp",
+            "headers": {"Authorization": "Bearer ${KAGGLE_API_TOKEN:-}"}}
+        bridge = ["-y", "mcp-remote@0.14.3", "https://www.kaggle.com/mcp",
+                  "--header", "Authorization:Bearer ${KAGGLE_API_TOKEN}"]
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json"):
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert servers["kaggle"] == {"command": "npx", "args": bridge}, relpath
+            assert "banco-lia" in servers, relpath
+        opencode = json.loads((workspace / "opencode.json").read_text())
+        assert opencode["mcp"]["kaggle"] == {
+            "type": "remote", "url": "https://www.kaggle.com/mcp",
+            "headers": {"Authorization": "Bearer {env:KAGGLE_API_TOKEN}"}, "enabled": True}
+        assert "banco-lia" in opencode["mcp"]
+
+    def test_init_registers_the_colab_mcp_for_every_declared_harness(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        args = ["git+https://github.com/googlecolab/colab-mcp@b9ab3899e0f1fa493390b1fd6d54aa2e464ecdf1"]
+        claude = json.loads((workspace / ".mcp.json").read_text())
+        assert claude["mcpServers"]["colab"] == {
+            "type": "stdio", "command": "uvx", "args": args, "timeout": 30000}
+        assert {"banco-lia", "kaggle"} <= set(claude["mcpServers"])
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json"):
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert servers["colab"] == {"command": "uvx", "args": args}, relpath
+            assert {"banco-lia", "kaggle"} <= set(servers), relpath
+        opencode = json.loads((workspace / "opencode.json").read_text())
+        assert opencode["mcp"]["colab"] == {
+            "type": "local", "command": ["uvx", *args], "enabled": True}
+        assert {"banco-lia", "kaggle"} <= set(opencode["mcp"])
+
+    def test_import_keeps_the_repository_mcp_servers_and_adds_banco_lia(self) -> None:
+        workspace = self.new_tmp() / "repo"
+        workspace.mkdir()
+        own = {"mcpServers": {"mine": {"command": "my-server", "args": []}}}
+        (workspace / ".mcp.json").write_text(json.dumps(own), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main(["init", str(workspace), "--import-existing", "--no-npm", "--no-env"]) == 0
+        servers = json.loads((workspace / ".mcp.json").read_text())["mcpServers"]
+        assert servers["mine"] == own["mcpServers"]["mine"]
+        assert servers["banco-lia"]["command"] == "uvx"
+
+    def test_import_refuses_symlink_directory_without_following_it(self) -> None:
+        parent = self.new_tmp()
+        workspace = parent / "existing"
+        workspace.mkdir()
+        external = parent / "outside"
+        external.mkdir()
+        (workspace / "guidance").symlink_to(external, target_is_directory=True)
+        with self.assertRaisesRegex(UserError, "import collision.*guidance"):
+            init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert list(external.iterdir()) == []
+        assert sorted(p.name for p in workspace.iterdir()) == ["guidance"]
+
+    def test_import_parent_swap_does_not_write_outside_destination(self) -> None:
+        parent = self.new_tmp()
+        workspace = parent / "existing"
+        reference = workspace / "guidance" / "reference-papers"
+        reference.mkdir(parents=True)
+        (reference / "source.pdf").write_bytes(b"original")
+        external = parent / "outside"
+        external.mkdir()
+        original_open = init_module.os.open
+        reference_inode = reference.stat().st_ino
+        swapped = False
+
+        def swap_before_open(path, *args, **kwargs):
+            nonlocal swapped
+            fd = kwargs.get("dir_fd")
+            if (path == ".gitkeep" and fd is not None and not swapped
+                    and init_module.os.fstat(fd).st_ino == reference_inode):
+                swapped = True
+                reference.rename(workspace / "parked-reference-papers")
+                reference.symlink_to(external, target_is_directory=True)
+            return original_open(path, *args, **kwargs)
+
+        with mock.patch.object(init_module.os, "open", swap_before_open):
+            with self.assertRaises(UserError):
+                init_module.initialize(workspace, import_existing=True, run_npm=False, run_env=False)
+        assert swapped, "the attack must reach the post-preflight file-create boundary"
+        assert list(external.iterdir()) == []
+        assert (workspace / "parked-reference-papers" / "source.pdf").read_bytes() == b"original"
+
+    def test_import_copy_failure_rolls_back_new_paths_only(self) -> None:
+        parent = self.new_tmp()
+        workspace = parent / "existing"
+        workspace.mkdir()
+        original = workspace / "notes.txt"
+        original.write_bytes(b"keep")
+        staged = parent / "stage"
+        (staged / "newdir").mkdir(parents=True)
+        (staged / "newdir" / "a.txt").write_bytes(b"a")
+        (staged / "newdir" / "b.txt").write_bytes(b"b")
+        real_copy = shutil.copyfileobj
+        calls = 0
+
+        def fail_second(inp, out):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("simulated copy failure")
+            return real_copy(inp, out)
+
+        with mock.patch.object(init_module.shutil, "copyfileobj", side_effect=fail_second):
+            with self.assertRaisesRegex(UserError, "import failed"):
+                init_module._import_staged(workspace, staged)
+        assert original.read_bytes() == b"keep"
+        assert sorted(p.name for p in workspace.iterdir()) == ["notes.txt"]
+
+    def test_cli_init_help_describes_import_opt_in(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(SystemExit) as exit_info:
+                main(["init", "--help"])
+        assert exit_info.exception.code == 0
+        assert "--import-existing" in output.getvalue()
+
     def test_cli_init_routes_flags_and_prints_summary(self) -> None:
         tmp_path = self.new_tmp()
         workspace = tmp_path / "cli-paper"
@@ -570,7 +817,7 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
     Measured defect: the kit ships `scripts/setup_env.py` into workspaces, and
     `cmd_install` unconditionally ran `pip install -e PROJECT_ROOT` with
     `check=True`. A workspace is not a Python project (no `pyproject.toml` or
-    `setup.py`), so pip failed and aborted provisioning before `marker-pdf`,
+    `setup.py`), so pip failed and aborted provisioning before the ingestion engine,
     leaving `OCR Engine Missing`. These load a *copy* of the real script into
     a bare dir -- exactly the workspace situation -- with the process boundary
     stubbed, so no test touches the network.
@@ -588,14 +835,15 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def install_calls(self, root: Path) -> list[list[str]]:
+    def install_calls(self, root: Path, *, no_ingestion: bool = False) -> list[list[str]]:
         module = self.load_copy(root)
         calls: list[list[str]] = []
         module.find_micromamba = lambda: Path("/fake/mm")
         module.env_exists = lambda name: False
         module.detect_cuda = lambda: False
         module.run = lambda mm, args, env: calls.append(list(args))
-        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False, no_ingestion=False)
+        args = argparse.Namespace(name="papersmith", cpu=True, cuda=False,
+                                  no_ingestion=no_ingestion)
         assert module.cmd_install(args) == 0
         return calls
 
@@ -607,7 +855,14 @@ class WorkspaceSetupEnvTests(unittest.TestCase):
     def test_workspace_without_python_project_skips_editable_install(self) -> None:
         calls = self.install_calls(self.new_bare_root())
         assert not any("-e" in call for call in calls), calls
-        assert any("marker-pdf==2.0.0" in call for call in calls), calls
+        assert any("docling==2.141.0" in call for call in calls), calls
+
+    def test_build_cli_is_provisioned_even_without_ingestion(self) -> None:
+        calls = self.install_calls(self.new_bare_root(), no_ingestion=True)
+        conda = [call for call in calls if call[0] in ("create", "install")]
+        assert len(conda) == 1, calls
+        assert "python-build" in conda[0], calls
+        assert not any("docling==2.141.0" in call for call in calls), calls
 
     def test_checkout_with_pyproject_keeps_editable_install(self) -> None:
         root = self.new_bare_root()

@@ -80,7 +80,7 @@ def test_the_documented_opencode_block_is_a_local_command(text: str) -> None:
     assert blocks, "the document must show the OpenCode wiring"
     server = blocks[0]["mcp"]["papersmith"]
     assert server["type"] == "local"
-    assert server["command"][:3] == ["papersmith", "mcp", "serve"]
+    assert server["command"][:3] == ["smith", "mcp", "serve"]
 
 
 def test_the_document_states_the_pinned_revision_and_its_refusal(text: str) -> None:

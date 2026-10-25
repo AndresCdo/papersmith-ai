@@ -211,6 +211,24 @@ from this list, not that the direction is unnecessary.
 When an item reaches movement 5, the reference on its alternative is the same one the
 corresponding future-work direction carries.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+Nine of the ten papers state their limitations, and none in a top-level section: five
+as the last subsection of the results, titled *Limitations*, and four inside the
+conclusions, ahead of the future work. They open by conceding the scope (*Despite the
+performance of the proposed …, several limitations should be acknowledged.*) and
+enumerate the items as *First*, *Second*, *Third*, each paired with the direction that
+would address it.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+
 ## Inputs
 
 ### External inputs

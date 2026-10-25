@@ -1,0 +1,31 @@
+# colab-team-accounts
+Objective: Google Colab as a second remote GPU service beside Kaggle — connection (official CLI headless, official MCP interactive), instructions and flow in the Experimentos tab, proof of concept and experiments able to run there — and several accounts per service under a TEAM model: one account per person per service, Colab campaigns only on paid compute.
+Branch: feat/colab-team-accounts · Delivery: single merge (user asks merge and push) · Runners: `npm run test:py`, `npm test`.
+
+## Specs
+
+- S1 (Colab): "ajusta para que el panel de experimentos, y la preuba de concepto y los experimentos también pueda utilizar google colab, revisa y explora como podemos conectarnos con ese servicio tambien, y deja las indicaciones tambien y el flujo como hiciste con kaggle."
+- S2 (accounts): "el usario podra conectar entonces varias cuentsa de kaggle y de colab" — accepted model (2026-10-25, "sí, constrúyelo con ese modelo de equipo"): several accounts per service, ONE ACCOUNT PER PERSON (each account is owned and operated by a distinct team member), and remote campaigns on Colab only with paid compute (Colab Pro/Pay-As-You-Go compute units or Colab Enterprise). Evidence: the official Colab FAQ disallows "using multiple accounts to work around access or resource usage restrictions" and, on free runtimes without compute units, "running distributed computing workers" (https://research.google.com/colaboratory/faq.html [verified: 2026-10-25]). Kaggle's terms could not be read (JS page); the same one-per-person rule is applied until verified.
+
+## Shared conventions (all units must follow; report a conflict instead of diverging)
+
+- **Team registry** (no secrets, personal data, git-ignored): `<workspace>/.papersmith/team.json`
+  `{"schema": 1, "members": [{"owner": "<slug, 1-40 [a-z0-9-]>", "displayName": "<text>", "attestedAt": "YYYY-MM-DD", "attestation": "owns and operates exactly one account per service listed here", "accounts": {"kaggle": {"username": "<kaggle username>"}, "colab": {"tier": "free|pro|payg|enterprise", "configDir": "<absolute path>"}}}]}`.
+  A member may list one or both services. An owner slug appears once. The same Kaggle username or Colab configDir may not appear under two owners.
+- **Colab per-owner state**: `$XDG_CONFIG_HOME/papersmith/colab/<owner>/` (default `~/.config/papersmith/colab/<owner>/`, dir 0700). CORRECTED (measured by T1 and T2 independently on 0.6.0 and 0.7.5): `--config PATH` only relocates `sessions.json`; the oauth token path is fixed at `~/.config/colab-cli/token.json` from `HOME`, so each owner runs the CLI with `HOME=<configDir>` plus `--config <configDir>/.config/colab-cli/sessions.json`. Pin stays `google-colab-cli==0.6.0` (0.7.5 removed the hidden keep-alive the adapter uses). Nothing in papersmith reads, copies or prints files inside it (token.json / sessions.json are credential-grade).
+- **Colab MCP** (official, interactive, browser session): server key `colab`, command `uvx` args `["git+https://github.com/googlecolab/colab-mcp@b9ab3899e0f1fa493390b1fd6d54aa2e464ecdf1"]` (pinned commit 2026-04-01), registered for every harness exactly like `kaggle` (claude `.mcp.json` type stdio with `"timeout": 30000`; opencode `opencode.json` local; pi/antigravity stdio).
+- **Policy, enforced in code where measurable**: parallelism across accounts counts DISTINCT OWNERS, never accounts; a Colab account with tier `free` may run interactive/proof-of-concept work in one session but is never a worker of a split campaign; a campaign split across several owners on Colab requires every participating account tier ∈ {pro, payg, enterprise}. Mixing services (Kaggle + Colab shards) inside one campaign is refused unless the per-shard environment stamps are identical (accelerator model, CUDA, torch) — default verdict: do not mix.
+
+## Tasks
+
+- T1 [S1,S2] remote-execution Colab adapter: one worker per team owner (configDir), tier-aware, CLI 0.7.5 compatibility — route: delegated (parallel units) — done
+- T2 [S1,S2] smith CLI: team registry + `smith team` + `smith colab login/status` + Colab MCP registration + remote-parallelism policy correction — route: delegated (parallel units) — done
+- T3 [S1,S2] dashboard: Colab rows in the services table, Colab activation/instructions box, team table, help box section — route: delegated (parallel units) — done
+- T4 shared pins, projections, verifier, suite, merge, push, QMLEEG upgrade, restart dashboards — route: inline — done
+
+## Log
+
+- L1 (2026-10-25, user verbatim): "ajusta para que el panel de experimentos, y la preuba de concepto y los experimentos también pueda utilizar google colab, revisa y explora como podemos conectarnos con ese servicio tambien, y deja las indicaciones tambien y el flujo como hiciste con kaggle. el usario podra conectar entonces varias cuentsa de kaggle y de colab"
+- L2 (2026-10-25, user verbatim): "sí, constrúyelo con ese modelo de equipo"
+- L3 Evidence: papersmith already ships `skills/remote-execution/scripts/adapters/colab.py` (headless `google-colab-cli`, measured against 0.6.0, single static worker, GPU via `COLAB_ACCELERATOR_VARIANTS`); `google-colab-cli` 0.7.5 (2026-10-20) exposes `new/run/upload/download/stop/sessions`, `--gpu T4|L4|A100|H100…`, global `--config PATH` and `--auth oauth2|adc`; official `googlecolab/colab-mcp` (Apache-2.0) bridges a local agent to a Colab notebook open in the browser.
+- L4 Verification: independent verifier — no blockers, 7/7 checks pass (per-owner HOME isolation, no file inside a configDir read, registry refusals, tier policy, backward compatibility byte-identical, dashboard no secrets, one install pin, Colab MCP pinned in 4 harnesses). Advisories fixed: A1 `packer.distribute` now skips workers the adapter's `campaign_refusal` names (free owners no longer block a paid campaign); A2 `team add` warns when the owner's state directory already exists. Parent incident: an over-wide slice deleted a region of adapters/colab.py; the T1 writer rebuilt it from HEAD plus its recorded edits (single insertion, 810 tests green). Full suite 6825 passed; fixed the new `team`/`colab` MCP registry roster failure; remaining: 2 known environment failures and the version-bump hygiene test.

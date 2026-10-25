@@ -39,6 +39,23 @@ even reach — never by convention:
    newline). The path is what `remote_cli` threads; the bytes never touch
    argv, `run-config.json`, the job folder, the ledger or any log.
 
+   Under the TEAM model (one worker per team owner, below) the same two
+   names are forwarded and nothing else — only the VALUE of `HOME`
+   changes: a team worker's child runs with `HOME=<configDir>`, the
+   owner's own state directory from `<workspace>/.papersmith/team.json`.
+   That is load-bearing, measured in the CLI's own source (0.6.0 and
+   0.7.5 alike): the OAuth token path is
+   `os.path.expanduser("~/.config/colab-cli/token.json")`, fixed at import
+   from `HOME`, and the global `--config PATH` flag names the session
+   state FILE (`sessions.json`) only — it never moves the token. So the
+   child's `HOME` is what keeps one owner's credential apart from
+   another's, and `--config <configDir>/.config/colab-cli/sessions.json`
+   is passed besides, on every argv, so the state file a worker uses is
+   stated rather than inferred. This module reads exactly three fields of
+   the registry (`owner`, `accounts.colab.tier`,
+   `accounts.colab.configDir`), stats the directory itself (exists, mode
+   0700), and never opens, lists or copies anything inside it.
+
 3. Every subprocess call is `shell=False` with a list argv, an explicit
    timeout, and that same two-variable environment. A non-zero exit, an
    expired timeout, or output this module cannot honestly read is a
@@ -137,6 +154,40 @@ WORKER_ID = "colab"
 # per account), and the CLI reports no concurrency allowance to read.
 # Revise only alongside a measured reason.
 COLAB_WORKER_CAPACITY = 1
+
+# The TEAM registry: one Colab account per person, each owned and operated
+# by a distinct team member. Git-ignored, no secrets, written by the
+# operator's own tooling (`smith team`); this module only reads it. Its
+# default location is the workspace root this file ships inside
+# (`<workspace>/skills/remote-execution/scripts/adapters/colab.py`), read
+# at call time so a caller (or a test) can point it elsewhere.
+TEAM_REGISTRY_RELATIVE = Path(".papersmith") / "team.json"
+DEFAULT_TEAM_REGISTRY = Path(__file__).resolve().parents[4] / TEAM_REGISTRY_RELATIVE
+TEAM_REGISTRY_SCHEMA = 1
+
+# A team worker's id: this prefix plus the owner slug. Parallelism across
+# accounts counts DISTINCT OWNERS, and the id makes that structural — an
+# owner appears once in the registry, so it appears once here.
+TEAM_WORKER_PREFIX = "colab:"
+_OWNER_RE = re.compile(r"^[a-z0-9-]{1,40}$")
+
+# The tiers a registry entry may declare, and the ones admitted to a split
+# campaign. A `free` account may run one interactive or proof-of-concept
+# session; it is never a worker of a split campaign.
+COLAB_TIERS = ("free", "pro", "payg", "enterprise")
+COLAB_CAMPAIGN_TIERS = frozenset({"pro", "payg", "enterprise"})
+
+# The rule the free-tier refusal cites, quoted from the service's own FAQ
+# (verified 2026-10-25): disallowed on managed runtimes running free of
+# charge without a positive compute-unit balance.
+COLAB_FAQ_URL = "https://research.google.com/colaboratory/faq.html"
+COLAB_FAQ_FREE_RULE = "running distributed computing workers"
+
+# Where the CLI keeps its session state under a given HOME — the value
+# passed to the CLI's own global `--config` flag for a team worker. It is
+# the CLI's default path re-rooted at the owner's directory, so the flag
+# states the file rather than changing it.
+CLI_SESSIONS_FILE_RELATIVE = Path(".config") / "colab-cli" / "sessions.json"
 
 # Every session this adapter creates carries this name prefix. The CLI
 # lists the ACCOUNT's sessions, not this skill's — `list_active()` claims
@@ -362,6 +413,136 @@ def _append_note(exc: BaseException, note: str) -> None:
         exc.args = (*exc.args, note)
 
 
+class TeamAccount:
+    """One owner's Colab account, as the team registry declares it: the
+    owner slug, the declared tier, and the owner's state directory. The
+    directory is a PATH this module hands to the child as `HOME` — never a
+    place this module reads from."""
+
+    __slots__ = ("owner", "tier", "config_dir")
+
+    def __init__(self, owner: str, tier: str, config_dir: Path) -> None:
+        self.owner = owner
+        self.tier = tier
+        self.config_dir = config_dir
+
+    @property
+    def worker_id(self) -> str:
+        return f"{TEAM_WORKER_PREFIX}{self.owner}"
+
+    @property
+    def sessions_file(self) -> Path:
+        return self.config_dir / CLI_SESSIONS_FILE_RELATIVE
+
+    def campaign_refusal(self) -> str | None:
+        """Why this account may not take part in a split campaign, or
+        `None` when its tier admits it."""
+        if self.tier in COLAB_CAMPAIGN_TIERS:
+            return None
+        return (
+            f"worker {self.worker_id!r} (owner {self.owner!r}) is declared "
+            f"tier {self.tier!r}: a free account may run one interactive or "
+            "proof-of-concept session, but it is never a worker of a split "
+            "campaign — the Colab FAQ disallows, on free runtimes without a "
+            f"positive compute-unit balance, \"{COLAB_FAQ_FREE_RULE}\" "
+            f"({COLAB_FAQ_URL}). Run this campaign on owners whose tier is "
+            f"one of {sorted(COLAB_CAMPAIGN_TIERS)}, or send this unit alone "
+            "as a single submission"
+        )
+
+
+def load_colab_team(path: str | Path) -> tuple[TeamAccount, ...] | None:
+    """The Colab accounts the team registry at `path` declares, or `None`
+    when no registry exists there (the single-worker behaviour, unchanged).
+
+    Reads exactly three fields per member — `owner`, `accounts.colab.tier`,
+    `accounts.colab.configDir` — and ignores everything else (display name,
+    attestation, other services). A member with no Colab account is not a
+    worker here. Fail-closed on every shape it cannot honestly read: a
+    registry that exists but is not schema 1, an owner slug outside
+    `[a-z0-9-]{1,40}` or repeated, an unknown tier, a `configDir` that is
+    not an absolute path, or the SAME directory under two owners (one
+    account per person: two owners sharing one state directory would be
+    one account wearing two names). Directory identity is compared after
+    normalization and symlink resolution of the directory path itself;
+    nothing inside it is opened.
+    """
+    registry = Path(path)
+    try:
+        text = registry.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise ColabAdapterError(f"cannot read the team registry {registry}: {exc}") from exc
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ColabAdapterError(
+            f"the team registry {registry} is not JSON ({exc}); refusing to "
+            "guess which accounts it declares"
+        ) from exc
+    if not isinstance(document, dict) or document.get("schema") != TEAM_REGISTRY_SCHEMA:
+        raise ColabAdapterError(
+            f"the team registry {registry} is not a schema-{TEAM_REGISTRY_SCHEMA} "
+            "object; refusing to guess which accounts it declares"
+        )
+    members = document.get("members")
+    if not isinstance(members, list):
+        raise ColabAdapterError(f"the team registry {registry} carries no 'members' list")
+
+    accounts: list[TeamAccount] = []
+    owners_seen: set[str] = set()
+    owner_by_dir: dict[str, str] = {}
+    for index, member in enumerate(members):
+        if not isinstance(member, dict):
+            raise ColabAdapterError(f"{registry}: member #{index} is not an object")
+        owner = member.get("owner")
+        if not isinstance(owner, str) or _OWNER_RE.match(owner) is None:
+            raise ColabAdapterError(
+                f"{registry}: member #{index} owner {owner!r} is not a slug "
+                "of 1-40 characters in [a-z0-9-]"
+            )
+        if owner in owners_seen:
+            raise ColabAdapterError(
+                f"{registry}: owner {owner!r} appears more than once; an owner "
+                "is one person and is listed once"
+            )
+        owners_seen.add(owner)
+        services = member.get("accounts")
+        colab = services.get("colab") if isinstance(services, dict) else None
+        if colab is None:
+            continue
+        if not isinstance(colab, dict):
+            raise ColabAdapterError(f"{registry}: owner {owner!r} accounts.colab is not an object")
+        tier = colab.get("tier")
+        if tier not in COLAB_TIERS:
+            raise ColabAdapterError(
+                f"{registry}: owner {owner!r} declares Colab tier {tier!r}; "
+                f"expected one of {list(COLAB_TIERS)}"
+            )
+        config_dir = colab.get("configDir")
+        if (
+            not isinstance(config_dir, str)
+            or "\0" in config_dir
+            or not os.path.isabs(config_dir)
+        ):
+            raise ColabAdapterError(
+                f"{registry}: owner {owner!r} declares configDir {config_dir!r}; "
+                "an absolute directory path is required"
+            )
+        identity = os.path.normcase(os.path.realpath(config_dir))
+        if identity in owner_by_dir:
+            raise ColabAdapterError(
+                f"{registry}: owners {owner_by_dir[identity]!r} and {owner!r} "
+                f"declare the same Colab configDir ({config_dir}); each owner "
+                "operates exactly one account of their own, with their own "
+                "state directory"
+            )
+        owner_by_dir[identity] = owner
+        accounts.append(TeamAccount(owner, tier, Path(os.path.normpath(config_dir))))
+    return tuple(accounts)
+
+
 class ColabAdapter(ADAPTER.Adapter):
     """The official `colab` CLI, behind the seam's six operations."""
 
@@ -387,8 +568,15 @@ class ColabAdapter(ADAPTER.Adapter):
         remote_root: str = DEFAULT_REMOTE_ROOT,
         assets_dir: Path | None = None,
         repo_credential_path: str | Path | None = None,
+        team_registry: str | Path | None = None,
     ) -> None:
         self._colab_executable = colab_executable
+        # The registry's PATH; read lazily (and once) by `_team()`, so a
+        # constructor never fails over a file no operation has needed yet.
+        # `None` means the module default, resolved at read time.
+        self._team_registry = Path(team_registry) if team_registry is not None else None
+        self._team_cache: tuple[TeamAccount, ...] | None = None
+        self._team_loaded = False
         self._control_timeout = timeout
         self._new_timeout = new_timeout
         self._transfer_timeout = transfer_timeout
@@ -438,9 +626,69 @@ class ColabAdapter(ADAPTER.Adapter):
             )
         return value
 
+    # -- the team (one worker per owner) -----------------------------------
+
+    def _team(self) -> tuple[TeamAccount, ...] | None:
+        """The registry's Colab accounts, or `None` for the single-worker
+        mode (no registry, or a registry declaring no Colab account — the
+        operator's own account then stays the one worker, exactly as
+        before the team model existed)."""
+        if not self._team_loaded:
+            path = self._team_registry if self._team_registry is not None else DEFAULT_TEAM_REGISTRY
+            team = load_colab_team(path)
+            self._team_cache = team if team else None
+            self._team_loaded = True
+        return self._team_cache
+
+    def _account_for(self, worker: str | None, *, allow_legacy: bool) -> TeamAccount | None:
+        """The team account a worker id names, or `None` for the legacy
+        single worker. In team mode the legacy id is admitted only where
+        `allow_legacy` says so (reads and cleanup of sessions issued before
+        the registry existed — never a new submission, which would spend
+        an account the registry does not list)."""
+        team = self._team()
+        if team is None:
+            if worker is None or worker == WORKER_ID:
+                return None
+            raise ColabAdapterError(
+                f"worker {worker!r} is not this adapter's: with no team registry "
+                f"the only Colab worker is {WORKER_ID!r}"
+            )
+        if worker is None or worker == WORKER_ID:
+            if allow_legacy:
+                return None
+            raise ColabAdapterError(
+                f"worker {worker!r} names the single operator account, but a team "
+                "registry is in force: submit to one owner's worker "
+                f"({', '.join(account.worker_id for account in team)})"
+            )
+        for account in team:
+            if account.worker_id == worker:
+                return account
+        raise ColabAdapterError(
+            f"worker {worker!r} is not declared in the team registry; declared: "
+            f"{', '.join(account.worker_id for account in team)}"
+        )
+
+    def campaign_refusal(self, worker: str) -> str | None:
+        """Why `worker` may not take part in a split campaign, or `None`
+        when it may. Not one of the seam's six operations: an ordinary
+        method a campaign planner can ask before placing units, answered
+        from the registry alone (no subprocess, no network)."""
+        account = self._account_for(worker, allow_legacy=True)
+        return None if account is None else account.campaign_refusal()
+
+    def _cli(self, account: TeamAccount | None) -> list[str]:
+        """The argv prefix for one worker's child: the executable, plus —
+        for a team worker — the CLI's own global `--config` naming that
+        owner's session state file."""
+        if account is None:
+            return [self._colab_executable]
+        return [self._colab_executable, "--config", str(account.sessions_file)]
+
     # -- the subprocess boundary ------------------------------------------
 
-    def _env_for(self) -> dict[str, str]:
+    def _env_for(self, account: TeamAccount | None = None) -> dict[str, str]:
         """The child's WHOLE environment, from a two-name allowlist:
         `PATH` and `HOME`. Nothing else is ever forwarded.
 
@@ -451,7 +699,45 @@ class ColabAdapter(ADAPTER.Adapter):
         that does. A process with no `HOME` is refused here rather than
         passed a child that would fail authentication for a reason no
         caller could read.
+
+        For a team worker the same two names are forwarded, and `HOME` is
+        the owner's `configDir` — the one route by which that owner's own
+        token file is the one the child resolves. The directory itself is
+        stat'ed (it must exist and be mode 0700, since what the CLI keeps
+        in it is credential-grade) and nothing inside it is touched; a
+        missing directory refuses naming the owner's one-time login.
         """
+        if account is not None:
+            directory = account.config_dir
+            login = (
+                f"HOME={directory} {self._colab_executable} --config "
+                f"{account.sessions_file} sessions"
+            )
+            try:
+                mode = directory.stat().st_mode
+            except FileNotFoundError:
+                raise ColabAdapterError(
+                    f"owner {account.owner!r}'s Colab configDir {directory} does "
+                    f"not exist; create it (mode 0700) and have that owner sign "
+                    f"in once with: {login}"
+                ) from None
+            except OSError as exc:
+                raise ColabAdapterError(
+                    f"cannot stat owner {account.owner!r}'s Colab configDir "
+                    f"{directory}: {exc}"
+                ) from exc
+            if not (mode & 0o170000) == 0o040000:
+                raise ColabAdapterError(
+                    f"owner {account.owner!r}'s Colab configDir {directory} is "
+                    "not a directory"
+                )
+            if mode & 0o077:
+                raise ColabAdapterError(
+                    f"owner {account.owner!r}'s Colab configDir {directory} is "
+                    f"mode {oct(mode & 0o777)}; it holds that owner's token, so "
+                    f"it must be 0700 (chmod 700 {directory})"
+                )
+            return {"PATH": os.environ.get("PATH", ""), "HOME": str(directory)}
         home = os.environ.get("HOME")
         if not home:
             raise ColabAdapterError(
@@ -467,8 +753,11 @@ class ColabAdapter(ADAPTER.Adapter):
         argv: list[str],
         *,
         timeout: float | None = None,
+        account: TeamAccount | None = None,
     ) -> subprocess.CompletedProcess:
         """One subprocess boundary for every child this adapter starts.
+        `account` selects whose environment the child gets (`_env_for`);
+        the argv already carries that worker's `_cli()` prefix.
 
         `timeout=None` means the control-plane budget. A timeout is a
         `ColabTransportError` (the request died in flight — retry-eligible
@@ -478,6 +767,7 @@ class ColabAdapter(ADAPTER.Adapter):
         here, in the one file this skill lets name a service.
         """
         effective_timeout = self._control_timeout if timeout is None else timeout
+        env = self._env_for(account)
         try:
             return subprocess.run(
                 argv,
@@ -485,7 +775,7 @@ class ColabAdapter(ADAPTER.Adapter):
                 capture_output=True,
                 text=True,
                 timeout=effective_timeout,
-                env=self._env_for(),
+                env=env,
             )
         except subprocess.TimeoutExpired as exc:
             raise ColabTransportError(
@@ -497,8 +787,9 @@ class ColabAdapter(ADAPTER.Adapter):
             if argv and argv[0] == self._colab_executable:
                 remedy = (
                     f" — this adapter shells out to the {argv[0]!r} command "
-                    "line, which arrives with `uv tool install --python 3.14 "
-                    'google-colab-cli --with "jupyter-kernel-client<1"`; '
+                    "line, which arrives with `"
+                    'uv tool install --force --python 3.14 "google-colab-cli==0.6.0" --with "jupyter-kernel-client<1"'
+                    "`; "
                     "install it and make sure the tool bin directory it "
                     "reports is on PATH"
                 )
@@ -509,6 +800,7 @@ class ColabAdapter(ADAPTER.Adapter):
         argv: list[str],
         *,
         timeout: float | None = None,
+        account: TeamAccount | None = None,
     ) -> subprocess.CompletedProcess:
         """`_run`, with the ONE retry this adapter ever performs: an
         idempotent read that died in flight is retried once, then
@@ -520,7 +812,7 @@ class ColabAdapter(ADAPTER.Adapter):
         retried = False
         while True:
             try:
-                result = self._run(argv, timeout=timeout)
+                result = self._run(argv, timeout=timeout, account=account)
             except ColabTransportError:
                 if retried:
                     raise
@@ -568,9 +860,12 @@ class ColabAdapter(ADAPTER.Adapter):
     def _session_dir(self, session_name: str) -> str:
         return f"{self._remote_root}/{session_name}"
 
-    def _session_name_from(self, submission_id: str) -> str:
+    def _parse_submission(self, submission_id: str) -> tuple[TeamAccount | None, str]:
         """Split `"<worker>/<session-name>"` and validate BOTH halves: the
-        worker must be this adapter's own, and the name must match the
+        worker must be this adapter's own (the single worker, or a team
+        owner the registry declares — whose account the returned tuple
+        carries, so every child for this submission runs as that owner),
+        and the name must match the
         shape this adapter generates (`SESSION_NAME_PREFIX` + slug +
         digest). The name is substituted into rendered sources that run
         on the VM, so anything else is refused here, before any
@@ -582,11 +877,13 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{submission_id!r} is not '<worker>/<session-name>'; "
                 "refusing to guess which session this names"
             )
-        if worker != WORKER_ID:
+        try:
+            account = self._account_for(worker, allow_legacy=True)
+        except ColabAdapterError as exc:
             raise ColabAdapterError(
-                f"{submission_id!r} names worker {worker!r}, but this adapter "
-                f"issues ids for {WORKER_ID!r} only"
-            )
+                f"{submission_id!r} names worker {worker!r}, which this adapter "
+                f"does not issue ids for: {exc}"
+            ) from exc
         if (
             len(session_name) > SESSION_NAME_MAX_CHARS
             or not session_name.startswith(SESSION_NAME_PREFIX)
@@ -597,7 +894,7 @@ class ColabAdapter(ADAPTER.Adapter):
                 "session name this adapter generates; refusing before that "
                 "name could reach a rendered source"
             )
-        return session_name
+        return account, session_name
 
     def _status_line(self, stdout: str, session_name: str) -> tuple[str, str] | None:
         """The measured status line for `session_name`, or `None` when the
@@ -691,6 +988,7 @@ class ColabAdapter(ADAPTER.Adapter):
         session_name: str,
         *,
         retry_read: bool = False,
+        account: TeamAccount | None = None,
     ) -> subprocess.CompletedProcess:
         """One in-kernel helper execution: `exec -f <rendered file>`, with
         the kernel budget passed to the CLI explicitly (the CLI's own
@@ -699,7 +997,7 @@ class ColabAdapter(ADAPTER.Adapter):
         fires first and its message is the one a caller reads.
         """
         argv = [
-            self._colab_executable,
+            *self._cli(account),
             "exec",
             "-s",
             session_name,
@@ -710,17 +1008,19 @@ class ColabAdapter(ADAPTER.Adapter):
         ]
         timeout = self._kernel_timeout + self._subprocess_slack
         runner = self._run_read if retry_read else self._run
-        return runner(argv, timeout=timeout)
+        return runner(argv, timeout=timeout, account=account)
 
     # -- lifecycle pieces --------------------------------------------------
 
-    def _refuse_existing_session(self, session_name: str) -> None:
+    def _refuse_existing_session(
+        self, session_name: str, account: TeamAccount | None = None
+    ) -> None:
         """S0 obligation 1: `colab new` on an existing name REPLACES the
         machine and orphans the old one, which has no CLI release path
         and burns compute until idle reclaim. The listing is read BEFORE
         `new`, and a name already on it is a refusal — never a replace.
         """
-        result = self._run_read([self._colab_executable, "sessions"])
+        result = self._run_read([*self._cli(account), "sessions"], account=account)
         if result.returncode != 0:
             raise ColabAdapterError(
                 f"colab sessions refused (exit {result.returncode}): "
@@ -795,7 +1095,11 @@ class ColabAdapter(ADAPTER.Adapter):
         return variant
 
     def _new_session(
-        self, session_name: str, *, accelerator_variant: str | None = None
+        self,
+        session_name: str,
+        *,
+        accelerator_variant: str | None = None,
+        account: TeamAccount | None = None,
     ) -> None:
         """Provision one machine, requiring the measured positive
         confirmation (`Session READY`) rather than a bare exit code. A
@@ -803,10 +1107,10 @@ class ColabAdapter(ADAPTER.Adapter):
         and all three mapped variants are in the captured `help-new.log`
         surface (S0 fact 4).
         """
-        argv = [self._colab_executable, "new", "-s", session_name]
+        argv = [*self._cli(account), "new", "-s", session_name]
         if accelerator_variant is not None:
             argv += ["--gpu", accelerator_variant]
-        result = self._run(argv, timeout=self._new_timeout)
+        result = self._run(argv, timeout=self._new_timeout, account=account)
         combined = f"{result.stdout}\n{result.stderr}"
         if result.returncode != 0 or "session ready" not in combined.lower():
             raise ColabAdapterError(
@@ -815,13 +1119,13 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{result.stderr.strip() or result.stdout.strip()}"
             )
 
-    def _endpoint_for(self, session_name: str) -> str:
+    def _endpoint_for(self, session_name: str, account: TeamAccount | None = None) -> str:
         """The `m-…` endpoint token from the measured `status` line. An
         unparseable endpoint refuses the launch BEFORE any upload: a
         session without keep-alive idles out mid-run and wastes the run.
         """
         result = self._run_read(
-            [self._colab_executable, "status", "-s", session_name]
+            [*self._cli(account), "status", "-s", session_name], account=account
         )
         if self._looks_like_not_found(result):
             raise ColabAdapterError(
@@ -838,7 +1142,9 @@ class ColabAdapter(ADAPTER.Adapter):
             )
         return found[1]
 
-    def _spawn_keep_alive(self, endpoint: str, session_name: str) -> None:
+    def _spawn_keep_alive(
+        self, endpoint: str, session_name: str, account: TeamAccount | None = None
+    ) -> None:
         """Best-effort keep-alive, detached, output to DEVNULL (parent
         plan D9). A spawn failure is deliberately NOT a refusal: the plan
         calls this best-effort, the session is already usable, and the
@@ -848,11 +1154,12 @@ class ColabAdapter(ADAPTER.Adapter):
         command, and S5 verifies this form against the real service
         (ledger S2-J5).
         """
-        argv = [self._colab_executable, "keep-alive", endpoint, session_name]
+        argv = [*self._cli(account), "keep-alive", endpoint, session_name]
+        env = self._env_for(account)
         try:
             subprocess.Popen(
                 argv,
-                env=self._env_for(),
+                env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
@@ -860,14 +1167,20 @@ class ColabAdapter(ADAPTER.Adapter):
         except OSError:
             return
 
-    def _upload(self, local: Path, remote: str, session_name: str) -> None:
+    def _upload(
+        self,
+        local: Path,
+        remote: str,
+        session_name: str,
+        account: TeamAccount | None = None,
+    ) -> None:
         if not local.is_file():
             raise ColabAdapterError(
                 f"cannot upload {local}: not a readable regular file"
             )
         result = self._run(
             [
-                self._colab_executable,
+                *self._cli(account),
                 "upload",
                 "-s",
                 session_name,
@@ -875,6 +1188,7 @@ class ColabAdapter(ADAPTER.Adapter):
                 remote,
             ],
             timeout=self._transfer_timeout,
+            account=account,
         )
         if result.returncode != 0:
             raise ColabAdapterError(
@@ -882,19 +1196,23 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{result.stderr.strip() or result.stdout.strip()}"
             )
 
-    def _ensure_dependencies(self, probe: Path, session_name: str) -> None:
+    def _ensure_dependencies(
+        self, probe: Path, session_name: str, account: TeamAccount | None = None
+    ) -> None:
         """D10: probe, install only what is missing, re-probe once, and
         refuse a still-broken runtime — after a stop, never before one.
         """
         payload = self._parse_json_line(
-            self._exec_result(probe, session_name), f"dependency probe for {session_name!r}"
+            self._exec_result(probe, session_name, account=account),
+            f"dependency probe for {session_name!r}",
         )
         missing = [package for package in PROBE_PACKAGES if payload.get(package) is None]
         if not missing:
             return
         install = self._run(
-            [self._colab_executable, "install", "-s", session_name, *missing],
+            [*self._cli(account), "install", "-s", session_name, *missing],
             timeout=self._install_timeout,
+            account=account,
         )
         if install.returncode != 0:
             raise ColabAdapterError(
@@ -903,7 +1221,7 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{install.stderr.strip() or install.stdout.strip()}"
             )
         reparsed = self._parse_json_line(
-            self._exec_result(probe, session_name),
+            self._exec_result(probe, session_name, account=account),
             f"dependency re-probe for {session_name!r}",
         )
         still = [package for package in PROBE_PACKAGES if reparsed.get(package) is None]
@@ -915,12 +1233,14 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{session_name} {' '.join(still)}`) and resubmit"
             )
 
-    def _launch(self, launcher: Path, session_name: str) -> None:
+    def _launch(
+        self, launcher: Path, session_name: str, account: TeamAccount | None = None
+    ) -> None:
         """Run the rendered launcher and require its receipt line. Never
         retried: a retry could spawn a second executor.
         """
         payload = self._parse_json_line(
-            self._exec_result(launcher, session_name),
+            self._exec_result(launcher, session_name, account=account),
             f"launch for {session_name!r}",
         )
         if not isinstance(payload.get("launched_pid"), int):
@@ -929,13 +1249,13 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{payload!r}"
             )
 
-    def _stop_session(self, session_name: str) -> None:
+    def _stop_session(self, session_name: str, account: TeamAccount | None = None) -> None:
         """`colab stop -s <session>`, output-interpreted (measured:
         unknown sessions print "not found" and exit 0 — the exit code is
         not truth, S0 obligation 3).
         """
-        argv = [self._colab_executable, "stop", "-s", session_name]
-        result = self._run(argv)
+        argv = [*self._cli(account), "stop", "-s", session_name]
+        result = self._run(argv, account=account)
         if self._looks_like_not_found(result):
             return
         if result.returncode != 0:
@@ -944,14 +1264,16 @@ class ColabAdapter(ADAPTER.Adapter):
                 f"{result.stderr.strip() or result.stdout.strip()}"
             )
 
-    def _stop_session_quietly(self, session_name: str) -> str:
+    def _stop_session_quietly(
+        self, session_name: str, account: TeamAccount | None = None
+    ) -> str:
         """Best-effort cleanup for a failure path: attempt the stop and
         return a note describing a FAILED cleanup, or `""` when the stop
         succeeded or the session was already gone. Never raises — the
         caller is already unwinding a primary failure.
         """
         try:
-            self._stop_session(session_name)
+            self._stop_session(session_name, account)
         except ColabAdapterError as exc:
             return f"session cleanup also failed: {exc}"
         return ""
@@ -959,15 +1281,35 @@ class ColabAdapter(ADAPTER.Adapter):
     # -- the seam's six operations ----------------------------------------
 
     def workers(self) -> list["ADAPTER.Worker"]:
-        """This backend's one worker, stated rather than discovered.
+        """This backend's workers, stated rather than discovered: the
+        operator's single account, or — when the team registry declares
+        Colab accounts — one worker per owner (`colab:<owner>`).
 
-        No subprocess, no network, no credential read: this backend's
-        unit of capacity is the operator's single account, its sessions
-        are serialized by this adapter, and a `workers()` that dialed the
-        service would make `packer`'s own capacity path depend on the
-        network for a figure no call could change.
+        No subprocess, no network, no credential read: a unit of capacity
+        is one account (the registry is read, never anything inside an
+        owner's state directory), its sessions are serialized by this
+        adapter, and a `workers()` that dialed the service would make
+        `packer`'s own capacity path depend on the network for a figure no
+        call could change.
         """
-        return [ADAPTER.Worker(id=WORKER_ID, capacity=COLAB_WORKER_CAPACITY)]
+        team = self._team()
+        if team is None:
+            return [ADAPTER.Worker(id=WORKER_ID, capacity=COLAB_WORKER_CAPACITY)]
+        # One worker per owner, FREE-tier accounts listed first. The order
+        # is load-bearing for the campaign path: `packer.distribute()`
+        # assigns in this order and the campaign submit loop launches in
+        # assignment order, so a campaign that would place a unit on a
+        # free account reaches that account's refusal in `submit()` before
+        # any paid account has launched anything — the campaign refuses
+        # whole, never half-launched. A single send (`packer.select()`)
+        # may pick a free account first, which its tier allows.
+        ordered = [a for a in team if a.campaign_refusal() is not None] + [
+            a for a in team if a.campaign_refusal() is None
+        ]
+        return [
+            ADAPTER.Worker(id=account.worker_id, capacity=COLAB_WORKER_CAPACITY)
+            for account in ordered
+        ]
 
     def submit(self, job: "ADAPTER.Job") -> "ADAPTER.Submission":
         """The full session lifecycle, in the parent plan's own order:
@@ -993,6 +1335,18 @@ class ColabAdapter(ADAPTER.Adapter):
         exists, so the boundary can start at the invocation without
         inventing a session that was never created.
         """
+        # Whose account this is, decided before anything else: an unknown
+        # worker, or the legacy single worker while a team registry is in
+        # force, refuses here. Then the tier rule: a job carrying campaign
+        # `units` on a free account refuses by name, citing the service's
+        # own FAQ, before any CLI call — refusing is free here.
+        account = self._account_for(job.worker, allow_legacy=False) if (
+            self._team() is not None
+        ) else None
+        if account is not None and job.run_config.get("units"):
+            refusal = account.campaign_refusal()
+            if refusal is not None:
+                raise ColabAdapterError(f"campaign submission refused: {refusal}")
         entrypoint = Path(job.entrypoint)
         run_config_path = entrypoint.parent / RUN_CONFIG_FILENAME
         if not run_config_path.is_file():
@@ -1047,7 +1401,7 @@ class ColabAdapter(ADAPTER.Adapter):
             else None
         )
 
-        self._refuse_existing_session(session_name)
+        self._refuse_existing_session(session_name, account)
 
         if job.run_config:
             merged = dict(parsed_run_config)
@@ -1072,12 +1426,16 @@ class ColabAdapter(ADAPTER.Adapter):
             staged_run_config.write_text(staged_run_config_text, encoding="utf-8")
 
             try:
-                self._new_session(session_name, accelerator_variant=accelerator_variant)
-                endpoint = self._endpoint_for(session_name)
-                self._spawn_keep_alive(endpoint, session_name)
+                self._new_session(
+                    session_name,
+                    accelerator_variant=accelerator_variant,
+                    account=account,
+                )
+                endpoint = self._endpoint_for(session_name, account)
+                self._spawn_keep_alive(endpoint, session_name, account)
 
                 payload = self._parse_json_line(
-                    self._exec_result(mkdir_helper, session_name),
+                    self._exec_result(mkdir_helper, session_name, account=account),
                     f"remote mkdir for {session_name!r}",
                 )
                 if payload.get("exists") is not True:
@@ -1086,9 +1444,9 @@ class ColabAdapter(ADAPTER.Adapter):
                         f"directory: {payload!r}"
                     )
 
-                self._upload(self._assets_dir / EXECUTOR_ASSET, f"{self._session_dir(session_name)}/{EXECUTOR_ASSET}", session_name)
-                self._upload(staged_run_config, f"{self._session_dir(session_name)}/{RUN_CONFIG_FILENAME}", session_name)
-                self._upload(entrypoint, f"{self._session_dir(session_name)}/{entrypoint.name}", session_name)
+                self._upload(self._assets_dir / EXECUTOR_ASSET, f"{self._session_dir(session_name)}/{EXECUTOR_ASSET}", session_name, account)
+                self._upload(staged_run_config, f"{self._session_dir(session_name)}/{RUN_CONFIG_FILENAME}", session_name, account)
+                self._upload(entrypoint, f"{self._session_dir(session_name)}/{entrypoint.name}", session_name, account)
 
                 # S3/D6 staging: the askpass script (verbatim) and the
                 # token file (stripped bytes, 0o600, no trailing newline)
@@ -1107,17 +1465,19 @@ class ColabAdapter(ADAPTER.Adapter):
                         askpass_local,
                         f"{self._session_dir(session_name)}/{REPO_CREDENTIAL_ASKPASS_FILENAME}",
                         session_name,
+                        account,
                     )
                     self._upload(
                         token_local,
                         f"{self._session_dir(session_name)}/{REPO_CREDENTIAL_TOKEN_FILENAME}",
                         session_name,
+                        account,
                     )
 
-                self._ensure_dependencies(probe_helper, session_name)
-                self._launch(launcher, session_name)
+                self._ensure_dependencies(probe_helper, session_name, account)
+                self._launch(launcher, session_name, account)
             except BaseException as exc:  # noqa: BLE001 - D9's cleanup boundary
-                note = self._stop_session_quietly(session_name)
+                note = self._stop_session_quietly(session_name, account)
                 if note:
                     _append_note(exc, note)
                 raise
@@ -1135,9 +1495,9 @@ class ColabAdapter(ADAPTER.Adapter):
         once; neither is ever retried into a different answer, because
         the same input is re-asked, not a new question.
         """
-        session_name = self._session_name_from(submission_id)
+        account, session_name = self._parse_submission(submission_id)
         status_result = self._run_read(
-            [self._colab_executable, "status", "-s", session_name]
+            [*self._cli(account), "status", "-s", session_name], account=account
         )
         if self._looks_like_not_found(status_result):
             return ADAPTER.Status(state="unknown", detail="session not found")
@@ -1154,7 +1514,9 @@ class ColabAdapter(ADAPTER.Adapter):
             reader = self._render_asset(
                 READ_STATE_ASSET, session_name, Path(raw_tmp) / READ_STATE_ASSET
             )
-            read_result = self._exec_result(reader, session_name, retry_read=True)
+            read_result = self._exec_result(
+                reader, session_name, retry_read=True, account=account
+            )
         if self._looks_like_not_found(self._service_prose_only(read_result)):
             return ADAPTER.Status(state="unknown", detail="session not found")
         payload = self._parse_json_line(read_result, f"state read for {submission_id!r}")
@@ -1211,7 +1573,7 @@ class ColabAdapter(ADAPTER.Adapter):
         is a refusal naming it, and a refusal to stop fails the fetch
         only after the bytes are already local.
         """
-        session_name = self._session_name_from(submission_id)
+        account, session_name = self._parse_submission(submission_id)
         into = Path(into)
         into.mkdir(parents=True, exist_ok=True)
 
@@ -1219,7 +1581,9 @@ class ColabAdapter(ADAPTER.Adapter):
             reader = self._render_asset(
                 READ_STATE_ASSET, session_name, Path(raw_tmp) / READ_STATE_ASSET
             )
-            read_result = self._exec_result(reader, session_name, retry_read=True)
+            read_result = self._exec_result(
+                reader, session_name, retry_read=True, account=account
+            )
         if self._looks_like_not_found(self._service_prose_only(read_result)):
             raise ColabAdapterError(
                 f"the session for {submission_id!r} no longer exists; it may "
@@ -1269,7 +1633,7 @@ class ColabAdapter(ADAPTER.Adapter):
             remote = f"{self._session_dir(session_name)}/{entry}"
             result = self._run(
                 [
-                    self._colab_executable,
+                    *self._cli(account),
                     "download",
                     "-s",
                     session_name,
@@ -1277,6 +1641,7 @@ class ColabAdapter(ADAPTER.Adapter):
                     str(local),
                 ],
                 timeout=self._transfer_timeout,
+                account=account,
             )
             if result.returncode != 0:
                 raise ColabAdapterError(
@@ -1303,7 +1668,7 @@ class ColabAdapter(ADAPTER.Adapter):
             complete = exit_code == 0
 
         if terminal:
-            self._stop_session(session_name)
+            self._stop_session(session_name, account)
 
         return ADAPTER.Fetched(path=into, complete=complete, files=tuple(sorted(materialized)))
 
@@ -1314,8 +1679,8 @@ class ColabAdapter(ADAPTER.Adapter):
         orphans, never cancels them); it exists for an explicit caller
         and for tests.
         """
-        session_name = self._session_name_from(submission_id)
-        self._stop_session(session_name)
+        account, session_name = self._parse_submission(submission_id)
+        self._stop_session(session_name, account)
 
     def list_active(self, worker: str) -> list[str]:
         """Submission ids this adapter issued whose sessions still exist,
@@ -1328,7 +1693,8 @@ class ColabAdapter(ADAPTER.Adapter):
         it, and fabricating one would make `reconcile` claim a session
         this skill can neither stop nor fetch.
         """
-        result = self._run([self._colab_executable, "sessions"])
+        account = self._account_for(worker, allow_legacy=True)
+        result = self._run([*self._cli(account), "sessions"], account=account)
         if result.returncode != 0:
             raise ColabAdapterError(
                 f"colab sessions refused (exit {result.returncode}): "
@@ -1346,13 +1712,27 @@ class ColabAdapter(ADAPTER.Adapter):
         return active
 
 
-def _declared_capacity() -> tuple[int, int]:
+def _declared_capacity() -> tuple[int, int] | None:
     """The engine's declared-capacity channel (`adapter.py`'s fourth
-    registry): the same static fact `workers()` already declares — one
-    operator account, capacity one — answered from constants, per that
-    registry's own contract (no network, nothing guessed). A subprocess
-    here would be a lie about a figure that is constant by construction."""
-    return (1, COLAB_WORKER_CAPACITY)
+    registry), answered from disk and constants alone — no subprocess, no
+    network, per that registry's own contract.
+
+    With no team registry (or one declaring no Colab account): the static
+    single worker, `(1, COLAB_WORKER_CAPACITY)`, exactly as before. With
+    one: parallelism counts DISTINCT OWNERS whose tier admits a split
+    campaign, because a free account is never a campaign worker; a team
+    of free accounts only still declares the one session a single send
+    can use, `(1, COLAB_WORKER_CAPACITY)`. A registry this module cannot
+    honestly read declares nothing (`None`), so a caller leaves the figure
+    out rather than publishing a guess."""
+    try:
+        team = load_colab_team(DEFAULT_TEAM_REGISTRY)
+    except ColabAdapterError:
+        return None
+    if not team:
+        return (1, COLAB_WORKER_CAPACITY)
+    paid = sum(1 for account in team if account.campaign_refusal() is None)
+    return (max(paid, 1), COLAB_WORKER_CAPACITY)
 
 
 ADAPTER.register("colab", ColabAdapter)

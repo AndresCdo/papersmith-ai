@@ -19,11 +19,21 @@ reproducible: same sources and pins, same bytes.
 
 ## Division of labour
 
-The viewer never lays anything out. `render_atlas.py` computes every position,
-orbital frame, edge and family tie deterministically and writes them into a
-`<script type="application/json" id="atlas-data">` island; the viewer only
-draws them. "Same atlas, same sky" therefore stays a property of the Python
-renderer, and the starfield uses a fixed-seed generator, never `Math.random`.
+The default layout is never computed in the browser. `render_atlas.py`
+computes every position, orbital frame, edge and family tie deterministically
+and writes them into a `<script type="application/json" id="atlas-data">`
+island; the viewer draws them as they come. "Same atlas, same sky" therefore
+stays a property of the Python renderer, and the starfield uses a fixed-seed
+generator, never `Math.random`.
+
+The one client-side rearrangement is opt-in: `setLayout('groups')` (the page's
+"Disposición de grupos" button) rigidly translates each whole system — planets,
+rings and label together, its orbital plane untouched — so systems of one
+family (its family planet's label, the rule `_family_of` uses) pack around a
+family center, and family centers sit on a flat grid (`z = 0`), ordered by
+sorted family label then system id: deterministic, never `Math.random`, never
+written back to the data island. `setLayout('sky')` restores the precomputed
+positions exactly.
 
 ## Scene contract (`version: 1`)
 
@@ -47,7 +57,53 @@ its rings are drawn in that same plane.
 ## Page surface
 
 `window.AtlasViewer.mount(container, scene, hooks)` returns a handle with
-`setDim(keep | null)`, `zoom(factor)`, `reset()` and `focus(key)`.
-`hooks.onSelect(key)` fires on a planet click and `hooks.onHover(key | null)`
-on hover. The page's inline script owns the modal, the family chips and the
-zoom buttons.
+`setDim(keep | null)`, `zoom(factor)`, `reset()`, `focus(key)`,
+`setLayout('sky' | 'groups')` (animates the switch, then reframes the camera;
+returns the mode) and `layout()` (the current mode). `reset()` returns to the
+home view of the current layout and clears dimming. `hooks.onSelect(key)` fires
+on a planet click and `hooks.onHover(key | null)` on hover. The handle also
+offers `rotating()` / `rotate(on?)`, `spin(angle)` / `tilt(angle)` (radians),
+`project(keys)` (screen positions `{x, y, z, on}` in CSS pixels), `refresh()`,
+`pause()` / `resume()` and `dispose()` (releases the WebGL context, geometries
+and textures). A planet may carry a short `tip`, shown on hover instead of
+`label [slot]`.
+
+The home view fits the planets themselves: it keeps the viewing direction and
+takes the least distance that keeps every planet inside both fields of view,
+then centers the projected extent, so a tall or wide frame never crops the sky.
+The canvas renders at least one pixel per CSS pixel (a zoomed-out browser keeps
+visible points). Orbit rings and family ties are one geometry each, and a frame
+is drawn only when something changed or the camera moved by about a tenth of a
+pixel, so an idle sky with rotation off costs no rendering.
+
+The page's inline script owns the modal, the family chips, the toolbar (zoom,
+turn, tilt, rotation, names, reset, the "Disposición de grupos" toggle with
+class `on` while grouped, and the 2D/3D view button) and the system names.
+System names are not sprites: the page places them in an HTML layer (3D) or
+on the canvas (2D), by priority, skipping any that would overlap one already
+placed, so zooming in reveals more of them.
+
+**2D constellation.** The page opens a canvas 2D view of the same scene, with
+the same handle, when the 3D sky cannot or should not run: no WebGL, a
+software renderer (`failIfMajorPerformanceCaveat` or a SwiftShader / llvmpipe
+renderer name), under 4 GB of reported memory or under 4 cores, or a 3D sky
+that draws under 20 fps in its first seconds. `#gpunote` says why. `?view=2d`
+or `?view=3d` overrides the choice, and so does the view button (remembered
+in `localStorage` where the frame allows it). The 2D view draws on demand,
+one frame per change, and nothing at rest unless rotation is on. Either view
+stops drawing while the page is hidden (`visibilitychange`) or the dashboard
+paused it.
+
+Framed by the dashboard (an `allow-scripts` sandbox, opaque origin), the page
+talks to its parent with `postMessage`, and only when `window.parent !== window`:
+
+```text
+parent -> atlas  { type: 'atlas-command',
+                   command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset'
+                            | 'pause' | 'resume'     pause stops drawing until resume
+                            | 'view-2d' | 'view-3d' }  switch the view (remembered)
+                 accepted only when event.source === window.parent; anything else is ignored
+atlas -> parent  { type: 'atlas-layout', mode: 'sky' | 'groups' }      on load and on every layout command
+                 { type: 'atlas-planet-selected', key, label, slot,
+                   system: { id, title } }                              on a planet click (plain strings)
+```

@@ -1,6 +1,6 @@
 """A step plan rendered while it runs: a bar, the child's log, an estimate.
 
-``papersmith init`` spends most of its life inside two child processes — an
+``smith init`` spends most of its life inside two child processes — an
 ``npm install`` and the workspace's own environment provisioning — and until
 this module existed it ran them with the output captured, so the operator
 watched nothing for minutes and, on a cold cache, for the better part of an
@@ -9,7 +9,7 @@ step is measured as it finishes, and the child's own lines are streamed instead
 of swallowed.
 
 **Three modes, and silence is the default.** ``Reporter()`` writes nothing:
-every programmatic caller — the MCP server, which spawns ``papersmith init`` and
+every programmatic caller — the MCP server, which spawns ``smith init`` and
 reads its stdout, and the test suite — keeps the bytes it always got. A caller
 that wants reporting asks for it (``mode=BAR``/``mode=PLAIN``), or goes through
 :meth:`Reporter.for_stream`, which chooses the bar for a terminal, the plain log

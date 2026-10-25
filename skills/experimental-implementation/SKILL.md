@@ -154,6 +154,31 @@ A document declaring no dataset (`dataset_marker: None`, as `documents[1]`
 stays undemanded for that document, exactly as before this capability
 existed.
 
+## The Results layout the dashboard reads
+
+Every measurement this skill instruments lands inside its own product folder,
+under `Results/`, in the shape the command center's experiments panel reads.
+A measurement written anywhere else runs and is never shown. Paths are
+relative to the product folder `<Name>/`:
+
+| Path | What it holds | Shape |
+| --- | --- | --- |
+| `Results/history*.{json,jsonl,csv}` | Convergence, per epoch or step | One record per epoch or step, carrying an `epoch` or `step` key and numeric series such as `loss`, `val_loss` or a metric; optional `seed`, `fold` and `model` columns let the panel draw mean ± sd across seeds and separate the curves. |
+| `Results/figures/**` | The experiment's figures | `png`, `svg`, `jpg` or `pdf` files. |
+| `Results/tables/**` | The experiment's tables | `csv`, `md` or `json` files. |
+| `Results/summary.json` | The run's headline numbers | One JSON object. |
+| `Results/significance*.json` | The significance table | A JSON list of objects with the keys `comparison`, `test`, `statistic`, `p_value`, `p_adjusted`, `correction`, `effect_size`, `effect_size_name`, `ci_low`, `ci_high`, `n` and `alpha`. |
+
+The test, correction and effect size written there are the ones the bound
+experiments revision declares (see `experimental-deliberation`'s **Choosing
+the significance test by experiment type**); the instrumentation stage is not
+closed for an experiment whose declared significance table has nowhere to
+land.
+
+The panel classifies a product folder by its checklist holder: one holding
+`Experimental_AGREED.md` is a full experiment (this skill), and one holding
+only `AGREED.md` is a proof of concept (`proposal-implementation`).
+
 ## The objective flow
 
 **Why this skill was invoked, and where it has to arrive.** Declared here and in
@@ -188,13 +213,14 @@ same reasoning `experimental-deliberation`'s own profile records for itself.
 
 ## What this skill delegates, and to whom
 
-Two stretches of this flow are mechanical from end to end, each carried out by
-its own agent. What moves is EXECUTION, never doctrine: every rule stays here,
+Three stretches of this flow are carried out by their own agents: two are
+mechanical from end to end, and one is a read-only review between them. What moves is EXECUTION, never doctrine: every rule stays here,
 and each agent's first instruction is to load this file.
 
 | Stretch | Delegated to | Begins after | Ends at | Measure this before delegating |
 | --- | --- | --- | --- | --- |
 | Build | this skill delegates to the `experiments-build` agent | the object-to-map is approved | every declared measurement has a place to land (`instrumentation`) | `verify` -- the protocol's declared steps must already be traced to runnable commands |
+| Review | this skill delegates to the `experiments-reviewer` agent | every declared measurement has a place to land (`instrumentation`) | a findings report on code quality, optimisation, remote GPU use and statistical tests, read by the operator before the rehearsal and the launch | `verify` -- every declared measurement resolves, so the code under review is the code that will run |
 | Walk | this skill delegates to the `experiments-walk` agent | each step's placement is decided | the launch the operator must authorize | `verify` -- `undeclaredPlacement` is empty, so every step says where it runs |
 
 Each agent also refuses from inside when it finds itself before its own start --
@@ -203,7 +229,8 @@ the backstop, not the rule.
 ## When a delegated agent cannot be spawned
 
 Each stretch this skill delegates is defined in full by its own agent file:
-`.claude/agents/experiments-build.md`, `.claude/agents/experiments-walk.md`.
+`.claude/agents/experiments-build.md`, `.claude/agents/experiments-reviewer.md`,
+`.claude/agents/experiments-walk.md`.
 When an agent cannot be spawned — the harness has no sub-agent mechanism, the
 agent is not registered in this session, or the spawn itself fails — perform
 the stretch inline: read that agent's definition file and follow it as
@@ -211,6 +238,43 @@ written, from the beginning it states to the end it states, holding any gate thi
 `tools:` line still bounds the stretch: an act that would need a tool outside
 that list is a stop, not a workaround. Say in the reply that the stretch ran
 inline and why the agent could not be spawned.
+
+## Estimating the processing time before the pilot and before the full run
+
+Report the processing-time estimate to the operator before asking for a
+pilot, and again before asking for a launch of the full run. It comes from
+`remote-parallelism`'s `estimate` verb
+(`skills/remote-parallelism/SKILL.md`, **Estimate before you scale**), read
+over the timing probe's record.
+
+- **The timing record.** A short timing probe — one epoch of one fold per
+  arm, on the target's own interpreter, with the device recorded — writes
+  `Results/timing.json` in the product folder `<Name>/`. `Results/` is
+  declared among the step's `produces` roots, so the record is committed with
+  the step's product like any other output. `scales` is copied from the
+  approved experiments protocol (the bound experiments revision) and the
+  declared pilot; nothing guesses it.
+- **The estimate.** `estimate --timing <Name>/Results/timing.json --record
+  <Name>` gives each stage (`poc`, `full`) a range per host, from the one
+  formula that verb defines. A remote GPU host reads `unmeasured` until a
+  measured rehearsal on that host adds its own timing; local timings never
+  stand in for it.
+- **What it is.** A measurement-derived range (±20%, single-probe
+  extrapolation), never a promise, and never authorization: the pilot and the
+  launch stay the operator's to approve after reading it.
+
+## The hyperparameter search step
+
+Only when the bound experiments revision declares a Hyperparameter Search
+subsection. The step sits after the proof of concept and the timing estimate,
+and before the full runs: the timing probe sizes it (`plan --timing`), and it
+is placed like the full runs — a step routed to a remote GPU notebook is
+generated, rehearsed and launched through `remote-execution`, behind the
+operator's consent. It runs through `/hyperparameter-search`
+(`skills/hyperparameter-search/SKILL.md`), which validates the plan, names one
+study per arm and outer fold and reports their importance and contour figures
+under `Results/hpo/`. Its results are frozen per outer fold: every seed of
+the full run reuses that fold's tuned values and never searches again.
 
 ## Where to start: the repository is the memory
 
@@ -365,7 +429,7 @@ launcher) must be an absolute path: a relative one refuses
 `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any command runs. The
 commands that write the ledger take `--session <id>`, an id you choose per
 working session; `proposal-implementation`'s `references/usage.md`, "Session
-ids", defines it. The workspace bridge `papersmith implement` drives the
+ids", defines it. The workspace bridge `smith implement` drives the
 sibling's launcher, never this one: run this skill's commands through its own
 `scripts/implementation_cli.py`.
 

@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import warnings as _warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .core import fs
 from .core.config import load_papersmith_yaml, load_workspace_config
@@ -168,10 +169,17 @@ CAPABILITIES = ("skills", "commands", "agents", "plugins")
 #: rendered file a user is expected to edit -- their own data folders, their
 #: editor's files -- and before 0.14.0 every upgrade overwrote it whole.
 MANAGED_BLOCK_FILES = frozenset({".gitignore"})
-MANAGED_BLOCK_BEGIN = ("# >>> papersmith managed block: `papersmith upgrade` rewrites every "
+MANAGED_BLOCK_BEGIN = ("# >>> papersmith managed block: `smith upgrade` rewrites every "
                        "line up to the closing marker")
 MANAGED_BLOCK_END = ("# <<< papersmith managed block ends: lines below this marker are this "
                      "workspace's own, and upgrade keeps them")
+#: Begin markers earlier releases wrote. 0.19.0 renamed the command in the
+#: marker to `smith upgrade`; a block opened by the old wording is still the
+#: framework's, and the next write replaces it with the current marker.
+LEGACY_BLOCK_BEGINS = frozenset({
+    "# >>> papersmith managed block: `papersmith upgrade` rewrites every "
+    "line up to the closing marker",
+})
 
 
 def _block_span(lines: list[str]) -> tuple[int, int] | None | bool:
@@ -185,7 +193,8 @@ def _block_span(lines: list[str]) -> tuple[int, int] | None | bool:
     lines and is therefore never guessed at.
     """
     stripped = [line.rstrip("\r\n") for line in lines]
-    begins = [index for index, line in enumerate(stripped) if line == MANAGED_BLOCK_BEGIN]
+    begins = [index for index, line in enumerate(stripped)
+              if line == MANAGED_BLOCK_BEGIN or line in LEGACY_BLOCK_BEGINS]
     ends = [index for index, line in enumerate(stripped) if line == MANAGED_BLOCK_END]
     if not begins and not ends:
         return None
@@ -311,10 +320,140 @@ def _build_capabilities() -> dict[str, dict[str, Capability]]:
 
 HARNESS_CAPABILITIES = _build_capabilities()
 
+#: Pi's project settings. Pi installs the packages declared here once the
+#: project is trusted, so the web tools the agent projection names are present
+#: on every machine, not only where the operator installed them personally.
+PI_SETTINGS_FILE = ".pi/settings.json"
+PI_PACKAGES = ("npm:pi-web-access",)
+
+
+def seed_pi_settings(workspace: Path) -> bool:
+    """Write :data:`PI_SETTINGS_FILE` when it is absent; return whether it did.
+
+    The file belongs to the workspace once written (``pi install -l`` adds to
+    it), so an existing one is never touched, whatever it declares.
+    """
+    path = workspace / PI_SETTINGS_FILE
+    if fs.exists(path) or path.is_symlink():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"packages": list(PI_PACKAGES)}, indent=2) + "\n",
+                    encoding="utf-8")
+    return True
+
+#: The lab's article and project bank (https://github.com/LIAUNAL/bancoProyectosPapersLIA),
+#: served over stdio by ``uvx`` straight from GitHub. OpenCode registers it in
+#: the rendered ``opencode.json`` (see ``opencode.json.tpl``); the other
+#: harnesses read a file of their own, listed in :data:`MCP_CONFIG_FILES`.
+BANCO_LIA_SERVER = "banco-lia"
+BANCO_LIA_COMMAND = "uvx"
+BANCO_LIA_ARGS = ("--from", "git+https://github.com/LIAUNAL/bancoProyectosPapersLIA",
+                  "banco-lia-mcp")
+
+#: Kaggle's official remote MCP server (https://www.kaggle.com/docs/mcp): datasets,
+#: notebooks (``save_notebook`` takes ``enableGpu`` and ``machineShape``, then
+#: ``get_notebook_session_status`` and ``download_notebook_output``) and the
+#: weekly accelerator quota. Public tools answer without a token; account tools
+#: read a ``KGAT_`` token from :data:`KAGGLE_TOKEN_ENV`, which no file ever holds.
+#: Claude and OpenCode speak streamable HTTP natively; Pi and Antigravity reach
+#: it through the pinned ``mcp-remote`` stdio bridge, which expands the variable.
+KAGGLE_MCP_SERVER = "kaggle"
+KAGGLE_MCP_URL = "https://www.kaggle.com/mcp"
+KAGGLE_TOKEN_ENV = "KAGGLE_API_TOKEN"
+MCP_REMOTE_PACKAGE = "mcp-remote@0.14.3"
+
+#: Google Colab's official MCP server (https://github.com/googlecolab/colab-mcp,
+#: Apache-2.0), pinned to one commit: it bridges the agent to a Colab notebook
+#: the person keeps open in their own browser session, so it holds no token and
+#: reads none from the environment. Interactive work only; headless campaigns go
+#: through the official CLI (``smith colab login|status``). Its README asks for a
+#: 30-second start-up timeout, which only Claude's ``.mcp.json`` can express.
+COLAB_MCP_SERVER = "colab"
+COLAB_MCP_COMMAND = "uvx"
+COLAB_MCP_ARGS = ("git+https://github.com/googlecolab/colab-mcp@b9ab3899e0f1fa493390b1fd6d54aa2e464ecdf1",)
+COLAB_MCP_TIMEOUT_MS = 30000
+
+#: Each harness's project MCP file and the entries it takes. These files belong
+#: to the workspace: ``init`` and ``upgrade`` add or refresh only the
+#: :data:`BANCO_LIA_SERVER`, :data:`KAGGLE_MCP_SERVER` and :data:`COLAB_MCP_SERVER`
+#: entries and keep every other server.
+MCP_CONFIG_FILES = {
+    "claude": ".mcp.json",
+    "pi": ".pi/mcp.json",
+    "antigravity": ".agents/mcp_config.json",
+}
+
+
+def _banco_lia_entry(tool: str) -> dict[str, Any]:
+    entry: dict[str, Any] = {"command": BANCO_LIA_COMMAND, "args": list(BANCO_LIA_ARGS)}
+    if tool == "claude":
+        entry = {"type": "stdio", **entry}
+    return entry
+
+
+def _kaggle_entry(tool: str) -> dict[str, Any]:
+    if tool == "claude":
+        # The `:-` default keeps `.mcp.json` parseable when the token is unset.
+        return {"type": "http", "url": KAGGLE_MCP_URL,
+                "headers": {"Authorization": f"Bearer ${{{KAGGLE_TOKEN_ENV}:-}}"}}
+    return {"command": "npx",
+            "args": ["-y", MCP_REMOTE_PACKAGE, KAGGLE_MCP_URL,
+                     "--header", f"Authorization:Bearer ${{{KAGGLE_TOKEN_ENV}}}"]}
+
+
+def _colab_entry(tool: str) -> dict[str, Any]:
+    entry: dict[str, Any] = {"command": COLAB_MCP_COMMAND, "args": list(COLAB_MCP_ARGS)}
+    if tool == "claude":
+        entry = {"type": "stdio", **entry, "timeout": COLAB_MCP_TIMEOUT_MS}
+    return entry
+
+
+def _mcp_entries(tool: str) -> dict[str, dict[str, Any]]:
+    return {BANCO_LIA_SERVER: _banco_lia_entry(tool), KAGGLE_MCP_SERVER: _kaggle_entry(tool),
+            COLAB_MCP_SERVER: _colab_entry(tool)}
+
+
+def ensure_mcp_servers(workspace: Path, tools: Sequence[str], *,
+                       warnings: list[str] | None = None) -> list[str]:
+    """Register the :func:`_mcp_entries` servers in each declared harness's MCP file.
+
+    Returns the paths written. A missing file is created; an existing one keeps
+    every other server and key. A file that is not a JSON object, or whose
+    ``mcpServers`` is not an object, is left untouched and named in
+    ``warnings``, so a hand-edited config is never lost.
+    """
+    written: list[str] = []
+    for tool, relpath in MCP_CONFIG_FILES.items():
+        if tool not in tools:
+            continue
+        path = workspace / relpath
+        data: Any = {}
+        if fs.exists(path) or path.is_symlink():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8")) if fs.is_regular_file(path) else None
+            except (OSError, UnicodeDecodeError, ValueError):
+                data = None
+            if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+                if warnings is not None:
+                    warnings.append(f"{relpath} is not a JSON object with an `mcpServers` object; "
+                                    f"add the {BANCO_LIA_SERVER}, {KAGGLE_MCP_SERVER} and "
+                                    f"{COLAB_MCP_SERVER} servers by hand")
+                continue
+        servers = data.setdefault("mcpServers", {})
+        entries = _mcp_entries(tool)
+        if all(servers.get(name) == entry for name, entry in entries.items()):
+            continue
+        servers.update(entries)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        written.append(relpath)
+    return written
+
 #: Claude tool names to Pi tool names for the `.pi/agents/` projection.
 #: Unknown names pass through lowercased rather than silently dropped, so a
-#: new Claude tool shows up verbatim instead of vanishing -- except the names
-#: in :data:`PI_SKIPPED_TOOLS`.
+#: new Claude tool shows up verbatim instead of vanishing. Web tools come from
+#: the pi-web-access package, which the workspace declares in
+#: :data:`PI_SETTINGS_FILE` (see :func:`seed_pi_settings`).
 PI_TOOL_MAP = {
     "read": "read",
     "glob": "find",
@@ -322,14 +461,9 @@ PI_TOOL_MAP = {
     "write": "write",
     "edit": "edit",
     "bash": "bash",
+    "websearch": "web_search",
+    "webfetch": "fetch_content",
 }
-
-#: Claude web tools that are dropped from the Pi `tools:` list with a note.
-#: Pi has no sourced counterpart: its documented built-ins are read, bash,
-#: edit, write, grep, find and ls, and MCP access is granted through a
-#: separate `mcp:` frontmatter field, which this projection does not emit.
-#: The names `mcp`/`mcpScript` this map once used have no primary source.
-PI_SKIPPED_TOOLS = frozenset({"websearch", "webfetch"})
 
 #: Claude tool names to the OpenCode permission keys that gate them, for the
 #: `.opencode/agents/` projection. OpenCode has no `tools:` allow-list any more
@@ -473,17 +607,13 @@ def collect_commands(workspace: Path, *,
 def _pi_tools_line(value: str) -> tuple[str, list[str]]:
     """Map a Claude `tools: A, B` line onto Pi tool names as a YAML list.
 
-    Returns ``(yaml, notes)``; tools in :data:`PI_SKIPPED_TOOLS` are left out
-    and named in ``notes``.
+    Returns ``(yaml, notes)``; web names require pi-web-access at runtime.
     """
     mapped: list[str] = []
     notes: list[str] = []
     for item in value.split(","):
         tool = item.strip()
         if not tool:
-            continue
-        if tool.lower() in PI_SKIPPED_TOOLS:
-            notes.append(f"tool '{tool}' has no Pi tool; not granted")
             continue
         mapped.append(PI_TOOL_MAP.get(tool.lower(), tool.lower()))
     return "tools:\n" + "\n".join(f"  - {name}" for name in mapped), notes
@@ -533,8 +663,7 @@ def _translate_agent_for_pi(
 
     Returns ``({"name": ..., "text": ...}, None, notes)`` or ``(None,
     skip_reason, [])`` -- never raises. Front matter travels verbatim except
-    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP` (web tools
-    in :data:`PI_SKIPPED_TOOLS` are dropped and named in ``notes``); the
+    the `tools:` line, which is mapped through :data:`PI_TOOL_MAP`; the
     body travels verbatim except `.claude/skills/` references, which
     become harness-neutral `skills/` (a symlink in every workspace).
     """
@@ -774,6 +903,8 @@ def _context_with_defaults(context: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("version", "0.1.0")
     result.setdefault("tools", ", ".join(ALL_TOOLS))
     result.setdefault("agents", "- No specialized agents have been installed yet.")
+    # One statement of the paper-construction flow, shared by every harness.
+    result.setdefault("paper_flow", render_package_template("paper-flow.md.tpl", {}).strip())
     return result
 
 

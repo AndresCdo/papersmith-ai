@@ -447,5 +447,115 @@ class RenderAtlasTests(unittest.TestCase):
         self.assertGreater(math.dist(centroids["F1"], centroids["F2"]), 3000)
 
 
+class GroupLayoutAndBridgeTests(unittest.TestCase):
+    """The group layout ("Disposición de grupos") and the dashboard bridge are
+    additions: the default sky the Python renderer precomputes stays the same
+    bytes, and the page only gains one button and a postMessage contract."""
+
+    # sha256 of json.dumps(_scene(atlas)) for FIXED_ATLAS, taken before the
+    # group layout existed: the default layout must not move.
+    SCENE_SHA = "29b6a5f8249dc9158d33a35e5e91c83281dc07989f28a894276f45f86420bb87"
+    LAYOUT_SHA = "5f426e9544d6bb8bfd087f4264af8007bdc9302b222c5ddb71adbd57e3fba3f5"
+
+    @staticmethod
+    def fixed_atlas():
+        links = [{"from_system": "a", "from": "a-family", "to_system": "b",
+                  "to": "b-family", "rel": "shares-family-with"}]
+        return atlas(systems=[system("a", "F1"), system("b", "F2"), system("c", "F1")],
+                     links=links)
+
+    @staticmethod
+    def module():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("render_atlas", str(RENDERER))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def page(self):
+        return self.module().render(self.fixed_atlas())
+
+    def page_script(self):
+        page = self.page()
+        bundle = BUNDLE.read_text(encoding="utf-8")
+        return page[page.index(bundle) + len(bundle):]
+
+    def test_default_scene_is_byte_identical_to_the_precomputed_sky(self):
+        import hashlib
+        scene = self.module()._scene(self.fixed_atlas())
+        self.assertEqual(hashlib.sha256(json.dumps(scene).encode()).hexdigest(),
+                         self.SCENE_SHA)
+        layout = {"positions": scene["positions"], "frames": scene["frames"]}
+        self.assertEqual(hashlib.sha256(json.dumps(layout).encode()).hexdigest(),
+                         self.LAYOUT_SHA)
+        island = scene_of(self.page())
+        self.assertEqual(island["positions"], scene["positions"])
+        self.assertEqual(island["frames"], scene["frames"])
+        self.assertEqual(self.page(), self.page())
+
+    def test_page_has_the_group_layout_button_beside_the_zoom_buttons(self):
+        page = self.page()
+        self.assertIn('<button id="grouplayout">Disposición de grupos</button>', page)
+        toolbar = page[page.index('<div id="toolbar">'):]
+        toolbar = toolbar[:toolbar.index("</div>")]
+        for button in ('id="zoomin"', 'id="zoomout"', 'id="zoomreset"', 'id="grouplayout"'):
+            self.assertIn(button, toolbar)
+        script = self.page_script()
+        self.assertIn("getElementById('grouplayout')", script)
+        self.assertIn("setLayout", script)
+
+    def test_page_listens_to_atlas_commands_from_its_parent_only(self):
+        script = self.page_script()
+        self.assertIn("addEventListener('message'", script)
+        self.assertIn("event.source === window.parent", script)
+        self.assertIn("'atlas-command'", script)
+        for command in ("'group-layout'", "'sky-layout'", "'toggle-layout'", "'reset'"):
+            self.assertIn(command, script)
+
+    def test_page_reports_layout_and_planet_selection_to_its_parent(self):
+        script = self.page_script()
+        self.assertIn("type: 'atlas-layout'", script)
+        self.assertIn("type: 'atlas-planet-selected'", script)
+        self.assertIn("window.parent !== window", script)
+        self.assertIn("postMessage(", script)
+
+    def test_page_offers_the_2d_constellation_when_the_3d_sky_should_not_run(self):
+        """No WebGL, a software renderer, a small machine or a slow first few
+        seconds open the 2D constellation, and the viewer can switch by hand."""
+        page = self.page()
+        toolbar = page[page.index('<div id="toolbar">'):]
+        toolbar = toolbar[:toolbar.index("</div>")]
+        for button in ('id="viewmode"', 'id="names"', 'id="autorotate"', 'id="spinleft"',
+                       'id="spinright"', 'id="tiltup"', 'id="tiltdown"'):
+            self.assertIn(button, toolbar)
+        self.assertIn('<div id="gpunote" role="status" hidden></div>', page)
+        script = self.page_script()
+        for needle in ("failIfMajorPerformanceCaveat", "WEBGL_debug_renderer_info",
+                       "navigator.deviceMemory", "navigator.hardwareConcurrency",
+                       "get('view')", "const FlatViewer", "function watchFrameRate",
+                       "'view-2d'", "'view-3d'"):
+            self.assertIn(needle, script)
+
+    def test_page_stops_drawing_while_nobody_can_see_it(self):
+        script = self.page_script()
+        self.assertIn("addEventListener('visibilitychange'", script)
+        self.assertIn("'pause': () => { dashboardPaused = true; applyVisibility(); }", script)
+        self.assertIn("'resume': () => { dashboardPaused = false; applyVisibility(); }", script)
+
+    def test_bundle_draws_no_system_label_sprites_and_exposes_the_page_handle(self):
+        source = (BUNDLE.parent / "atlas3d" / "viewer.js").read_text(encoding="utf-8")
+        self.assertNotIn("labelSprite(String(system.title", source)
+        self.assertIn("Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)", source)
+        bundle = BUNDLE.read_text(encoding="utf-8")
+        for method in ("dispose(", "project(", "rotating(", "spin(", "tilt(", "refresh("):
+            self.assertIn(method, bundle)
+
+    def test_bundle_exposes_the_layout_switch(self):
+        bundle = BUNDLE.read_text(encoding="utf-8")
+        self.assertIn("setLayout", bundle)
+        self.assertIn("'groups'".replace("'", '"'), bundle)
+        self.assertNotIn("</script", bundle.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 import stat
+import os
 from pathlib import Path
 from typing import Any
 
@@ -315,6 +316,26 @@ def build_preview(root: Path | str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 # whitelisted artifacts
 # --------------------------------------------------------------------------
+def _exact_case(base: Path, target: Path) -> bool:
+    """Whether every component of ``target`` below ``base`` is spelled exactly
+    as its directory lists it. A case-insensitive file system (macOS, Windows)
+    would otherwise serve ``figures/ARCH.pdf`` for ``arch.pdf``, so the public
+    name space would depend on the machine instead of on the bytes."""
+    try:
+        relative = target.relative_to(base.parent) if target.is_absolute() else target
+    except ValueError:
+        return False
+    current = base.parent
+    for part in relative.parts:
+        try:
+            if part not in os.listdir(current):
+                return False
+        except OSError:
+            return False
+        current = current / part
+    return True
+
+
 def resolve_artifact(root: Path | str, name: str) -> tuple[str, Path | None, str | None]:
     """Resolve a public artifact ``name`` to ``(status, path, content_type)``.
 
@@ -346,7 +367,7 @@ def resolve_artifact(root: Path | str, name: str) -> tuple[str, Path | None, str
     except (OSError, ValueError, RuntimeError):
         return "absent", None, None
     resolved = _contained(base, target)
-    if resolved is None:
+    if resolved is None or not _exact_case(base, target):
         return "absent", None, None
     try:
         if resolved.stat().st_size > FILE_MAX_BYTES:

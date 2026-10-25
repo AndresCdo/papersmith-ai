@@ -30,49 +30,59 @@ from papersmith.generators import (
     yaml_double_quote,
     _translate_agent_for_antigravity,
     _translate_agent_for_opencode,
+    _translate_agent_for_pi,
 )
 from papersmith.kit import resolve_and_validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The twelve command-bearing skills, in the deterministic order
+#: The fifteen command-bearing skills, in the deterministic order
 #: ``collect_commands`` sorts them into. Pinned literally so a new or renamed
 #: top-level skill has to be acknowledged here.
 COMMAND_NAMES = (
+    "datasets",
     "experimental-deliberation",
     "experimental-implementation",
     "figure-review",
+    "hyperparameter-search",
     "kaggle-accounts",
+    "math-tutor",
     "paper-ingestion",
     "paper-writing",
     "plausibility",
     "proposal-deliberation",
     "proposal-implementation",
     "remote-execution",
+    "remote-parallelism",
     "skill-audit",
     "upgrade-project",
 )
 
-#: The nineteen agent definitions, in the deterministic order
+#: The twenty-four agent definitions, in the deterministic order
 #: ``collect_pi_agents`` sorts them into. Pinned literally so a new or renamed
 #: agent has to be acknowledged here -- and in the `.pi/agents/` projection
 #: the Pi harness discovers.
 AGENT_NAMES = (
     "audit-report",
     "contract-auditor",
+    "dataset-curator",
+    "dataset-scout",
     "deliberation-publish",
     "diagram-author",
     "experimental-publish",
     "experimental-validation",
     "experiments-build",
+    "experiments-reviewer",
     "experiments-walk",
     "figure-auditor",
     "implementation-build",
     "implementation-walk",
     "insumos-observer",
+    "math-tutor",
     "novelty-screener",
     "paper-ingestion",
+    "paper-replicator",
     "redactor",
     "section-grounding-auditor",
     "sota-grapher",
@@ -175,7 +185,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [agent["name"] for agent in collect_pi_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         pi = render_files(workspace, tools=("pi",))
-        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 19
+        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 24
         assert ".pi/agents/sota-scout.md" in pi
         assert not any(
             path.startswith(".pi/agents/")
@@ -190,7 +200,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [a["name"] for a in collect_opencode_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         opencode = render_files(workspace, tools=("opencode",))
-        assert sum(1 for path in opencode if path.startswith(".opencode/agents/")) == 19
+        assert sum(1 for path in opencode if path.startswith(".opencode/agents/")) == 24
         assert ".opencode/agents/sota-scout.md" in opencode
         for tool in ("claude", "pi", "antigravity"):
             assert not any(
@@ -279,7 +289,7 @@ class GeneratorsTests(unittest.TestCase):
         (agents / "dir.md").mkdir()
         sink: list[str] = []
         names = [a["name"] for a in collect_opencode_agents(workspace, warnings=sink)]
-        assert len(names) == 19
+        assert len(names) == 24
         for stem in ("broken", "unclosed", "nameless", "undescribed", "unsafe", "binary", "dir"):
             assert any(f"'{stem}'" in w for w in sink), (stem, sink)
 
@@ -316,7 +326,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [a["name"] for a in collect_antigravity_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         rendered = render_files(workspace, tools=("antigravity",))
-        assert sum(1 for path in rendered if path.startswith(".agents/agents/")) == 19
+        assert sum(1 for path in rendered if path.startswith(".agents/agents/")) == 24
         assert ".agents/agents/sota-scout.md" in rendered
         for tool in ("claude", "pi", "opencode"):
             assert not any(
@@ -403,7 +413,7 @@ class GeneratorsTests(unittest.TestCase):
         (agents / "dir.md").mkdir()
         sink: list[str] = []
         names = [a["name"] for a in collect_antigravity_agents(workspace, warnings=sink)]
-        assert len(names) == 19
+        assert len(names) == 24
         for stem in ("broken", "unclosed", "nameless", "undescribed", "unsafe", "binary", "dir"):
             assert any(f"'{stem}'" in w for w in sink), (stem, sink)
 
@@ -425,24 +435,25 @@ class GeneratorsTests(unittest.TestCase):
         assert head.startswith("---\n")
         assert "name: sota-scout" in head
         assert "WebSearch" not in head and "WebFetch" not in head
-        # Pi has no sourced counterpart for the web tools: skipped, not renamed.
+        # pi-web-access supplies these names; the projection only declares tools,
+        # and does not install the extension or change Pi's tool settings.
         assert "mcp" not in head and "websearch" not in head and "webfetch" not in head
+        assert "  - web_search" in head and "  - fetch_content" in head
         assert "- read" in head and "- bash" in head
         assert ".claude/" not in scout
         assert "skills/plausibility/SKILL.md" in body
         # Domain metadata the skills read travels untouched.
         assert "description: " in head
 
-    def test_pi_web_tools_are_skipped_with_a_note_per_agent(self) -> None:
+    def test_pi_web_tools_map_to_pi_web_access_without_warnings(self) -> None:
         workspace = _workspace(self.new_tmp())
         sink: list[str] = []
         by_name = {a["name"]: a["text"] for a in collect_pi_agents(workspace, warnings=sink)}
         for name in ("sota-scout", "experimental-validation", "novelty-screener"):
             head = by_name[name].partition("\n---\n")[0]
-            assert "mcp" not in head and "websearch" not in head and "webfetch" not in head, name
-            notes = [w for w in sink if f"agent '{name}'" in w]
-            assert any("'WebSearch'" in w and "not granted" in w for w in notes), notes
-            assert any("'WebFetch'" in w and "not granted" in w for w in notes), notes
+            tools = yaml.safe_load(head.removeprefix("---\n"))["tools"]
+            assert "web_search" in tools and "fetch_content" in tools, name
+            assert not any(f"agent '{name}'" in w and "Web" in w for w in sink), sink
 
     def test_pi_unknown_non_web_tools_still_pass_through_lowercased(self) -> None:
         workspace = _workspace(self.new_tmp())
@@ -454,9 +465,18 @@ class GeneratorsTests(unittest.TestCase):
         sink: list[str] = []
         by_name = {a["name"]: a["text"] for a in collect_pi_agents(workspace, warnings=sink)}
         head = by_name["custom"].partition("\n---\n")[0]
-        assert "  - read\n  - notebookedit" in head
-        assert "websearch" not in head
-        assert not any("NotebookEdit" in w for w in sink), sink
+        assert "  - read\n  - notebookedit\n  - web_search" in head
+        assert not any("NotebookEdit" in w or "WebSearch" in w for w in sink), sink
+
+    def test_pi_legacy_tool_mapping_remains_unchanged(self) -> None:
+        source = ("---\nname: legacy\ndescription: x\n"
+                  "tools: Read, Glob, Grep, Write, Edit, Bash, WebFetch\n---\nbody\n")
+        entry, reason, notes = _translate_agent_for_pi(source)
+        assert reason is None and entry is not None and notes == []
+        head = entry["text"].partition("\n---\n")[0]
+        assert yaml.safe_load(head.removeprefix("---\n"))["tools"] == [
+            "read", "find", "grep", "write", "edit", "bash", "fetch_content",
+        ]
 
     def test_pi_agent_projection_skips_malformed_definitions(self) -> None:
         workspace = _workspace(self.new_tmp())
@@ -465,7 +485,7 @@ class GeneratorsTests(unittest.TestCase):
         names = [agent["name"] for agent in collect_pi_agents(workspace, warnings=sink)]
         assert "broken" not in names
         assert any("broken" in warning for warning in sink), sink
-        assert len(names) == 19
+        assert len(names) == 24
 
     def test_unsupported_runtime_generator_still_raises(self) -> None:
         workspace = _workspace(self.new_tmp())
@@ -489,13 +509,13 @@ class GeneratorsTests(unittest.TestCase):
 
     def test_pi_generator_repairs_both_outputs(self) -> None:
         workspace = _workspace(self.new_tmp())
-        (workspace / ".pi/APPEND_SYSTEM.md").write_text("drift", encoding="utf-8")
+        (workspace / ".pi/APPEND_SYSTEM.md").write_text("tampered-body-7f3c", encoding="utf-8")
         (workspace / ".pi/gentle-ai/persona.json").write_text("{}", encoding="utf-8")
         command = [sys.executable, str(ROOT / "scripts/gen-pi.py"), "--root", str(workspace)]
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert '"mode": "gentleman"' in (workspace / ".pi/gentle-ai/persona.json").read_text()
-        assert "drift" not in (workspace / ".pi/APPEND_SYSTEM.md").read_text()
+        assert "tampered-body-7f3c" not in (workspace / ".pi/APPEND_SYSTEM.md").read_text()
 
     def test_antigravity_check_is_exit_three_on_missing_output(self) -> None:
         workspace = _workspace(self.new_tmp())

@@ -298,12 +298,9 @@ misread the budget. Nothing in this contract licenses that.
 carrying constraints, summing over indices — is displayed. What reads in a running
 line stays in the text.
 
-**Number by reference.** Number it if it will be referenced by number later, if it
-defines a contribution, or if it is the general combination. A displayed equation
-nobody will name again is displayed without a number.
-
-Numbering by reflex is the common failure: it produces long runs of numbered
-expressions that no sentence in the paper ever mentions.
+**Number every displayed equation.** The group's papers number all of them, so a
+reader can name any expression by its number. Numbering is not a promise of a later
+reference; what this section owes is that each number it does cite exists.
 
 **Referenced equations are named by number** across subsections and across sections.
 That cross-reference is what makes the notation chain verifiable.
@@ -369,6 +366,66 @@ the introduction and the gap was closed before this section. Here a contribution
 **defined**, not justified. One purpose clause per contribution is enough; a paragraph
 explaining why the problem matters is repeated material.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** 11–26–46 paragraphs; 939–2007–2955 words, about 84–173–266 lines;
+51–81–143 words per paragraph; 3–4–6 subsections; 8–22–35 displayed equations;
+4–12–21 citations, 0.2–0.9 per paragraph; 0–2–4 figures, usually the architecture.
+
+**Shape.** The section is titled *Materials and Methods*. It opens on the problem
+setup and its notation, or on the dataset when the dataset is part of the
+contribution; each component of the proposal then gets its own subsection, named
+after it (*The proposed method's architecture*, *Loss function*, *Optimization*), with
+the loss and its optimization last.
+
+**Notation.**
+
+- **Scalars are italic**: lowercase for values and indices (*x*, *n*, *t*),
+  uppercase for counts and dimensions (*N*, *C*, *T*, *K*), each count paired with
+  its lowercase index. Sums carry both limits, `\sum_{n=1}^{N}`.
+- **Vectors are bold lowercase** (`\mathbf{x}`), **matrices bold uppercase**
+  (`\mathbf{X}`), and **tensors bold uppercase too**, told apart from matrices by the
+  shape they are declared with (`\mathbf{X} \in \mathbb{R}^{C \times T \times F}`).
+  Greek vectors and matrices use `\boldsymbol{}`. The group's papers split between
+  upright and italic bold; a paper picks one and never mixes them.
+- **Every variable is declared at first use with its space**: *Let*
+  `\mathbf{X} \in \mathbb{R}^{C \times T}` *denote …*. Number sets are blackboard
+  (`\mathbb{R}`, `\mathbb{N}`), and so are expectation and divergence
+  (`\mathbb{E}`, `\mathbb{D}_{\mathrm{KL}}`).
+- **Calligraphic letters are for sets, spaces, distributions and losses**:
+  `\mathcal{D}`, `\mathcal{X}`, `\mathcal{H}`, `\mathcal{N}(\mathbf{0}, \mathbf{I})`,
+  `\mathcal{L}`. A loss term carries an upright subscript, `\mathcal{L}_{\mathrm{rec}}`.
+- **Operators are upright**: `\operatorname{tr}`, `\operatorname{diag}`,
+  `\operatorname{vec}`, `\operatorname{softmax}`, `\log`, `\exp`. Transpose is
+  `^{\top}`, never a superscript *T*; Hadamard product `\odot`; Kronecker product
+  `\otimes`; norms `\lVert \cdot \rVert_2`; inner product
+  `\langle \cdot, \cdot \rangle`; an argument slot is `(\cdot)`; `\arg\min` and
+  `\arg\max` take their variable underneath.
+- **Parameters and accents**: learnable parameters are `\theta`, subscripted by the
+  operator they belong to (`f_{\theta}`); hyperparameters are Greek letters declared
+  with their domain (`\gamma \geq 0`). A hat marks an estimate or prediction
+  (`\hat{y}`), a tilde a transformed or intermediate quantity
+  (`\tilde{\mathbf{Z}}`), a bar a mean, a star an optimum (`\theta^{*}`).
+- **An equation is part of a sentence.** The sentence before it ends in a colon or
+  in *as*; the equation closes with a comma or a period; the sentence after it opens
+  in lower case with *where* and defines every new symbol — one to five per clause,
+  closed by *respectively* when they pair with a list.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+- **Definitions are in the present tense.** *The encoder maps*, *the loss
+  penalizes* — the method is described as it is, not as it was built.
+- **A borrowed component is cited where it is named**, right after its name; the
+  proposal's own equations carry no citation.
+- **A figure is the subject of its sentence**: *Figure 2 illustrates the
+  architecture*. It is never *Fig.*, and never a bare parenthesis.
+
 ## Inputs
 
 Nothing here waits for an experiment. But it does wait for the code to exist.
@@ -433,3 +490,7 @@ Nothing here waits for an experiment. But it does wait for the code to exist.
 - A dataset described here and left unreferenced.
 - A paragraph re-motivating the problem.
 - A result, a measured number, or a comparison.
+- A vector, matrix or tensor typeset without bold, or two bold styles mixed in the section.
+- A variable used before its space and dimensions are declared.
+- A displayed equation without a number, or one referred to as *Eq.* instead of *Equation (n)*.
+- A transpose written as a superscript *T* instead of `^{\top}`.

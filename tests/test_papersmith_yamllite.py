@@ -111,7 +111,7 @@ class YamlliteTests(unittest.TestCase):
         path = Path(__file__).resolve().parent.parent / "papersmith.yaml"
         data = loads(path.read_text(encoding="utf-8"))
         ingestion = data["paper_ingestion"]
-        assert ingestion["engine"] == "marker"
+        assert ingestion["engine"] == "auto"
         assert ingestion["mode"] == "fast"
         assert ingestion["strip_references"] is True
         assert ingestion["source_base"] == "guidance"

@@ -2,7 +2,7 @@
 
 Layer purpose. ``test_agents.py`` holds the deep two-way binding contract for
 the repository's own copies; this module proves the *shipped* copies — the
-``.claude/agents`` tree every ``papersmith init`` workspace carries — arrive
+``.claude/agents`` tree every ``smith init`` workspace carries — arrive
 whole, parse, resolve the skill each stretch loads, and reach every harness
 routing document. An agent that only exists in the repository is not a shipped
 subagent.
