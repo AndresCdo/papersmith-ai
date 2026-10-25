@@ -89,9 +89,12 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         self.assertEqual((estimate["kind"], estimate["tab"]), ("redirect", "experiments"))
         self.assertIn("Results/timing.json", estimate["desc"])
         remote = next(i for i, a in enumerate(actions) if a.get("slash") == "/remote-execution")
-        build = next(i for i, a in enumerate(actions) if a.get("slash") == "/experimental-implementation")
-        self.assertLess(build, labels.index("Estimar tiempo y elegir dónde correr"))
-        self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), remote)
+        poc = labels.index("Implementar la prueba de concepto")
+        full = next(i for i, a in enumerate(actions) if a.get("slash") == "/experimental-implementation")
+        # The estimate runs before the pilot and again before the full run.
+        self.assertLess(poc, labels.index("Estimar tiempo y elegir dónde correr"))
+        self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), full)
+        self.assertLess(full, remote)
 
     def test_the_gates_live_in_the_pipeline_tab_and_telemetry_comes_last(self) -> None:
         tabs = re.findall(r"onclick=\"navigateTab\('([a-z]+)'\)\">", PAGE)
@@ -177,16 +180,18 @@ class ServerPhaseTests(unittest.TestCase):
         names = [s["name"] for s in fase5["subfases"]]
         data = names.index("Datos: toy set siempre y dataset oficial")
         replica = names.index("Réplica de métodos de comparación")
-        build = names.index("Implementación PoC y experimental")
+        build = names.index("Prueba de concepto")
         self.assertLess(data, build)
         self.assertLess(replica, build)
         self.assertIn("paper-replicator", fase5["subfases"][replica]["detail"])
         estimate = names.index("Estimar tiempo y elegir dónde correr")
-        remote = names.index("Ejecución remota y cuentas")
+        full = names.index("Experimentos completos")
+        remote = names.index("Ensayo remoto y autorización del lanzamiento (operador)")
         self.assertLess(build, estimate)
-        self.assertLess(estimate, remote)
+        self.assertLess(estimate, full)
+        self.assertLess(full, remote)
         self.assertIn("Results/timing.json", fase5["subfases"][estimate]["detail"])
-        self.assertEqual(fase5["subfases"][remote]["id"], "5.10")
+        self.assertEqual(fase5["subfases"][remote]["id"], "5.12")
         self.assertIn("/datasets", fase5["subfases"][data]["detail"])
 
     def test_each_phase_runs_its_own_check(self) -> None:

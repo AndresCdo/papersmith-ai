@@ -48,9 +48,12 @@ skill refuses when its input is missing.
      its pillars, hypotheses and concept layers (dashboard: Mapa Conceptual &
      Modelo) and its equations with `/math-tutor`, the Socratic tutor that
      also reads hand-written pages.
-5. **Proof of concept and experiments**: `/experimental-deliberation` writes
-   the protocol in `experiments/`, `/proposal-implementation` builds the proof
-   of concept, and `/experimental-implementation` runs its measurements.
+5. **Proof of concept and experiments**, in this order:
+   `/experimental-deliberation` writes the protocol in `experiments/`; a toy
+   set (`/datasets synth`); replication of the comparison methods;
+   the proof of concept (`/proposal-implementation`); a timing estimate;
+   the full experiments (`/experimental-implementation`); the code review
+   (`experiments-reviewer`); the remote rehearsal; and the operator's launch.
    - **Data**: `/datasets synth|search|license|qc|prepare|publish` gives both
      stages a seeded toy set always and one official dataset (agents
      `dataset-scout`, `dataset-curator`): license checked, quality measured,
@@ -60,7 +63,15 @@ skill refuses when its input is missing.
      each baseline paper to `paper-replicator`, which looks for the paper's
      published code first, adopts it pinned and audits it against the paper,
      and reimplements the method only when no code exists.
-   Use `/kaggle-accounts` and `/remote-execution` when they run remotely.
+   - **Timing and placement**: a short timing probe in `Results/timing.json`
+     before the pilot and again before the full run; the dashboard's
+     Experimentos tab lists the local, Kaggle and Colab options, and
+     `/remote-parallelism` (`estimate`, then `assess --owners <distinct
+     owners>`) decides whether to split a campaign.
+   - **Remote runs**: one account per person and service
+     (`smith team add … --attest`), `/kaggle-accounts validate`, then
+     `/remote-execution`: generate-job → submit --smoke → fetch --smoke /
+     smoke record → readiness → gate → submit → status / poll → fetch.
    Only the operator authorizes a launch.
 6. **Scaffolding**: `/paper-writing` opens the `paper/` tree and its section
    contracts.

@@ -478,22 +478,34 @@
       ${k.accounts_store_present ? '<span class="badge badge--ok">presente</span>' : '<span class="badge badge--warn">ausente</span>'}
       · credenciales en <code>${esc(k.inbox || 'kaggle-inbox')}/</code>: <strong>${esc(k.inbox_count ?? 0)}</strong></p>`;
     return `<details class="panel exp-help">
-      <summary class="panel__title">Ayuda: lanzar y monitorear en Kaggle (CLI o MCP) y Colab</summary>
+      <summary class="panel__title">Ayuda: lanzar y monitorear en Kaggle (CLI o MCP) y Colab, o correr en local</summary>
       ${status}
       <h4 class="exp-h4">1. Flujo: prueba de concepto vs. experimentos completos</h4>
       <ol>
+        <li><code>/experimental-deliberation</code> publica el protocolo (<code>experiments/experiments-&lt;slug&gt;-vNN.md</code>).</li>
+        <li><code>/datasets synth</code> crea el toy set sembrado; <code>/datasets search|license|qc|prepare</code> deja el dataset oficial.</li>
+        <li>Réplica de los métodos de comparación (<code>/proposal-implementation</code> → <code>paper-replicator</code>): primero el código publicado, auditado; si no existe, reimplementación (<code>REPLICATION.md</code>).</li>
         <li><code>/proposal-implementation</code> construye la <strong>prueba de concepto</strong> (carpeta con <code>AGREED.md</code>).</li>
+        <li>Sonda de tiempo corta (una época de un fold por brazo) en <code>Results/timing.json</code>, antes del piloto y otra vez antes de la corrida completa: la tabla <em>Opciones de corrida</em> estima cada etapa por host (±20%); <code>/remote-parallelism estimate</code> y luego <code>assess --owners &lt;propietarios distintos&gt;</code> deciden si repartir.</li>
         <li><code>/experimental-implementation</code> construye los <strong>experimentos completos</strong> del protocolo (carpeta con <code>Experimental_AGREED.md</code>).</li>
-        <li><code>/kaggle-accounts validate</code> comprueba que las cuentas autentican (deja <code>kaggle.json</code> en <code>kaggle-inbox/</code>).</li>
+        <li><code>experiments-reviewer</code> revisa el código (calidad, optimización, uso de GPU, pruebas estadísticas) antes de cualquier ensayo; su informe va al operador.</li>
+        <li><strong>Local</strong>: corre directo con el <code>.venv</code> del objetivo o el entorno micromamba del workspace (tabla <em>Entorno local</em>); no necesita ensayo ni ledger.</li>
+        <li><strong>Remoto</strong>: cada persona se registra con <code>smith team add --owner &lt;slug&gt; --name "&lt;nombre&gt;" --kaggle-username &lt;usuario&gt; --attest</code>; <code>/kaggle-accounts validate</code> comprueba que su cuenta autentica.</li>
         <li><code>/remote-execution</code>, con la forma exacta <code>python skills/remote-execution/scripts/remote_cli.py &lt;verbo&gt;</code>:
-          <code>readiness</code> → <code>smoke</code> → <code>generate-job</code> → <code>submit</code> → <code>status</code> / <code>poll</code> → <code>fetch</code>.</li>
-        <li>Solo el operador autoriza un lanzamiento: ningún agente ejecuta <code>submit</code> por su cuenta.</li>
+          <code>generate-job</code> → <code>submit --smoke</code> → <code>fetch --smoke</code> y <code>smoke record</code> → <code>readiness</code> → <code>gate</code> (operador, <code>implementation_cli gate</code>) → <code>submit</code> → <code>status</code> / <code>poll</code> → <code>fetch</code>.</li>
+        <li>Solo el operador autoriza un lanzamiento: ningún agente ejecuta <code>gate</code> ni <code>submit</code> por su cuenta.</li>
       </ol>
+      <h4 class="exp-h4">Cuentas y credenciales</h4>
+      <ul>
+        <li>Regla de Kaggle: una cuenta por persona. Kaggle staff: "the one account per person applies to all Kaggle site use, not just competitions" (<a href="https://www.kaggle.com/discussions/general/192527" target="_blank" rel="noopener">https://www.kaggle.com/discussions/general/192527</a>). Un segundo correo no hace una segunda persona: solo las cuentas que <code>.papersmith/team.json</code> asigna a un propietario son workers, una por persona.</li>
+        <li>Workers (<code>/remote-execution</code>): usan el almacén de <code>/kaggle-accounts</code>; deja un <code>kaggle.json</code> o un archivo con una línea <code>usuario token</code> por cuenta en <code>kaggle-inbox/</code> y valida.</li>
+        <li>MCP y CLI oficial: leen el token <code>KGAT_…</code> de tu cuenta en <code>~/.kaggle/access_token</code>, que escribe <code>smith mcp kaggle activate</code>; no es una credencial de worker.</li>
+      </ul>
       <h4 class="exp-h4">2. GPU</h4>
       <ul>
-        <li>El adaptador Kaggle de papersmith ya empuja con <code>enable_gpu: true</code> y <code>machine_shape: "NvidiaTeslaT4"</code>; un <code>enable_gpu</code> solo puede caer en una P100 y fallar.</li>
+        <li>El adaptador Kaggle de papersmith ya empuja con <code>enable_gpu: true</code> y <code>machine_shape: "NvidiaTeslaT4"</code> (una sola GPU); un <code>enable_gpu</code> solo puede caer en una P100 y fallar.</li>
         <li>Verifica en el log del job: <code>import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))</code>.</li>
-        <li>Cuota semanal de GPU en Kaggle: ~30 h (varía); sesión máxima de 9 h. En papersmith.yaml, <code>compute_targets.kaggle-gpu-pool.max_timeout_hours</code> la acota.</li>
+        <li>Límites: los de sesión y la cuota semanal de GPU son los que Kaggle muestra en la configuración de la cuenta o en <code>get_accelerator_quota</code>; léelos ahí en vez de suponer un número. En papersmith.yaml, <code>compute_targets.kaggle-gpu-pool.max_timeout_hours</code> es un tope local que declaras, no el límite de Kaggle.</li>
       </ul>
       <h4 class="exp-h4">3. Alternativa: Kaggle CLI directo</h4>
       <pre><code>kaggle kernels push -p &lt;dir&gt;          # kernel-metadata.json con "enable_gpu": true
@@ -510,14 +522,14 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
       </ul>
       <h4 class="exp-h4">5. Optimización</h4>
       <ul>
-        <li>Circuitos statevector pequeños (≤ ~10 qubits) suelen correr más rápido en CPU o en lote con backprop de torch (PennyLane <code>default.qubit</code>, <code>diff_method="backprop"</code>) que con parameter-shift.</li>
-        <li>Pon el backbone clásico en GPU; usa precisión mixta en la parte clásica.</li>
+        <li>Simuladores pequeños: suelen correr más rápido en CPU o en lotes vectorizados con diferenciación automática que paso a paso; mide antes de mover algo a GPU.</li>
+        <li>GPU para la parte clásica (backbone, capas densas); usa precisión mixta allí.</li>
         <li>Reparte shards entre cuentas con <code>distribute</code>.</li>
         <li>Cachea épocas preprocesadas en <code>Data/</code>; fija semillas.</li>
       </ul>
       <h4 class="exp-h4">6. Google Colab (CLI o MCP)</h4>
       <ul>
-        <li>Sin interfaz: el backend Colab de <code>/remote-execution</code> usa la CLI oficial <code>colab</code> con los mismos verbos (<code>readiness</code> → <code>smoke</code> → <code>generate-job</code> → <code>submit</code> → <code>status</code> / <code>poll</code> → <code>fetch</code>); un worker por persona del equipo, cada una tras <code>smith colab login --owner &lt;slug&gt;</code>.</li>
+        <li>Sin interfaz: el backend Colab de <code>/remote-execution</code> usa la CLI oficial <code>colab</code> con los mismos verbos (<code>generate-job</code> → <code>submit --smoke</code> → <code>fetch --smoke</code> y <code>smoke record</code> → <code>readiness</code> → <code>gate</code> (operador, <code>implementation_cli gate</code>) → <code>submit</code> → <code>status</code> / <code>poll</code> → <code>fetch</code>); un worker por persona del equipo, cada una tras <code>smith colab login --owner &lt;slug&gt;</code>.</li>
         <li>Interactivo: el MCP oficial de Colab maneja un cuaderno abierto en el navegador; sirve para explorar y para la prueba de concepto, y no escribe el ledger que lee este panel.</li>
         <li>Regla del equipo: una cuenta por persona y servicio; las campañas repartidas en Colab solo con niveles de pago (pro, payg, enterprise); una cuenta gratuita nunca es worker de una campaña.</li>
         <li>Reproducibilidad: No mezcles shards de Kaggle y Colab en una misma campaña salvo que los sellos de entorno de cada shard sean idénticos (modelo de acelerador, CUDA, torch); por defecto, no se mezclan.</li>

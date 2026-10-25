@@ -522,6 +522,27 @@ Three modules exist so far, each service-blind and stdlib-only:
   exit or an expired timeout is a refusal (`KaggleAdapterError`), never a
   fabricated `Status`, `Submission` or `Fetched`.
 
+  **Team accounts: only owner-mapped Kaggle accounts are workers.** When
+  `<workspace>/.papersmith/team.json` maps at least one owner to a Kaggle
+  username (`accounts.kaggle.username`), `workers()` returns only the
+  accounts kaggle-accounts lists whose username an owner maps — one per
+  owner. Every other listed account stays in kaggle-accounts but is never
+  a worker, and `submit` to it refuses before any credential is asked for:
+  it is "not mapped to a team owner: one account per person — Kaggle
+  staff: 'the one account per person applies to all Kaggle site use'"
+  (https://www.kaggle.com/discussions/general/192527, verified
+  2026-10-25). Registering a second account under a different email does
+  not make it a different person's account. An owner whose mapped
+  username kaggle-accounts does not list is reported as not validated and
+  yields no worker until that account is taken in and validated.
+  `KaggleAdapter.team_report()` returns all three lists (`workers`,
+  `excluded` with each reason, `not_validated`), and the declared capacity
+  counts mapped workers only. The adapter reads two fields per member
+  (`owner`, `accounts.kaggle.username`) and nothing else; it refuses a
+  registry that is not schema 1, an owner listed twice, and the same
+  username under two owners. With no registry, or one mapping no Kaggle
+  account, every listed account is a worker exactly as before.
+
   **`fetch()` owns its own time budget, `KAGGLE_FETCH_TIMEOUT_SECONDS`
   (1800s) — a SEPARATE constant from `SUBPROCESS_TIMEOUT_SECONDS` (120s),
   never the same one reused.** This is the same finding as

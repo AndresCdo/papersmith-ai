@@ -127,10 +127,12 @@ ACTIONS: dict[str, dict[str, Any]] = {
         ],
     },
     "poc_experiments": {
-        "skills": ["experimental-deliberation", "proposal-implementation", "datasets",
-                   "experimental-implementation", "kaggle-accounts", "remote-execution",
-                   "remote-parallelism"],
-        "agent": "experimental-deliberation & proposal/experimental-implementation",
+        "skills": ["experimental-deliberation", "datasets", "proposal-implementation",
+                   "remote-parallelism", "experimental-implementation", "kaggle-accounts",
+                   "remote-execution"],
+        "agent": ("experimental-validation → experimental-publish → dataset-scout / dataset-curator → "
+                  "paper-replicator → implementation-build → experiments-build → experiments-reviewer → "
+                  "experiments-walk"),
         "actions": [
             _prompt("/experimental-deliberation", "Deliberar el diseño experimental", [
                 "Pregunta que gobierna cada turno: ¿qué experimento pondría a prueba esta afirmación de la propuesta?",
@@ -153,18 +155,32 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Convierte la última propuesta en Python contra un repositorio objetivo, o verifica una implementación existente.",
                 "Indica el repositorio objetivo y si es primera pasada o una pasada posterior.",
             ], "Ej.: implementa la PoC de la propuesta r03 en ../mi-poc", optional=True),
+            _redirect("Estimar tiempo y elegir dónde correr", "experiments",
+                      "Antes del piloto y otra vez antes de la corrida completa: sonda de tiempo corta (una "
+                      "época de un fold por brazo) en Results/timing.json; la pestaña Experimentos estima la "
+                      "PoC y la corrida completa (±20%), muestra el entorno local y las opciones de corrida "
+                      "local, Kaggle y Colab."),
             _prompt("/experimental-implementation", "Implementar y medir los experimentos", [
                 "Convierte el protocolo experimental vigente en Python y corre sus mediciones declaradas.",
                 "Indica el repositorio objetivo; la verificación compara contra el protocolo y la propuesta.",
+                "Antes de cualquier ensayo remoto, experiments-reviewer revisa el código (calidad, optimización, uso de GPU y pruebas estadísticas) y entrega su informe.",
             ], "Ej.: implementa E1 y E2 y reporta las métricas.", optional=True),
-            _redirect("Estimar tiempo y elegir dónde correr", "experiments",
-                      "Sonda de tiempo corta (una época de un fold por brazo) en Results/timing.json; la "
-                      "pestaña Experimentos estima la PoC y la corrida completa (±20%), muestra el entorno "
-                      "local y las opciones de corrida local o remota."),
-            _prompt("/remote-execution", "Ejecución remota (Kaggle / workers)", [
-                "Envía entrypoints a un worker remoto y lee lo que regresó; el ledger es de solo anexar.",
-                "Si las cuentas no autentican, usa primero /kaggle-accounts.",
-            ], "Ej.: envía experiments/e1.py al mejor worker disponible.", optional=True),
+            _prompt("/remote-parallelism", "Decidir si repartir entre cuentas", [
+                "Primero estimate --timing <objetivo>/<Nombre>/Results/timing.json: el rango por etapa y host (±20%).",
+                "Luego assess con las entradas medidas; --owners es el número de propietarios distintos del equipo (smith team list), nunca el de cuentas.",
+                "Regla del equipo: una cuenta por persona y servicio; cada persona se registra con `smith team add --owner <slug> --name \"<nombre>\" --kaggle-username <usuario> --attest`.",
+                "No coloca, no genera ni lanza nada: el veredicto lo lee el operador.",
+            ], "Ej.: estima la PoC con su timing.json y evalúa repartir la corrida completa entre 3 propietarios.",
+                optional=True),
+            _prompt("/kaggle-accounts", "Validar las cuentas Kaggle", [
+                "validate re-comprueba cada cuenta guardada contra el servicio y toma lo que haya en kaggle-inbox/ (kaggle.json o una línea `usuario token`).",
+                "Solo las cuentas que el registro del equipo asigna a un propietario son workers: una por persona.",
+            ], "Ej.: valida las cuentas y toma las credenciales nuevas del inbox.", optional=True, prefix="validate "),
+            _prompt("/remote-execution", "Ensayo remoto y lanzamiento (Kaggle / Colab)", [
+                "Orden: generate-job → submit --smoke → fetch --smoke y smoke record → readiness → gate (solo el operador) → submit → status / poll → fetch.",
+                "El ledger es de solo anexar; si las cuentas no autentican, usa primero /kaggle-accounts.",
+                "Solo el operador autoriza un lanzamiento: ningún agente ejecuta submit por su cuenta.",
+            ], "Ej.: genera el job de experiments/e1.py y prepara su ensayo smoke.", optional=True),
             _redirect("Ver el tablero PoC", "modelo", "Experimentos y veredictos de la prueba de concepto.", "poc"),
         ],
     },

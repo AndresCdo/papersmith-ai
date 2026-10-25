@@ -229,6 +229,32 @@ def _rehearsals_row(root: Path) -> dict[str, Any]:
                 state, detail, None, jobs=jobs, passed=passed)
 
 
+_LEDGER_GLOBS = ("implementations/*/.remote-execution/ledger.jsonl",
+                 "implementations/*/*/.remote-execution/ledger.jsonl")
+MAX_LEDGERS = 200
+
+
+def launch_evidence(root: Path | str) -> dict[str, int]:
+    """Counts of the remote path's evidence on disk: generated jobs, passed
+    rehearsals, and ledgers holding at least one recorded event (a submit
+    reached the ledger). Bounded; never raises."""
+    root = Path(root)
+    try:
+        jobs = len(_bounded_glob(root, _JOB_GLOBS, MAX_JOBS))
+        smokes = _bounded_glob(root, _SMOKE_GLOBS, MAX_SMOKE_FILES)
+        passed = sum(1 for path in smokes if _smoke_passed(path))
+        ledgers = 0
+        for path in _bounded_glob(root, _LEDGER_GLOBS, MAX_LEDGERS):
+            try:
+                with path.open("rb") as handle:
+                    ledgers += bool(handle.read(MAX_SMOKE_BYTES).strip())
+            except OSError:
+                continue
+        return {"jobs": jobs, "smokes": len(smokes), "rehearsals_passed": passed, "launched": ledgers}
+    except Exception:  # noqa: BLE001 - evidence that cannot be read is no evidence
+        return {"jobs": 0, "smokes": 0, "rehearsals_passed": 0, "launched": 0}
+
+
 def _quota_row() -> dict[str, Any]:
     return _row("quota", "Cuota GPU semanal", "Horas de GPU disponibles esta semana.",
                 "unverified", "No se consulta en cada sondeo (requiere red).",
@@ -308,7 +334,7 @@ def team_members(root: Path | str) -> dict[str, Any]:
         out["problem"] = "invalid"
         return out
     members = data.get("members") if isinstance(data, dict) else None
-    if not isinstance(members, list):
+    if not isinstance(members, list) or data.get("schema") != 1:
         out["problem"] = "invalid"
         return out
     stored = _store_usernames(root)
@@ -335,6 +361,12 @@ def team_members(root: Path | str) -> dict[str, Any]:
             "eligible": eligible,
         })
     out["skipped"] += max(0, len(members) - MAX_MEMBERS)
+    # The remote backends refuse a registry with a repeated or malformed owner
+    # or one Kaggle username under two owners, so the dashboard must not call
+    # it ready either: one account per person is the rule both enforce.
+    usernames = [m["kaggle_username"].lower() for m in out["members"] if m["kaggle_username"]]
+    if out["skipped"] or len(usernames) != len(set(usernames)):
+        out["problem"] = "rejected"
     return out
 
 
@@ -391,8 +423,10 @@ def remote_host_readiness(services: Any, stage: str) -> dict[str, dict[str, Any]
     """Whether each remote host family can take ``stage`` (``poc`` or ``full``).
 
     Read from the rows ``remote_services`` already built, never re-probed.
-    Kaggle needs an active token, the official CLI and at least one stored
-    worker account. Colab needs the official CLI and at least one team owner
+    Kaggle needs an active token, the official CLI and at least one worker:
+    when the team registry maps an owner to a Kaggle username, a worker is a
+    mapped owner whose account is validated (one per owner, the rule the
+    remote-execution backend applies); with no mapping, a stored account. Colab needs the official CLI and at least one team owner
     signed in (their config directory exists); a full run also needs one of
     them on a paid tier. Never raises.
     """
@@ -404,13 +438,26 @@ def remote_host_readiness(services: Any, stage: str) -> dict[str, dict[str, Any]
     def active(row_id: str) -> bool:
         return (rows.get(row_id) or {}).get("state") == "active"
 
-    accounts = (rows.get("accounts") or {}).get("count")
-    accounts = accounts if isinstance(accounts, int) else 0
+    # Same rule as the remote-execution backend: when the team registry maps
+    # at least one owner to a Kaggle username, only those owners' validated
+    # accounts are workers (one per owner); otherwise every stored account is.
+    mapped = [m for m in members if m.get("kaggle_username")]
+    if team.get("problem"):
+        workers, worker_text = 0, "registro del equipo ilegible (smith team list)"
+        counted = "0 propietario(s) con cuenta validada"
+    elif mapped:
+        workers = sum(1 for m in mapped if m.get("kaggle_validated") is True)
+        counted = worker_text = f"{workers} propietario(s) con cuenta validada"
+    else:
+        stored = (rows.get("accounts") or {}).get("count")
+        workers = stored if isinstance(stored, int) else 0
+        counted = worker_text = (f"{workers} cuenta(s) worker guardada(s); sin propietarios Kaggle en el "
+                                 "registro del equipo, cada cuenta guardada es un worker")
     gaps = [text for ok, text in ((active("token"), "sin token activo"),
                                   (active("cli"), "CLI oficial no instalada"),
-                                  (accounts >= 1, "sin cuentas worker validadas")) if not ok]
-    kaggle = {"available": not gaps,
-              "reason": (f"Token activo, CLI oficial y {accounts} cuenta(s) worker." if not gaps
+                                  (workers >= 1, worker_text)) if not ok]
+    kaggle = {"available": not gaps, "workers": workers,
+              "reason": (f"Token activo, CLI oficial y {counted}." if not gaps
                          else "Kaggle: " + "; ".join(gaps) + ".")}
     signed = [m for m in members if m.get("colab_tier") and m.get("colab_config_present")]
     paid = [m for m in signed if m.get("colab_tier") in COLAB_PAID_TIERS]

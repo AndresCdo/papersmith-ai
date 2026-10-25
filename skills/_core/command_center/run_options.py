@@ -104,14 +104,28 @@ def estimate_seconds(measurements: list[dict[str, Any]], scale: dict[str, int]) 
     return unit * scale["epochs"] * runs * scale["arms"] + setup * runs
 
 
+#: (upper bound in seconds, unit divisor, unit name, decimals), first match wins.
+_UNITS = ((90, 1, "s", 0), (90 * 60, 60, "min", 1), (48 * 3600, 3600, "h", 1), (math.inf, 86400, "d", 1))
+
+
+def _unit_for(seconds: float) -> tuple[float, str, int]:
+    return next((div, name, dec) for limit, div, name, dec in _UNITS if seconds < limit)
+
+
+def _amount(seconds: float, div: float, decimals: int) -> str:
+    # Spanish UI: decimal comma.
+    return f"{seconds / div:.{decimals}f}".replace(".", ",")
+
+
 def duration_label(seconds: float) -> str:
-    if seconds < 90:
-        return f"{seconds:.0f} s"
-    if seconds < 90 * 60:
-        return f"{seconds / 60:.0f} min"
-    if seconds < 48 * 3600:
-        return f"{seconds / 3600:.1f} h"
-    return f"{seconds / 86400:.1f} d"
+    div, name, decimals = _unit_for(seconds)
+    return f"{_amount(seconds, div, decimals)} {name}"
+
+
+def range_label(low: float, high: float) -> str:
+    """``low – high`` in one unit, the one ``low`` reads best in."""
+    div, name, decimals = _unit_for(low)
+    return f"{_amount(low, div, decimals)} {name} – {_amount(high, div, decimals)} {name}"
 
 
 def _timing_for(stage: str, products: list[Any]) -> dict[str, Any] | None:
@@ -155,7 +169,7 @@ def _row(stage: str, host: str, readiness: dict[str, Any], timing: dict[str, Any
             estimate = {"seconds": round(seconds, 6), "low": round(low, 6), "high": round(high, 6),
                         "measurements": len(own), "source": timing.get("file"),
                         "devices": sorted({m["device"] for m in own if m.get("device")})}
-            label = f"{duration_label(low)} – {duration_label(high)} (±20%)"
+            label = f"{range_label(low, high)} ±20%"
     return {"stage": stage, "stage_label": STAGE_LABELS[stage], "host": host,
             "host_label": HOST_LABELS.get(host, host), "available": bool(readiness.get("available")),
             "reason": str(readiness.get("reason") or "—"), "estimate": estimate, "estimate_label": label}
