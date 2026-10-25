@@ -1,0 +1,671 @@
+"""Read-only view behind the dashboard's Experiments tab.
+
+``get_experiments_view(root)`` gathers, without writing anything:
+
+* the latest experiments protocol (``experiments/experiments-*-vNN.md``): its
+  validation scheme and, per experiment, the expected report tables approved
+  in deliberation;
+* every product folder ``implementations/<repo>/<Name>/`` — a proof of concept
+  when it holds ``AGREED.md``, a full experiment when it holds
+  ``Experimental_AGREED.md`` — with its convergence histories, figures,
+  tables, significance tests, pinned artifacts and remote runs folded from
+  its ``.remote-execution/ledger.jsonl``;
+* a cheap remote-accounts readiness hint (the credential store its owning
+  skill declares is present; credential files waiting in the drop-zone that
+  skill declares), read through ``state_extractor``'s declaration readers so
+  no service name is restated here.
+
+Every read is bounded (files per product, bytes per file, points per series,
+series per history) and contained under ``root``: a symlink resolving outside
+the workspace is skipped, never read. Malformed files never raise; they are
+recorded in ``warnings``. Returned paths are relative to ``root`` so
+``/api/artifact`` can serve them.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+import math
+import os
+import re
+from pathlib import Path
+from typing import Any
+
+from .atlas import _locate
+from .state_extractor import credentials_store, inbox_directory
+from .terminal import remote_mcp_status
+from .decisions import LEDGER_MAX_BYTES, MAX_LEDGER_LINES, _discover_ledgers, _read_bytes
+
+MAX_PRODUCTS = 50
+MAX_FILES_PER_PRODUCT = 200
+MAX_FILE_BYTES = 2 * 1024 * 1024
+MAX_POINTS = 500
+MAX_SERIES = 24
+MAX_HISTORIES = 12
+MAX_FIGURES = 60
+MAX_TABLES = 30
+MAX_TABLE_ROWS = 200
+MAX_TABLE_COLS = 30
+MAX_SIGNIFICANCE_ROWS = 200
+MAX_PINNED = 30
+MAX_LATEST_RUNS = 10
+MAX_WARNINGS = 100
+MAX_PROTOCOL_BYTES = 1024 * 1024
+TEXT_MAX = 600
+
+FIGURE_EXTS = {".png", ".svg", ".jpg", ".jpeg", ".pdf"}
+TABLE_EXTS = {".csv", ".md", ".json"}
+HISTORY_EXTS = {".json", ".jsonl", ".csv"}
+GROUP_KEYS = ("model", "variant", "fold", "seed")
+X_KEYS = ("epoch", "step")
+SIGNIFICANCE_KEYS = ("comparison", "test", "statistic", "p_value", "p_adjusted", "correction",
+                     "effect_size", "effect_size_name", "ci_low", "ci_high", "n", "alpha")
+
+_PROTOCOL_RE = re.compile(r"^experiments-.+-v(\d+)\.md$")
+_EXPERIMENT_RE = re.compile(r"^##\s+Experiment\s+\[exp:([^\]]+)\]\s*[—–-]?\s*(.*)$")
+_REPORT_RE = re.compile(r"^###\s+Expected Report:?\s*(.*)$")
+_BULLET_RE = re.compile(r"^-\s+\*\*([^*]+?):?\*\*:?\s*(.*)$")
+_SCHEME_RE = re.compile(r"^\*\*Validation scheme:?\*\*:?\s*(.*)$", re.IGNORECASE)
+_BULLET_FIELDS = {
+    "hypothesis": "hypothesis",
+    "priority": "priority",
+    "success criterion": "success_criterion",
+    "estimated cost": "cost",
+}
+
+
+def _clip(value: Any, limit: int = TEXT_MAX) -> str:
+    text = str(value if value is not None else "").strip()
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _rel(root: Path, path: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+class _Reader:
+    """Contained, bounded reads that note every refusal instead of raising."""
+
+    def __init__(self, root: Path, warnings: list[str]) -> None:
+        self.root = root
+        self.warnings = warnings
+
+    def warn(self, message: str) -> None:
+        if len(self.warnings) < MAX_WARNINGS:
+            self.warnings.append(message)
+
+    def text(self, path: Path, cap: int = MAX_FILE_BYTES) -> str | None:
+        status, resolved, _size, _mtime = _locate(self.root, path, cap)
+        label = self.label(path)
+        if status == "unsafe":
+            return None  # Escapes the workspace: neither read nor reported by path.
+        if status == "too_large":
+            self.warn(f"{label}: larger than {cap // 1024} KiB, not read")
+            return None
+        if status != "ok" or resolved is None:
+            self.warn(f"{label}: unreadable")
+            return None
+        data = _read_bytes(resolved, cap)
+        if data is None:
+            self.warn(f"{label}: unreadable")
+            return None
+        return data.decode("utf-8", errors="replace")
+
+    def json(self, path: Path) -> Any:
+        text = self.text(path)
+        if text is None:
+            return None
+        try:
+            return json.loads(text)
+        except ValueError:
+            self.warn(f"{self.label(path)}: malformed JSON")
+            return None
+
+    def contained(self, path: Path) -> bool:
+        status, _resolved, _size, _mtime = _locate(self.root, path, MAX_FILE_BYTES * 64)
+        return status in ("ok", "too_large")
+
+    def label(self, path: Path) -> str:
+        try:
+            return _rel(self.root, path)
+        except ValueError:
+            return path.name
+
+
+# --------------------------------------------------------------------------
+# protocol
+# --------------------------------------------------------------------------
+def _split_row(line: str) -> list[str]:
+    cells = line.strip().strip("|").split("|")
+    return [_clip(c.strip(), 200) for c in cells][:MAX_TABLE_COLS]
+
+
+def _is_separator(line: str) -> bool:
+    return bool(re.fullmatch(r"\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?", line.strip()))
+
+
+def _markdown_tables(lines: list[str]) -> list[dict[str, Any]]:
+    """Every pipe table in ``lines`` as ``{headers, rows}``."""
+    tables: list[dict[str, Any]] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("|") and i + 1 < len(lines) and _is_separator(lines[i + 1]):
+            headers = _split_row(line)
+            rows: list[list[str]] = []
+            i += 2
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                if len(rows) < MAX_TABLE_ROWS:
+                    row = _split_row(lines[i])
+                    rows.append((row + [""] * len(headers))[: len(headers)])
+                i += 1
+            tables.append({"headers": headers, "rows": rows})
+            continue
+        i += 1
+    return tables
+
+
+def _latest_protocol(root: Path) -> Path | None:
+    folder = root / "experiments"
+    best: tuple[int, str] | None = None
+    try:
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                match = _PROTOCOL_RE.match(entry.name)
+                if match and entry.is_file(follow_symlinks=True):
+                    key = (int(match.group(1)), entry.name)
+                    if best is None or key > best:
+                        best = key
+    except OSError:
+        return None
+    return folder / best[1] if best else None
+
+
+def _parse_protocol(root: Path, reader: _Reader) -> dict[str, Any] | None:
+    path = _latest_protocol(root)
+    if path is None:
+        return None
+    text = reader.text(path, MAX_PROTOCOL_BYTES)
+    if text is None:
+        return None
+    revision = int(_PROTOCOL_RE.match(path.name).group(1))  # type: ignore[union-attr]
+    lines = text.splitlines()
+    scheme = ""
+    experiments: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    report_title: str | None = None
+    report_lines: list[str] = []
+
+    def close_report() -> None:
+        nonlocal report_title, report_lines
+        if current is not None and report_title is not None:
+            for table in _markdown_tables(report_lines)[:1]:
+                current["expected_reports"].append({"title": _clip(report_title, 200), **table})
+        report_title, report_lines = None, []
+
+    for line in lines:
+        stripped = line.strip()
+        scheme_match = _SCHEME_RE.match(stripped)
+        if scheme_match and not scheme:
+            scheme = _clip(scheme_match.group(1))
+            continue
+        exp_match = _EXPERIMENT_RE.match(stripped)
+        if exp_match:
+            close_report()
+            current = {"id": _clip(exp_match.group(1), 40), "title": _clip(exp_match.group(2), 200),
+                       "priority": "", "hypothesis": "", "success_criterion": "", "cost": "",
+                       "expected_reports": []}
+            experiments.append(current)
+            continue
+        if stripped.startswith("## "):
+            close_report()
+            current = None
+            continue
+        report_match = _REPORT_RE.match(stripped)
+        if report_match and current is not None:
+            close_report()
+            report_title = report_match.group(1) or "Expected Report"
+            continue
+        if stripped.startswith("### "):
+            close_report()
+            continue
+        if report_title is not None:
+            report_lines.append(line)
+            continue
+        bullet = _BULLET_RE.match(stripped)
+        if bullet and current is not None:
+            field = _BULLET_FIELDS.get(bullet.group(1).strip().lower())
+            if field and not current[field]:
+                current[field] = _clip(bullet.group(2))
+    close_report()
+    return {"file": _rel(root, path), "revision": revision, "validation_scheme": scheme,
+            "experiments": experiments}
+
+
+# --------------------------------------------------------------------------
+# histories
+# --------------------------------------------------------------------------
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _records(data: Any) -> list[dict[str, Any]] | None:
+    """Row records from a list of dicts, a {history|records: [...]} wrapper,
+    or a column dict of equal-length lists (Keras ``History.history``)."""
+    if isinstance(data, dict):
+        for key in ("history", "records", "rows"):
+            if isinstance(data.get(key), list):
+                return _records(data[key])
+        columns = {k: v for k, v in data.items() if isinstance(v, list)}
+        if columns:
+            length = max(len(v) for v in columns.values())
+            return [{k: (v[i] if i < len(v) else None) for k, v in columns.items()}
+                    for i in range(length)]
+        return None
+    if isinstance(data, list):
+        rows = [r for r in data if isinstance(r, dict)]
+        return rows if rows else None
+    return None
+
+
+def _downsample(points: list[list[float]]) -> list[list[float]]:
+    if len(points) <= MAX_POINTS:
+        return points
+    last = len(points) - 1
+    picks = sorted({round(i * last / (MAX_POINTS - 1)) for i in range(MAX_POINTS)})
+    return [points[i] for i in picks]
+
+
+def _x_value(x: float) -> float | int:
+    return int(x) if float(x).is_integer() else x
+
+
+def _series(rows: list[dict[str, Any]], label: str, reader: _Reader) -> dict[str, Any] | None:
+    keys: list[str] = []
+    for row in rows[:50]:
+        for key in row:
+            if key not in keys:
+                keys.append(key)
+    x_key = next((k for k in X_KEYS if k in keys), None)
+    group_keys = [k for k in keys if k in GROUP_KEYS]
+    metrics = [k for k in keys if k != x_key and k not in group_keys
+               and any(_number(r.get(k)) is not None for r in rows[:50])]
+    if not metrics:
+        reader.warn(f"{label}: no numeric series")
+        return None
+    buckets: dict[tuple[str, str], list[list[float]]] = {}
+    for index, row in enumerate(rows):
+        x = _number(row.get(x_key)) if x_key else float(index)
+        if x is None:
+            continue
+        group = ", ".join(f"{k}={_clip(row.get(k), 40)}" for k in sorted(group_keys)
+                          if row.get(k) not in (None, ""))
+        for metric in metrics:
+            y = _number(row.get(metric))
+            if y is None:
+                continue
+            bucket = buckets.get((metric, group))
+            if bucket is None:
+                if len(buckets) >= MAX_SERIES:
+                    continue
+                bucket = buckets[(metric, group)] = []
+            bucket.append([_x_value(x), y])
+    if len(buckets) >= MAX_SERIES:
+        reader.warn(f"{label}: series capped at {MAX_SERIES}")
+    series = [{"name": metric, "group": group,
+               "points": _downsample(sorted(points, key=lambda p: p[0]))}
+              for (metric, group), points in buckets.items() if points]
+    if not series:
+        reader.warn(f"{label}: no numeric points")
+        return None
+    return {"file": label, "x_key": x_key or "index", "series": series}
+
+
+def _read_history(path: Path, reader: _Reader) -> dict[str, Any] | None:
+    label = reader.label(path)
+    text = reader.text(path)
+    if text is None:
+        return None
+    ext = path.suffix.lower()
+    rows: list[dict[str, Any]] | None
+    if ext == ".csv":
+        try:
+            rows = list(csv.DictReader(io.StringIO(text)))
+        except csv.Error:
+            rows = None
+    elif ext == ".jsonl":
+        rows = []
+        bad = 0
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except ValueError:
+                bad += 1
+                continue
+            if isinstance(value, dict):
+                rows.append(value)
+        if bad:
+            reader.warn(f"{label}: {bad} malformed line(s) skipped")
+    else:
+        try:
+            rows = _records(json.loads(text))
+        except ValueError:
+            reader.warn(f"{label}: malformed JSON")
+            return None
+    if not rows:
+        reader.warn(f"{label}: no records")
+        return None
+    return _series(rows, label, reader)
+
+
+# --------------------------------------------------------------------------
+# tables, significance, pinned
+# --------------------------------------------------------------------------
+def _flatten(data: dict[str, Any], prefix: str = "", depth: int = 0) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for key, value in data.items():
+        name = f"{prefix}{key}"
+        if isinstance(value, dict) and depth < 1:
+            rows.extend(_flatten(value, f"{name}.", depth + 1))
+        elif isinstance(value, (dict, list)):
+            rows.append([_clip(name, 200), _clip(json.dumps(value)[:200], 200)])
+        else:
+            rows.append([_clip(name, 200), _clip(value, 200)])
+        if len(rows) >= MAX_TABLE_ROWS:
+            break
+    return rows[:MAX_TABLE_ROWS]
+
+
+def _read_table(path: Path, reader: _Reader) -> dict[str, Any] | None:
+    label = reader.label(path)
+    ext = path.suffix.lower()
+    text = reader.text(path)
+    if text is None:
+        return None
+    if ext == ".csv":
+        try:
+            parsed = list(csv.reader(io.StringIO(text)))
+        except csv.Error:
+            reader.warn(f"{label}: malformed CSV")
+            return None
+        if not parsed:
+            return None
+        headers = [_clip(h, 200) for h in parsed[0][:MAX_TABLE_COLS]]
+        rows = [[_clip(c, 200) for c in row[:MAX_TABLE_COLS]] for row in parsed[1:MAX_TABLE_ROWS + 1]]
+        return {"path": label, "format": "csv", "headers": headers, "rows": rows}
+    if ext == ".md":
+        tables = _markdown_tables(text.splitlines())
+        if not tables:
+            return None
+        return {"path": label, "format": "md", **tables[0]}
+    try:
+        data = json.loads(text)
+    except ValueError:
+        reader.warn(f"{label}: malformed JSON")
+        return None
+    if isinstance(data, list) and data and all(isinstance(r, dict) for r in data):
+        headers: list[str] = []
+        for row in data[:MAX_TABLE_ROWS]:
+            for key in row:
+                if key not in headers and len(headers) < MAX_TABLE_COLS:
+                    headers.append(key)
+        rows = [[_clip(row.get(h, ""), 200) for h in headers] for row in data[:MAX_TABLE_ROWS]]
+        return {"path": label, "format": "json", "headers": [_clip(h, 200) for h in headers],
+                "rows": rows}
+    if isinstance(data, dict):
+        return {"path": label, "format": "json", "headers": ["key", "value"], "rows": _flatten(data)}
+    reader.warn(f"{label}: not a table")
+    return None
+
+
+def _read_significance(path: Path, reader: _Reader) -> list[dict[str, Any]]:
+    data = reader.json(path)
+    if data is None:
+        return []
+    if isinstance(data, dict):
+        data = next((data[k] for k in ("tests", "comparisons", "results") if isinstance(data.get(k), list)),
+                    [data])
+    if not isinstance(data, list):
+        reader.warn(f"{reader.label(path)}: not a list of tests")
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in data[:MAX_SIGNIFICANCE_ROWS]:
+        if not isinstance(item, dict):
+            continue
+        row: dict[str, Any] = {"file": reader.label(path)}
+        for key in SIGNIFICANCE_KEYS:
+            value = item.get(key)
+            if key in ("comparison", "test", "correction", "effect_size_name"):
+                row[key] = _clip(value, 200) if value is not None else None
+            else:
+                row[key] = _number(value)
+        rows.append(row)
+    return rows
+
+
+def _pinned(root: Path, product: Path, reader: _Reader, panel: Path | None) -> list[str]:
+    if panel is None:
+        return []
+    data = reader.json(panel)
+    entries = data.get("pinned") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        if data is not None:
+            reader.warn(f"{reader.label(panel)}: expected {{\"pinned\": [...]}}")
+        return []
+    out: list[str] = []
+    for entry in entries[:MAX_PINNED]:
+        if not isinstance(entry, str) or not entry or entry.startswith("/"):
+            continue
+        base = root if entry.startswith("implementations/") else product
+        candidate = base / entry
+        status, resolved, _size, _mtime = _locate(root, candidate, MAX_FILE_BYTES * 64)
+        if status in ("ok", "too_large") and resolved is not None:
+            rel = _rel(root, resolved)
+            if rel not in out:
+                out.append(rel)
+    return out
+
+
+# --------------------------------------------------------------------------
+# remote runs
+# --------------------------------------------------------------------------
+def _fold_runs(root: Path, ledger: Path | None, reader: _Reader) -> dict[str, Any]:
+    empty = {"count": 0, "by_state": {}, "latest": []}
+    if ledger is None:
+        return empty
+    text = reader.text(ledger, LEDGER_MAX_BYTES)
+    if text is None:
+        return empty
+    by_id: dict[str, str] = {}
+    runs: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    bad = 0
+    for line in text.splitlines()[:MAX_LEDGER_LINES]:
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            bad += 1
+            continue
+        if not isinstance(event, dict):
+            bad += 1
+            continue
+        kind = event.get("kind")
+        sid = _clip(event.get("submissionId"), 120)
+        if kind == "submitted":
+            entry = _clip(event.get("entrypoint"), 200) or sid or "?"
+            if sid:
+                by_id[sid] = entry
+            runs[entry] = {"entrypoint": entry, "state": "submitted", "worker": _clip(event.get("worker"), 80),
+                           "submission_id": sid, "ts": _clip(event.get("ts"), 40), "reason": ""}
+            if entry in order:
+                order.remove(entry)
+            order.append(entry)
+        elif kind in ("returned", "errored"):
+            entry = by_id.get(sid)
+            if entry is None or entry not in runs:
+                continue
+            runs[entry].update(state=kind, ts=_clip(event.get("ts"), 40),
+                               reason=_clip(event.get("reason"), 300) if kind == "errored" else "")
+            order.remove(entry)
+            order.append(entry)
+    if bad:
+        reader.warn(f"{reader.label(ledger)}: {bad} malformed line(s) skipped")
+    by_state: dict[str, int] = {}
+    for run in runs.values():
+        by_state[run["state"]] = by_state.get(run["state"], 0) + 1
+    latest = [runs[e] for e in reversed(order)][:MAX_LATEST_RUNS]
+    return {"count": len(runs), "by_state": dict(sorted(by_state.items())), "latest": latest}
+
+
+# --------------------------------------------------------------------------
+# products
+# --------------------------------------------------------------------------
+def _scan(folder: Path, cap: int) -> tuple[list[Path], bool]:
+    """Files under ``folder`` without following directory symlinks."""
+    found: list[Path] = []
+    if not folder.is_dir() or folder.is_symlink():
+        return found, False
+    for current, dirs, files in os.walk(folder, followlinks=False):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        for name in sorted(files):
+            if len(found) >= cap:
+                return found, True
+            found.append(Path(current) / name)
+    return found, False
+
+
+def _product_dirs(root: Path, reader: _Reader) -> list[tuple[str, Path]]:
+    top = root / "implementations"
+    if not top.is_dir():
+        return []
+    try:
+        top.resolve(strict=True).relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        reader.warn("implementations/ is outside the workspace")
+        return []
+    out: list[tuple[str, Path]] = []
+    try:
+        repos = sorted(e.name for e in os.scandir(top) if e.is_dir(follow_symlinks=False)
+                       and not e.name.startswith("."))
+    except OSError:
+        return []
+    for repo in repos:
+        try:
+            names = sorted(e.name for e in os.scandir(top / repo) if e.is_dir(follow_symlinks=False)
+                           and not e.name.startswith("."))
+        except OSError:
+            continue
+        for name in names:
+            folder = top / repo / name
+            if any((folder / marker).is_file() for marker in ("AGREED.md", "Experimental_AGREED.md")) \
+                    or (folder / "Results").is_dir():
+                out.append((repo, folder))
+                if len(out) >= MAX_PRODUCTS:
+                    reader.warn(f"products capped at {MAX_PRODUCTS}")
+                    return out
+    return out
+
+
+def _product(root: Path, repo: str, folder: Path, ledger: Path | None,
+             global_warnings: list[str]) -> dict[str, Any]:
+    warnings: list[str] = []
+    reader = _Reader(root, warnings)
+    if (folder / "Experimental_AGREED.md").is_file():
+        kind = "full"
+    elif (folder / "AGREED.md").is_file():
+        kind = "poc"
+    else:
+        kind = "unknown"
+    results = folder / "Results"
+    files, cut = _scan(results, MAX_FILES_PER_PRODUCT)
+    if cut:
+        reader.warn(f"{reader.label(results)}: only the first {MAX_FILES_PER_PRODUCT} files were scanned")
+    convergence: list[dict[str, Any]] = []
+    figures: list[str] = []
+    tables: list[dict[str, Any]] = []
+    significance: list[dict[str, Any]] = []
+    panel: Path | None = None
+    for path in files:
+        if not reader.contained(path):
+            continue  # A symlink leaving the workspace is ignored outright.
+        rel_parts = path.relative_to(results).parts
+        name, ext = path.name.lower(), path.suffix.lower()
+        if len(rel_parts) == 1 and name == "panel.json":
+            panel = path
+        elif name.startswith("history") and ext in HISTORY_EXTS:
+            if len(convergence) < MAX_HISTORIES:
+                entry = _read_history(path, reader)
+                if entry:
+                    convergence.append(entry)
+        elif name.startswith("significance") and ext == ".json":
+            significance.extend(_read_significance(path, reader))
+        elif rel_parts[0] == "figures" and ext in FIGURE_EXTS:
+            if len(figures) < MAX_FIGURES:
+                figures.append(_rel(root, path))
+        elif (rel_parts[0] == "tables" and ext in TABLE_EXTS) or (len(rel_parts) == 1 and name == "summary.json"):
+            if len(tables) < MAX_TABLES:
+                table = _read_table(path, reader)
+                if table:
+                    tables.append(table)
+    for message in warnings:
+        if len(global_warnings) < MAX_WARNINGS:
+            global_warnings.append(message)
+    return {
+        "repo": repo,
+        "name": folder.name,
+        "kind": kind,
+        "path": _rel(root, folder),
+        "convergence": convergence,
+        "figures": figures,
+        "tables": tables,
+        "significance": significance[:MAX_SIGNIFICANCE_ROWS],
+        "pinned": _pinned(root, folder, reader, panel),
+        "runs": _fold_runs(root, ledger, reader),
+        "warnings": warnings,
+    }
+
+
+def _remote_accounts(root: Path) -> dict[str, Any]:
+    store = credentials_store(root)
+    inbox_name = inbox_directory(root)
+    count = 0
+    if inbox_name:
+        try:
+            with os.scandir(root / inbox_name) as entries:
+                for entry in entries:
+                    if entry.name.endswith(".json") and entry.is_file(follow_symlinks=False):
+                        count += 1
+        except OSError:
+            pass
+    return {"accounts_store_present": bool(store and store.is_file()),
+            "inbox": inbox_name, "inbox_count": count}
+
+
+def get_experiments_view(root: Path | str) -> dict[str, Any]:
+    root = Path(root).expanduser().resolve()
+    warnings: list[str] = []
+    reader = _Reader(root, warnings)
+    protocol = _parse_protocol(root, reader)
+    ledgers, _cut, _escaped = _discover_ledgers(root)
+    by_folder = {path.parent.parent: path for path in ledgers}
+    products = [_product(root, repo, folder, by_folder.get(folder), warnings)
+                for repo, folder in _product_dirs(root, reader)]
+    return {"protocol": protocol, "products": products, "remote_accounts": _remote_accounts(root),
+            "remote_mcp": remote_mcp_status(root), "warnings": warnings}

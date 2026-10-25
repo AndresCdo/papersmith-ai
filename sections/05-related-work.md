@@ -320,6 +320,30 @@ is left to synthesize.
 - This section is not necessarily more cited than the introduction. What changes is
   the depth per family.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size, in the three papers that keep this section.** 6–13–22 paragraphs;
+604–1723–2264 words, about 53–149–201 lines; 101–103–133 words per paragraph; 2–3–5
+subsections; 19–31–35 citations, 2.7–3.2 per paragraph. The other seven carry the
+state of the art inside the introduction.
+
+**Citations.** Numeric, in square brackets. Most markers cite one work; a group cites
+at most four, listed with commas (`[31,32,33,34]`), never as a range. A citation closes
+the sentence it supports, or follows the name of the method it credits; it is never
+the subject of a sentence (*ref. [29] presents*).
+
+**The section can close on a comparison table** that sets the proposal's properties
+against the families reviewed, one row per family.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+
 ## Inputs per block
 
 **Nothing here depends on a measurement.** The section is written in full before a

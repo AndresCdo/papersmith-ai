@@ -4,7 +4,7 @@
 The generators cannot run at the repository root -- there is no
 ``.papersmith/config.json`` here, so ``context_for_workspace`` refuses (see
 ``generators.context_for_workspace``). This script therefore builds a throwaway
-workspace with the real ``papersmith init``, renders the projection there, and
+workspace with the real ``smith init``, renders the projection there, and
 copies only the context-independent artifacts back into the checkout:
 ``.opencode/commands/``, ``.opencode/plugins/``, ``.claude/commands/``,
 ``.pi/prompts/``, ``.pi/agents/``, ``.pi/extensions/``, ``.opencode/agents/``, and

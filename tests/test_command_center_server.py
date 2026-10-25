@@ -252,6 +252,65 @@ class SseFramingTests(unittest.TestCase):
         assert "state_update" in frames[1]
 
 
+class BrowserLaunchTests(unittest.TestCase):
+    def test_wsl_uses_windows_browser_when_python_has_no_handler(self) -> None:
+        url = "http://127.0.0.1:8080/api/terminal/login?token=private&next=home"
+        with (mock.patch("webbrowser.open", return_value=False) as browser,
+              mock.patch.object(server, "_is_wsl", return_value=True),
+              mock.patch.object(server.subprocess, "Popen") as launch):
+            server.open_browser(url)
+
+        browser.assert_called_once_with(url)
+        launch.assert_called_once_with(
+            ["explorer.exe", url], stdin=server.subprocess.DEVNULL,
+            stdout=server.subprocess.DEVNULL, stderr=server.subprocess.DEVNULL,
+            close_fds=True,
+        )
+
+    def test_existing_browser_success_does_not_launch_windows_browser(self) -> None:
+        with (mock.patch("webbrowser.open", return_value=True),
+              mock.patch.object(server, "_is_wsl", return_value=True),
+              mock.patch.object(server.subprocess, "Popen") as launch):
+            server.open_browser("http://localhost:8080/")
+        launch.assert_not_called()
+
+    def test_non_wsl_does_not_launch_windows_browser(self) -> None:
+        with (mock.patch("webbrowser.open", return_value=False),
+              mock.patch.object(server, "_is_wsl", return_value=False),
+              mock.patch.object(server.subprocess, "Popen") as launch):
+            server.open_browser("http://localhost:8080/")
+        launch.assert_not_called()
+
+    def test_wsl_detection_uses_kernel_release_not_environment(self) -> None:
+        with (mock.patch.object(server.sys, "platform", "linux"),
+              mock.patch.object(server.platform, "release", return_value="5.15.0-microsoft-standard-WSL2")):
+            assert server._is_wsl()
+        with (mock.patch.object(server.sys, "platform", "linux"),
+              mock.patch.object(server.platform, "release", return_value="6.8.0-generic"),
+              mock.patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"})):
+            assert not server._is_wsl()
+        with (mock.patch.object(server.sys, "platform", "darwin"),
+              mock.patch.object(server.platform, "release", return_value="microsoft")):
+            assert not server._is_wsl()
+
+    def test_wsl_browser_failure_does_not_expose_login_url(self) -> None:
+        url = "http://localhost:8080/api/terminal/login?token=private"
+        with (mock.patch("webbrowser.open", side_effect=RuntimeError("no browser")),
+              mock.patch.object(server, "_is_wsl", return_value=True),
+              mock.patch.object(server.subprocess, "Popen", side_effect=OSError(url))):
+            server.open_browser(url)  # No exception with the token escapes.
+
+    def test_no_browser_skips_launch_even_on_wsl(self) -> None:
+        root = Path(".")
+        app = mock.Mock()
+        app.state.terminal_enabled = False
+        with (mock.patch.object(server, "create_app", return_value=app),
+              mock.patch.object(server.threading, "Timer") as timer,
+              mock.patch("uvicorn.run")):
+            assert server.main(["--root", str(root), "--no-browser"]) == 0
+        timer.assert_not_called()
+
+
 class CliParserTests(unittest.TestCase):
     def test_parser_defaults_match_the_documented_flags(self) -> None:
         args = server.build_parser().parse_args([])

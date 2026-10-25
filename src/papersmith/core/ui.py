@@ -1,4 +1,4 @@
-"""``papersmith ui``: serve the Paper Command Center for a workspace.
+"""``smith ui``: serve the Paper Command Center for a workspace.
 
 The command center itself lives inside the initialized paper folder at
 ``skills/_core/command_center/`` (a kit entry). This command resolves that
@@ -82,8 +82,9 @@ def provisioned_interpreters(workspace: Path) -> tuple[Path, ...]:
         env_name = str(module.ENV_NAME)
     except Exception:                      # noqa: BLE001 -- any failure is "cannot derive"
         return ()
-    binary = root / "envs" / env_name / "bin"
-    return (binary / "python", binary / "python.exe")
+    env_dir = root / "envs" / env_name
+    binary = env_dir / "bin"
+    return (binary / "python", binary / "python.exe", env_dir / "python.exe")
 
 
 def workspace_interpreter(workspace: Path) -> str:
@@ -133,9 +134,9 @@ def require_runnable_backend(workspace: Path, interpreter: str) -> None:
         f"no interpreter in {workspace} can run the command center: "
         f"{interpreter} cannot import fastapi.\n"
         f"Provision the workspace's environment and run this again:\n"
-        f"  python3 {PROVISIONING_SCRIPT} install\n"
-        f"That creates {expected}. `papersmith init` runs this step itself "
-        "unless it is given `--no-env`."
+        f"  smith env install  (or python3 {PROVISIONING_SCRIPT} install)\n"
+        f"That creates {expected}. `smith init` defers environment provisioning by "
+        "default for faster setup."
     )
 
 
@@ -145,7 +146,7 @@ def command_center_entry(workspace: Path) -> Path:
     if not fs.is_regular_file(entry):
         raise SourceError(
             f"{workspace} has no command center at {COMMAND_CENTER_ENTRY}; "
-            "run `papersmith upgrade` to restore the kit"
+            "run `smith upgrade` to restore the kit"
         )
     return entry
 
@@ -166,7 +167,7 @@ def find_available_port(host: str, preferred: int,
 
     A local dashboard is a convenience, not a service contract: when the
     preferred port is occupied the command center moves to the next one
-    instead of failing the operator's `papersmith ui`.
+    instead of failing the operator's `smith ui`.
     """
     for candidate in range(preferred, preferred + attempts):
         if port_is_free(host, candidate):
@@ -179,7 +180,8 @@ def find_available_port(host: str, preferred: int,
 def build_server_argv(workspace: Path, host: str, port: int, *, no_browser: bool,
                       export_static: str | None = None,
                       interpreter: str | None = None,
-                      allowed_hosts: list[str] | None = None) -> list[str]:
+                      allowed_hosts: list[str] | None = None,
+                      no_terminal: bool = False) -> list[str]:
     """Build the child command that runs the workspace's backend."""
     argv = [
         interpreter or sys.executable,
@@ -200,6 +202,9 @@ def build_server_argv(workspace: Path, host: str, port: int, *, no_browser: bool
     # flag keeps working.
     for allowed in allowed_hosts or []:
         argv.extend(["--allowed-host", allowed])
+    # Same rule: only forwarded when asked for.
+    if no_terminal:
+        argv.append("--no-terminal")
     return argv
 
 
@@ -274,16 +279,18 @@ def run_cli(args) -> int:
     if args.port < 1 or args.port > 65535:
         raise UserError(f"port out of range: {args.port}")
     port = args.port if port_is_free(args.host, args.port) else find_available_port(args.host, args.port)
+    prog = getattr(args, "_prog", "smith")
     if port != args.port:
-        print(f"papersmith ui: port {args.port} is busy; using {port}", file=sys.stderr)
+        print(f"{prog} ui: port {args.port} is busy; using {port}", file=sys.stderr)
 
     url = f"http://{args.host}:{port}/"
     require_runnable_backend(workspace, interpreter)
-    print(f"papersmith ui: serving {workspace} at {url}")
-    print("papersmith ui: press Ctrl+C to stop")
+    print(f"{prog} ui: serving {workspace} at {url}")
+    print(f"{prog} ui: press Ctrl+C to stop")
     argv = build_server_argv(workspace, args.host, port, no_browser=args.no_browser,
                              interpreter=interpreter,
-                             allowed_hosts=getattr(args, "allowed_host", None))
+                             allowed_hosts=getattr(args, "allowed_host", None),
+                             no_terminal=getattr(args, "no_terminal", False))
     return _run_child(argv, workspace)
 
 
@@ -305,6 +312,9 @@ def register(subparsers) -> None:
     parser.add_argument("--allowed-host", action="append", default=None, metavar="HOST:PORT",
                         help="also accept this Host header (repeatable), e.g. when forwarding "
                              "the port or running the Vite dev server")
+    parser.add_argument("--no-terminal", action="store_true",
+                        help="do not offer the dashboard's support terminal (it is only "
+                             "offered on a loopback bind)")
     parser.add_argument("directory", nargs="?", default=".", metavar="<dir>")
     parser.set_defaults(handler=run_cli)
 

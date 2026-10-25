@@ -2,7 +2,7 @@
 
 ## Intent
 
-Problem: no test drives `papersmith init → audit` in one workspace. Node e2e covers only the TS deliberation engine via jiti; pytest covers bridges with fakes. Cross-skill CLI regressions (init/ingest/deliberate/implement/remote/run/audit) ship undetected. This change adds a hermetic pytest gate proving the full from-scratch paper journey offline.
+Problem: no test drives `smith init → audit` in one workspace. Node e2e covers only the TS deliberation engine via jiti; pytest covers bridges with fakes. Cross-skill CLI regressions (init/ingest/deliberate/implement/remote/run/audit) ship undetected. This change adds a hermetic pytest gate proving the full from-scratch paper journey offline.
 
 ## Scope
 

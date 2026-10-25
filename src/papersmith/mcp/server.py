@@ -24,7 +24,7 @@ from .resources import RESOURCES, read_resource
 SERVER_NAME = "papersmith"
 INSTRUCTIONS = (
     "PaperSmith workspace orchestration and paper-writing tools. Every tool "
-    "projects an existing `papersmith` CLI contract; nothing is reimplemented. "
+    "projects an existing `smith` CLI contract; nothing is reimplemented. "
     "Read-only tools and resources are safe to call freely. Mutating tools keep "
     "the CLI's own consent and force semantics: `workspace_upgrade` writes only "
     "framework files, `run` and `remote push` require an explicit consent token, "
@@ -84,7 +84,7 @@ class Server:
             )
             return error.envelope(request_id)
         except Exception as exc:  # a bad call must never kill the transport loop
-            self.err.write(f"papersmith mcp: {method} failed: {exc}\n")
+            self.err.write(f"smith mcp: {method} failed: {exc}\n")
             self.err.flush()
             if not has_id:
                 return None

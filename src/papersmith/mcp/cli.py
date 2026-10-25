@@ -1,4 +1,4 @@
-"""``papersmith mcp`` — serve, inspect, and print client configuration.
+"""``smith mcp`` — serve, inspect, and print client configuration.
 
 ``serve`` owns stdout: the stdio transport *is* stdout, so this module prints
 nothing on that path. ``inspect`` and ``print-config`` are ordinary CLI
@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from ..core import fs
+from ..core import kaggle_mcp
 from ..errors import UserError
 from .server import Server, catalog
 
@@ -46,6 +47,8 @@ def register(subparsers) -> None:
     config.add_argument("--workspace", default=None)
     config.set_defaults(handler=run_print_config)
 
+    kaggle_mcp.register(commands)
+
 
 def run_serve(args) -> int:
     root = _workspace(args.workspace)
@@ -62,7 +65,7 @@ def run_print_config(args) -> int:
     snippet = {
         "mcpServers": {
             "papersmith": {
-                "command": "papersmith",
+                "command": "smith",
                 "args": ["mcp", "serve", "--workspace", str(root)],
             }
         }
