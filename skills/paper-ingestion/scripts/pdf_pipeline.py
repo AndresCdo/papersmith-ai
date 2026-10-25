@@ -529,7 +529,12 @@ class HeavyEngine:
         return self._converters[(ocr, tables)]
 
     def convert(self, pdf_path: Path, first: int, last: int, ocr: bool, tables: bool = True) -> dict[int, FastPage]:
-        """Markdown and figures for pages ``first..last`` (1-based, inclusive)."""
+        """Markdown and figures for pages ``first..last`` (1-based, inclusive).
+
+        A page Docling left out of its document is not returned. One of its
+        stages failed on that page, and Docling still returns the rest of the
+        run (``PARTIAL_SUCCESS``); exporting the page would give an empty one.
+        """
         try:  # docling_core ships with docling, which is optional
             from docling_core.types.doc import PictureItem
         except ImportError:
@@ -543,6 +548,8 @@ class HeavyEngine:
                 pictures.setdefault(item.prov[0].page_no, []).append(item)
         pages: dict[int, FastPage] = {}
         for number in range(first, last + 1):
+            if number not in document.pages:
+                continue
             text = document.export_to_markdown(page_no=number, escape_underscores=False, compact_tables=True)
             figures: dict = {}
             for picture in pictures.get(number, []):

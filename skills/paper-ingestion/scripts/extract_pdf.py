@@ -629,6 +629,7 @@ class RoutedEngine:
                     engines[probe.page] = "pdfium"
                     self._store(pdf_sha, key, probe, pages[probe.page], "pdfium")
             heavy_seconds = 0.0
+            left_out: list[int] = []  # pages Docling ran on but did not convert
             for run in pp.heavy_runs(probes):
                 first, last, ocr, tables = run
                 # Docling lays a page out with its neighbours in the same run, so
@@ -659,6 +660,13 @@ class RoutedEngine:
                         engines[number] = "docling"
                         self._store(pdf_sha, keys[number], probe, produced[number], "docling")
                     else:
+                        if self.heavy_missing is None:
+                            # Docling ran and left this page out: one of its stages
+                            # failed on it. engine docling reads no page another way.
+                            if self.engine == "docling":
+                                raise RuntimeError(f"Docling did not convert page {number}; "
+                                                   "engine docling reads no page another way")
+                            left_out.append(number)
                         if number not in line_groups:
                             line_groups[number] = pp.page_lines(document, number)
                         page = document[number - 1]
@@ -667,7 +675,8 @@ class RoutedEngine:
                         finally:
                             page.close()
                         engines[number] = "pdfium"
-                        probe.reason += "; Docling unavailable, read on the fast path"
+                        probe.reason += ("; Docling unavailable, read on the fast path" if self.heavy_missing
+                                         else "; Docling did not convert this page, read on the fast path")
         finally:
             document.close()
 
@@ -694,6 +703,11 @@ class RoutedEngine:
             print(f"NOTE {pdf_path.name}: Docling is not installed, so its math/table/scanned pages "
                   f"were read on the fast path (formulas as Unicode, tables as text). "
                   f"Provision it with {SETUP_SCRIPT}.", file=sys.stderr)
+        if left_out:
+            label = f"page {left_out[0]}" if len(left_out) == 1 else "pages " + ", ".join(map(str, left_out))
+            print(f"NOTE {pdf_path.name}: Docling did not convert {label}: read on the fast path instead "
+                  f"(formulas as Unicode, tables as text) and kept out of the cache, so a later "
+                  f"ingestion of this PDF tries Docling there again.", file=sys.stderr)
 
     def _heavy_version(self) -> str | None:
         try:

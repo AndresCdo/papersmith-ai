@@ -14,10 +14,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 import zlib
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "skills" / "paper-ingestion" / "scripts"
@@ -225,16 +227,53 @@ class PageCacheTests(_Tmp):
         self.assertNotEqual(base, key("ab" * 32, 1, "math", "docling", "v1", {"ocr": "rapidocr"}))
 
 
+class HeavyEngineTests(unittest.TestCase):
+    """HeavyEngine.convert against a stand-in for Docling's result: Docling is
+    optional, so the suite does not import it."""
+
+    def test_a_page_docling_left_out_of_its_document_is_not_returned(self) -> None:
+        # Docling's threaded PDF pipeline drops a page one of its stages failed on
+        # from the document, and convert() still returns (PARTIAL_SUCCESS).
+        # docling-core exports a page the document does not hold as "".
+        class Document:
+            pages = {1: object(), 3: object()}
+
+            def iterate_items(self):
+                return iter(())
+
+            def export_to_markdown(self, page_no, **_options):
+                return f"body {page_no}" if page_no in self.pages else ""
+
+        class Converter:
+            def convert(self, _source, page_range):
+                self.page_range = page_range
+                return types.SimpleNamespace(document=Document(), status="partial_success")
+
+        engine = pdf_pipeline.HeavyEngine()
+        converter = engine._converters[(False, True)] = Converter()
+        doc = types.ModuleType("docling_core.types.doc")
+        doc.PictureItem = type("PictureItem", (), {})
+        fakes = {"docling_core": types.ModuleType("docling_core"),
+                 "docling_core.types": types.ModuleType("docling_core.types"), "docling_core.types.doc": doc}
+        with mock.patch.dict(sys.modules, fakes):
+            pages = engine.convert(Path("paper.pdf"), 1, 3, False, True)
+        self.assertEqual(converter.page_range, (1, 3))
+        self.assertEqual(sorted(pages), [1, 3])
+        self.assertEqual(pages[3].markdown, "body 3")
+
+
 class _StubHeavy:
-    """Stands in for Docling: records the runs it is asked for."""
+    """Stands in for Docling: records the runs it is asked for, and leaves out
+    the pages in ``drop``, as Docling leaves out a page one of its stages failed on."""
 
     name = "docling"
     formula_preset = "granite_docling"
     formula_why = "stub"
 
-    def __init__(self, fail: bool = False):
+    def __init__(self, fail: bool = False, drop: frozenset[int] = frozenset()):
         self.calls: list[tuple] = []
         self.fail = fail
+        self.drop = drop
 
     @staticmethod
     def version() -> str:
@@ -247,7 +286,7 @@ class _StubHeavy:
         self.calls.append((first, last, ocr, tables))
         if self.fail:
             raise ImportError("No module named 'docling'")
-        return {n: pdf_pipeline.FastPage(f"$$\\alpha_{n}$$") for n in range(first, last + 1)}
+        return {n: pdf_pipeline.FastPage(f"$$\\alpha_{n}$$") for n in range(first, last + 1) if n not in self.drop}
 
 
 class RoutedEngineTests(_Tmp):
@@ -333,6 +372,23 @@ class RoutedEngineTests(_Tmp):
         self.assertIn("Docling unavailable", sidecar["pages"][1]["reason"])
         self.assertIn("Docling is not installed", self.stderr)
         self.assertIn("where each symbol is defined", text)
+
+    def test_auto_reads_a_page_docling_left_out_on_the_fast_path_and_caches_none_of_it(self) -> None:
+        pdf = self.pdf(TEXT_PAGE, MATH_PAGE, MATH_PAGE)
+        text, sidecar = self.render(self.engine(heavy=_StubHeavy(drop=frozenset({3}))), pdf)
+        self.assertEqual([p["engine"] for p in sidecar["pages"]], ["pdfium", "docling", "pdfium"])
+        self.assertIn("Docling did not convert this page", sidecar["pages"][2]["reason"])
+        self.assertIn("where each symbol is defined", text.split("<!-- page 3 -->", 1)[1])
+        self.assertIn("Docling did not convert page 3", self.stderr)
+        # The page is kept out of the cache, so its run is converted again.
+        heavy = _StubHeavy()
+        _text, sidecar = self.render(self.engine(heavy=heavy), pdf)
+        self.assertEqual(heavy.calls, [(2, 3, False, False)])
+        self.assertEqual([p["engine"] for p in sidecar["pages"]], ["pdfium", "docling", "docling"])
+
+    def test_engine_docling_fails_a_paper_whose_page_docling_left_out(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "Docling did not convert page 2"):
+            self.render(self.engine("docling", _StubHeavy(drop=frozenset({2}))), self.pdf(TEXT_PAGE, TEXT_PAGE))
 
     def test_engine_docling_without_docling_is_an_environment_error(self) -> None:
         with self.assertRaises(extract_pdf.EngineError):
