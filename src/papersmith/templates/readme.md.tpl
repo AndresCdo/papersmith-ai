@@ -10,5 +10,5 @@ This paper workspace is managed by `papersmith` {{version}}.
 - **Reference literature**: `guidance/reference-papers/`
 - **Execution drops**: `kaggle-inbox/`
 
-Framework files are synchronized with `papersmith upgrade`; research
+Framework files are synchronized with `smith upgrade`; research
 artifacts remain protected by the workspace preservation contract.

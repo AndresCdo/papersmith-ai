@@ -18,7 +18,7 @@ torch>=2.0            # the kit's own `benchmark.py` imports it, so every test t
 # without it 18 of this suite's tests fail, all of them reporting something other
 # than the missing package -- four routed a kit-built target to `env-first`, which
 # reads as a defect in the target rather than an absence in the environment.
-PyMuPDF>=1.23
+pypdfium2>=4.30  # paper-ingestion fast path (Apache-2.0 / BSD-3-Clause)
 PyYAML>=6.0
 jsonschema>=4.0
 kagglesdk==0.1.37  # published standalone since 2025-07-11; NOT vendored inside
@@ -32,13 +32,13 @@ kagglesdk==0.1.37  # published standalone since 2025-07-11; NOT vendored inside
 # locked by DoctrinePinTests in tests/test_remote_execution.py. Requires
 # Python >=3.11; this repository's own forge venv runs 3.12.
 
-# Paper Command Center (`papersmith ui`) -- the local dashboard server that
+# Paper Command Center (`smith ui`) -- the local dashboard server that
 # ships inside every workspace at `skills/_core/command_center/`. It is
 # standalone from the forge CLI: a workspace's own venv (built from the kit's
 # `requirements.txt`) runs `python -m skills._core.command_center.server`
 # without Node/npm. Measured on 2026-05-18: all four resolve on CPython 3.14
 # (watchfiles ships `cp310-abi3` wheels), and CI runs them on 3.11/3.12.
 fastapi>=0.110        # HTTP routing + static mount for the command center API
-uvicorn>=0.27         # ASGI server the `papersmith ui` command launches
+uvicorn>=0.27         # ASGI server the `smith ui` command launches
 watchfiles>=0.21      # debounced filesystem watching behind the SSE channel
 pydantic>=2.0         # response models for /api/state and /api/health/wiring

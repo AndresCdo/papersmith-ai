@@ -990,16 +990,22 @@ class ProducesFactsSchemaTests(unittest.TestCase):
 #: `01` re-capturado ahora (R3-stale-section-digest): el guard SI estaba
 #: vivo -- rojo antes de este cambio -- sobre la prosa nueva en :281-291
 #: y :406-410; el digest viejo quedaba de una edicion sin commitear.
+#: `01`-`09` re-capturados (lia-writing-guide): cada contrato gano una
+#: seccion `## LIA house style` antes de `## Inputs` (o de
+#: `## Cross-cutting conventions` en `06` y `08`), medida sobre los diez
+#: articulos Q1 de metodo del grupo (2025-2026); `01` cambio la regla de
+#: numeracion de ecuaciones y `09` el rango del titulo a 10-13 palabras;
+#: `01` y `03` sumaron descalificadores de notacion y de reporte.
 PRE_MIGRATION_BODY_DIGESTS: dict[str, str] = {
-    "01-materials-and-methods.md": "094b1a32e6dee72eb41260d2b7a9426c1632bdd1f2e457b2f2b23f8c82459612"[:64],
-    "02-experimental-setup.md": "bfd655f577c8f61802fc4c3d5280f5ada15b9342e11c6b941e75455c0d381960"[:64],
-    "03-results-and-discussion.md": "5d32f19e4636fa5be6773fadee31d19019c02d06f312ebcfc8a0058a841795df"[:64],
-    "04-limitations.md": "4048e92f81c6203aaa04c066696b90ac3219a3435ce636e7b9840c09a715e490"[:64],
-    "05-related-work.md": "7d2f87474f7c357bdb99971e49784f0f6415887f988f00d2a7b3b0b4679098a6"[:64],
-    "06-introduction.md": "07d434d32c04a32d2aefe27158b38a69dc9ad9b761ea16653f681c89f70aa648"[:64],
-    "07-conclusions.md": "27defb96c3dcd6e136b90c2ce614f8eb2b51376afdb69b4f0345426d847ec1d5"[:64],
-    "08-abstract.md": "ccce12b364248dbf3794cca2efb9eb0d5f04b90d16335a6b434312f5903f0ac9"[:64],
-    "09-title-and-keywords.md": "c1f8f8401d08f5e2832cfc17cc9eeabb9b27d1f269ef2d6ad2e4d2b34583687c"[:64],
+    "01-materials-and-methods.md": "4a4d5078955ba64d77e9b45b1f4d116bf072ac011069e2ad57e100d77927405e"[:64],
+    "02-experimental-setup.md": "8974689bc11ce955e707b14502aeaf974be7d69959df28f82e9f016cca1d8ce5"[:64],
+    "03-results-and-discussion.md": "1f232a64dd277d10da2e47ed3436acb58137f77ac2f5de32cc22da8e8cf974b1"[:64],
+    "04-limitations.md": "9175dfeb1d8375439aa9430027464bafe4ddfa477e25efa5d9192b7e74212ed4"[:64],
+    "05-related-work.md": "0b8a99da1b91307b3e2e1a654ca161d02ac251635fec99a23edc4407b70d4323"[:64],
+    "06-introduction.md": "1018e4ffbc861a3a1eb8ff1386a772cdb506ec9272db4e7f5fc88d351c0fcb23"[:64],
+    "07-conclusions.md": "5b400628d6d7f783172a0546cb3fa92b973d471b34001f58fb8ff9277d25aeec"[:64],
+    "08-abstract.md": "e5e2d180ad612c99c2f779d669956405c56f9744645ca9e229a57c1bc605ba94"[:64],
+    "09-title-and-keywords.md": "0fb1238c2b4cc956f127ef75a81bb476ec1e6117c0c0baee472e5e433e17096a"[:64],
     "10-back-matter.md": "b1cd44fe7c00d8eca92d979be5780a97a6cd815faba9ab3890442f2286316cbb"[:64],
 }
 

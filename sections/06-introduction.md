@@ -538,6 +538,39 @@ It is a fixed formula:
 
 **Introduce no new argument, problem, contribution, method, or result.**
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** 7–9–15 paragraphs; 850–1166–1604 words, about 73–102–139 lines;
+105–123–178 words per paragraph; no subsections, equations, figures or tables;
+23–27–45 citations, 1.7–4.2 per paragraph.
+
+**The moves the group's introductions make**, ten of ten: the stakes of the
+application, often anchored in a public health or societal goal; the difficulties of
+the data; the families of prior methods, each closed by a sentence opening on
+*However* that names its limitation; the joint gap; the proposal, introduced by the
+hinge *To address these limitations, this work introduces* followed by the full name and
+the acronym in parentheses; the contributions, as a list announced by *The main
+contributions of this work are as follows:*; and the closing roadmap, *The remainder
+of this paper is organized as follows:*.
+
+**Citations.** Numeric, in square brackets. Most markers cite one work; a group cites
+at most four, listed with commas (`[31,32,33,34]`), never as a range. A citation closes
+the sentence it supports, or follows the name of the method it credits; it is never
+the subject of a sentence.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+- **Present and present perfect.** The field *has addressed*; the problem *remains*.
+- **Novelty is stated by contrast, not by priority.** *Unlike previous approaches,
+  the proposed …*; a claim of being first appears only when the state of the art was
+  searched for it.
+
 ## Cross-cutting conventions
 
 - **Place the citation at the end of the sentence it supports.** One sentence, one

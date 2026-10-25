@@ -16,7 +16,7 @@ Read `papersmith.yaml`, `guidance/paper-guide/`, and the applicable
 Every top-level skill under `skills/` is also generated as a Pi prompt template
 in `.pi/prompts/<name>.md`, so it can be invoked as `/<name>`. Each template
 loads that skill's `SKILL.md` and passes your text through as `$ARGUMENTS`. The
-directory is a framework artifact that `papersmith upgrade` restores, so do not
+directory is a framework artifact that `smith upgrade` restores, so do not
 edit it by hand.
 
 ## Precedence
@@ -24,3 +24,5 @@ edit it by hand.
 A trusted project `.pi/APPEND_SYSTEM.md` takes precedence over the operator's
 own `~/.pi/agent/APPEND_SYSTEM.md`, and the two are never combined: this file
 therefore replaces that append inside this workspace rather than adding to it.
+
+{{paper_flow}}

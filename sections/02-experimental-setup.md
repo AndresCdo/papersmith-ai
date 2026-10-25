@@ -261,6 +261,41 @@ one shows the experiment. The test: **no dataset and no baseline appears in the
 methods diagram, and no internal component of the proposal appears in this one.** A
 box appearing in both means one of them is wrong.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** 7–10–16 paragraphs; 767–985–1318 words, about 67–86–119 lines;
+72–103–140 words per paragraph; 0–3–5 subsections; 0–0–7 displayed equations, only
+for a metric the reader cannot be assumed to know; 1–4–10 citations; 0–1–3 figures and
+0–1–2 tables.
+
+**What the group's setups state, in this order:**
+
+1. preprocessing of the data, with every parameter that shapes it;
+2. the validation scheme — folds, stratification, and whether subjects or recordings
+   are kept apart across folds;
+3. the hyperparameter search — the method (Bayesian optimization, tree-structured
+   Parzen estimators), the ranges searched, and the value selected, in a table;
+4. the baselines, with the statement that they ran under the same splits and the same
+   tuning budget;
+5. the metrics, with an equation only when the metric is not standard;
+6. the statistical test that decides significance — Friedman with a post hoc
+   pairwise test and a Holm or Bonferroni correction is the group's default;
+7. the hardware and platform, and the URL of the code repository.
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+- **What ran is in the past tense; what a table holds is in the present.** *Each model
+  was trained for*; *Table 3 lists the search ranges*.
+- **No symbol is redefined here.** The setup reuses the methods section's notation;
+  a parameter it sets must already exist there.
+- **The section is titled *Experimental Set-Up*.**
+
 ## Inputs
 
 ### External inputs
