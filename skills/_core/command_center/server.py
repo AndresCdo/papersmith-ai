@@ -30,7 +30,6 @@ import sys
 import logging
 import threading
 import time
-from html import escape as _escape_html
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
@@ -1605,7 +1604,7 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         candidates_json = (json.dumps(candidates).replace("<", "\\u003c")
                            .replace(">", "\\u003e").replace("&", "\\u0026"))
         families_options = "".join(
-            f'<option value="{_escape_html(str(f), quote=True)}">{_escape_html(str(f))}</option>'
+            f'<option value="{html.escape(str(f), quote=True)}">{html.escape(str(f))}</option>'
             for f in families)
         
         html_content = f"""<!DOCTYPE html>

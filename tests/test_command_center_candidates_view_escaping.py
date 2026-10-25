@@ -116,7 +116,7 @@ class ActionOriginTests(unittest.TestCase):
         app = server.create_app(root)
         for path, payload in (
             ("/api/pdf/execute", {"annotations": []}),
-            ("/api/phase/run", {"phase_id": "9"}),
+            ("/api/phase/run", {"phase_id": "paper"}),
         ):
             endpoint = next(r.endpoint for r in app.routes if getattr(r, "path", None) == path)
             request = _Request(
