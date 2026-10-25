@@ -1,0 +1,169 @@
+---
+name: remote-parallelism
+description: "Trigger: decide whether a proof of concept or an experiment campaign is worth spreading over several remote GPU accounts, and how to keep the split reproducible. Turns measured inputs (a pilot's per-unit duration, a rehearsal's setup overhead, each account's concurrent sessions, session wall-time limit and weekly GPU quota) into serial and parallel makespans, speed-up, quota per account and a verdict with its threshold stated, plus the reproducibility checklist a split must satisfy before any job is generated. Reuses remote-execution's placement and launch gate; never places, generates or launches anything. Stdlib-only CLI, no network, no credentials."
+---
+
+# Remote parallelism
+
+Whether spreading one campaign over several remote GPU accounts is worth it,
+and what keeps the result one experiment rather than several.
+
+Splitting is not free. Every session pays a setup (clone, environment install,
+data mount) before its first unit runs, every account has a weekly GPU quota
+and a wall-time limit per session, and every extra machine is one more place
+where the numerics can drift. So the question is asked with numbers that were
+**measured**, never guessed, and answered with a verdict whose threshold is
+written beside it. When the verdict is to split, the split is held to a
+checklist that keeps it reproducible.
+
+This skill decides and records. It does **not** place units — `distribute`
+(`skills/remote-execution/SKILL.md`) still decides which unit goes to which
+healthy account under the capacity clamp — and it does not build or start
+anything: `generate-job` builds the job folders and `submit` launches them,
+behind the operator's consent. A verdict here is never launch authorization.
+
+## The objective flow
+
+**Why this skill was invoked, and where it has to arrive.** Declared here and
+in `OBJECTIVE_FLOW` (`scripts/parallelism_cli.py`), held equal by a test. Every
+refusal prints the flow, so a blocked session knows which stage it is behind.
+
+| Stage | Establishes | Behind when |
+|---|---|---|
+| `measured` | per-unit duration comes from a pilot and setup overhead from a rehearsal, and the accounts' limits and quota are recorded with their date | an input to assess has no pilot, rehearsal or quota reading behind it |
+| `assessed` | assess turned those measurements into a verdict with its threshold stated, recorded in the tree it concerns | no .remote-parallelism/assessment-*.json exists in the product or experiments tree |
+| `planned` | every reproducibility checklist item holds for the split the verdict calls for | a checklist item is unmet: no declared axis, stamp fields missing from identicalAcrossShards, accelerator not pinned, or an account without a passing rehearsal |
+
+**Arrival:** a recorded verdict — parallelize over N accounts or stay on one — with its reproducibility checklist satisfied, before any job is generated.
+
+**Two stops are a person's:**
+
+1. **The launch.** Nothing here submits. The launch stays behind
+   `remote-execution`'s consent token and the implementation skills' `gate`;
+   a `parallelize` verdict authorizes nothing.
+2. **Which accounts take part.** Only accounts the operator owns and controls,
+   validated through the `kaggle-accounts` skill, count toward `--accounts`.
+
+## Measured inputs
+
+Every input to `assess` is a measurement or a recorded limit, and the CLI
+refuses (`missing-input`) rather than assume one:
+
+| Input | Where it comes from |
+|---|---|
+| `--unit-minutes` | the pilot: the `step` command's `lastRun` for one unit, or the remote ledger's measured duration for a rehearsal — never an estimate |
+| `--units` / `--units-file` | the unit list along the declared axis (one seed, fold or subject block per unit); `--units-file` is a JSON list of ids or `{id, minutes}` objects when units differ in length |
+| `--accounts` | the number of validated, operator-owned accounts |
+| `--sessions-per-account` | concurrent GPU sessions one account may run (the `capacity` the adapter reports) |
+| `--session-limit-hours` | one session's wall-time limit |
+| `--quota-hours` | one account's weekly GPU quota, operator-supplied or read from the remote service's official MCP accelerator-quota tool; record where with `--quota-source` and when with `--quota-date` |
+| `--setup-minutes` | per-session overhead measured by a rehearsal: clone, environment install, data mount |
+| `--axis` | the declared distribution axis; `arm` or `comparison` is refused |
+
+## The worth-it rule
+
+`assess` packs the units onto sessions, longest first, each session paying
+the setup once and never running past its wall-time limit, and reports three
+makespans: `serialMinutes` (one account, one session at a time),
+`singleAccountMinutes` (one account using all its concurrent sessions) and
+`parallelMinutes` (every account). `speedup` is `singleAccountMinutes /
+parallelMinutes` and `savedMinutes` their difference, because the alternative
+to splitting is staying on one account, not running one session. Each
+account's `gpuHours` counts its setups too, since a session spends quota from
+its first minute.
+
+| Verdict | When |
+|---|---|
+| `split-first` | a unit plus the setup exceeds one session's limit: split it along the declared axis (more units, never by arm) and assess again |
+| `parallelize` | more than one account, `speedup >= 1.5`, `savedMinutes >= 30`, and no account exceeds its quota |
+| `single-account` | anything else; every unmet condition is named in `reasons` |
+
+The thresholds travel in every output (`thresholds`), so a verdict is read
+against them rather than trusted. A campaign that exceeds the quota on every
+plan says so in `reasons`: it spans more than one quota week.
+
+## The reproducibility checklist
+
+`checklist` prints it and `assess` carries it as `reproducibilityChecklist`.
+A split that misses any item is several experiments that share a table:
+
+- **Split along the declared axis only, never by arm** or by comparison. This
+  is `proposal-implementation`'s distribution declaration ("The axis may be
+  anything except a comparison"), reused rather than restated.
+- **Seed from the unit id.** `int(sha256(unit_id).hexdigest()[:8], 16) %
+  2**31`, never from the account, the shard index or the launch order;
+  `assess --units-file` prints `unitSeeds` so the job code and the record
+  agree.
+- **Pin the commit and the environment** identically for every account: one
+  published commit, one pinned requirements file.
+- **Pin the accelerator.** Request the same accelerator model
+  (`machine_shape`) on every account. Different GPU models produce different
+  floating-point results, so a campaign whose shards ran on different
+  accelerators is stamped and refused at merge.
+- **Stamp the environment per shard** — python, torch, CUDA, cuDNN,
+  accelerator name, commit, requirements digest, and the data checksum and
+  preparation version from the `datasets` skill — and declare those fields
+  `identicalAcrossShards` (`stamp-fields` prints them). `verify --shards`
+  then refuses a merge over shards that disagree, and `currentWhen` /
+  `shardsRoot` keep working as declared.
+- **Deterministic flags:** `torch.manual_seed(seed)` per unit,
+  `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`
+  and `torch.backends.cudnn.benchmark=False`. They cost speed, and some
+  operations raise instead of running: measure the pilot with them on.
+- **Same dataset version** mounted by every notebook, read through the one
+  official preparation.
+- **Rehearse once per account.** `readiness` is per worker and never carries
+  over from another account; `smoke` each one before the campaign.
+- **Never pool timing across machines.** Wall time and memory are
+  `perEnvironment`; accuracy pools, seconds do not.
+
+## Accounts and terms
+
+Only accounts the operator owns and controls take part, each validated through
+the accounts skill. Respect the platform's terms: several accounts are a way
+to run one person's own work in parallel, never a way around per-user limits
+on behalf of other people, and never someone else's account. If the terms of
+the service do not allow it, the verdict does not matter.
+
+## Accepted operations
+
+```
+python3 skills/remote-parallelism/scripts/parallelism_cli.py [--root <workspace>] <verb> ...
+```
+
+| Verb | What it does |
+|---|---|
+| `assess` | `--units N --unit-minutes M --accounts A --sessions-per-account S --session-limit-hours H --quota-hours Q --setup-minutes O [--units-file units.json] [--axis <name>] [--quota-source <text>] [--quota-date YYYY-MM-DD] [--record <dir>]`: JSON `{inputs, thresholds, serialMinutes, singleAccountMinutes, parallelMinutes, speedup, savedMinutes, accountsUsed, recommendedAccounts, perAccount[{account, units, gpuHours, overQuota}], quotaOk, unitsOverSessionLimit, verdict, reasons, unitSeeds?, reproducibilityChecklist, stampFields, launchAuthorization: false}`. `--record <dir>` writes `<dir>/.remote-parallelism/assessment-<date>.json` (a second one the same day gets `-2`, never an overwrite); `<dir>` must resolve inside the workspace, through no symlink that leaves it |
+| `checklist` | the reproducibility checklist as JSON |
+| `stamp-fields` | the shard stamp fields to declare `identicalAcrossShards` |
+
+Success prints one JSON object on stdout. A refusal prints
+`{"error", "message", "objective"}` on stderr and exits 2.
+
+### Error codes
+
+| Error code | Meaning |
+|---|---|
+| `missing-input` | a measured input was not given; it is never guessed |
+| `bad-argument` | an input is not a number, or not positive (setup may be zero) |
+| `units-file-missing` | `--units-file` names no file |
+| `units-file-invalid` | the units file is not a non-empty JSON list of ids or `{id, minutes}` objects |
+| `duplicate-unit` | a unit id appears twice in the units file |
+| `units-mismatch` | `--units` disagrees with the units file's count |
+| `axis-is-comparison` | `--axis` is an arm or a comparison |
+| `record-outside-workspace` | `--record` resolves outside the workspace, or its record folder is a link |
+| `record-missing` | `--record` is not an existing directory |
+
+## Compatibility
+
+Runs unchanged under **Claude Code, OpenCode and Pi**: plain `python3`, no
+third-party imports, no network and no credentials. The agents of the proof
+of concept and the experiments load this file before generating jobs for more
+than one unit.
+
+## Output Reporting
+
+Report the verdict, the speed-up and saved minutes against their thresholds,
+each account's units and GPU hours, every reason, the checklist items still
+unmet, and the recorded path. Speak the user's language; flags, paths and
+field names are never translated.

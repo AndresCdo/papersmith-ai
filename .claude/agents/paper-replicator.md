@@ -141,6 +141,15 @@ as they reach. Do not decide whether the replication is good enough; that is
 the operator's. This stretch never launches a remote run, submits anything, or
 spends quota: the GPU run belongs to a later stretch behind the launch gate.
 
+## Whether the later GPU run should be split
+
+When the replication's later GPU run would span more than one unit, load
+`.claude/skills/remote-parallelism/SKILL.md`, run its `assess` with measured
+inputs only, and report its verdict and checklist in what you return, so the
+stretch that launches inherits them. Seed every unit from its unit id as the
+checklist states. The verdict is never launch authorization, and this stretch
+launches nothing.
+
 ## What you return
 
 Your report is not shown to the operator. It reaches the orchestrator, which

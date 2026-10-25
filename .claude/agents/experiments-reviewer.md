@@ -86,6 +86,16 @@ a suggested change in words. You never write the change.
    (`Results/history*`, `Results/significance*.json`). Suggest which tests to
    add when the protocol declares none or an inappropriate one.
 
+## Reviewing a split campaign
+
+When reviewing a campaign that runs more than one unit remotely, load
+`.claude/skills/remote-parallelism/SKILL.md` and run its `assess` with the
+measured inputs on file (no `--record`: this stretch writes nothing). Report
+its verdict, and every checklist item the code does not meet as a finding
+under remote GPU use — a seed not derived from the unit id, a missing stamp
+field, an unpinned accelerator, deterministic flags left off. The verdict is
+never launch authorization.
+
 ## When something refuses
 
 Every refusal carries an `objective` block: the purpose, the stages, and the

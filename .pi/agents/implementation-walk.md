@@ -50,6 +50,17 @@ it rather than offering it. A campaign is hours of quota and its plan is the
 operator's to approve. Report what a rehearsal found either way: a rehearsal
 that failed is the cheapest result this flow can produce.
 
+## Whether to split a campaign
+
+Before generating jobs for more than one unit, load
+`skills/remote-parallelism/SKILL.md` and run its `assess` with
+measured inputs only — the pilot's per-unit duration, the rehearsal's setup
+minutes, and each validated account's concurrent sessions, session limit and
+recorded quota — with `--record` into the product tree. Report the verdict, its
+reasons and every checklist item still unmet. The verdict is never launch
+authorization: placement stays with `distribute` and the launch with the
+operator.
+
 ## What you return
 
 Your report is not shown to the operator. It reaches the orchestrator, which

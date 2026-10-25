@@ -16,7 +16,10 @@
 * a cheap remote-accounts readiness hint (the credential store its owning
   skill declares is present; credential files waiting in the drop-zone that
   skill declares), read through ``state_extractor``'s declaration readers so
-  no service name is restated here.
+  no service name is restated here;
+* the remote-services table (``remote_services``): one offline, bounded row
+  per service the remote path depends on, with its state and the one action
+  that activates it.
 
 Every read is bounded (files per product, bytes per file, points per series,
 series per history) and contained under ``root``: a symlink resolving outside
@@ -39,6 +42,7 @@ from typing import Any
 from .atlas import _locate
 from .state_extractor import credentials_store, inbox_directory
 from .terminal import remote_mcp_status
+from .remote_services import remote_services
 from .decisions import LEDGER_MAX_BYTES, MAX_LEDGER_LINES, _discover_ledgers, _read_bytes
 
 MAX_PRODUCTS = 50
@@ -714,4 +718,5 @@ def get_experiments_view(root: Path | str) -> dict[str, Any]:
                 for repo, folder in _product_dirs(root, reader)]
     return {"protocol": protocol, "products": products, "datasets": _datasets(root, reader),
             "remote_accounts": _remote_accounts(root),
-            "remote_mcp": remote_mcp_status(root), "warnings": warnings}
+            "remote_mcp": remote_mcp_status(root), "remote_services": remote_services(root),
+            "warnings": warnings}
