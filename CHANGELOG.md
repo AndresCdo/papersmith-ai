@@ -15,6 +15,16 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **`smith mcp kaggle activate|status|deactivate`.** Activates the official
+  Kaggle MCP server for this user: a hidden prompt (or `--token-stdin`) takes
+  a `KGAT_` token, a read-only `get_accelerator_quota` call verifies it
+  (`--no-verify` skips the call), and it is stored outside every workspace in
+  `$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token` (`0600`). The dashboard's CLI
+  assistant passes it as `KAGGLE_API_TOKEN` to the sessions it starts unless
+  that variable is already exported; a symlinked or group-readable file is
+  never used. The Experimentos tab shows the activation state and has buttons
+  that run `smith mcp kaggle activate` and `status --verify` in the CLI
+  assistant, which also offers both as quick commands.
 - **Kaggle's official MCP server in every workspace.** `smith init` and
   `smith upgrade` register `kaggle` (https://www.kaggle.com/mcp) beside
   `banco-lia`: streamable HTTP in `.mcp.json` and `opencode.json`, the pinned

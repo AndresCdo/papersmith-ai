@@ -224,6 +224,40 @@
     </section>`;
   }
 
+  // ---------------------------------------------------------- MCP activation
+  // The commands run in the dashboard's CLI assistant (window.sendToCli, shell
+  // kind): the token is typed there into a hidden prompt, never into this page.
+  function cliButton(command, label) {
+    return `<button type="button" class="btn" data-exp-cli="${esc(command)}">${esc(label)}</button>`;
+  }
+
+  function mcpActivation(state) {
+    const st = state || {};
+    const activate = st.activate || 'smith mcp kaggle activate';
+    const check = st.status || 'smith mcp kaggle status';
+    const badge = st.activated
+      ? `<span class="badge badge--ok">activo (${st.source === 'env' ? `variable ${esc(st.env || 'KAGGLE_API_TOKEN')}` : 'token guardado'})</span>`
+      : `<span class="badge badge--warn">${st.problem === 'insecure' ? 'token con permisos inseguros' : 'sin activar'}</span>`;
+    const registered = (st.registered || []).length
+      ? `registrado en ${(st.registered || []).map((f) => `<code>${esc(f)}</code>`).join(', ')}`
+      : 'no registrado en este proyecto: ejecuta <code>smith upgrade</code>';
+    return `<section class="panel exp-mcp" id="expMcpActivation">
+      <h3 class="panel__title">Activar Kaggle por MCP</h3>
+      <p class="exp-intro">Estado: ${badge} · servidor <code>kaggle</code> ${registered}.</p>
+      <ol>
+        <li>Crea un token en <a href="https://www.kaggle.com/settings" target="_blank" rel="noopener">kaggle.com/settings</a> → API → <em>Generate New Token</em> (empieza por <code>KGAT_</code>).</li>
+        <li>Pulsa <strong>Activar</strong>: abre el asistente CLI smith del tablero y ejecuta <code>${esc(activate)}</code>. Pega el token en la terminal (la entrada queda oculta); smith lo verifica contra Kaggle y lo guarda solo para tu usuario en <code>${esc(st.token_path || '~/.config/papersmith/kaggle-mcp-token')}</code> (permisos 0600), nunca dentro del proyecto.</li>
+        <li>Abre una sesión nueva de Claude, OpenCode o Pi desde el asistente: el tablero le pasa <code>${esc(st.env || 'KAGGLE_API_TOKEN')}</code> y el MCP <code>kaggle</code> queda autenticado. Fuera del tablero: <code>export ${esc(st.env || 'KAGGLE_API_TOKEN')}=$(cat ${esc(st.token_path || '~/.config/papersmith/kaggle-mcp-token')})</code>.</li>
+        <li>Comprueba con <code>${esc(check)} --verify</code> (lee tu cuota semanal de GPU); <code>smith mcp kaggle deactivate</code> borra el token.</li>
+      </ol>
+      <div class="exp-mcp__actions">
+        ${cliButton(activate, 'Activar en el asistente CLI')}
+        ${cliButton(`${check} --verify`, 'Verificar')}
+        <button type="button" class="btn" data-exp-refresh="1">Recargar estado</button>
+      </div>
+    </section>`;
+  }
+
   // ---------------------------------------------------------------- help
   function help(accounts) {
     const k = accounts || {};
@@ -256,7 +290,7 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
       <h4 class="exp-h4">4. MCP</h4>
       <ul>
         <li>papersmith registra el servidor MCP oficial de Kaggle (<code>https://www.kaggle.com/mcp</code>) como <code>kaggle</code> en <code>.mcp.json</code>, <code>opencode.json</code>, <code>.pi/mcp.json</code> y <code>.agents/mcp_config.json</code> al hacer <code>smith init</code> o <code>smith upgrade</code>.</li>
-        <li>Las herramientas públicas (<code>search_datasets</code>, <code>search_notebooks</code>) responden sin token. Las de cuenta piden un token <code>KGAT_…</code> (Kaggle → Settings → API): <code>export KAGGLE_API_TOKEN=KGAT_…</code> antes de abrir el agente; nunca lo escribas en un archivo del proyecto.</li>
+        <li>Las herramientas públicas (<code>search_datasets</code>, <code>search_notebooks</code>) responden sin token. Las de cuenta piden un token <code>KGAT_…</code> (Kaggle → Settings → API): actívalo con <code>smith mcp kaggle activate</code> desde el asistente CLI (recuadro <em>Activar Kaggle por MCP</em>) o con <code>export KAGGLE_API_TOKEN=KGAT_…</code>; nunca lo escribas en un archivo del proyecto.</li>
         <li>Lanzar con GPU: <code>save_notebook</code> con <code>enableGpuNullable: true</code> y <code>machineShapeNullable: "NvidiaTeslaT4"</code>; monitorear con <code>get_notebook_session_status</code>, <code>list_notebook_session_output</code> y <code>download_notebook_output</code>; cuota semanal con <code>get_accelerator_quota</code>; cancelar con <code>cancel_notebook_session</code>.</li>
         <li>Úsalo para pruebas de concepto rápidas y para monitorear; solo el operador autoriza un lanzamiento.</li>
         <li>Para lanzar, prefiere la ruta CLI de papersmith: registra el ledger (<code>.remote-execution/ledger.jsonl</code>) que este panel lee.</li>
@@ -287,6 +321,7 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
     const full = products.filter((p) => p.kind === 'full');
     const other = products.filter((p) => p.kind !== 'poc' && p.kind !== 'full');
     return [
+      mcpActivation(v.remote_mcp),
       help(v.remote_accounts),
       group('Prueba de concepto', 'Productos de /proposal-implementation (AGREED.md): convergencia, figuras y tablas principales.',
         poc, 'Sin pruebas de concepto: /proposal-implementation crea implementations/<repo>/<Nombre>/ con AGREED.md; sus curvas salen de Results/history*.json|csv.'),
@@ -318,7 +353,16 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('click', (event) => {
-      const button = event.target && event.target.closest ? event.target.closest('[data-exp-log]') : null;
+      const closest = (sel) => (event.target && event.target.closest ? event.target.closest(sel) : null);
+      const cli = closest('[data-exp-cli]');
+      if (cli) {
+        if (typeof window.sendToCli === 'function') {
+          window.sendToCli(cli.getAttribute('data-exp-cli'), true, { kind: 'shell' });
+        }
+        return;
+      }
+      if (closest('[data-exp-refresh]')) { refreshExperimentsPanel(); return; }
+      const button = closest('[data-exp-log]');
       if (!button) return;
       const id = button.getAttribute('data-exp-log');
       if (logCharts.has(id)) logCharts.delete(id); else logCharts.add(id);
@@ -327,5 +371,5 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
   }
 
   window.refreshExperimentsPanel = refreshExperimentsPanel;
-  window.ExperimentsPanel = { render };
+  window.ExperimentsPanel = { render, mcpActivation };
 })();

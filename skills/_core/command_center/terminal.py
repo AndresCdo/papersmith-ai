@@ -24,6 +24,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import signal
 import struct
 import subprocess
@@ -50,7 +51,74 @@ MIN_SIZE, MAX_COLS, MAX_ROWS = 2, 500, 200
 
 #: Quick commands the console offers per agent kind: the smith CLI in a shell,
 #: the projected slash commands inside an agent.
-SHELL_QUICK = ("smith status", "smith atlas build", "smith audit")
+SHELL_QUICK = ("smith status", "smith atlas build", "smith audit",
+               "smith mcp kaggle activate", "smith mcp kaggle status")
+
+#: The remote MCP token `smith mcp kaggle activate` stores once per user,
+#: outside every workspace (``papersmith.core.kaggle_mcp.token_path`` names the
+#: same place; a test holds the two equal). Sessions started here receive it as
+#: :data:`REMOTE_MCP_TOKEN_ENV` unless that variable is already exported.
+REMOTE_MCP_TOKEN_ENV = "KAGGLE_API_TOKEN"
+REMOTE_MCP_TOKEN_FILE = "kaggle-mcp-token"
+
+
+def remote_mcp_token_path() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base).expanduser() / "papersmith" / REMOTE_MCP_TOKEN_FILE
+
+
+def read_remote_mcp_token() -> str | None:
+    """The stored token, only from a private regular file this user owns."""
+    path = remote_mcp_token_path()
+    try:
+        info = path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077
+                or (hasattr(os, "getuid") and info.st_uid != os.getuid())):
+            return None
+        token = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return token or None
+
+
+#: Where each harness names the remote MCP server, and under which key.
+REMOTE_MCP_SERVER = "kaggle"
+REMOTE_MCP_FILES = ((".mcp.json", "mcpServers"), ("opencode.json", "mcp"),
+                    (".pi/mcp.json", "mcpServers"), (".agents/mcp_config.json", "mcpServers"))
+
+
+def remote_mcp_status(root: Path) -> dict[str, Any]:
+    """Whether the remote MCP is activated, from where, and which workspace
+    files register it. Never carries the token itself."""
+    path = remote_mcp_token_path()
+    if os.environ.get(REMOTE_MCP_TOKEN_ENV):
+        source, problem = "env", None
+    elif read_remote_mcp_token():
+        source, problem = "file", None
+    else:
+        source = None
+        try:
+            info = path.lstat()
+        except OSError:
+            info = None
+        if info is None:
+            problem = "absent"
+        elif (stat.S_ISREG(info.st_mode) and not stat.S_IMODE(info.st_mode) & 0o077
+              and (not hasattr(os, "getuid") or info.st_uid == os.getuid())):
+            problem = "empty"
+        else:
+            problem = "insecure"
+    registered = []
+    for relpath, key in REMOTE_MCP_FILES:
+        try:
+            servers = json.loads((Path(root) / relpath).read_text(encoding="utf-8")).get(key)
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(servers, dict) and REMOTE_MCP_SERVER in servers:
+            registered.append(relpath)
+    return {"activated": source is not None, "source": source, "problem": problem,
+            "token_path": str(path), "env": REMOTE_MCP_TOKEN_ENV, "registered": registered,
+            "activate": "smith mcp kaggle activate", "status": "smith mcp kaggle status"}
 
 
 class TerminalError(Exception):
@@ -274,6 +342,10 @@ def session_env(agent_id: str, root: Path) -> dict[str, str]:
     env.update({"TERM": "xterm-256color", "COLORTERM": "truecolor",
                 "PAPERSMITH_WORKSPACE": str(root),
                 "PATH": os.pathsep.join([*path, *map(str, TOOL_DIRS)])})
+    if not env.get(REMOTE_MCP_TOKEN_ENV):
+        token = read_remote_mcp_token()
+        if token:
+            env[REMOTE_MCP_TOKEN_ENV] = token
     return env
 
 
