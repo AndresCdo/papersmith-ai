@@ -1,0 +1,297 @@
+"""The experiments panel: its read-only view, its route, its tab and its renderer.
+
+The view (``experiments_view.get_experiments_view``) reads the latest
+experiments protocol and every product folder under ``implementations/`` and
+never raises on what it finds there. The route and ``/api/artifact`` are
+exercised through their ASGI endpoints; the renderer runs under node.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from skills._core.command_center import experiments_view, server
+
+STATIC = Path(server.__file__).resolve().parent / "static"
+PAGE = (STATIC / "index.html").read_text(encoding="utf-8")
+SCRIPT_PATH = STATIC / "experiments-panel.js"
+
+PROTOCOL = """<!-- proposal-workspace:artifact:v1 -->
+# A Title
+
+**Validation scheme:** Stratified 5-fold CV with 5 seeds, Wilcoxon signed-rank (p < 0.05)
+
+## Experiment [exp:E1] — Hybrid Classification
+
+- **Hypothesis:** The hybrid model beats the baseline.
+- **Success criterion:** Balanced accuracy at least 0.85.
+- **Priority:** core
+- **Estimated Cost:** 12 GPU hours.
+
+### Expected Report: Experiment E1
+
+| Model Variant | Balanced Acc | F1 |
+| :--- | :--- | :--- |
+| Hybrid DRU | | |
+| Linear | | |
+
+## Experiment [exp:E2] — Ablation
+
+- **Hypothesis:** Entanglement helps.
+- **Priority:** ablation
+
+### Expected Report: Experiment E2
+
+| Scheme | F1 |
+| :--- | :--- |
+| Ring | |
+"""
+
+
+def _routes(app) -> dict:
+    return {
+        route.path: route.endpoint
+        for route in app.routes
+        if hasattr(route, "path") and hasattr(route, "endpoint")
+    }
+
+
+def _json(response) -> dict:
+    return json.loads(bytes(response.body).decode("utf-8"))
+
+
+def _write(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+class Workspace:
+    """A temporary workspace with a protocol, a PoC and a full product."""
+
+    def __init__(self, test: unittest.TestCase) -> None:
+        holder = tempfile.TemporaryDirectory()
+        test.addCleanup(holder.cleanup)
+        outside = tempfile.TemporaryDirectory()
+        test.addCleanup(outside.cleanup)
+        self.root = Path(holder.name).resolve()
+        self.outside = Path(outside.name).resolve()
+        root = self.root
+        _write(root / "experiments" / "experiments-demo-v01.md", "# old\n")
+        _write(root / "experiments" / "experiments-demo-v02.md", PROTOCOL)
+
+        poc = root / "implementations" / "repo" / "PocModel"
+        _write(poc / "AGREED.md", "agreed\n")
+        history = [{"epoch": i, "loss": 1.0 / (i + 1), "val_loss": 1.2 / (i + 1)} for i in range(1200)]
+        _write(poc / "Results" / "history.json", json.dumps(history))
+        _write(poc / "Results" / "figures" / "curve.svg", "<svg xmlns='http://www.w3.org/2000/svg'/>")
+        _write(poc / "Results" / "figures" / "fig.png", "png")
+        _write(poc / "Results" / "summary.json", json.dumps({"best": {"acc": 0.9, "loss": 0.1}, "seed": 42}))
+        _write(poc / "Results" / "broken.json", "{not json")
+        _write(poc / "Results" / "significance-broken.json", "{also not json")
+        ledger = [
+            {"kind": "submitted", "ts": "2026-10-01T00:00:00Z", "entrypoint": "Notebooks/train.py",
+             "submissionId": "s1", "worker": "acct-a"},
+            {"kind": "returned", "ts": "2026-10-01T01:00:00Z", "submissionId": "s1",
+             "artifactPath": "out"},
+            {"kind": "submitted", "ts": "2026-10-02T00:00:00Z", "entrypoint": "Notebooks/eval.py",
+             "submissionId": "s2", "worker": "acct-b"},
+        ]
+        _write(poc / ".remote-execution" / "ledger.jsonl",
+               "\n".join(json.dumps(e) for e in ledger) + "\nnot-json\n")
+
+        full = root / "implementations" / "repo" / "FullModel"
+        _write(full / "Experimental_AGREED.md", "agreed\n")
+        rows = ["epoch,loss,acc,seed,model"]
+        for model in ("hybrid", "linear"):
+            for seed in (1, 2):
+                for epoch in range(5):
+                    rows.append(f"{epoch},{1.0 / (epoch + 1)},{0.5 + epoch * 0.1},{seed},{model}")
+        _write(full / "Results" / "history.csv", "\n".join(rows) + "\n")
+        _write(full / "Results" / "shards" / "a" / "history.jsonl",
+               "\n".join(json.dumps({"step": s, "loss": 2.0 - s * 0.1}) for s in range(10)) + "\n")
+        _write(full / "Results" / "tables" / "metrics.csv", "model,acc\nhybrid,0.9\nlinear,0.8\n")
+        _write(full / "Results" / "tables" / "metrics.md",
+               "| model | f1 |\n| --- | --- |\n| hybrid | 0.88 |\n")
+        _write(full / "Results" / "significance.json", json.dumps([
+            {"comparison": "hybrid vs linear", "test": "wilcoxon", "statistic": 0.0, "p_value": 0.031,
+             "p_adjusted": 0.031, "correction": "holm", "effect_size": 0.8,
+             "effect_size_name": "rank-biserial", "ci_low": 0.02, "ci_high": 0.12, "n": 25,
+             "alpha": 0.05},
+        ]))
+        _write(full / "Results" / "figures" / "cm.pdf", "%PDF-1.4")
+        _write(full / "Results" / "panel.json", json.dumps({"pinned": ["Results/figures/cm.pdf",
+                                                                        "../../../../escape.txt"]}))
+        # A symlink escaping the workspace is never read nor listed.
+        secret = _write(self.outside / "history.json", json.dumps([{"epoch": 0, "loss": 9.0}]))
+        os.symlink(secret, full / "Results" / "history-escape.json")
+        os.symlink(self.outside, full / "Results" / "figures" / "linked")
+        _write(self.outside / "leak.png", "png")
+
+
+class ViewTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.ws = Workspace(self)
+        self.view = experiments_view.get_experiments_view(self.ws.root)
+        self.products = {p["name"]: p for p in self.view["products"]}
+
+    def test_protocol_comes_from_the_latest_revision(self) -> None:
+        protocol = self.view["protocol"]
+        self.assertEqual(protocol["file"], "experiments/experiments-demo-v02.md")
+        self.assertEqual(protocol["revision"], 2)
+        self.assertIn("Wilcoxon", protocol["validation_scheme"])
+        e1, e2 = protocol["experiments"]
+        self.assertEqual((e1["id"], e1["title"], e1["priority"]), ("E1", "Hybrid Classification", "core"))
+        self.assertEqual(e1["hypothesis"], "The hybrid model beats the baseline.")
+        self.assertEqual(e1["success_criterion"], "Balanced accuracy at least 0.85.")
+        self.assertEqual(e1["cost"], "12 GPU hours.")
+        report = e1["expected_reports"][0]
+        self.assertEqual(report["headers"], ["Model Variant", "Balanced Acc", "F1"])
+        self.assertEqual(report["rows"][0], ["Hybrid DRU", "", ""])
+        self.assertEqual(e2["id"], "E2")
+        self.assertEqual(e2["expected_reports"][0]["rows"], [["Ring", ""]])
+
+    def test_products_are_classified_by_their_agreement_file(self) -> None:
+        self.assertEqual(self.products["PocModel"]["kind"], "poc")
+        self.assertEqual(self.products["FullModel"]["kind"], "full")
+        self.assertEqual(self.products["PocModel"]["path"], "implementations/repo/PocModel")
+
+    def test_convergence_series_are_parsed_and_downsampled(self) -> None:
+        conv = self.products["PocModel"]["convergence"]
+        self.assertEqual(len(conv), 1)
+        self.assertEqual(conv[0]["x_key"], "epoch")
+        names = sorted(s["name"] for s in conv[0]["series"])
+        self.assertEqual(names, ["loss", "val_loss"])
+        for series in conv[0]["series"]:
+            self.assertLessEqual(len(series["points"]), experiments_view.MAX_POINTS)
+            self.assertEqual(series["points"][0][0], 0)
+            self.assertEqual(series["points"][-1][0], 1199)
+
+    def test_grouped_csv_and_shard_histories(self) -> None:
+        conv = {c["file"].rsplit("/", 1)[-1]: c for c in self.products["FullModel"]["convergence"]}
+        self.assertIn("history.csv", conv)
+        self.assertIn("history.jsonl", conv)
+        groups = {(s["name"], s["group"]) for s in conv["history.csv"]["series"]}
+        self.assertIn(("loss", "model=hybrid, seed=1"), groups)
+        self.assertIn(("acc", "model=linear, seed=2"), groups)
+        self.assertEqual(len(groups), 8)
+        self.assertEqual(conv["history.jsonl"]["x_key"], "step")
+
+    def test_figures_tables_significance_and_pinned(self) -> None:
+        full = self.products["FullModel"]
+        self.assertEqual(full["figures"], ["implementations/repo/FullModel/Results/figures/cm.pdf"])
+        tables = {t["path"].rsplit("/", 1)[-1]: t for t in full["tables"]}
+        self.assertEqual(tables["metrics.csv"]["headers"], ["model", "acc"])
+        self.assertEqual(tables["metrics.csv"]["rows"], [["hybrid", "0.9"], ["linear", "0.8"]])
+        self.assertEqual(tables["metrics.md"]["rows"], [["hybrid", "0.88"]])
+        self.assertEqual(full["significance"][0]["test"], "wilcoxon")
+        self.assertAlmostEqual(full["significance"][0]["p_adjusted"], 0.031)
+        self.assertEqual(full["pinned"], ["implementations/repo/FullModel/Results/figures/cm.pdf"])
+        poc = self.products["PocModel"]
+        summary = [t for t in poc["tables"] if t["path"].endswith("summary.json")][0]
+        self.assertIn(["best.acc", "0.9"], summary["rows"])
+        self.assertEqual(sorted(p.rsplit("/", 1)[-1] for p in poc["figures"]), ["curve.svg", "fig.png"])
+
+    def test_malformed_files_become_warnings(self) -> None:
+        text = "\n".join(self.view["warnings"])
+        self.assertIn("significance-broken.json", text)
+        poc_text = "\n".join(self.products["PocModel"]["warnings"])
+        self.assertIn("significance-broken.json", poc_text)
+
+    def test_symlinks_escaping_the_workspace_are_ignored(self) -> None:
+        payload = json.dumps(self.view)
+        self.assertNotIn("history-escape", json.dumps(self.products["FullModel"]["convergence"]))
+        self.assertNotIn("leak.png", payload)
+        self.assertNotIn(str(self.ws.outside), payload)
+        self.assertNotIn("escape.txt", json.dumps(self.products["FullModel"]["pinned"]))
+
+    def test_runs_are_folded_from_the_ledger(self) -> None:
+        runs = self.products["PocModel"]["runs"]
+        self.assertEqual(runs["count"], 2)
+        self.assertEqual(runs["by_state"], {"returned": 1, "submitted": 1})
+        self.assertEqual(runs["latest"][0]["entrypoint"], "Notebooks/eval.py")
+        self.assertEqual(self.products["FullModel"]["runs"]["count"], 0)
+
+    def test_an_empty_workspace_is_a_valid_view(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        view = experiments_view.get_experiments_view(holder.name)
+        self.assertIsNone(view["protocol"])
+        self.assertEqual(view["products"], [])
+        self.assertIn("remote_accounts", view)
+
+
+class RouteTests(unittest.TestCase):
+    def test_route_returns_the_view_and_artifact_serves_svg_and_csv(self) -> None:
+        ws = Workspace(self)
+        routes = _routes(server.create_app(ws.root))
+        payload = _json(routes["/api/experiments"]())
+        self.assertEqual(len(payload["products"]), 2)
+        svg = routes["/api/artifact"](path="implementations/repo/PocModel/Results/figures/curve.svg")
+        self.assertEqual(svg.media_type, "image/svg+xml")
+        csv = routes["/api/artifact"](path="implementations/repo/FullModel/Results/tables/metrics.csv")
+        self.assertTrue(csv.media_type.startswith("text/plain"))  # unchanged: CSV stays readable in a tab
+
+
+class PageTests(unittest.TestCase):
+    def test_the_tab_sits_between_model_and_sections(self) -> None:
+        modelo = PAGE.index("navigateTab('modelo')")
+        experiments = PAGE.index("navigateTab('experiments')")
+        sections = PAGE.index("navigateTab('sections')")
+        self.assertLess(modelo, experiments)
+        self.assertLess(experiments, sections)
+        self.assertLess(PAGE.index('id="pane-experiments"'), PAGE.index('id="pane-sections"'))
+
+    def test_the_script_is_loaded_and_the_tab_refreshes_it(self) -> None:
+        self.assertIn('<script src="./experiments-panel.js?v=0.20.0"></script>', PAGE)
+        start = PAGE.index("function navigateTab(tabId)")
+        body = PAGE[start:PAGE.index("function filterModelView")]
+        self.assertIn("tabId === 'experiments'", body)
+        self.assertIn("window.refreshExperimentsPanel?.()", body)
+        self.assertIn("'experiments'", PAGE[PAGE.index("// Hash routing on load"):])
+
+
+@unittest.skipUnless(shutil.which("node"), "node is required to run the panel renderer")
+class RenderTests(unittest.TestCase):
+    def render(self, view: dict) -> str:
+        script = (
+            "const fs=require('fs');global.window={};global.document={addEventListener(){}};"
+            f"eval(fs.readFileSync({json.dumps(str(SCRIPT_PATH))},'utf8'));"
+            "console.log(window.ExperimentsPanel.render(JSON.parse(fs.readFileSync(0,'utf8'))));"
+        )
+        return subprocess.run(["node", "-e", script], input=json.dumps(view), capture_output=True,
+                              text=True, cwd=tempfile.gettempdir(), check=True).stdout
+
+    def test_renders_help_charts_sections_and_escapes(self) -> None:
+        ws = Workspace(self)
+        view = experiments_view.get_experiments_view(ws.root)
+        view["products"][0]["name"] = "<img src=x onerror=alert(1)>"
+        out = self.render(view)
+        self.assertIn("Ayuda: lanzar y monitorear en Kaggle (CLI o MCP)", out)
+        self.assertIn("<details", out)
+        self.assertIn("<svg", out)
+        self.assertIn("<polyline", out)
+        self.assertIn("Prueba de concepto", out)
+        self.assertIn("Experimentos completos", out)
+        self.assertIn("NvidiaTeslaT4", out)
+        self.assertIn("remote_cli.py", out)
+        self.assertIn("https://www.kaggle.com/mcp", out)
+        self.assertIn("/api/artifact?path=", out)
+        self.assertIn("wilcoxon", out)
+        self.assertIn("pendiente", out.lower())
+        self.assertNotIn("<img src=x", out)
+
+    def test_empty_view_names_what_produces_the_charts(self) -> None:
+        out = self.render({"protocol": None, "products": [], "warnings": [], "remote_accounts": {}})
+        self.assertIn("Results/history", out)
+        self.assertIn("Ayuda: lanzar y monitorear en Kaggle (CLI o MCP)", out)
+
+
+if __name__ == "__main__":
+    unittest.main()

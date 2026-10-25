@@ -58,6 +58,27 @@ cell the composer either filled or did not — and no search closes it. That is
 why this stretch, unlike `deliberated`, may be delegated at all: its end is
 decidable from the candidate's own bytes, not a person's judgment call.
 
+## The significance test: suggested per experiment type
+
+Searching for "the significance test the area expects" is not enough on its
+own: the test must also fit each experiment's design. For every experiment the
+deliberation names, classify its type with the table in the skill's
+**Choosing the significance test by experiment type** section (two models on
+shared folds, three or more variants, one fixed test set, an ordered factor, a
+decay along a factor, repeated measures per subject) and hand back, per
+experiment:
+
+- the suggested test, its multiple-comparison correction, its effect size and
+  its confidence interval, with **a source a search in this run reached**
+  (tagged like every other URL) — the table's citations are the starting point
+  for that search, never a substitute for it;
+- where the area's habitual test contradicts the design — for example a paired
+  Wilcoxon over n = 5 folds, whose smallest two-sided exact p is 0.0625 — the
+  contradiction itself, quoted, so the tutoring session can refute it.
+
+You suggest; the deliberation decides. A suggestion with no searched source is
+marked `[pending-verification]` exactly as a URL would be.
+
 **Not every agent's description carries its bound skill's arrival, verbatim.**
 Only a `stretch: terminal` agent does; any other stretch ends at a named,
 earlier stage instead, and a skill that declares no north at all binds an

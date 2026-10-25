@@ -1,11 +1,11 @@
 ---
 name: upgrade-project
-description: "Trigger: a workspace created by `papersmith init` is running an older release and needs the current one — its skills, agents, slash commands, harness wiring and artifact shapes brought up to the installed distribution. Delegates every write to `papersmith upgrade`, which owns the kit copy, the projections, the orphan sweep and the artifact migrations; this skill never copies a file or edits an artifact itself. Refuses before writing when the directory is not a workspace or the CLI is unreachable, and names the one command that fixes each. Verbs: `plan` previews pending migrations and writes nothing; `apply` performs the upgrade; `status` reports the recorded version against the installed one."
+description: "Trigger: a workspace created by `smith init` is running an older release and needs the current one — its skills, agents, slash commands, harness wiring and artifact shapes brought up to the installed distribution. Delegates every write to `smith upgrade`, which owns the kit copy, the projections, the orphan sweep and the artifact migrations; this skill never copies a file or edits an artifact itself. Refuses before writing when the directory is not a workspace or the CLI is unreachable, and names the one command that fixes each. Verbs: `plan` previews pending migrations and writes nothing; `apply` performs the upgrade; `status` reports the recorded version against the installed one."
 ---
 
 # Upgrade Project
 
-A workspace is not a checkout. `papersmith init` copies a release's skills,
+A workspace is not a checkout. `smith init` copies a release's skills,
 renders its slash commands and agents for every harness, and records which
 release the workspace received in `.papersmith/version`. Nothing about that is
 live: when the installed distribution moves ahead, the workspace keeps the
@@ -19,7 +19,7 @@ anything about it.
 ## What this skill does not do
 
 It performs no upgrade of its own. Every byte written is written by
-`papersmith upgrade`, and that is deliberate: the upgrade is not a file copy.
+`smith upgrade`, and that is deliberate: the upgrade is not a file copy.
 It is a kit copy, a symlink repair, a re-derivation of every projection, an
 orphan sweep over previously-baselined dynamic paths, and an ordered run of
 artifact migrations — with the version marker written last, and only when the
@@ -47,7 +47,7 @@ test -f .papersmith/manifest.json
 ```
 
 Absent, refuse and say so plainly: this directory was not created by
-`papersmith init`, and `papersmith init .` is what creates one. Do not offer to
+`smith init`, and `smith init .` is what creates one. Do not offer to
 run `init` as a recovery — initializing a directory somebody believed was
 already a workspace is how a misunderstanding becomes a tree of files.
 
@@ -55,7 +55,7 @@ already a workspace is how a misunderstanding becomes a tree of files.
 package, so the upgrade can only come from the installed distribution.
 
 ```
-papersmith --version
+smith --version
 ```
 
 If that fails, try `python -m papersmith.cli --version`, which works whenever
@@ -80,7 +80,7 @@ useful than attempting a fallback that cannot exist.
 ### `plan` — what would a migration do
 
 ```
-papersmith upgrade . --plan-migrations
+smith upgrade . --plan-migrations
 ```
 
 Reports the migrations that would run and exits having written nothing.
@@ -93,7 +93,7 @@ all. Telling a user "this is a dry run" would be false.
 ### `apply` — perform the upgrade
 
 ```
-papersmith upgrade .
+smith upgrade .
 ```
 
 Copies the current kit, repairs the per-harness `skills` links, rewrites
@@ -125,7 +125,7 @@ Flags worth knowing, with what each actually changes:
 ### `status` — how far behind is this workspace
 
 ```
-papersmith status
+smith status
 ```
 
 Reports the recorded version against the installed one. Prefer this over
@@ -142,7 +142,7 @@ upgrade writes the record; no migration is involved.
 ## Which workspaces can be upgraded
 
 Say this plainly when a user asks whether their workspace is too old, and
-never suggest re-initializing a live workspace instead: `papersmith init` in a
+never suggest re-initializing a live workspace instead: `smith init` in a
 fresh directory leaves behind every ledger, receipt, seal, managed revision and
 lock the paper accumulated.
 

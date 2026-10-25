@@ -84,7 +84,11 @@ execution_profiles:
 # The paper-ingestion skill owns this block. The orchestrator intentionally
 # leaves its keys opaque while keeping the block in the same workspace file.
 paper_ingestion:
-  engine: marker
+  # auto: route each page -- digital prose through pypdfium2 in milliseconds,
+  # only equation, table and scanned pages through Docling. All
+  # license-unrestricted. Also: pdfium (fast path only), docling (every page),
+  # marker (opt-in; weights free only below USD 5M in funding or revenue).
+  engine: auto
   mode: fast
   strip_references: true
   source_base: guidance

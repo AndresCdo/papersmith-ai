@@ -59,7 +59,7 @@
 ---
 # Title and Keywords
 
-**Extent** title 11–15 words · keywords 4–8
+**Extent** title 10–13 words · keywords 4–8
 **Carries** no number, no percentage, no claim of superiority
 
 The title is the paper's only irrevocable claim: it is what gets cited, indexed and
@@ -138,6 +138,16 @@ invented for the search engine.
 Some journals require a subject-classification code after the keywords. That is an
 external requirement, not a style decision: take it from the target journal's
 instructions, along with the permitted keyword count.
+
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** Titles of 7–12–13 words, in title case; 4–5–8 keywords.
+
+**The group's titles** follow *<Mechanism>-Based <Model> for <Task>* or *<Property>
+<Mechanism> for <Qualified Task>*, and nine of ten leave the method's acronym out. The
+acronym appears in the abstract and the body.
 
 ## Inputs
 

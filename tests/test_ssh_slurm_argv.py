@@ -84,7 +84,7 @@ def test_ssh_target_rejects_option_like_hosts(tmp_path, capsys, host, operation)
         code = main(argv)
     # Then: the established error envelope precedes every remote launch.
     assert code == 1
-    assert capsys.readouterr().err.startswith("papersmith: error:")
+    assert capsys.readouterr().err.startswith("smith: error:")
     launch.assert_not_called()
 
 

@@ -35,7 +35,7 @@ relative one refuses `IMPLEMENTATION_DOMAIN_PROFILE_NOT_ABSOLUTE` before any
 command runs, because it would resolve against whatever working directory a
 child process happens to have.
 
-`papersmith implement --action <command>` (the workspace CLI's bridge) runs only
+`smith implement --action <command>` (the workspace CLI's bridge) runs only
 `env`, `name`, `plan`, `apply`, `admit`, `handoff`, `compose`, `probe` and
 `verify`; every other command on this page runs through this launcher directly.
 Its `--action materialize` is a kept alias of `apply`, not of the `materialize`

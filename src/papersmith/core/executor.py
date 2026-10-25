@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..bridges.python import mapped_returncode, script_environment
+from ..bridges.python import interpreter_for, mapped_returncode, script_environment
 from ..core.exit_codes import EXECUTION_ERROR, SUCCESS, USER_ERROR
 from ..errors import ExecutionError, UserError
 from . import config, ledger
@@ -50,7 +51,7 @@ def _target_markers(profile: dict) -> set[str]:
     return {marker for marker in TARGET_PLACEHOLDERS if any(marker in text for text in texts)}
 
 
-#: How profiles written by `papersmith init` before 0.14.0 named the target.
+#: How profiles written by `smith init` before 0.14.0 named the target.
 #: `{paper_slug}` is the workspace folder name, which names no implementation
 #: unless the target happens to share it.
 LEGACY_TARGET = IMPLEMENTATIONS + "/{paper_slug}"
@@ -72,7 +73,7 @@ def _legacy_target_problem(root: Path, profile: dict) -> str | None:
             f"{IMPLEMENTATIONS}/{root.name}/ and does not exist: {{paper_slug}} is the "
             "workspace folder name, not an implementation target. Edit papersmith.yaml "
             "to name {target} instead (and {target_python} -m pytest rather than a bare "
-            "pytest), as `papersmith init` writes from 0.14.0 on")
+            "pytest), as `smith init` writes from 0.14.0 on")
 
 
 def _venv_python(directory: Path) -> Path:
@@ -181,6 +182,53 @@ def _local_job(root: Path, profile_name: str, job_id: str, job: dict[str, Any], 
     return SUCCESS if result.returncode == 0 else EXECUTION_ERROR
 
 
+def _env_is_provisioned(root: Path) -> bool:
+    env_dir = root / ".micromamba" / "envs" / "papersmith"
+    mamba_name = "micromamba.exe" if os.name == "nt" else "micromamba"
+    mamba_local = root / ".micromamba" / "bin" / mamba_name
+    fallback_local = root / ".micromamba" / "bin" / "micromamba"
+    return env_dir.is_dir() and (
+        mamba_local.is_file()
+        or fallback_local.is_file()
+        or shutil.which("micromamba") is not None
+    )
+
+
+def _prompt_env_if_interactive(root: Path, profile_name: str) -> None:
+    if _env_is_provisioned(root):
+        return
+
+    script = root / "scripts" / "setup_env.py"
+    if not script.is_file():
+        return
+
+    if sys.stdin.isatty():
+        sys.stderr.write(
+            f"\n[!] Profile '{profile_name}' uses Kaggle remote execution.\n"
+            "    The isolated papersmith micromamba environment is not yet installed.\n"
+            "Would you like to provision it now? [y/N]: "
+        )
+        sys.stderr.flush()
+        try:
+            line = sys.stdin.readline()
+            reply = line.strip().lower() if line else "n"
+        except (OSError, KeyboardInterrupt):
+            reply = "n"
+        if reply in {"y", "yes"}:
+            sys.stderr.write("\n[setup] Provisioning micromamba environment via scripts/setup_env.py install ...\n")
+            py = sys.executable or shutil.which("python3") or shutil.which("python") or "python"
+            proc = subprocess.run([py, str(script), "install"], cwd=root, check=False)
+            if proc.returncode == 0:
+                sys.stderr.write("[setup] Environment provisioning complete.\n\n")
+            else:
+                sys.stderr.write("[setup] Warning: environment provisioning failed; continuing with fallback interpreter.\n\n")
+        else:
+            sys.stderr.write(
+                "[note] Continuing with host interpreter. To install the isolated environment later:\n"
+                "       smith env install  (or python3 scripts/setup_env.py install)\n\n"
+            )
+
+
 def _remote_command(root: Path, job: dict[str, Any], target: dict, *, consent: str | None) -> list[str]:
     script = root / "skills" / "remote-execution" / "scripts" / "remote_cli.py"
     entrypoint = None
@@ -193,8 +241,9 @@ def _remote_command(root: Path, job: dict[str, Any], target: dict, *, consent: s
             break
     if entrypoint is None:
         entrypoint = root / "runner.ipynb"
+    interpreter = interpreter_for(root, prefer_micromamba=True)
     command = [
-        os.fspath(__import__("sys").executable), os.fspath(script), "submit",
+        *interpreter, os.fspath(script), "submit",
         "--target", str(root), "--entrypoint", str(entrypoint),
         "--backend", str(target.get("backend", "kaggle")),
     ]
@@ -271,6 +320,8 @@ def run_profile(workspace: str | Path, profile_name: str, *, target_override: st
             if dry_run:
                 code = SUCCESS
             else:
+                _prompt_env_if_interactive(root, profile_name)
+                command = _remote_command(root, job, target, consent=consent)
                 try:
                     # remote_cli.py is a kit script under the workspace's skills/.
                     # The ssh branch below needs no such environment: ssh does
