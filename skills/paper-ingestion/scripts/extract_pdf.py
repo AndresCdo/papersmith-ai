@@ -500,6 +500,14 @@ def marker_options(mode: str | None, force_ocr: bool) -> dict:
     return options
 
 
+def _marker_unavailable(exc: ImportError) -> EngineError:
+    return EngineError(
+        f"the Marker engine is not available in this interpreter ({exc}). "
+        f"Provision it with {SETUP_SCRIPT} and run the script through "
+        "skills/paper-ingestion/.venv/bin/python"
+    )
+
+
 def build_converter(mode: str | None, force_ocr: bool = False):
     """Construct a keyless Marker PDF->markdown converter (models loaded once)."""
     try:
@@ -507,11 +515,7 @@ def build_converter(mode: str | None, force_ocr: bool = False):
         from marker.models import create_model_dict
         from marker.config.parser import ConfigParser
     except ImportError as exc:
-        raise EngineError(
-            f"the Marker engine is not available in this interpreter ({exc}). "
-            f"Provision it with {SETUP_SCRIPT} and run the script through "
-            "skills/paper-ingestion/.venv/bin/python"
-        ) from None
+        raise _marker_unavailable(exc) from None
 
     config_parser = ConfigParser(marker_options(mode, force_ocr))
     return PdfConverter(
@@ -540,7 +544,12 @@ def render_paper(converter, pdf_path: Path, strip_refs: bool, staging: Path) -> 
     if isinstance(converter, RoutedEngine):
         converter.render(pdf_path, strip_refs, staging)
         return
-    from marker.output import text_from_rendered
+    # Marker is opt-in: guarded here as in build_converter, so the forge gate
+    # does not count it as a package every interpreter must carry.
+    try:
+        from marker.output import text_from_rendered
+    except ImportError as exc:
+        raise _marker_unavailable(exc) from None
 
     started = time.monotonic()
     rendered = converter(str(pdf_path))
