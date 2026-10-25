@@ -362,10 +362,21 @@ KAGGLE_MCP_URL = "https://www.kaggle.com/mcp"
 KAGGLE_TOKEN_ENV = "KAGGLE_API_TOKEN"
 MCP_REMOTE_PACKAGE = "mcp-remote@0.14.3"
 
+#: Google Colab's official MCP server (https://github.com/googlecolab/colab-mcp,
+#: Apache-2.0), pinned to one commit: it bridges the agent to a Colab notebook
+#: the person keeps open in their own browser session, so it holds no token and
+#: reads none from the environment. Interactive work only; headless campaigns go
+#: through the official CLI (``smith colab login|status``). Its README asks for a
+#: 30-second start-up timeout, which only Claude's ``.mcp.json`` can express.
+COLAB_MCP_SERVER = "colab"
+COLAB_MCP_COMMAND = "uvx"
+COLAB_MCP_ARGS = ("git+https://github.com/googlecolab/colab-mcp@b9ab3899e0f1fa493390b1fd6d54aa2e464ecdf1",)
+COLAB_MCP_TIMEOUT_MS = 30000
+
 #: Each harness's project MCP file and the entries it takes. These files belong
 #: to the workspace: ``init`` and ``upgrade`` add or refresh only the
-#: :data:`BANCO_LIA_SERVER` and :data:`KAGGLE_MCP_SERVER` entries and keep every
-#: other server.
+#: :data:`BANCO_LIA_SERVER`, :data:`KAGGLE_MCP_SERVER` and :data:`COLAB_MCP_SERVER`
+#: entries and keep every other server.
 MCP_CONFIG_FILES = {
     "claude": ".mcp.json",
     "pi": ".pi/mcp.json",
@@ -390,8 +401,16 @@ def _kaggle_entry(tool: str) -> dict[str, Any]:
                      "--header", f"Authorization:Bearer ${{{KAGGLE_TOKEN_ENV}}}"]}
 
 
+def _colab_entry(tool: str) -> dict[str, Any]:
+    entry: dict[str, Any] = {"command": COLAB_MCP_COMMAND, "args": list(COLAB_MCP_ARGS)}
+    if tool == "claude":
+        entry = {"type": "stdio", **entry, "timeout": COLAB_MCP_TIMEOUT_MS}
+    return entry
+
+
 def _mcp_entries(tool: str) -> dict[str, dict[str, Any]]:
-    return {BANCO_LIA_SERVER: _banco_lia_entry(tool), KAGGLE_MCP_SERVER: _kaggle_entry(tool)}
+    return {BANCO_LIA_SERVER: _banco_lia_entry(tool), KAGGLE_MCP_SERVER: _kaggle_entry(tool),
+            COLAB_MCP_SERVER: _colab_entry(tool)}
 
 
 def ensure_mcp_servers(workspace: Path, tools: Sequence[str], *,
@@ -417,8 +436,8 @@ def ensure_mcp_servers(workspace: Path, tools: Sequence[str], *,
             if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
                 if warnings is not None:
                     warnings.append(f"{relpath} is not a JSON object with an `mcpServers` object; "
-                                    f"add the {BANCO_LIA_SERVER} and {KAGGLE_MCP_SERVER} "
-                                    "servers by hand")
+                                    f"add the {BANCO_LIA_SERVER}, {KAGGLE_MCP_SERVER} and "
+                                    f"{COLAB_MCP_SERVER} servers by hand")
                 continue
         servers = data.setdefault("mcpServers", {})
         entries = _mcp_entries(tool)

@@ -19,7 +19,9 @@
   no service name is restated here;
 * the remote-services table (``remote_services``): one offline, bounded row
   per service the remote path depends on, with its state and the one action
-  that activates it.
+  that activates it, plus the team table (one account per person and service);
+* the Colab box state (``terminal.colab_mcp_status``): which MCP files register
+  the official Colab MCP, the box's constant commands and the environment.
 
 Every read is bounded (files per product, bytes per file, points per series,
 series per history) and contained under ``root``: a symlink resolving outside
@@ -41,7 +43,7 @@ from typing import Any
 
 from .atlas import _locate
 from .state_extractor import credentials_store, inbox_directory
-from .terminal import remote_mcp_status
+from .terminal import colab_mcp_status, remote_mcp_status
 from .remote_services import remote_services
 from .decisions import LEDGER_MAX_BYTES, MAX_LEDGER_LINES, _discover_ledgers, _read_bytes
 
@@ -718,5 +720,6 @@ def get_experiments_view(root: Path | str) -> dict[str, Any]:
                 for repo, folder in _product_dirs(root, reader)]
     return {"protocol": protocol, "products": products, "datasets": _datasets(root, reader),
             "remote_accounts": _remote_accounts(root),
-            "remote_mcp": remote_mcp_status(root), "remote_services": remote_services(root),
+            "remote_mcp": remote_mcp_status(root), "remote_colab": colab_mcp_status(root),
+            "remote_services": remote_services(root),
             "warnings": warnings}

@@ -4,7 +4,16 @@
 proof of concept or a full experiment depends on: the official Kaggle MCP
 server, the official ``kaggle`` CLI, the account token both read, the worker
 accounts the ``kaggle-accounts`` skill stores, the rehearsal evidence the
-``remote-execution`` skill writes, and the weekly GPU quota.
+``remote-execution`` skill writes, the weekly GPU quota, and then Colab: the
+official ``colab`` CLI, the official Colab MCP registration, the team's Colab
+accounts, the owners a split campaign may use, and the team as a whole.
+
+The team comes from ``.papersmith/team.json`` (one account per person and
+service). Only owner slugs, display names, the declared Kaggle username and
+the Colab tier leave it. A member's Colab ``configDir`` is checked for
+existence only, never listed or opened (it holds the CLI's credentials), and
+the accounts store answers one yes/no per declared username. Parallelism
+counts distinct owners; a ``free`` Colab account is never a campaign worker.
 
 Nothing here touches the network: the dashboard polls this view, and a probe
 that reached the service on every poll would be slow and would spend the
@@ -23,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -30,7 +40,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .state_extractor import credentials_store
-from .terminal import REMOTE_MCP_TOKEN_ENV, find_executable, remote_mcp_status
+from .terminal import (COLAB_CLI_INSTALL, COLAB_COMMANDS, COLAB_MCP_SERVER, COLAB_PAID_TIERS,
+                       REMOTE_MCP_TOKEN_ENV, find_executable, registered_mcp_files, remote_mcp_status)
 
 #: Row states; the panel maps them to "activo", "inactivo", "no instalado"
 #: and "sin verificar".
@@ -46,7 +57,19 @@ ACTIONS = {
     "verify": "smith mcp kaggle status --verify",
     "install_cli": "pipx install kaggle",
     "validate_accounts": "/kaggle-accounts validate",
+    "install_colab_cli": COLAB_CLI_INSTALL,
+    "colab_status": COLAB_COMMANDS["status"],
+    "team_list": COLAB_COMMANDS["team_list"],
 }
+
+COLAB_CLI_NAME = "colab"
+COLAB_TIERS = ("free", *COLAB_PAID_TIERS)
+TEAM_FILE = Path(".papersmith") / "team.json"
+#: The empty team table names this; the placeholders are literal.
+TEAM_ADD_COMMAND = 'smith team add --owner <slug> --name "<Nombre>" --attest ...'
+MAX_TEAM_BYTES = 256 * 1024
+MAX_MEMBERS = 64
+_OWNER = re.compile(r"[a-z0-9-]{1,40}")
 
 VERSION_TTL = 300.0
 VERSION_TIMEOUT = 3.0
@@ -212,6 +235,149 @@ def _quota_row() -> dict[str, Any]:
                 _action("verify", "Leer cuota"))
 
 
+def _colab_cli_row() -> dict[str, Any]:
+    purpose = "Ejecución sin interfaz (headless) en Colab, por la ruta de remote-execution."
+    executable = find_executable(COLAB_CLI_NAME)
+    if not executable:
+        return _row("colab_cli", f"CLI oficial de Colab ({COLAB_CLI_NAME})", purpose, "missing",
+                    "No instalado: instala la versión fijada que documenta remote-execution.",
+                    _action("install_colab_cli", "Instalar"))
+    version = _cli_version(executable)
+    detail = f"{version} en {executable}" if version else f"Encontrado en {executable} (versión no leída)."
+    return _row("colab_cli", f"CLI oficial de Colab ({COLAB_CLI_NAME})", purpose, "active",
+                detail[:2 * MAX_TEXT], _action("colab_status", "Comprobar"))
+
+
+def _colab_mcp_row(root: Path) -> dict[str, Any]:
+    purpose = "Trabajo interactivo: el agente maneja un cuaderno de Colab abierto en el navegador."
+    registered = registered_mcp_files(root, COLAB_MCP_SERVER)
+    if registered:
+        return _row("colab_mcp", "MCP oficial de Colab", purpose, "active",
+                    f"Registrado en {', '.join(registered)}; necesita el cuaderno abierto en el navegador.",
+                    None, badge="registrado")
+    return _row("colab_mcp", "MCP oficial de Colab", purpose, "inactive",
+                "No registrado en los archivos MCP del proyecto (smith upgrade lo registra); "
+                "necesita un cuaderno abierto en el navegador.", None, badge="no registrado")
+
+
+def _store_usernames(root: Path) -> set[str]:
+    store = credentials_store(root)
+    try:
+        if store is None or not store.is_file() or store.stat().st_size > MAX_STORE_BYTES:
+            return set()
+        data = json.loads(store.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    accounts = data.get("accounts") if isinstance(data, dict) else None
+    if not isinstance(accounts, list):
+        return set()
+    return {entry["username"] for entry in accounts
+            if isinstance(entry, dict) and isinstance(entry.get("username"), str)}
+
+
+def _text(value: Any, limit: int = MAX_TEXT) -> str | None:
+    return value.strip()[:limit] or None if isinstance(value, str) else None
+
+
+def _config_present(value: Any) -> bool:
+    """Whether a member's Colab config directory exists: one stat, never a listing."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    path = Path(value.strip()).expanduser()
+    try:
+        return path.is_absolute() and path.is_dir()
+    except OSError:
+        return False
+
+
+def team_members(root: Path | str) -> dict[str, Any]:
+    """The team registry reduced to what the table shows; never raises."""
+    root = Path(root)
+    out: dict[str, Any] = {"file": TEAM_FILE.as_posix(), "present": False, "problem": None,
+                           "members": [], "skipped": 0, "add_command": TEAM_ADD_COMMAND}
+    path = root / TEAM_FILE
+    try:
+        if not path.is_file() or path.is_symlink():
+            return out
+        out["present"] = True
+        if path.stat().st_size > MAX_TEAM_BYTES:
+            out["problem"] = "too_large"
+            return out
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        out["problem"] = "invalid"
+        return out
+    members = data.get("members") if isinstance(data, dict) else None
+    if not isinstance(members, list):
+        out["problem"] = "invalid"
+        return out
+    stored = _store_usernames(root)
+    seen: set[str] = set()
+    for entry in members[:MAX_MEMBERS]:
+        owner = entry.get("owner") if isinstance(entry, dict) else None
+        if not isinstance(owner, str) or not _OWNER.fullmatch(owner) or owner in seen:
+            out["skipped"] += 1
+            continue
+        seen.add(owner)
+        accounts = entry.get("accounts") if isinstance(entry.get("accounts"), dict) else {}
+        kaggle = accounts.get("kaggle") if isinstance(accounts.get("kaggle"), dict) else None
+        colab = accounts.get("colab") if isinstance(accounts.get("colab"), dict) else None
+        username = _text(kaggle.get("username"), 80) if kaggle else None
+        tier = colab.get("tier") if colab else None
+        tier = tier if tier in COLAB_TIERS else ("unknown" if colab else None)
+        validated = (username in stored) if username else None
+        eligible = [service for service, ok in (("kaggle", bool(validated)),
+                                                 ("colab", tier in COLAB_PAID_TIERS)) if ok]
+        out["members"].append({
+            "owner": owner, "display_name": _text(entry.get("displayName"), 80),
+            "kaggle_username": username, "kaggle_validated": validated,
+            "colab_tier": tier, "colab_config_present": _config_present(colab.get("configDir")) if colab else None,
+            "eligible": eligible,
+        })
+    out["skipped"] += max(0, len(members) - MAX_MEMBERS)
+    return out
+
+
+def _team_rows(team: dict[str, Any]) -> list[dict[str, Any]]:
+    list_action = _action("team_list", "Ver equipo")
+    purposes = {"colab_accounts": "Una cuenta Colab por persona del equipo.",
+                "colab_eligible": "Propietarios con cómputo de pago: pueden repartir una campaña.",
+                "team": "Personas distintas: el paralelismo cuenta propietarios, no cuentas."}
+    services = {"colab_accounts": "Cuentas Colab del equipo", "colab_eligible": "Elegibles para campañas",
+                "team": "Equipo"}
+    if team["problem"]:
+        detail = f"{team['file']} no se pudo leer; revisa con smith team list."
+        return [_row(row_id, services[row_id], purposes[row_id], "unverified", detail, list_action)
+                for row_id in ("colab_accounts", "colab_eligible", "team")]
+    members = team["members"]
+    colab = [m for m in members if m["colab_tier"]]
+    paid = [m["owner"] for m in colab if m["colab_tier"] in COLAB_PAID_TIERS]
+    free = sum(1 for m in colab if m["colab_tier"] == "free")
+    kaggle = sum(1 for m in members if m["kaggle_username"])
+    if colab:
+        accounts = _row("colab_accounts", services["colab_accounts"], purposes["colab_accounts"], "active",
+                        f"{len(colab)} cuenta(s): {len(paid)} de pago, {free} gratuita(s).", list_action,
+                        count=len(colab), paid=len(paid), free=free)
+    else:
+        accounts = _row("colab_accounts", services["colab_accounts"], purposes["colab_accounts"], "inactive",
+                        "Sin cuentas Colab en el equipo.", list_action, count=0, paid=0, free=0)
+    if paid:
+        shown = ", ".join(paid[:12]) + (" …" if len(paid) > 12 else "")
+        eligible = _row("colab_eligible", services["colab_eligible"], purposes["colab_eligible"], "active",
+                        f"{len(paid)} propietario(s) de pago: {shown}. Las gratuitas solo para trabajo "
+                        "interactivo en una sesión.", _action("colab_status", "Comprobar"), owners=paid)
+    else:
+        eligible = _row("colab_eligible", services["colab_eligible"], purposes["colab_eligible"], "inactive",
+                        "Ningún propietario con nivel de pago (pro, payg o enterprise): sin campañas "
+                        "repartidas en Colab.", _action("colab_status", "Comprobar"), owners=[])
+    state = "active" if members else "inactive"
+    detail = (f"{len(members)} persona(s): {kaggle} con Kaggle, {len(colab)} con Colab."
+              if members else f"Sin {team['file']}: cada persona se registra con smith team add.")
+    whole = _row("team", services["team"], purposes["team"], state, detail, list_action,
+                 owners=len(members), kaggle=kaggle, colab=len(colab))
+    return [accounts, eligible, whole]
+
+
 def _guarded(row_id: str, service: str, probe: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     try:
         return probe()
@@ -241,9 +407,23 @@ def remote_services(root: Path | str) -> dict[str, Any]:
         _guarded("accounts", "Cuentas worker", lambda: _accounts_row(root)),
         _guarded("rehearsals", "Ensayos remotos", lambda: _rehearsals_row(root)),
         _guarded("quota", "Cuota GPU semanal", _quota_row),
+        _guarded("colab_cli", "CLI oficial de Colab", _colab_cli_row),
+        _guarded("colab_mcp", "MCP oficial de Colab", lambda: _colab_mcp_row(root)),
     ]
+    try:
+        team = team_members(root)
+    except Exception:  # noqa: BLE001 - never raises; the rows say so
+        team = {"file": TEAM_FILE.as_posix(), "present": False, "problem": "invalid", "members": [],
+                "skipped": 0, "add_command": TEAM_ADD_COMMAND}
+    try:
+        rows.extend(_team_rows(team))
+    except Exception:  # noqa: BLE001
+        rows.extend(_row(row_id, service, "", "unverified", "No se pudo sondear.", None)
+                    for row_id, service in (("colab_accounts", "Cuentas Colab del equipo"),
+                                            ("colab_eligible", "Elegibles para campañas"),
+                                            ("team", "Equipo")))
     for row in rows:
         row["purpose"] = row["purpose"] or "—"
     note = ("Sondeo local sin red: la cuota y la autenticación de las cuentas se leen "
             "con su acción. La versión de la CLI se guarda en caché por 5 minutos.")
-    return {"rows": rows, "note": note}
+    return {"rows": rows, "note": note, "team": team}

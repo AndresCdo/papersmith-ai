@@ -5,6 +5,11 @@ accounts, and what keeps the split reproducible.
 Stdlib only, no network, no credentials. This CLI decides from MEASURED
 numbers -- a pilot's per-unit duration, a rehearsal's setup overhead, the
 accounts' own limits -- and writes nothing but an optional assessment record.
+
+Accounts are counted under the team rule: one account per person per service,
+so parallelism counts DISTINCT OWNERS (`--owners`), never accounts. On Colab
+only paid compute joins a split (`--tiers`), and services do not mix inside one
+campaign unless the shards' environment stamps are declared identical.
 It never places a unit on an account (`remote-execution distribute` does),
 never generates a job (`generate-job` does) and never launches one (`submit`,
 behind the operator's consent, does).
@@ -42,7 +47,7 @@ OBJECTIVE_FLOW = {
         "its reproducibility checklist satisfied, before any job is generated"),
     "humanStops": [
         "the launch itself, behind remote-execution's consent and gate",
-        "which accounts take part: only accounts the operator owns and has validated",
+        "which owners take part: one account per person per service, each owner registered in the team registry and validated",
     ],
 }
 
@@ -58,6 +63,20 @@ ERROR_CODES = (
 #: against them rather than trusted.
 MIN_SPEEDUP = 1.5
 MIN_SAVED_MINUTES = 30
+
+#: Colab compute tiers. Only paid compute may be a worker of a split campaign:
+#: the Colab FAQ disallows, on free runtimes without compute units, "running
+#: distributed computing workers", and on any tier "using multiple accounts to
+#: work around access or resource usage restrictions".
+COLAB_SERVICE = "colab"
+COLAB_TIERS = ("free", "pro", "payg", "enterprise")
+PAID_COLAB_TIERS = ("pro", "payg", "enterprise")
+COLAB_FAQ = "https://research.google.com/colaboratory/faq.html"
+COLAB_FAQ_REASON = (
+    'the Colab FAQ disallows "running distributed computing workers" on free runtimes '
+    'without compute units, and "using multiple accounts to work around access or resource '
+    f'usage restrictions" ({COLAB_FAQ}, verified 2026-10-25); a free Colab account runs '
+    "interactive or proof-of-concept work in one session and is never a worker of a split campaign")
 
 #: Axes a split may never run along: a shard boundary there puts a comparison
 #: across a hardware boundary.
@@ -103,9 +122,12 @@ CHECKLIST = (
     {"id": "no-pooled-timing",
      "rule": "Never pool wall time or memory across machines; they are perEnvironment measurements.",
      "why": "an average over two machines describes neither"},
-    {"id": "owned-accounts-only",
-     "rule": "Use only accounts the operator owns and controls, validated through the accounts skill, within the platform's terms.",
-     "why": "spreading work over other people's accounts to get around per-user limits is a terms violation, not an optimisation"},
+    {"id": "one-account-per-person",
+     "rule": "One account per person per service: every participating account is owned and operated by a distinct team member registered with `smith team`, and parallelism counts distinct owners, never accounts. On Colab only paid compute (Pro, Pay-As-You-Go compute units, Enterprise) joins a split campaign; where a service's terms are unverified the same one-per-person rule applies.",
+     "why": "several accounts held by one person to get around per-user limits are a terms violation, not an optimisation"},
+    {"id": "one-service-per-campaign",
+     "rule": "Run one campaign on one service; mix services only when the shards' environment stamps (accelerator model, CUDA, torch) are declared identical, and let verify --shards confirm it.",
+     "why": "two services rarely hand out the same accelerator and software, and a merge over different stamps is several experiments"},
     {"id": "launch-is-the-operator-s",
      "rule": "The verdict is never launch authorization: placement stays with distribute and the launch with submit behind the operator's consent.",
      "why": "a campaign is hours of somebody's quota"},
@@ -214,7 +236,7 @@ def per_account(state: list[dict], sessions: int, quota_hours: float) -> list[di
 
 
 def cmd_assess(args, root: Path, today: str) -> dict:
-    required = {"--unit-minutes": args.unit_minutes, "--accounts": args.accounts,
+    required = {"--unit-minutes": args.unit_minutes, "--owners": args.owners,
                 "--sessions-per-account": args.sessions_per_account,
                 "--session-limit-hours": args.session_limit_hours,
                 "--quota-hours": args.quota_hours, "--setup-minutes": args.setup_minutes}
@@ -230,7 +252,12 @@ def cmd_assess(args, root: Path, today: str) -> dict:
         raise Refusal("axis-is-comparison", f"--axis {args.axis!r}: a split may run along a seed, fold or subject block, never by arm or comparison")
 
     unit_minutes = positive("--unit-minutes", args.unit_minutes) if args.unit_minutes is not None else None
-    accounts = positive("--accounts", args.accounts, int)
+    owners = positive("--owners", args.owners, int)
+    held = positive("--accounts", args.accounts, int) if args.accounts is not None else owners
+    if held < owners:
+        raise Refusal("bad-argument", f"--accounts {held} is fewer than --owners {owners}: every owner holds an account")
+    services, tiers, excluded = team_policy(args, owners)
+    accounts = owners - len(excluded)
     sessions = positive("--sessions-per-account", args.sessions_per_account, int)
     limit_hours = positive("--session-limit-hours", args.session_limit_hours)
     quota_hours = positive("--quota-hours", args.quota_hours)
@@ -247,7 +274,9 @@ def cmd_assess(args, root: Path, today: str) -> dict:
 
     limit = limit_hours * 60
     inputs = {"units": len(units), "unitMinutes": num(unit_minutes) if unit_minutes is not None else None,
-              "unitsFile": args.units_file, "accounts": accounts, "sessionsPerAccount": sessions,
+              "unitsFile": args.units_file, "owners": owners, "accounts": held,
+              "service": services, "tiers": tiers, "stampsIdentical": bool(args.stamps_identical),
+              "sessionsPerAccount": sessions,
               "sessionLimitHours": num(limit_hours), "quotaHours": num(quota_hours),
               "quotaSource": args.quota_source, "quotaDate": args.quota_date,
               "setupMinutes": num(setup), "axis": args.axis}
@@ -259,15 +288,35 @@ def cmd_assess(args, root: Path, today: str) -> dict:
         "speedup": None, "savedMinutes": None, "accountsUsed": None,
         "recommendedAccounts": None, "perAccount": [], "quotaOk": None,
         "unitsOverSessionLimit": [],
+        "eligibleOwners": accounts, "excludedOwners": excluded,
     }
     over = [unit["id"] for unit in units if unit["minutes"] + setup > limit]
     reasons = []
-    if over:
+    if held > owners:
+        reasons.append(f"{held} accounts are held by {owners} owner(s): accounts beyond one per owner "
+                       "never add parallelism, so the plan counts owners")
+    if excluded:
+        reasons.append(f"{len(excluded)} free-tier Colab owner(s) excluded from the split: {COLAB_FAQ_REASON}")
+    mixed = len(services) > 1
+    if mixed and args.stamps_identical:
+        reasons.append(f"services {', '.join(services)} are mixed under declared identical stamps "
+                       "(accelerator model, CUDA, torch): verify --shards must confirm them before any merge")
+    if mixed and not args.stamps_identical:
+        result["verdict"] = "do-not-mix"
+        reasons.append(f"services {', '.join(services)} would be mixed in one campaign: shards on different "
+                       "services run on different accelerators and software, so mixing is refused unless "
+                       "their environment stamps are declared identical (--stamps-identical); run the "
+                       "campaign on one service")
+    elif over:
         result["unitsOverSessionLimit"] = over
         result["verdict"] = "split-first"
         reasons.append(f"{len(over)} unit(s) need more than one session's {num(limit)} minutes "
                        f"including the {num(setup)}-minute setup: split them along the declared axis "
                        "(more seeds, folds or subject blocks per unit, never by arm) and assess again")
+    elif accounts == 0:
+        result["verdict"] = "single-account"
+        result["recommendedAccounts"] = 1
+        reasons.append("no owner may be a worker of a split campaign; run on one account, in one session")
     else:
         serial = max(slot["finish"] for slot in schedule(units, 1, limit, setup))
         single_state = schedule(units, sessions, limit, setup)
@@ -285,7 +334,7 @@ def cmd_assess(args, root: Path, today: str) -> dict:
                        "savedMinutes": num(saved), "accountsUsed": used,
                        "perAccount": spread, "quotaOk": quota_ok})
         if accounts == 1:
-            reasons.append("one account is available, so there is nothing to spread over")
+            reasons.append("one owner's account is available, so there is nothing to spread over")
         if speedup < MIN_SPEEDUP:
             reasons.append(f"speed-up {num(speedup)} is below the {MIN_SPEEDUP} threshold")
         if saved < MIN_SAVED_MINUTES:
@@ -345,6 +394,36 @@ def record(root: Path, name: str, result: dict, today: str) -> str:
     return path.relative_to(root).as_posix()
 
 
+def team_policy(args, owners: int) -> tuple[list[str], list[str] | None, list[dict]]:
+    """The campaign's services, its Colab tiers and the owners excluded by tier."""
+    services: list[str] = []
+    if args.service is not None:
+        for name in (part.strip().lower() for part in args.service.split(",")):
+            if not name or not all(ch.isalnum() or ch == "-" for ch in name):
+                raise Refusal("bad-argument", f"--service {args.service!r}: a comma list of service names")
+            if name not in services:
+                services.append(name)
+    has_colab = COLAB_SERVICE in services
+    if args.tiers is None:
+        if has_colab:
+            raise Refusal("missing-input", "--tiers is required on colab: one compute tier per Colab owner "
+                                           f"({', '.join(COLAB_TIERS)}), never guessed")
+        return services, None, []
+    if not has_colab:
+        raise Refusal("bad-argument", "--tiers describes Colab owners; pass --service colab")
+    tiers = [part.strip().lower() for part in args.tiers.split(",")]
+    unknown = [tier for tier in tiers if tier not in COLAB_TIERS]
+    if unknown:
+        raise Refusal("bad-argument", f"--tiers {args.tiers!r}: each tier is one of {', '.join(COLAB_TIERS)}")
+    expected_all = len(services) == 1
+    if (expected_all and len(tiers) != owners) or (not expected_all and len(tiers) > owners):
+        raise Refusal("bad-argument", f"--tiers lists {len(tiers)} tier(s) for {owners} owner(s): one per "
+                                      "Colab owner" + ("" if expected_all else ", at most one per owner"))
+    excluded = [{"owner": index, "tier": tier} for index, tier in enumerate(tiers, start=1)
+                if tier not in PAID_COLAB_TIERS]
+    return services, tiers, excluded
+
+
 def cmd_checklist(args, root: Path, today: str) -> dict:
     return {"checklist": [dict(item) for item in CHECKLIST]}
 
@@ -358,10 +437,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="workspace root (default: the current directory)")
     verbs = parser.add_subparsers(dest="verb", required=True, metavar="{" + ",".join(VERBS) + "}")
     assess = verbs.add_parser("assess", help="serial vs parallel makespan, quota, verdict and checklist")
-    for flag in ("--units", "--unit-minutes", "--accounts", "--sessions-per-account",
+    for flag in ("--units", "--unit-minutes", "--owners", "--accounts", "--sessions-per-account",
                  "--session-limit-hours", "--quota-hours", "--setup-minutes", "--units-file",
-                 "--axis", "--quota-source", "--quota-date", "--record"):
+                 "--axis", "--quota-source", "--quota-date", "--record", "--service", "--tiers"):
         assess.add_argument(flag, default=None)
+    assess.add_argument("--stamps-identical", action="store_true",
+                        help="the shards of a mixed-service campaign declare identical environment stamps")
     assess.set_defaults(func=cmd_assess)
     verbs.add_parser("checklist", help="the reproducibility checklist").set_defaults(func=cmd_checklist)
     verbs.add_parser("stamp-fields", help="the fields to declare identicalAcrossShards").set_defaults(

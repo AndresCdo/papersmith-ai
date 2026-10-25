@@ -4020,6 +4020,20 @@ papersmith-ai/
 └── scripts/                    # environment provisioning and harness setup
 ```
 
+
+### `smith team {list,add,remove}` and `smith colab {login,status}`
+
+```bash
+smith team add --owner ana --name "Ana" --kaggle-username ana_k --colab --colab-tier pro --attest
+smith team list
+smith colab login --owner ana
+smith colab status
+```
+
+Several remote accounts are supported as a **team**: one account per person per service. `team add` records an owner in `.papersmith/team.json` (git-ignored, no secrets) and refuses without `--attest`, the person's confirmation that they own and operate exactly one account per listed service, and refuses an account already listed under someone else. Google's Colab FAQ disallows "using multiple accounts to work around access or resource usage restrictions", and on free runtimes without compute units "running distributed computing workers"; Kaggle's terms could not be read, so the same rule applies. A Colab owner on the `free` tier may run interactive or proof-of-concept work in one session, never a worker of a split campaign.
+
+`colab login --owner <slug>` runs the official `google-colab-cli` (pinned `0.6.0`) consent for that owner under a private `HOME` of its own (`~/.config/papersmith/colab/<owner>/`, mode `0700`): the CLI keeps its token under `HOME`, so a private `HOME` is what isolates one person's account from another's, and papersmith never opens a file inside it. `colab status` reports, per owner, the CLI version, whether the sign-in still answers, the tier and whether the owner may take part in a split campaign. `smith init` and `smith upgrade` also register Google's official Colab MCP server (`colab`), which drives a notebook the person has open in the browser.
+
 ### Engineering guarantees
 
 - **AST invariants and boundaries**: equations and sections are tracked by stable

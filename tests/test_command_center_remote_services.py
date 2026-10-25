@@ -87,7 +87,8 @@ class RowTests(_Env):
     def test_every_row_is_present_in_order_with_a_note(self) -> None:
         view = remote_services.remote_services(self.root)
         self.assertEqual([row["id"] for row in view["rows"]],
-                         ["mcp", "cli", "token", "accounts", "rehearsals", "quota"])
+                         ["mcp", "cli", "token", "accounts", "rehearsals", "quota",
+                          "colab_cli", "colab_mcp", "colab_accounts", "colab_eligible", "team"])
         self.assertTrue(view["note"])
         for row in view["rows"]:
             self.assertIn(row["state"], remote_services.STATES)
@@ -206,9 +207,9 @@ class RenderTests(_Env):
         view = experiments_view.get_experiments_view(self.root)
         view["remote_services"]["rows"][0]["detail"] = "<img src=x onerror=alert(1)>"
         out = self.render(view)
-        self.assertIn("Servicios de Kaggle", out)
-        self.assertLess(out.index('id="expMcpActivation"'), out.index("Servicios de Kaggle"))
-        self.assertLess(out.index("Servicios de Kaggle"), out.index("Ayuda: lanzar"))
+        self.assertIn("Servicios remotos (Kaggle y Colab)", out)
+        self.assertLess(out.index('id="expMcpActivation"'), out.index("Servicios remotos (Kaggle y Colab)"))
+        self.assertLess(out.index("Servicios remotos (Kaggle y Colab)"), out.index("Ayuda: lanzar"))
         self.assertIn('data-exp-cli="pipx install kaggle"', out)
         self.assertIn('data-exp-cli="/kaggle-accounts validate"', out)
         self.assertIn('data-exp-cli="smith mcp kaggle status --verify"', out)

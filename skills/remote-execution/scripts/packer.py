@@ -490,7 +490,18 @@ def distribute(
     requested = len(units)
     granted_plans: list[Plan] = []
     skipped: list[Skip] = []
+    # A campaign is placed only on workers the adapter says may take part
+    # in one. `campaign_refusal` is an optional adapter hook (a worker on a
+    # tier whose terms forbid distributed workers, say): an ineligible
+    # worker is skipped by name, before any live probe, so the units go to
+    # the eligible ones instead of the whole campaign being refused later.
+    campaign_refusal = getattr(adapter, "campaign_refusal", None)
     for worker in workers:
+        if callable(campaign_refusal):
+            refusal = campaign_refusal(worker.id)
+            if refusal:
+                skipped.append(Skip(worker=worker.id, reason=f"not a campaign worker: {refusal}"))
+                continue
         candidate, reason = _triage(
             adapter=adapter,
             worker=worker,

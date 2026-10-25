@@ -55,7 +55,8 @@ MIN_SIZE, MAX_COLS, MAX_ROWS = 2, 500, 200
 #: Quick commands the console offers per agent kind: the smith CLI in a shell,
 #: the projected slash commands inside an agent.
 SHELL_QUICK = ("smith status", "smith atlas build", "smith audit",
-               "smith mcp kaggle activate", "smith mcp kaggle status")
+               "smith mcp kaggle activate", "smith mcp kaggle status",
+               "smith colab status", "smith team list")
 
 #: The remote MCP token `smith mcp kaggle activate` stores once per user,
 #: outside every workspace, where the service's own client keeps it
@@ -156,6 +157,19 @@ REMOTE_MCP_FILES = ((".mcp.json", "mcpServers"), ("opencode.json", "mcp"),
                     (".pi/mcp.json", "mcpServers"), (".agents/mcp_config.json", "mcpServers"))
 
 
+def registered_mcp_files(root: Path, server: str) -> list[str]:
+    """The workspace MCP files (of :data:`REMOTE_MCP_FILES`) that name ``server``."""
+    registered = []
+    for relpath, key in REMOTE_MCP_FILES:
+        try:
+            servers = json.loads((Path(root) / relpath).read_text(encoding="utf-8")).get(key)
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(servers, dict) and server in servers:
+            registered.append(relpath)
+    return registered
+
+
 def remote_mcp_status(root: Path) -> dict[str, Any]:
     """Whether the remote MCP is activated, from where, and which workspace
     files register it. Never carries the token itself."""
@@ -168,18 +182,43 @@ def remote_mcp_status(root: Path) -> dict[str, Any]:
         source = None
         states = [_private_file(candidate) for candidate in remote_mcp_token_candidates()]
         problem = "insecure" if False in states else "empty" if True in states else "absent"
-    registered = []
-    for relpath, key in REMOTE_MCP_FILES:
-        try:
-            servers = json.loads((Path(root) / relpath).read_text(encoding="utf-8")).get(key)
-        except (OSError, ValueError, AttributeError):
-            continue
-        if isinstance(servers, dict) and REMOTE_MCP_SERVER in servers:
-            registered.append(relpath)
+    registered = registered_mcp_files(root, REMOTE_MCP_SERVER)
     return {"activated": source is not None, "source": source, "problem": problem,
             "token_path": str(path), "env": REMOTE_MCP_TOKEN_ENV, "registered": registered,
             "activate": "smith mcp kaggle activate", "status": "smith mcp kaggle status",
             "token_page": "https://www.kaggle.com/settings", "environment": remote_mcp_environment()}
+
+
+#: The second remote GPU service. Its official MCP (`googlecolab/colab-mcp`)
+#: is interactive: it drives a notebook the person keeps open in a browser.
+#: Headless runs go through the official `colab` CLI, installed with the exact
+#: pin the remote-execution skill documents (a test holds the two equal).
+COLAB_MCP_SERVER = "colab"
+COLAB_CLI_INSTALL = 'uv tool install --force --python 3.14 "google-colab-cli==0.6.0" --with "jupyter-kernel-client<1"'
+COLAB_PAID_TIERS = ("pro", "payg", "enterprise")
+COLAB_FAQ_URL = "https://research.google.com/colaboratory/faq.html"
+#: Commands the Colab box offers. Typed by the dashboard into the CLI
+#: assistant, so they are constants: `<slug>`, `<Nombre>` and `<tier>` are
+#: literal placeholders the person replaces in the terminal before running.
+COLAB_COMMANDS = {
+    "install": COLAB_CLI_INSTALL,
+    "team_add": 'smith team add --owner <slug> --name "<Nombre>" --colab --colab-tier <tier> --attest',
+    "login": "smith colab login --owner <slug>",
+    "status": "smith colab status",
+    "team_list": "smith team list",
+}
+
+
+def colab_mcp_status(root: Path) -> dict[str, Any]:
+    """Which workspace files register the Colab MCP, the box's constant
+    commands and this server's environment. Reads no Colab state."""
+    try:
+        registered = registered_mcp_files(root, COLAB_MCP_SERVER)
+    except Exception:  # noqa: BLE001 - the box still renders its steps
+        registered = []
+    return {"server": COLAB_MCP_SERVER, "registered": registered, "commands": dict(COLAB_COMMANDS),
+            "paid_tiers": list(COLAB_PAID_TIERS), "faq": COLAB_FAQ_URL,
+            "environment": remote_mcp_environment()}
 
 
 class TerminalError(Exception):
