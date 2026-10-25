@@ -9200,6 +9200,12 @@ FORGE_FLOOR_SURFACE_ADMISSIONS: dict[str, dict[str, str]] = {
                   "skill's directory name, the slash command the operator types "
                   "when a remote run cannot authenticate",
     },
+    "_core/command_center/static/experiments-panel.js": {
+        "kaggle": "the experiments panel's help box explains how to launch and "
+                  "monitor runs on that one hosted service through its CLI, its "
+                  "MCP server and the `kaggle-accounts` skill; the service is "
+                  "the box's subject, not a loan from any research project",
+    },
     "_core/command_center/server.py": {
         "kaggle": "one detail line of the experiments phase naming the same "
                   "`kaggle-accounts` skill the phase panel offers",

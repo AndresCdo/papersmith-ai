@@ -18,6 +18,14 @@
         "banco-lia-mcp"
       ],
       "enabled": true
+    },
+    "kaggle": {
+      "type": "remote",
+      "url": "https://www.kaggle.com/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:KAGGLE_API_TOKEN}"
+      },
+      "enabled": true
     }
   }
 }

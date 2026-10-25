@@ -157,6 +157,7 @@ class UpgradeTests(unittest.TestCase):
         for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
             assert relpath in result["changed_files"], relpath
             assert "banco-lia" in json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert "kaggle" in json.loads((workspace / relpath).read_text())["mcpServers"]
         result = upgrade_module.upgrade(workspace)
         for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
             assert relpath not in result["changed_files"], relpath

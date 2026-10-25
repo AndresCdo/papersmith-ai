@@ -350,9 +350,22 @@ BANCO_LIA_COMMAND = "uvx"
 BANCO_LIA_ARGS = ("--from", "git+https://github.com/LIAUNAL/bancoProyectosPapersLIA",
                   "banco-lia-mcp")
 
-#: Each harness's project MCP file and the entry it takes for the bank. These
-#: files belong to the workspace: ``init`` and ``upgrade`` add or refresh only
-#: the :data:`BANCO_LIA_SERVER` entry and keep every other server.
+#: Kaggle's official remote MCP server (https://www.kaggle.com/docs/mcp): datasets,
+#: notebooks (``save_notebook`` takes ``enableGpu`` and ``machineShape``, then
+#: ``get_notebook_session_status`` and ``download_notebook_output``) and the
+#: weekly accelerator quota. Public tools answer without a token; account tools
+#: read a ``KGAT_`` token from :data:`KAGGLE_TOKEN_ENV`, which no file ever holds.
+#: Claude and OpenCode speak streamable HTTP natively; Pi and Antigravity reach
+#: it through the pinned ``mcp-remote`` stdio bridge, which expands the variable.
+KAGGLE_MCP_SERVER = "kaggle"
+KAGGLE_MCP_URL = "https://www.kaggle.com/mcp"
+KAGGLE_TOKEN_ENV = "KAGGLE_API_TOKEN"
+MCP_REMOTE_PACKAGE = "mcp-remote@0.14.3"
+
+#: Each harness's project MCP file and the entries it takes. These files belong
+#: to the workspace: ``init`` and ``upgrade`` add or refresh only the
+#: :data:`BANCO_LIA_SERVER` and :data:`KAGGLE_MCP_SERVER` entries and keep every
+#: other server.
 MCP_CONFIG_FILES = {
     "claude": ".mcp.json",
     "pi": ".pi/mcp.json",
@@ -367,9 +380,23 @@ def _banco_lia_entry(tool: str) -> dict[str, Any]:
     return entry
 
 
+def _kaggle_entry(tool: str) -> dict[str, Any]:
+    if tool == "claude":
+        # The `:-` default keeps `.mcp.json` parseable when the token is unset.
+        return {"type": "http", "url": KAGGLE_MCP_URL,
+                "headers": {"Authorization": f"Bearer ${{{KAGGLE_TOKEN_ENV}:-}}"}}
+    return {"command": "npx",
+            "args": ["-y", MCP_REMOTE_PACKAGE, KAGGLE_MCP_URL,
+                     "--header", f"Authorization:Bearer ${{{KAGGLE_TOKEN_ENV}}}"]}
+
+
+def _mcp_entries(tool: str) -> dict[str, dict[str, Any]]:
+    return {BANCO_LIA_SERVER: _banco_lia_entry(tool), KAGGLE_MCP_SERVER: _kaggle_entry(tool)}
+
+
 def ensure_mcp_servers(workspace: Path, tools: Sequence[str], *,
                        warnings: list[str] | None = None) -> list[str]:
-    """Register :data:`BANCO_LIA_SERVER` in each declared harness's MCP file.
+    """Register the :func:`_mcp_entries` servers in each declared harness's MCP file.
 
     Returns the paths written. A missing file is created; an existing one keeps
     every other server and key. A file that is not a JSON object, or whose
@@ -390,13 +417,14 @@ def ensure_mcp_servers(workspace: Path, tools: Sequence[str], *,
             if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
                 if warnings is not None:
                     warnings.append(f"{relpath} is not a JSON object with an `mcpServers` object; "
-                                    f"add the {BANCO_LIA_SERVER} server by hand")
+                                    f"add the {BANCO_LIA_SERVER} and {KAGGLE_MCP_SERVER} "
+                                    "servers by hand")
                 continue
         servers = data.setdefault("mcpServers", {})
-        entry = _banco_lia_entry(tool)
-        if servers.get(BANCO_LIA_SERVER) == entry:
+        entries = _mcp_entries(tool)
+        if all(servers.get(name) == entry for name, entry in entries.items()):
             continue
-        servers[BANCO_LIA_SERVER] = entry
+        servers.update(entries)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         written.append(relpath)

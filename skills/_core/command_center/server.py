@@ -36,7 +36,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, atlas_build, decisions, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
+from . import atlas, atlas_build, decisions, experiments_view, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state, memo_by_file
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -1210,6 +1210,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             media_type = "application/pdf"
         elif ext in (".png", ".jpg", ".jpeg"):
             media_type = f"image/{ext.lstrip('.')}"
+        elif ext == ".svg":
+            # An SVG opened directly must not run its scripts on this origin.
+            return Response(target.read_bytes(), media_type="image/svg+xml",
+                            headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                                     "X-Content-Type-Options": "nosniff"})
         return Response(target.read_bytes(), media_type=media_type)
 
     @app.get("/api/section-translation")
@@ -1285,6 +1290,13 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
     def api_model_math() -> JSONResponse:
         # The math panel: the paper's own LaTeX and its novelty card (read-only).
         return JSONResponse(math_view.build(root_path), headers=dict(_PAPER_HEADERS))
+
+    @app.get("/api/experiments")
+    def api_experiments() -> JSONResponse:
+        # The experiments tab: protocol, products, convergence, figures,
+        # tables, significance and remote runs (read-only, bounded, contained).
+        return JSONResponse(experiments_view.get_experiments_view(root_path),
+                            headers=dict(_PAPER_HEADERS))
 
     @app.get("/api/model")
     def api_model() -> JSONResponse:

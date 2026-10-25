@@ -648,6 +648,26 @@ class InitTests(unittest.TestCase):
         for relpath in (".pi/mcp.json", ".agents/mcp_config.json", "opencode.json"):
             assert not (other / relpath).exists(), relpath
 
+    def test_init_registers_the_kaggle_mcp_for_every_declared_harness(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = tmp_path / "paper"
+        init_module.initialize(workspace, run_npm=False, run_env=False)
+        claude = json.loads((workspace / ".mcp.json").read_text())
+        assert claude["mcpServers"]["kaggle"] == {
+            "type": "http", "url": "https://www.kaggle.com/mcp",
+            "headers": {"Authorization": "Bearer ${KAGGLE_API_TOKEN:-}"}}
+        bridge = ["-y", "mcp-remote@0.14.3", "https://www.kaggle.com/mcp",
+                  "--header", "Authorization:Bearer ${KAGGLE_API_TOKEN}"]
+        for relpath in (".pi/mcp.json", ".agents/mcp_config.json"):
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert servers["kaggle"] == {"command": "npx", "args": bridge}, relpath
+            assert "banco-lia" in servers, relpath
+        opencode = json.loads((workspace / "opencode.json").read_text())
+        assert opencode["mcp"]["kaggle"] == {
+            "type": "remote", "url": "https://www.kaggle.com/mcp",
+            "headers": {"Authorization": "Bearer {env:KAGGLE_API_TOKEN}"}, "enabled": True}
+        assert "banco-lia" in opencode["mcp"]
+
     def test_import_keeps_the_repository_mcp_servers_and_adds_banco_lia(self) -> None:
         workspace = self.new_tmp() / "repo"
         workspace.mkdir()

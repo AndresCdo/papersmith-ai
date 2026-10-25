@@ -11,6 +11,54 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **Kaggle's official MCP server in every workspace.** `smith init` and
+  `smith upgrade` register `kaggle` (https://www.kaggle.com/mcp) beside
+  `banco-lia`: streamable HTTP in `.mcp.json` and `opencode.json`, the pinned
+  `mcp-remote@0.14.3` stdio bridge in `.pi/mcp.json` and
+  `.agents/mcp_config.json`. Public tools answer without a token; account
+  tools (`save_notebook` with `enableGpu`/`machineShape`, session status,
+  outputs, accelerator quota) read a `KGAT_` token from `KAGGLE_API_TOKEN`,
+  which no file holds. Other servers in those files are kept.
+- **Significance tests chosen by experiment type.** `experimental-deliberation`
+  gains a "Choosing the significance test by experiment type" section: a table
+  mapping each design (two models on shared folds, three or more variants, one
+  fixed test set, an ordered factor, an exponential decay, repeated measures
+  per subject) to its recommended test, plus multiple-comparison corrections,
+  effect sizes and the optional Bayesian signed-rank with ROPE. Every
+  experiment now names its test, correction, effect size and confidence
+  interval, and declares convergence curves and a significance table among its
+  expected outputs. It also states that a paired Wilcoxon over n = 5 folds
+  cannot reach p < 0.05 (smallest two-sided exact p is 0.0625). The
+  `experimental-validation` agent suggests a test per experiment type, backed
+  by a source it actually searched.
+- **`experiments-reviewer` agent.** A read-only review stretch of
+  `experimental-implementation`, between instrumentation and the rehearsal:
+  code quality, optimisation (batched simulation, exact-gradient simulators,
+  data caching, mixed precision), remote GPU use (whether a job that requests
+  a GPU actually runs on CUDA, and when CPU is faster), and whether the
+  protocol's statistical tests are implemented and fit the design. It returns
+  findings and never repairs.
+- **Results layout documented.** `experimental-implementation` states where
+  measurements land so the dashboard can show them: `Results/history*`,
+  `Results/figures/`, `Results/tables/`, `Results/summary.json` and
+  `Results/significance*.json`, with the significance record's keys.
+- **Experiments tab in the command center.** A new "Experimentos" tab, placed
+  before "Secciones del Paper", reads `GET /api/experiments`: proof-of-concept
+  products (`AGREED.md`) and full-experiment products
+  (`Experimental_AGREED.md`) with convergence charts that are always shown
+  (empty state when no history exists), figures, tables, the significance
+  table, artifacts pinned in `Results/panel.json`, run status folded from each
+  product's remote ledger, and the expected reports the latest experiments
+  revision declares. A help box explains how to launch and monitor proof of
+  concept and full experiments remotely (papersmith CLI, the service's own CLI
+  and its MCP server), GPU use, optimisation, and which significance test to
+  report. `/api/artifact` now serves `.svg` as `image/svg+xml` under a
+  sandboxing Content-Security-Policy.
+
 ## 0.20.0
 
 ### Added

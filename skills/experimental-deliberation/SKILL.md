@@ -104,7 +104,7 @@ For the rest of this deliberation:
 - **Cost is part of the design.** An experiment whose estimated cost nobody wrote down is an experiment nobody decided to run. Every experiment carries a priority (core / ablation / optional) and an estimated cost.
 - **What was left out is part of the argument.** A plan that names no excluded alternative reads as a plan that considered none.
 - **Open the deliberation from the dataset, not the protocol.** What the plan runs on bounds everything decided after it — which metrics make sense, which baselines are comparable, which split is legitimate. v1 injects no skeleton for this: if the dataset is not already named in the idea text or a required source, `CREATE_INITIAL_REVISION` cannot compose a document that will pass, and discovering that after drafting wastes the whole revision.
-- **Always propose and present the validation scheme — never merely accept one the user names unexamined.** The seeds, repetitions and significance test the area expects are exactly what [External validation](#external-validation-before-any-draft) exists to search for. A scheme accepted unexamined is a scheme a reviewer will reject, and — same as the dataset — nothing composes a placeholder for you: a scheme decided after the fact never makes it into v1.
+- **Always propose and present the validation scheme — never merely accept one the user names unexamined.** The seeds, repetitions and significance test the area expects are exactly what [External validation](#external-validation-before-any-draft) exists to search for. A scheme accepted unexamined is a scheme a reviewer will reject, and — same as the dataset — nothing composes a placeholder for you: a scheme decided after the fact never makes it into v1. Propose the significance test from the experiment's own type, using [Choosing the significance test by experiment type](#choosing-the-significance-test-by-experiment-type), and refute a test that does not fit the design.
 
 These criteria are not optional style advice — apply them to every proposed change before it becomes a `resolvedDecisions` entry.
 
@@ -145,13 +145,37 @@ Before writing any experiment, search the web for:
 
 1. The area's **standard evaluation protocol** for this task and dataset.
 2. The **accepted metrics**, and how they are reported.
-3. **Seeds and repetitions** the area expects, and the **significance test** it uses.
+3. **Seeds and repetitions** the area expects, and the **significance test** it uses — checked against the experiment type in [Choosing the significance test by experiment type](#choosing-the-significance-test-by-experiment-type), which says what to propose when the area uses none or uses one the design cannot support.
 4. The **current baselines** for that task on that dataset.
 5. For each baseline: its **repository with a real URL**, its **venue** and its **year**.
 
 **Hard rule: anything that did not come out of a search in the current run is marked `[pending-verification]`.** Never invent a repository. Never infer a URL from a paper title, an author name, or a naming convention. A plausible URL is worse than an absent one, because it looks checked.
 
 If a later scope change invalidates what you searched — a different dataset, a different task, a new metric — **search again**. The searched evidence belongs to the scope it was searched under.
+
+## Choosing the significance test by experiment type
+
+A comparison with no declared test is a description, not evidence. **Every experiment's protocol names, before anything runs: its significance test, its multiple-comparison correction, its effect size and its confidence interval** — and the level `alpha` they are judged at. Choose them from the experiment's own type, below, and say in the document why the chosen test fits the design; a different test is legitimate when the area's benchmark uses one, and is justified the same way as any other deviation.
+
+| Experiment type | Recommended test | Why |
+| --- | --- | --- |
+| Two models on the same k-fold cross-validation splits | Corrected resampled t-test (Nadeau & Bengio, 2003) or the 5x2cv paired t-test (Dietterich, 1998) | Folds share training data, so a plain paired t-test underestimates the variance and inflates false positives. |
+| Two models, paired Wilcoxon signed-rank | Only with enough paired units | With n = 5 paired folds the smallest attainable two-sided exact Wilcoxon p is 0.0625, so p < 0.05 is unreachable whatever the data. Pool fold × seed pairs only together with the variance correction above, or test at the subject level. |
+| Three or more models or variants (ablations) over folds or datasets | Friedman test, then Nemenyi or Holm post-hoc, reported as a critical-difference diagram (Demšar, 2006) | Ranks per fold or dataset avoid assuming commensurable scores; pairwise t-tests without a correction inflate the family-wise error. |
+| Two classifiers on one fixed test set | McNemar's test on the paired predictions | The same samples are classified by both models; only the discordant pairs carry information. |
+| Two AUC values on one fixed test set | DeLong test | AUCs measured on the same samples are correlated; DeLong accounts for that covariance. |
+| Any metric on one fixed test set | Paired bootstrap confidence interval of the difference | Makes no distributional assumption and gives the interval directly. |
+| An ordered factor (depth, number of qubits, dose, ...) | Page's trend test or Jonckheere–Terpstra | The hypothesis is a monotone trend, which a test of "any difference" spends power ignoring. |
+| An exponential decay along a factor (for example gradient variance against circuit size, a barren-plateau claim) | Regression of log-variance on the factor, reporting the slope and its confidence interval | The claim is about the decay rate, so the slope is the quantity to estimate. |
+| Repeated measures per subject (for example a saliency value per region per subject) | Aggregate per subject first, then Wilcoxon signed-rank or a permutation test; a mixed-effects model is the alternative | Treating every measurement as independent is pseudoreplication: the unit of replication is the subject. |
+
+Across every type:
+
+- **Multiple comparisons.** Holm–Bonferroni for confirmatory families; Benjamini–Hochberg when the family is declared exploratory. Report the adjusted p-value beside the raw one.
+- **Effect sizes.** Cliff's delta or the rank-biserial correlation beside a rank test; Cohen's d beside a t-test. A p-value with no effect size says nothing about how large the difference is.
+- **Optional complement.** The Bayesian signed-rank test with a region of practical equivalence (ROPE) (Benavoli et al., 2017) states how probable it is that two models are practically equivalent, which a frequentist test cannot.
+
+**Two artifacts are declared as expected outputs of every experiment that trains or optimises anything:** the convergence curves — the loss or metric per epoch or step, as mean ± sd across seeds — and a significance table whose columns name the comparison, the test, the statistic, the raw and adjusted p-values, the correction, the effect size and its confidence interval, `n` and `alpha`. Both follow [the artifact](#the-artifact)'s rule for every expected report: complete headers and empty cells, never a number before the run. The citations above are the tutor's starting point, not verified evidence: a citation that reaches the document went through [External validation](#external-validation-before-any-draft) and carries its tag like any other URL.
 
 ## The artifact
 

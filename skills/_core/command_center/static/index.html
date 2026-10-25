@@ -18,6 +18,7 @@
   <script src="./vendor/katex/katex.min.js"></script>
   <script src="./math-panel.js?v=0.19.6"></script>
   <script src="./model-panel.js?v=0.19.6"></script>
+  <script src="./experiments-panel.js?v=0.20.0"></script>
   <script src="./phase-console.js?v=0.19.1"></script>
   <script src="./phase-run.js?v=0.18.8"></script>
   <style>
@@ -2550,6 +2551,41 @@
     .run-panel .run-tracker__foot { justify-content: flex-start; }
     .run-panel__close { position: absolute; top: 0.55rem; right: 0.6rem; background: transparent; border: 0; color: var(--text-muted, var(--text)); font-size: 1rem; cursor: pointer; }
     .btn--danger { border-color: var(--bad, #f87171); color: var(--bad, #f87171); }
+    /* Experiments tab */
+    #pane-experiments .exp-intro { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem; }
+    #pane-experiments .exp-empty { font-size: 0.82rem; color: var(--text-dim); font-style: italic; padding: 0.5rem 0; }
+    #pane-experiments .exp-muted { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.72rem; }
+    #pane-experiments .exp-h4 { font-size: 0.85rem; font-weight: 700; margin: 1rem 0 0.5rem; color: var(--text); }
+    #pane-experiments .exp-file { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin: 0.5rem 0 0.25rem; }
+    #pane-experiments .exp-product { border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; background: var(--surface-2); }
+    #pane-experiments .exp-product__header { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; align-items: flex-start; }
+    #pane-experiments .exp-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+    #pane-experiments .exp-chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.75rem; }
+    #pane-experiments .exp-chart { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 0.5rem; }
+    #pane-experiments .exp-chart figcaption { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; margin-bottom: 0.25rem; gap: 0.5rem; }
+    #pane-experiments .exp-chart__svg { width: 100%; height: auto; display: block; }
+    #pane-experiments .exp-axis { color: var(--text-muted); font-size: 10px; }
+    #pane-experiments .exp-axis line { stroke: currentColor; stroke-width: 1; }
+    #pane-experiments .exp-axis text { fill: currentColor; }
+    #pane-experiments .exp-axis line.exp-grid { stroke: var(--border-subtle); }
+    #pane-experiments .exp-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; font-size: 0.72rem; color: var(--text-muted); }
+    #pane-experiments .exp-legend__item i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+    #pane-experiments .exp-log-toggle { font-size: 0.7rem; padding: 0.15rem 0.5rem; }
+    #pane-experiments .exp-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
+    #pane-experiments .exp-figure { display: flex; flex-direction: column; gap: 0.3rem; text-decoration: none; color: var(--text-muted); font-size: 0.72rem; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 0.4rem; background: var(--surface); }
+    #pane-experiments .exp-figure img { width: 100%; max-height: 180px; object-fit: contain; background: #fff; border-radius: 4px; }
+    #pane-experiments .exp-figure--file { flex-direction: row; align-items: center; }
+    #pane-experiments .exp-table td.exp-pending { color: var(--text-dim); font-style: italic; }
+    #pane-experiments .exp-table tr.exp-sig td { background: var(--ok-dim); }
+    #pane-experiments .exp-help summary, #pane-experiments .exp-protocol-item summary, #pane-experiments .exp-runs summary, #pane-experiments .exp-warnings summary { cursor: pointer; }
+    #pane-experiments .exp-help h4 { margin-top: 1rem; }
+    #pane-experiments .exp-help ul, #pane-experiments .exp-help ol { padding-left: 1.25rem; font-size: 0.82rem; line-height: 1.6; color: var(--text); }
+    #pane-experiments .exp-help pre { background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 0.6rem; font-size: 0.75rem; overflow-x: auto; }
+    #pane-experiments .exp-protocol-item { border-top: 1px solid var(--border-subtle); padding: 0.6rem 0; font-size: 0.82rem; }
+    #pane-experiments .exp-protocol-item p { margin: 0.35rem 0; color: var(--text-muted); }
+    #pane-experiments .exp-runs ul, #pane-experiments .exp-warnings ul { list-style: none; font-size: 0.75rem; padding: 0.25rem 0; }
+    #pane-experiments .exp-reason { color: var(--bad); font-size: 0.72rem; }
+    #pane-experiments .exp-warnings { font-size: 0.75rem; color: var(--warn); margin-top: 0.75rem; }
   </style>
 </head>
 <body>
@@ -2593,6 +2629,7 @@
     <button class="tab-nav__btn active" onclick="navigateTab('flow')">Flujo Archify</button>
     <button class="tab-nav__btn" onclick="navigateTab('pipeline')">Pipeline y Avance</button>
     <button class="tab-nav__btn" onclick="navigateTab('modelo')">🧠 Mapa Conceptual &amp; Modelo</button>
+    <button class="tab-nav__btn" onclick="navigateTab('experiments')">🧪 Experimentos</button>
     <button class="tab-nav__btn" onclick="navigateTab('sections')">Secciones del Paper</button>
     <button class="tab-nav__btn" onclick="navigateTab('atlas')">Atlas de Grafos</button>
     <button class="tab-nav__btn" onclick="navigateTab('preview')">Previsualización PDF</button>
@@ -2846,6 +2883,18 @@
           <div id="modelPocGrid" class="poc-grid"></div>
         </div>
       </div>
+    </div>
+
+    <!-- TAB: EXPERIMENTS (proof of concept + full experiments) -->
+    <div id="pane-experiments" class="tab-pane">
+      <div class="panel">
+        <div class="panel__header">
+          <div class="panel__title">Experimentos: prueba de concepto y experimentos completos</div>
+          <button type="button" class="btn" onclick="window.refreshExperimentsPanel?.()">Actualizar</button>
+        </div>
+        <p class="exp-intro">Convergencia, figuras, tablas, significancia estadística y ejecuciones remotas leídas de <code>implementations/&lt;repo&gt;/&lt;Nombre&gt;/Results/</code>, junto al protocolo vigente de <code>experiments/</code>.</p>
+      </div>
+      <div id="experimentsRoot"><p class="exp-empty">Cargando experimentos…</p></div>
     </div>
 
     <!-- TAB 3: SECTIONS -->
@@ -3492,6 +3541,9 @@
       // The atlas stops drawing while its tab is not shown.
       if (graphFramePath() !== 'blank') {
         postToGraph({ type: 'atlas-command', command: tabId === 'atlas' ? 'resume' : 'pause' });
+      }
+      if (tabId === 'experiments') {
+        window.refreshExperimentsPanel?.();
       }
       if (tabId === 'modelo') {
         refreshModelData();
@@ -6207,7 +6259,7 @@
         // The gates tab merged into the pipeline; old links still land on it.
         navigateTab('pipeline');
         document.getElementById('gatesPanel')?.scrollIntoView();
-      } else if (hash && ['pipeline', 'flow', 'modelo', 'sections', 'telemetria', 'atlas', 'preview', 'artifacts'].includes(hash)) {
+      } else if (hash && ['pipeline', 'flow', 'modelo', 'experiments', 'sections', 'telemetria', 'atlas', 'preview', 'artifacts'].includes(hash)) {
         navigateTab(hash);
       }
       loadStatus();
