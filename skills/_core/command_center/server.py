@@ -22,6 +22,7 @@ import contextlib
 import hashlib
 import html
 import json
+import os
 import platform
 import re
 import shutil
