@@ -37,10 +37,11 @@ from papersmith.kit import resolve_and_validate
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The thirteen command-bearing skills, in the deterministic order
+#: The fourteen command-bearing skills, in the deterministic order
 #: ``collect_commands`` sorts them into. Pinned literally so a new or renamed
 #: top-level skill has to be acknowledged here.
 COMMAND_NAMES = (
+    "datasets",
     "experimental-deliberation",
     "experimental-implementation",
     "figure-review",
@@ -56,13 +57,15 @@ COMMAND_NAMES = (
     "upgrade-project",
 )
 
-#: The twenty-one agent definitions, in the deterministic order
+#: The twenty-four agent definitions, in the deterministic order
 #: ``collect_pi_agents`` sorts them into. Pinned literally so a new or renamed
 #: agent has to be acknowledged here -- and in the `.pi/agents/` projection
 #: the Pi harness discovers.
 AGENT_NAMES = (
     "audit-report",
     "contract-auditor",
+    "dataset-curator",
+    "dataset-scout",
     "deliberation-publish",
     "diagram-author",
     "experimental-publish",
@@ -77,6 +80,7 @@ AGENT_NAMES = (
     "math-tutor",
     "novelty-screener",
     "paper-ingestion",
+    "paper-replicator",
     "redactor",
     "section-grounding-auditor",
     "sota-grapher",
@@ -179,7 +183,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [agent["name"] for agent in collect_pi_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         pi = render_files(workspace, tools=("pi",))
-        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 21
+        assert sum(1 for path in pi if path.startswith(".pi/agents/")) == 24
         assert ".pi/agents/sota-scout.md" in pi
         assert not any(
             path.startswith(".pi/agents/")
@@ -194,7 +198,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [a["name"] for a in collect_opencode_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         opencode = render_files(workspace, tools=("opencode",))
-        assert sum(1 for path in opencode if path.startswith(".opencode/agents/")) == 21
+        assert sum(1 for path in opencode if path.startswith(".opencode/agents/")) == 24
         assert ".opencode/agents/sota-scout.md" in opencode
         for tool in ("claude", "pi", "antigravity"):
             assert not any(
@@ -283,7 +287,7 @@ class GeneratorsTests(unittest.TestCase):
         (agents / "dir.md").mkdir()
         sink: list[str] = []
         names = [a["name"] for a in collect_opencode_agents(workspace, warnings=sink)]
-        assert len(names) == 21
+        assert len(names) == 24
         for stem in ("broken", "unclosed", "nameless", "undescribed", "unsafe", "binary", "dir"):
             assert any(f"'{stem}'" in w for w in sink), (stem, sink)
 
@@ -320,7 +324,7 @@ class GeneratorsTests(unittest.TestCase):
         workspace = _workspace(self.new_tmp())
         assert [a["name"] for a in collect_antigravity_agents(workspace, warnings=[])] == list(AGENT_NAMES)
         rendered = render_files(workspace, tools=("antigravity",))
-        assert sum(1 for path in rendered if path.startswith(".agents/agents/")) == 21
+        assert sum(1 for path in rendered if path.startswith(".agents/agents/")) == 24
         assert ".agents/agents/sota-scout.md" in rendered
         for tool in ("claude", "pi", "opencode"):
             assert not any(
@@ -407,7 +411,7 @@ class GeneratorsTests(unittest.TestCase):
         (agents / "dir.md").mkdir()
         sink: list[str] = []
         names = [a["name"] for a in collect_antigravity_agents(workspace, warnings=sink)]
-        assert len(names) == 21
+        assert len(names) == 24
         for stem in ("broken", "unclosed", "nameless", "undescribed", "unsafe", "binary", "dir"):
             assert any(f"'{stem}'" in w for w in sink), (stem, sink)
 
@@ -479,7 +483,7 @@ class GeneratorsTests(unittest.TestCase):
         names = [agent["name"] for agent in collect_pi_agents(workspace, warnings=sink)]
         assert "broken" not in names
         assert any("broken" in warning for warning in sink), sink
-        assert len(names) == 21
+        assert len(names) == 24
 
     def test_unsupported_runtime_generator_still_raises(self) -> None:
         workspace = _workspace(self.new_tmp())

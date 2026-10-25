@@ -227,6 +227,66 @@ class ViewTests(unittest.TestCase):
         self.assertIn("remote_accounts", view)
 
 
+REGISTRY = [
+    {"slug": "toy-eeg", "role": "toy", "title": "Toy eeg set (toy-eeg)",
+     "source": {"kind": "synthetic", "url": "", "retrieved": "2026-10-24"},
+     "license": {"source_name": "generated", "decision": "allowed", "host_license": "CC0-1.0"},
+     "files": ["datasets/toy-eeg/toy-eeg.csv"], "qc": {"status": "pass", "report": "datasets/toy-eeg/qc.json"},
+     "preparation": {"manifest": "datasets/toy-eeg/PREPARATION.md", "version": 2},
+     "remote": {"ref": "someone/toy-eeg", "visibility": "private", "version": 1}},
+    {"slug": "bci-iv", "role": "full", "title": "<script>alert(1)</script>",
+     "source": {"kind": "external", "url": "https://example.org", "retrieved": "2026-10-24"},
+     "license": {"source_name": "CC BY-NC 4.0", "decision": "refused", "host_license": "CC-BY-NC-4.0"},
+     "files": [], "qc": None, "preparation": None, "remote": None},
+]
+
+
+class DatasetsViewTests(unittest.TestCase):
+    def setUp(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        self.root = Path(holder.name).resolve()
+
+    def test_registry_summary_is_read(self) -> None:
+        _write(self.root / "datasets" / "registry.json", json.dumps(REGISTRY))
+        _write(self.root / "datasets" / "search-2026-10-24.json", "{}")
+        view = experiments_view.get_experiments_view(self.root)
+        datasets = view["datasets"]
+        self.assertEqual(datasets["registry"], "datasets/registry.json")
+        self.assertEqual(datasets["searches"], ["datasets/search-2026-10-24.json"])
+        items = {item["slug"]: item for item in datasets["items"]}
+        self.assertEqual(list(items), ["bci-iv", "toy-eeg"])
+        toy = items["toy-eeg"]
+        self.assertEqual(toy, {"slug": "toy-eeg", "role": "toy", "title": "Toy eeg set (toy-eeg)",
+                               "license": "allowed", "host_license": "CC0-1.0", "qc": "pass",
+                               "prepared": True, "preparation_version": 2,
+                               "remote_ref": "someone/toy-eeg", "visibility": "private",
+                               "remote_version": 1})
+        self.assertIsNone(items["bci-iv"]["qc"])
+        self.assertIsNone(items["bci-iv"]["remote_ref"])
+
+    def test_absent_or_malformed_registry_never_raises(self) -> None:
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual(view["datasets"]["items"], [])
+        self.assertIsNone(view["datasets"]["registry"])
+        _write(self.root / "datasets" / "registry.json", "{not json")
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual(view["datasets"]["items"], [])
+        self.assertTrue(any("registry.json" in w for w in view["warnings"]))
+        _write(self.root / "datasets" / "registry.json", json.dumps([{"no": "slug"}, "junk", REGISTRY[0]]))
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual([item["slug"] for item in view["datasets"]["items"]], ["toy-eeg"])
+
+    def test_a_symlinked_registry_escaping_the_workspace_is_not_read(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        secret = _write(Path(outside.name) / "registry.json", json.dumps(REGISTRY))
+        (self.root / "datasets").mkdir()
+        os.symlink(secret, self.root / "datasets" / "registry.json")
+        view = experiments_view.get_experiments_view(self.root)
+        self.assertEqual(view["datasets"]["items"], [])
+
+
 class RouteTests(unittest.TestCase):
     def test_route_returns_the_view_and_artifact_serves_svg_and_csv(self) -> None:
         ws = Workspace(self)
@@ -286,6 +346,28 @@ class RenderTests(unittest.TestCase):
         self.assertIn("wilcoxon", out)
         self.assertIn("pendiente", out.lower())
         self.assertNotIn("<img src=x", out)
+
+    def test_renders_the_datasets_section_with_badges_and_escapes(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        _write(Path(holder.name) / "datasets" / "registry.json", json.dumps(REGISTRY))
+        view = experiments_view.get_experiments_view(holder.name)
+        out = self.render(view)
+        self.assertIn("Datasets (toy y completos)", out)
+        self.assertIn("toy-eeg", out)
+        self.assertIn("someone/toy-eeg", out)
+        self.assertIn("privado", out)
+        self.assertIn("badge--ok", out)
+        self.assertIn("rechazada", out)
+        self.assertNotIn("<script>alert(1)</script>", out)
+        self.assertIn("&lt;script&gt;", out)
+
+    def test_datasets_empty_state_names_the_verbs(self) -> None:
+        out = self.render({"protocol": None, "products": [], "warnings": [], "remote_accounts": {},
+                           "datasets": {"items": [], "registry": None, "searches": []}})
+        self.assertIn("Datasets (toy y completos)", out)
+        self.assertIn("/datasets synth", out)
+        self.assertIn("/datasets search", out)
 
     def test_empty_view_names_what_produces_the_charts(self) -> None:
         out = self.render({"protocol": None, "products": [], "warnings": [], "remote_accounts": {}})

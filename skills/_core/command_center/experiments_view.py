@@ -10,6 +10,9 @@
   ``Experimental_AGREED.md`` — with its convergence histories, figures,
   tables, significance tests, pinned artifacts and remote runs folded from
   its ``.remote-execution/ledger.jsonl``;
+* the ``datasets`` skill's registry (``datasets/registry.json``): per dataset
+  its role (toy or full), title, license decision, qc status, preparation
+  version and remote ref/visibility, plus the search files beside it;
 * a cheap remote-accounts readiness hint (the credential store its owning
   skill declares is present; credential files waiting in the drop-zone that
   skill declares), read through ``state_extractor``'s declaration readers so
@@ -52,6 +55,8 @@ MAX_SIGNIFICANCE_ROWS = 200
 MAX_PINNED = 30
 MAX_LATEST_RUNS = 10
 MAX_WARNINGS = 100
+MAX_DATASETS = 100
+MAX_SEARCHES = 20
 MAX_PROTOCOL_BYTES = 1024 * 1024
 TEXT_MAX = 600
 
@@ -658,6 +663,46 @@ def _remote_accounts(root: Path) -> dict[str, Any]:
             "inbox": inbox_name, "inbox_count": count}
 
 
+def _datasets(root: Path, reader: _Reader) -> dict[str, Any]:
+    """The ``datasets`` registry as one row per dataset; never raises."""
+    folder = root / "datasets"
+    path = folder / "registry.json"
+    out: dict[str, Any] = {"registry": None, "items": [], "searches": []}
+    if not path.is_file() and not path.is_symlink():
+        return out
+    data = reader.json(path)
+    if isinstance(data, list):
+        out["registry"] = _rel(root, path)
+        for entry in data[:MAX_DATASETS]:
+            if not isinstance(entry, dict) or not isinstance(entry.get("slug"), str):
+                continue
+            pick = lambda key: entry.get(key) if isinstance(entry.get(key), dict) else {}  # noqa: E731
+            lic, qc, prep, remote = pick("license"), pick("qc"), pick("preparation"), pick("remote")
+            out["items"].append({
+                "slug": _clip(entry["slug"], 80),
+                "role": _clip(entry.get("role"), 20),
+                "title": _clip(entry.get("title"), 200),
+                "license": lic.get("decision") or None,
+                "host_license": lic.get("host_license") or None,
+                "qc": qc.get("status") or None,
+                "prepared": bool(prep),
+                "preparation_version": prep.get("version"),
+                "remote_ref": remote.get("ref") or None,
+                "visibility": remote.get("visibility") or None,
+                "remote_version": remote.get("version"),
+            })
+        out["items"].sort(key=lambda item: item["slug"])
+    elif data is not None:
+        reader.warn(f"{_rel(root, path)}: not a list")
+    try:
+        searches = sorted((p for p in folder.glob("search-*.json") if reader.contained(p)),
+                          key=lambda p: (p.stat().st_mtime, p.name))
+    except OSError:
+        searches = []
+    out["searches"] = [_rel(root, p) for p in searches[-MAX_SEARCHES:]]
+    return out
+
+
 def get_experiments_view(root: Path | str) -> dict[str, Any]:
     root = Path(root).expanduser().resolve()
     warnings: list[str] = []
@@ -667,5 +712,6 @@ def get_experiments_view(root: Path | str) -> dict[str, Any]:
     by_folder = {path.parent.parent: path for path in ledgers}
     products = [_product(root, repo, folder, by_folder.get(folder), warnings)
                 for repo, folder in _product_dirs(root, reader)]
-    return {"protocol": protocol, "products": products, "remote_accounts": _remote_accounts(root),
+    return {"protocol": protocol, "products": products, "datasets": _datasets(root, reader),
+            "remote_accounts": _remote_accounts(root),
             "remote_mcp": remote_mcp_status(root), "warnings": warnings}

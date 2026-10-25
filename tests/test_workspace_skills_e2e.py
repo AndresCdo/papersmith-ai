@@ -29,6 +29,7 @@ from workspace_series import (
 )
 
 SKILL_NAMES = (
+    "datasets",
     "experimental-deliberation",
     "experimental-implementation",
     "figure-review",

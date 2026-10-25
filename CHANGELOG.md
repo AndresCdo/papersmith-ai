@@ -15,6 +15,24 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **`paper-replicator` agent.** A `proposal-implementation` stretch
+  (`fidelity`) that reimplements a referenced method with no public code from
+  its ingested Markdown and the cited papers it depends on: plan, analyze,
+  code, then invariant tests and a toy-set smoke run before any GPU run, with a
+  `REPLICATION.md` table tying every hyperparameter to a section or equation or
+  marking it `unspecified`. It runs as a subagent of the active Claude Code,
+  OpenCode or Pi session on that session's model: no API key and no external
+  LLM service.
+- **`datasets` skill with `dataset-scout` and `dataset-curator`.** A stdlib
+  CLI (`synth`, `search`, `license`, `qc`, `prepare`, `publish`, `status`)
+  over a `datasets/registry.json`: a seeded toy set for every proof of
+  concept, search across the remote dataset host's MCP, Hugging Face,
+  OpenNeuro and Zenodo (Google Dataset Search only as a manual link), license
+  decisions that refuse NC, ND and credentialed sources unless overridden,
+  quality reports, one stratified group split shared by the proof of concept
+  and the full experiments, and private publishing through the official
+  client with an explicit consent per dataset and a separate one before it
+  becomes public. The Experimentos tab lists the registered datasets.
 - **Kaggle MCP instructions follow the environment.** The activation box and
   `smith mcp kaggle status` detect macOS, Linux, WSL or Windows, the login
   shell (zsh, bash, fish, PowerShell) and the user, and print the export
