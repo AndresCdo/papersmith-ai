@@ -128,6 +128,31 @@ def _font_name(textpage, index: int, buffer) -> tuple[str, int]:
     return (name.split("+", 1)[1] if "+" in name[:7] else name), flags.value
 
 
+def _code_points(textpage, count: int):
+    """``(index, code point)`` for each character of a text page.
+
+    PDFium hands a character outside the Basic Multilingual Plane, such as the
+    italic math letters LaTeX sets (U+1D400 on), to ``FPDFText_GetUnicode`` as
+    its two UTF-16 surrogates, at two indices. They are joined here into one
+    code point at the first index, whose font and box are the glyph's. A
+    surrogate with no partner (a broken ToUnicode map) reads as U+FFFD, so no
+    line holds text that UTF-8 cannot encode.
+    """
+    import pypdfium2.raw as raw
+
+    index = 0
+    while index < count:
+        code = raw.FPDFText_GetUnicode(textpage, index)
+        if 0xD800 <= code <= 0xDBFF and index + 1 < count:
+            low = raw.FPDFText_GetUnicode(textpage, index + 1)
+            if 0xDC00 <= low <= 0xDFFF:
+                yield index, 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                index += 2
+                continue
+        yield index, 0xFFFD if 0xD800 <= code <= 0xDFFF else code
+        index += 1
+
+
 def _is_math_char(code: int) -> bool:
     return any(low <= code <= high for low, high in _MATH_RANGES)
 
@@ -187,8 +212,7 @@ def probe_page(page, number: int) -> PageProbe:
         lines: list[tuple[int, int, dict[str, int]]] = []  # (math, visible, fonts) per line
         line_math = line_visible = 0
         line_fonts: dict[str, int] = {}
-        for index in range(count + 1):
-            code = raw.FPDFText_GetUnicode(textpage, index) if index < count else 0x0A
+        for index, code in (*_code_points(textpage, count), (count, 0x0A)):
             if code == 0x0A:
                 lines.append((line_math, line_visible, line_fonts))
                 line_math = line_visible = 0
@@ -252,8 +276,7 @@ def _lines(page) -> list[Line]:
                                   hyphen=hyphen))
             chars.clear(); sizes.clear(); bold.clear(); tops.clear(); bottoms.clear()
 
-        for index in range(textpage.count_chars()):
-            code = raw.FPDFText_GetUnicode(textpage, index)
+        for index, code in _code_points(textpage, textpage.count_chars()):
             if code == 0x0A:
                 flush()
                 hyphen = False

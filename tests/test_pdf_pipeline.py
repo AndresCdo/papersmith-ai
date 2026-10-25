@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,18 @@ def make_pdf(path: Path, pages: list[dict]) -> Path:
     helvetica = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
     bold = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
     symbol = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>")
+    # Helvetica whose ToUnicode map reads `x` and `y` as U+1D465 and U+1D466,
+    # outside the BMP, as LaTeX output maps italic math letters, and `z` as a
+    # lone high surrogate, as a broken map can.
+    cmap = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap "
+            b"/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def "
+            b"/CMapName /Adobe-Identity-UCS def /CMapType 2 def "
+            b"1 begincodespacerange <00> <FF> endcodespacerange "
+            b"3 beginbfchar <78> <D835DC65> <79> <D835DC66> <7A> <D835> endbfchar "
+            b"endcmap CMapName currentdict /CMap defineresource pop end end")
+    to_unicode = add(b"<< /Length " + str(len(cmap)).encode() + b" >>\nstream\n" + cmap + b"\nendstream")
+    astral = add(f"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding "
+                 f"/ToUnicode {to_unicode} 0 R >>".encode())
     pixels = zlib.compress(bytes([90, 90, 90] * 64 * 64))
     image = add(b"<< /Type /XObject /Subtype /Image /Width 64 /Height 64 /ColorSpace /DeviceRGB "
                 b"/BitsPerComponent 8 /Filter /FlateDecode /Length " + str(len(pixels)).encode()
@@ -68,7 +81,7 @@ def make_pdf(path: Path, pages: list[dict]) -> Path:
         content = add(b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream")
         kids.append(add(
             f"<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 {PAGE_W} {PAGE_H}] /Contents {content} 0 R "
-            f"/Resources << /Font << /F1 {helvetica} 0 R /F2 {bold} 0 R /F3 {symbol} 0 R >> "
+            f"/Resources << /Font << /F1 {helvetica} 0 R /F2 {bold} 0 R /F3 {symbol} 0 R /F4 {astral} 0 R >> "
             f"/XObject << /Im1 {image} 0 R >> >> >>".encode()))
     objects[pages_id - 1] = (f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kids)}] "
                              f"/Count {len(kids)} >>").encode()
@@ -112,6 +125,14 @@ INLINE_PAGE = {"lines": [
     ("F3", 10, 72, 700, "ab"),
     prose(680, SENTENCE),
 ]}
+# Italic math letters outside the BMP inside a prose line, and a letter that a
+# broken ToUnicode map reads as a lone surrogate.
+ASTRAL_PAGE = {"lines": [
+    prose(720, SENTENCE),
+    ("F4", 10, 72, 700, "metadata x and the current solution y here"),
+]}
+BROKEN_MAP_PAGE = {"lines": [prose(720, SENTENCE), ("F4", 10, 72, 700, "a broken z map")]}
+LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 # An author line in a bold face, marked with footnote symbols from the math
 # face: little math and no body font, which is not a display equation.
 AUTHOR_PAGE = {"lines": [
@@ -161,6 +182,10 @@ class ProbeTests(_Tmp):
         probe = self.probes(AUTHOR_PAGE)[0]
         self.assertEqual((probe.route, probe.display_lines), ("text", 0))
 
+    def test_math_letters_outside_the_bmp_count_as_math_glyphs(self) -> None:
+        probe = self.probes(ASTRAL_PAGE)[0]
+        self.assertEqual((probe.route, probe.math_glyphs), ("text", 2))
+
     def test_citation_brackets_are_not_table_rows(self) -> None:
         probe = self.probes(CITED_PAGE)[0]
         self.assertEqual((probe.route, probe.table_rows), ("text", 0))
@@ -193,6 +218,16 @@ class FastPathTests(_Tmp):
         self.assertEqual(blocks[2], " ".join([SENTENCE, SENTENCE, "and it ends here."]))
         self.assertEqual(blocks[3], "A second paragraph starts after a visible gap in the page.")
         self.assertEqual(len(blocks), 4, "the bare page number is furniture, not a paragraph")
+
+    def test_a_letter_outside_the_bmp_reads_as_one_character(self) -> None:
+        text = self.markdown(ASTRAL_PAGE).markdown
+        self.assertIn("metadata \U0001d465 and the current solution \U0001d466 here", text)
+        self.assertIsNone(LONE_SURROGATE.search(text))
+
+    def test_a_surrogate_with_no_partner_reads_as_the_replacement_character(self) -> None:
+        text = self.markdown(BROKEN_MAP_PAGE).markdown
+        self.assertIn("a broken \ufffd map", text)
+        self.assertIsNone(LONE_SURROGATE.search(text))
 
     def test_an_embedded_figure_is_written_as_a_file_and_referenced(self) -> None:
         page = self.markdown(dict(TEXT_PAGE, figure=True))
@@ -299,6 +334,14 @@ class RoutedEngineTests(_Tmp):
         second, sidecar = self.render(self.engine(heavy=heavy), pdf)
         self.assertEqual(heavy.calls, [(2, 3, False, False)])
         self.assertEqual([p["cached"] for p in sidecar["pages"]], [True, False, False])
+        self.assertEqual(first, second)
+
+    def test_a_paper_with_letters_outside_the_bmp_is_ingested_and_cached_whole(self) -> None:
+        pdf = self.pdf(ASTRAL_PAGE)
+        first, _ = self.render(self.engine("pdfium"), pdf)
+        self.assertIn("\U0001d465 and the current solution \U0001d466", first)
+        second, sidecar = self.render(self.engine("pdfium"), pdf)
+        self.assertTrue(all(p["cached"] for p in sidecar["pages"]))
         self.assertEqual(first, second)
 
     def test_without_the_cache_nothing_is_stored(self) -> None:
