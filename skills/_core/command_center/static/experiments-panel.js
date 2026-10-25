@@ -235,6 +235,10 @@
     const st = state || {};
     const activate = st.activate || 'smith mcp kaggle activate';
     const check = st.status || 'smith mcp kaggle status';
+    const env = st.environment || {};
+    const envVar = st.env || 'KAGGLE_API_TOKEN';
+    const tokenPath = env.token_path || st.token_path || '~/.kaggle/access_token';
+    const sysLabel = { macos: 'macOS', linux: 'Linux', wsl: 'Windows (WSL)', windows: 'Windows' }[env.system] || 'desconocido';
     const badge = st.activated
       ? `<span class="badge badge--ok">activo (${st.source === 'env' ? `variable ${esc(st.env || 'KAGGLE_API_TOKEN')}` : 'token guardado'})</span>`
       : `<span class="badge badge--warn">${st.problem === 'insecure' ? 'token con permisos inseguros' : 'sin activar'}</span>`;
@@ -244,10 +248,12 @@
     return `<section class="panel exp-mcp" id="expMcpActivation">
       <h3 class="panel__title">Activar Kaggle por MCP</h3>
       <p class="exp-intro">Estado: ${badge} · servidor <code>kaggle</code> ${registered}.</p>
+      ${env.system ? `<p class="exp-intro">Entorno detectado: <strong>${esc(sysLabel)}</strong> · shell <code>${esc(env.shell || 'sh')}</code>${env.user ? ` · usuario <code>${esc(env.user)}</code>` : ''}.</p>` : ''}
+      ${env.note ? `<p class="exp-intro"><span class="badge badge--warn">${esc(sysLabel)}</span> ${esc(env.note)}</p>` : ''}
       <ol>
-        <li>Crea un token en <a href="https://www.kaggle.com/settings" target="_blank" rel="noopener">kaggle.com/settings</a> → API → <em>Generate New Token</em> (empieza por <code>KGAT_</code>).</li>
-        <li>Pulsa <strong>Activar</strong>: abre el asistente CLI smith del tablero y ejecuta <code>${esc(activate)}</code>. Pega el token en la terminal (la entrada queda oculta); smith lo verifica contra Kaggle y lo guarda solo para tu usuario en <code>${esc(st.token_path || '~/.config/papersmith/kaggle-mcp-token')}</code> (permisos 0600), nunca dentro del proyecto.</li>
-        <li>Abre una sesión nueva de Claude, OpenCode o Pi desde el asistente: el tablero le pasa <code>${esc(st.env || 'KAGGLE_API_TOKEN')}</code> y el MCP <code>kaggle</code> queda autenticado. Fuera del tablero: <code>export ${esc(st.env || 'KAGGLE_API_TOKEN')}=$(cat ${esc(st.token_path || '~/.config/papersmith/kaggle-mcp-token')})</code>.</li>
+        <li>Crea un token en <a href="${esc(st.token_page || 'https://www.kaggle.com/settings')}" target="_blank" rel="noopener">kaggle.com/settings</a> → pestaña <em>Account</em> → sección <em>API</em> → <em>Generate New Token</em> (empieza por <code>KGAT_</code>).</li>
+        <li>Pulsa <strong>Activar</strong>: abre el asistente CLI smith del tablero y ejecuta <code>${esc(activate)}</code>. Pega el token en la terminal (la entrada queda oculta); smith lo verifica contra Kaggle y lo guarda solo para tu usuario en <code>${esc(tokenPath)}</code>${env.system === 'windows' ? '' : ' (permisos 0600)'}, el mismo archivo que usan la CLI y el SDK oficiales de Kaggle, nunca dentro del proyecto. Si ya tenías otro token ahí, añade <code>--replace</code>.</li>
+        <li>Abre una sesión nueva de Claude, OpenCode o Pi desde el asistente: el tablero le pasa <code>${esc(envVar)}</code> y el MCP <code>kaggle</code> queda autenticado. Fuera del tablero, en tu shell: <code>${esc(env.export_command || `export ${envVar}="$(cat ~/.kaggle/access_token)"`)}</code>; para que quede en cada sesión nueva, añade esa línea a <code>${esc(env.profile_file || '~/.profile')}</code>.</li>
         <li>Comprueba con <code>${esc(check)} --verify</code> (lee tu cuota semanal de GPU); <code>smith mcp kaggle deactivate</code> borra el token.</li>
       </ol>
       <div class="exp-mcp__actions">
@@ -290,7 +296,7 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
       <h4 class="exp-h4">4. MCP</h4>
       <ul>
         <li>papersmith registra el servidor MCP oficial de Kaggle (<code>https://www.kaggle.com/mcp</code>) como <code>kaggle</code> en <code>.mcp.json</code>, <code>opencode.json</code>, <code>.pi/mcp.json</code> y <code>.agents/mcp_config.json</code> al hacer <code>smith init</code> o <code>smith upgrade</code>.</li>
-        <li>Las herramientas públicas (<code>search_datasets</code>, <code>search_notebooks</code>) responden sin token. Las de cuenta piden un token <code>KGAT_…</code> (Kaggle → Settings → API): actívalo con <code>smith mcp kaggle activate</code> desde el asistente CLI (recuadro <em>Activar Kaggle por MCP</em>) o con <code>export KAGGLE_API_TOKEN=KGAT_…</code>; nunca lo escribas en un archivo del proyecto.</li>
+        <li>Las herramientas públicas (<code>search_datasets</code>, <code>search_notebooks</code>) responden sin token. Las de cuenta piden un token <code>KGAT_…</code> (Kaggle → Settings → API): actívalo con <code>smith mcp kaggle activate</code> desde el asistente CLI (recuadro <em>Activar Kaggle por MCP</em>, que muestra el comando exacto para tu sistema y tu shell); nunca lo escribas en un archivo del proyecto.</li>
         <li>Lanzar con GPU: <code>save_notebook</code> con <code>enableGpuNullable: true</code> y <code>machineShapeNullable: "NvidiaTeslaT4"</code>; monitorear con <code>get_notebook_session_status</code>, <code>list_notebook_session_output</code> y <code>download_notebook_output</code>; cuota semanal con <code>get_accelerator_quota</code>; cancelar con <code>cancel_notebook_session</code>.</li>
         <li>Úsalo para pruebas de concepto rápidas y para monitorear; solo el operador autoriza un lanzamiento.</li>
         <li>Para lanzar, prefiere la ruta CLI de papersmith: registra el ledger (<code>.remote-execution/ledger.jsonl</code>) que este panel lee.</li>
