@@ -19,6 +19,7 @@ import unittest
 import zlib
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "skills" / "paper-ingestion" / "scripts"
@@ -228,6 +229,15 @@ class FastPathTests(_Tmp):
         text = self.markdown(BROKEN_MAP_PAGE).markdown
         self.assertIn("a broken \ufffd map", text)
         self.assertIsNone(LONE_SURROGATE.search(text))
+
+    def test_every_surrogate_sequence_reads_as_whole_code_points(self) -> None:
+        # The UTF-16 units PDFium can hand over, one per index: a letter, a pair,
+        # a lone low, a high followed by another high, that high's own pair, and
+        # a high at the last index, whose partner would lie past the page.
+        units = [0x61, 0xD835, 0xDC65, 0xDC65, 0xD835, 0xD835, 0xDC66, 0xD835]
+        with mock.patch("pypdfium2.raw.FPDFText_GetUnicode", side_effect=lambda _page, index: units[index]):
+            read = list(pdf_pipeline._code_points(None, len(units)))
+        self.assertEqual(read, [(0, 0x61), (1, 0x1D465), (3, 0xFFFD), (4, 0xFFFD), (5, 0x1D466), (7, 0xFFFD)])
 
     def test_an_embedded_figure_is_written_as_a_file_and_referenced(self) -> None:
         page = self.markdown(dict(TEXT_PAGE, figure=True))
