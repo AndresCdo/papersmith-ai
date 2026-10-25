@@ -5,6 +5,7 @@ last redirects the script's ``ROOT`` and ``_render`` to a temporary directory, s
 nothing here reads the operator's home directory or the real checkout; the last
 one only runs the read-only ``--check`` against the real checkout and needs no
 personal context either (it renders into a throwaway workspace).
+`DeclaredSkillRosterTests` only reads the real checkout.
 """
 
 from __future__ import annotations
@@ -12,12 +13,21 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import re
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "sync-repo-harness.py"
+ROOT = SCRIPT.parent.parent
+NUMBER_WORDS = {
+    word: value
+    for value, word in enumerate(
+        "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+        "fourteen fifteen sixteen seventeen eighteen nineteen twenty".split()
+    )
+}
 
 
 def _load():
@@ -92,6 +102,30 @@ class SyncRepoHarnessTests(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
             code = self.module.main(["--check"])
         assert code == 0, out.getvalue()
+
+
+class DeclaredSkillRosterTests(unittest.TestCase):
+    def test_declared_skill_roster_matches_canonical_skills(self) -> None:
+        """What a harness entrypoint says is projected is the canonical roster (#70).
+
+        A skill is a `skills/<name>/SKILL.md`, and the projection writes one
+        command for each. `CLAUDE.md` said "the eleven top-level skills" while
+        twelve were projected. It now names no number, as the workspace templates
+        never did, and a number an entrypoint states again is held to the roster.
+        """
+        roster = sorted(path.parent.name for path in (ROOT / "skills").glob("*/SKILL.md"))
+        commands = sorted(path.stem for path in (ROOT / ".claude" / "commands").glob("*.md"))
+        self.assertEqual(commands, roster)
+        templates = sorted((ROOT / "src" / "papersmith" / "templates").glob("*.md.tpl"))
+        self.assertTrue(templates, "the workspace entrypoint templates moved")
+        stated = re.compile(r"\b({}|\d+) top-level skills\b".format("|".join(NUMBER_WORDS)), re.I)
+        for path in [ROOT / "CLAUDE.md", *templates]:
+            text = " ".join(path.read_text(encoding="utf-8").split())
+            for count in stated.findall(text):
+                value = int(count) if count.isdigit() else NUMBER_WORDS[count.lower()]
+                self.assertEqual(
+                    value, len(roster), f"{path.name} says {count}; skills/ holds {roster}"
+                )
 
 
 if __name__ == "__main__":
