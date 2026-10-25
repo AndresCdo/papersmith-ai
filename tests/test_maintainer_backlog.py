@@ -43,7 +43,11 @@ class IssueReferenceTests(unittest.TestCase):
         self.assertEqual(backlog.issue_refs(body), [])
 
     def test_a_cross_repository_reference_does_not_count(self):
-        self.assertEqual(backlog.issue_refs("Closes other/repo#12"), [])
+        self.assertEqual(backlog.issue_refs("Closes other/repo#12", repo="LIAUNAL/papersmith-ai"), [])
+
+    def test_a_reference_qualified_with_this_repository_counts(self):
+        body = "Fixes LIAUNAL/papersmith-ai#91, liaunal/PAPERSMITH-AI#92"
+        self.assertEqual(backlog.issue_refs(body, repo="LIAUNAL/papersmith-ai"), [91, 92])
 
     def test_a_bare_mention_is_not_a_link(self):
         self.assertEqual(backlog.issue_refs("see #12 for context"), [])

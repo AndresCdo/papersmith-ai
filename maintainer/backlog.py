@@ -34,25 +34,31 @@ DEFAULT_ROOTS = REPO / "maintainer" / "backlog" / "roots.json"
 REQUIRED_ROOT_FIELDS = ("fix", "state", "tier")
 
 _COMMENT = re.compile(r"<!--.*?-->", re.S)
-# A keyword, an optional colon, then one or more `#N` separated by commas or
-# "and". A cross-repository `owner/repo#N` is not matched: `#` must follow
-# whitespace, a comma or the keyword itself.
+#: The repository whose issues count. GitHub accepts `owner/repo#N` for its own
+#: repository, so a qualified reference counts only when it names this one.
+REPO_SLUG = os.environ.get("GITHUB_REPOSITORY", "LIAUNAL/papersmith-ai")
+
+# A keyword, an optional colon, then one or more `#N` or `owner/repo#N`
+# separated by whitespace, commas or "and".
+_REF = r"(?:[\w.-]+/[\w.-]+)?#\d+\b"
 _LINK = re.compile(
-    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\b:?((?:(?:\s+|\s*,\s*|\s+and\s+)#\d+\b)+)",
+    rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\b:?((?:(?:\s+|\s*,\s*|\s+and\s+){_REF})+)",
     re.I,
 )
-_NUMBER = re.compile(r"#(\d+)")
+_NUMBER = re.compile(r"(?:([\w.-]+/[\w.-]+))?#(\d+)")
 _PATH = re.compile(
     r"`([\w./-]+\.(?:py|ts|tsx|mjs|js|json|sh|md|yml|yaml|toml|cjs))(?::(\d+)(?:\s*[-–]\s*(\d+))?)?`"
 )
 
 
-def issue_refs(body: str | None) -> list[int]:
-    """Issue numbers a PR body links with Closes/Fixes/Resolves/Refs."""
+def issue_refs(body: str | None, repo: str = REPO_SLUG) -> list[int]:
+    """Issue numbers of `repo` a PR body links with Closes/Fixes/Resolves/Refs."""
     text = _COMMENT.sub("", body or "")
     found = set()
     for match in _LINK.finditer(text):
-        found.update(int(n) for n in _NUMBER.findall(match.group(1)))
+        for owner, number in _NUMBER.findall(match.group(1)):
+            if not owner or owner.lower() == repo.lower():
+                found.add(int(number))
     return sorted(found)
 
 
