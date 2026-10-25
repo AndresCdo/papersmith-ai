@@ -14,6 +14,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -685,3 +686,41 @@ class AgentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThetaBetaProfileTests(Base):
+    """`--profile theta-beta`: class-dependent Theta (6 Hz) and Beta (20 Hz) power."""
+
+    @staticmethod
+    def band_power(samples: list[float], freq: float, sfreq: float) -> float:
+        re_part = sum(x * math.cos(2 * math.pi * freq * i / sfreq) for i, x in enumerate(samples))
+        im_part = sum(x * math.sin(2 * math.pi * freq * i / sfreq) for i, x in enumerate(samples))
+        return (re_part ** 2 + im_part ** 2) / len(samples)
+
+    def test_class_one_carries_a_higher_theta_beta_ratio(self) -> None:
+        result = self.run_cli("synth", "--slug", "tb", "--kind", "eeg", "--profile", "theta-beta", "--seed", "3",
+                              "--n-subjects", "4", "--n-per-subject", "6", "--channels", "2", "--length", "256",
+                              "--sfreq", "128")
+        self.assertEqual(result.code, 0, result.err)
+        rows = list(csv.reader((self.root / "datasets" / "tb" / "tb.csv").open(encoding="utf-8")))[1:]
+        ratios = {"0": [], "1": []}
+        for row in rows:
+            channel0 = [float(v) for v in row[3:3 + 256]]
+            ratios[row[2]].append(self.band_power(channel0, 6, 128) / self.band_power(channel0, 20, 128))
+        mean = {k: sum(v) / len(v) for k, v in ratios.items()}
+        self.assertGreater(mean["1"], 2 * mean["0"], mean)
+        toy = (self.root / "datasets" / "tb" / "TOY.md").read_text(encoding="utf-8")
+        self.assertIn("| profile | theta-beta |", toy)
+
+    def test_the_default_profile_is_unchanged(self) -> None:
+        args = ["synth", "--slug", "a", "--kind", "eeg", "--seed", "9", "--n-subjects", "2", "--n-per-subject", "2",
+                "--channels", "1", "--length", "16"]
+        self.run_cli(*args)
+        default = (self.root / "datasets" / "a" / "a.csv").read_bytes()
+        self.run_cli(*args, "--profile", "alpha", "--force")
+        self.assertEqual((self.root / "datasets" / "a" / "a.csv").read_bytes(), default)
+
+    def test_beta_above_nyquist_is_refused(self) -> None:
+        result = self.run_cli("synth", "--slug", "low", "--kind", "eeg", "--profile", "theta-beta", "--sfreq", "32")
+        self.assertEqual(result.code, 2)
+        self.assertEqual(result.error["error"], "bad-argument")
