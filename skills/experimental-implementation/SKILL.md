@@ -263,6 +263,19 @@ over the timing probe's record.
   extrapolation), never a promise, and never authorization: the pilot and the
   launch stay the operator's to approve after reading it.
 
+## The hyperparameter search step
+
+Only when the bound experiments revision declares a Hyperparameter Search
+subsection. The step sits after the proof of concept and the timing estimate,
+and before the full runs: the timing probe sizes it (`plan --timing`), and it
+is placed like the full runs — a step routed to a remote GPU notebook is
+generated, rehearsed and launched through `remote-execution`, behind the
+operator's consent. It runs through `/hyperparameter-search`
+(`skills/hyperparameter-search/SKILL.md`), which validates the plan, names one
+study per arm and outer fold and reports their importance and contour figures
+under `Results/hpo/`. Its results are frozen per outer fold: every seed of
+the full run reuses that fold's tuned values and never searches again.
+
 ## Where to start: the repository is the memory
 
 Same routing rule as `proposal-implementation`'s own -- **read `src/`, never
