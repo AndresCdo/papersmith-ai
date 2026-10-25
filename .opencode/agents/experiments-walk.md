@@ -54,6 +54,16 @@ run it rather than offering it. A campaign is hours of quota and its plan is
 the operator's to approve. Report what a rehearsal found either way: a
 rehearsal that failed is the cheapest result this flow can produce.
 
+## Estimate before the pilot
+
+Before the pilot, and again before the operator is asked for the full run's
+launch, make sure the timing probe exists and writes `Results/timing.json` in
+the product folder, run it, then load
+`skills/remote-parallelism/SKILL.md` and run its `estimate` over that
+record with `--record` into the product tree. Report each stage's range per
+host, and every host that reads `unmeasured`. The estimate is never
+authorization: it is what the operator reads before deciding.
+
 ## Whether to split a campaign
 
 Before generating jobs for more than one unit, load

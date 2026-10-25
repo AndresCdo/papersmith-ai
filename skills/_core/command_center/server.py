@@ -741,7 +741,8 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     {"id": "5.6", "name": "Datos: toy set siempre y dataset oficial", "status": fase5_status, "detail": "/datasets synth|search|license|qc|prepare|publish con dataset-scout y dataset-curator; publicación privada solo con consentimiento del operador"},
                     {"id": "5.7", "name": "Réplica de métodos de comparación", "status": fase5_status, "detail": "/proposal-implementation → paper-replicator: primero el código publicado, adoptado y auditado; si no existe, reimplementación"},
                     {"id": "5.8", "name": "Implementación PoC y experimental", "status": fase5_status, "detail": "proposal-implementation y experimental-implementation contra el repositorio objetivo"},
-                    {"id": "5.9", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
+                    {"id": "5.9", "name": "Estimar tiempo y elegir dónde correr", "status": fase5_status, "detail": "Sonda de tiempo corta (una época de un fold por brazo) en Results/timing.json; la pestaña Experimentos estima la PoC y la corrida completa (±20%) y lista las opciones local y remotas"},
+                    {"id": "5.10", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
                 ]
             },
             {

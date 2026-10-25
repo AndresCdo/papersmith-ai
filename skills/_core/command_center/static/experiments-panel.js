@@ -6,7 +6,10 @@
  * convergence histories, figures, tables, significance tests, pinned
  * artifacts and remote runs, the datasets registry (toy and full sets with
  * their license, qc and remote state), the remote-services table (one row
- * per service with its state and activating action), plus a remote-accounts
+ * per service with its state and activating action), the local environment
+ * (workspace micromamba env, each target .venv with its libraries and device),
+ * the run options (per stage and host: availability, ±20% estimate from
+ * Results/timing.json or "sin medir", reason and recommendation), plus a remote-accounts
  * readiness hint, the team table (one account per person and service) and the
  * Colab box (official CLI headless, official MCP interactive). Convergence is
  * always drawn (inline SVG); when nothing produces it yet, the empty state
@@ -354,6 +357,84 @@
     </section>`;
   }
 
+  // ------------------------------------------------------- local environment
+  // experiments_view's `local_environment`: the workspace micromamba env and
+  // each target's .venv, its declared libraries (installed or missing) and device.
+  const ENV_STATE = {
+    ready: ['badge--ok', 'listo'], incomplete: ['badge--warn', 'faltan librerías'],
+    missing: ['badge--warn', 'no instalado'], unverified: ['badge--info', 'sin verificar'],
+  };
+
+  function localEnvironment(state) {
+    if (!state) return '';
+    const ws = state.workspace || null;
+    const targets = Array.isArray(state.targets) ? state.targets : [];
+    const envBadge = (st) => {
+      const [cls, label] = ENV_STATE[st] || ENV_STATE.unverified;
+      return `<span class="badge ${esc(cls)}">${esc(label)}</span>`;
+    };
+    const rows = [];
+    if (ws) {
+      const mm = ws.micromamba ? `<small>micromamba en <code>${esc(ws.micromamba)}</code></small>` : '<small>micromamba no encontrado en el PATH</small>';
+      rows.push(`<tr><td><strong>${esc(ws.label || 'Entorno micromamba del workspace')}</strong><br><code>${esc(ws.path)}</code></td>`
+        + `<td>${esc(ws.python || '—')}</td><td>${envBadge(ws.state)} ${ws.detail ? `<small>${esc(ws.detail)}</small>` : ''}</td>`
+        + `<td>${mm}</td><td><span class="exp-muted">—</span></td></tr>`);
+    }
+    targets.forEach((t) => {
+      const libs = (t.libraries || []).map((lib) => (lib.version
+        ? `<span class="badge badge--ok">${esc(lib.name)} ${esc(lib.version)}</span>`
+        : `<span class="badge badge--warn">${esc(lib.name)}: falta</span>`)).join(' ')
+        || (t.required && t.required.length ? `<small>${esc(t.required.join(', '))}</small>` : '<span class="exp-muted">sin librerías declaradas</span>');
+      rows.push(`<tr><td><strong>${esc(t.repo)}</strong><br><code>${esc(t.path)}</code></td>`
+        + `<td>${esc(t.python || '—')}</td><td>${envBadge(t.state)} ${t.detail ? `<small>${esc(t.detail)}</small>` : ''}</td>`
+        + `<td>${libs}</td><td>${esc(t.device || '—')}</td></tr>`);
+    });
+    const body = rows.length ? rows.join('') : '';
+    return `<section class="panel exp-local" id="expLocalEnv">
+      <h3 class="panel__title">Entorno local</h3>
+      <p class="exp-intro">El entorno micromamba del workspace y el <code>.venv</code> de cada objetivo en <code>implementations/</code>: librerías de <code>pyproject.toml</code> y <code>requirements*.txt</code>, instaladas o faltantes, y el dispositivo que ve torch.${state.note ? ` ${esc(state.note)}` : ''}</p>
+      ${body ? `<div class="table-responsive"><table class="table exp-table"><thead><tr><th>Entorno</th><th>Python</th><th>Estado</th><th>Librerías</th><th>Dispositivo</th></tr></thead>
+      <tbody>${body}</tbody></table></div>` : empty('Sin entornos locales: python scripts/setup_env.py crea el entorno micromamba del workspace.')}
+    </section>`;
+  }
+
+  // ------------------------------------------------------------ run options
+  // experiments_view's `run_options`: one row per stage and host, the estimate
+  // from that host's own Results/timing.json measurements (±20%) or "sin medir".
+  function runOptions(state) {
+    if (!state) return '';
+    const rows = Array.isArray(state.rows) ? state.rows : [];
+    const recs = state.recommendations || {};
+    const stages = [];
+    rows.forEach((r) => { if (!stages.includes(r.stage)) stages.push(r.stage); });
+    const body = stages.map((stage) => {
+      const list = rows.filter((r) => r.stage === stage);
+      const rec = recs[stage] || {};
+      return list.map((r, i) => {
+        const avail = r.available ? '<span class="badge badge--ok">sí</span>' : '<span class="badge badge--warn">no</span>';
+        const est = r.estimate
+          ? `${esc(r.estimate_label)}<br><small>${esc(r.estimate.measurements)} medición(es)${(r.estimate.devices || []).length ? ` · ${esc(r.estimate.devices.join(', '))}` : ''}</small>`
+          : `<span class="badge badge--info">${esc(r.estimate_label || 'sin medir')}</span>`;
+        const recCell = i === 0
+          ? `<td rowspan="${list.length}">${rec.host ? `<strong>${esc((list.find((x) => x.host === rec.host) || {}).host_label || rec.host)}</strong> ` : ''}<small>${esc(rec.text || '—')}</small></td>`
+          : '';
+        const stageCell = i === 0 ? `<td rowspan="${list.length}"><strong>${esc(r.stage_label || r.stage)}</strong></td>` : '';
+        return `<tr>${stageCell}<td>${esc(r.host_label || r.host)}</td><td>${avail}</td><td>${est}</td><td><small>${esc(r.reason)}</small></td>${recCell}</tr>`;
+      }).join('');
+    }).join('');
+    const hint = state.empty ? `<p class="exp-intro"><span class="badge badge--warn">sin medir</span> ${esc(state.empty_hint || 'Sin Results/timing.json: corre la sonda de tiempo de /remote-parallelism («Estimate before you scale»).')}</p>` : '';
+    const sources = (state.sources || []).length
+      ? `<p class="exp-intro">Mediciones: ${(state.sources || []).map((f) => `<a href="${artifactUrl(f)}" target="_blank" rel="noopener"><code>${esc(f)}</code></a>`).join(', ')}</p>`
+      : '';
+    return `<section class="panel exp-run-options" id="expRunOptions">
+      <h3 class="panel__title">Opciones de corrida</h3>
+      <p class="exp-intro">Por etapa y host: disponibilidad, estimación (rango ${esc(state.note || '±20%, single-probe extrapolation')}) desde las mediciones propias de cada host, y una recomendación. Un host sin medición propia se lee "sin medir"; nunca se escala desde la medición local.</p>
+      ${hint}${sources}
+      ${body ? `<div class="table-responsive"><table class="table exp-table"><thead><tr><th>Etapa</th><th>Host</th><th>Disponible</th><th>Estimación</th><th>Motivo</th><th>Recomendación</th></tr></thead>
+      <tbody>${body}</tbody></table></div>` : ''}
+    </section>`;
+  }
+
   // ---------------------------------------------------------------- team
   // remote_services' `team`: owner slugs and presence flags only.
   const TEAM_TIER = { free: 'badge--info', pro: 'badge--ok', payg: 'badge--ok', enterprise: 'badge--ok' };
@@ -504,6 +585,8 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
       mcpActivation(v.remote_mcp),
       colabActivation(v.remote_colab),
       remoteServices(v.remote_services),
+      localEnvironment(v.local_environment),
+      runOptions(v.run_options),
       team(v.remote_services && v.remote_services.team),
       help(v.remote_accounts),
       datasets(v.datasets),
@@ -559,5 +642,5 @@ kaggle kernels output &lt;user/slug&gt; -p &lt;dest&gt;</code></pre>
   }
 
   window.refreshExperimentsPanel = refreshExperimentsPanel;
-  window.ExperimentsPanel = { render, mcpActivation, colabActivation, remoteServices, team, datasets };
+  window.ExperimentsPanel = { render, mcpActivation, colabActivation, remoteServices, localEnvironment, runOptions, team, datasets };
 })();

@@ -239,6 +239,30 @@ written, from the beginning it states to the end it states, holding any gate thi
 that list is a stop, not a workaround. Say in the reply that the stretch ran
 inline and why the agent could not be spawned.
 
+## Estimating the processing time before the pilot and before the full run
+
+Report the processing-time estimate to the operator before asking for a
+pilot, and again before asking for a launch of the full run. It comes from
+`remote-parallelism`'s `estimate` verb
+(`skills/remote-parallelism/SKILL.md`, **Estimate before you scale**), read
+over the timing probe's record.
+
+- **The timing record.** A short timing probe — one epoch of one fold per
+  arm, on the target's own interpreter, with the device recorded — writes
+  `Results/timing.json` in the product folder `<Name>/`. `Results/` is
+  declared among the step's `produces` roots, so the record is committed with
+  the step's product like any other output. `scales` is copied from the
+  approved experiments protocol (the bound experiments revision) and the
+  declared pilot; nothing guesses it.
+- **The estimate.** `estimate --timing <Name>/Results/timing.json --record
+  <Name>` gives each stage (`poc`, `full`) a range per host, from the one
+  formula that verb defines. A remote GPU host reads `unmeasured` until a
+  measured rehearsal on that host adds its own timing; local timings never
+  stand in for it.
+- **What it is.** A measurement-derived range (±20%, single-probe
+  extrapolation), never a promise, and never authorization: the pilot and the
+  launch stay the operator's to approve after reading it.
+
 ## Where to start: the repository is the memory
 
 Same routing rule as `proposal-implementation`'s own -- **read `src/`, never
