@@ -45,6 +45,7 @@ COMMAND_NAMES = (
     "experimental-deliberation",
     "experimental-implementation",
     "figure-review",
+    "hyperparameter-search",
     "kaggle-accounts",
     "math-tutor",
     "paper-ingestion",

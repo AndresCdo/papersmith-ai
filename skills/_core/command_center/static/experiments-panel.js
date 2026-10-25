@@ -10,7 +10,9 @@
  * (workspace micromamba env, each target .venv with its libraries and device),
  * the run options (per stage and host: availability, ±20% estimate from
  * Results/timing.json or "sin medir", reason and recommendation), plus a remote-accounts
- * readiness hint, the team table (one account per person and service) and the
+ * readiness hint, the hyperparameter studies per product (Results/hpo/<study>/
+ * summary.json: best parameters, importance bars, contour/importance/history
+ * figures), the team table (one account per person and service) and the
  * Colab box (official CLI headless, official MCP interactive). Convergence is
  * always drawn (inline SVG); when nothing produces it yet, the empty state
  * says which file does. Every value is escaped before insertion.
@@ -163,6 +165,59 @@
       <tbody>${body}</tbody></table></div>`;
   }
 
+  // ------------------------------------------------- hyperparameter search
+  const EVALUATOR_LABEL = { fanova: 'fANOVA', 'ped-anova': 'PED-ANOVA', 'mean-decrease-impurity': 'Mean Decrease Impurity' };
+  const DIRECTION_LABEL = { maximize: 'maximizar', minimize: 'minimizar' };
+  const HPO_FIGURE_LABEL = { contour: 'Contornos', importance: 'Importancia', history: 'Historia de la optimización' };
+  const evaluatorName = (name) => EVALUATOR_LABEL[name] || name || 'evaluador sin declarar';
+
+  function importanceBars(imp) {
+    const entries = Object.entries((imp && imp.values) || {})
+      .filter(([, v]) => Number.isFinite(Number(v))).sort((a, b) => Number(b[1]) - Number(a[1]));
+    if (!entries.length) return '';
+    const top = Math.max(...entries.map(([, v]) => Number(v)), 1e-12);
+    const rows = entries.map(([name, v]) => {
+      const width = Math.max(0, Math.min(100, (Number(v) / top) * 100)).toFixed(1);
+      return `<div class="exp-hpo-bar"><span class="exp-hpo-bar__name">${esc(name)}</span>
+        <span class="exp-hpo-bar__track"><i style="width:${width}%"></i></span><span class="exp-hpo-bar__value">${fmt(v)}</span></div>`;
+    }).join('');
+    return `<div class="exp-hpo-importance"><div class="exp-file">Importancia (${esc(evaluatorName(imp.evaluator))})</div>${rows}</div>`;
+  }
+
+  function hpoFigures(h) {
+    const figures = h.figures || {};
+    const notes = h.notes || [];
+    const cells = Object.keys(HPO_FIGURE_LABEL).map((key) => {
+      const path = figures[key];
+      if (path) return `<div class="exp-hpo-figure"><div class="exp-file">${esc(HPO_FIGURE_LABEL[key])}</div>${artifact(path)}</div>`;
+      const note = notes.find((n) => String(n).toLowerCase().includes(key)) || 'sin figura';
+      return `<div class="exp-hpo-figure"><div class="exp-file">${esc(HPO_FIGURE_LABEL[key])}</div>${empty(note)}</div>`;
+    }).join('');
+    const extra = notes.length ? `<ul class="exp-hpo-notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '';
+    return `<div class="exp-gallery exp-hpo-gallery">${cells}</div>${extra}`;
+  }
+
+  function hpo(product) {
+    const list = product.hpo || [];
+    if (!list.length) return '';
+    const body = list.map((h) => {
+      const obj = h.objective || {};
+      const params = Object.entries(h.bestParams || {}).map(([k, v]) => `<code>${esc(k)}=${esc(typeof v === 'number' ? fmt(v, 6) : v)}</code>`).join(' ') || '—';
+      const best = h.bestValue === null || h.bestValue === undefined ? '—'
+        : `${fmt(h.bestValue, 4)} <small>${esc(obj.metric || '')}${obj.direction ? ` · ${esc(DIRECTION_LABEL[obj.direction] || obj.direction)}` : ''}</small>`;
+      return `<tr><td><code>${esc(h.study)}</code></td><td>${esc(h.arm || '—')}</td><td>${esc(h.fold ?? '—')}</td>
+        <td>${esc(h.complete ?? '—')} / ${esc(h.pruned ?? '—')}${h.failed ? ` <small>(${esc(h.failed)} fallidos)</small>` : ''}${h.nTrials ? ` <small>de ${esc(h.nTrials)}</small>` : ''}</td>
+        <td>${best}</td><td>${params}</td></tr>`;
+    }).join('');
+    const details = list.map((h) => `<details class="exp-hpo-study"><summary><code>${esc(h.study)}</code> · ${esc(h.file)}</summary>
+      ${importanceBars(h.importance)}${h.importanceCheck ? importanceBars(h.importanceCheck) : ''}
+      ${hpoFigures(h)}</details>`).join('');
+    return `<h4 class="exp-h4">Búsqueda de hiperparámetros (Optuna)</h4>
+      <div class="table-responsive"><table class="table exp-table">
+      <thead><tr><th>Estudio</th><th>Brazo</th><th>Fold</th><th>Trials completos / podados</th><th>Mejor valor</th><th>Mejores parámetros</th></tr></thead>
+      <tbody>${body}</tbody></table></div>${details}`;
+  }
+
   const STATE_LABEL = { submitted: ['badge--info', 'enviado'], returned: ['badge--ok', 'retornado'], errored: ['badge--bad', 'con error'] };
   function runs(product) {
     const r = product.runs || {};
@@ -192,6 +247,7 @@
       ${pinned.length ? `<h4 class="exp-h4">Artefactos aprobados en deliberación</h4><div class="exp-gallery">${pinned.map(artifact).join('')}</div>` : ''}
       <h4 class="exp-h4">Convergencia</h4>${convergence(p)}
       ${figures.length ? `<h4 class="exp-h4">Figuras</h4><div class="exp-gallery">${figures.map(artifact).join('')}</div>` : ''}
+      ${hpo(p)}
       ${tables(p)}
       ${significance(p)}
       ${warnings.length ? `<details class="exp-warnings"><summary>${esc(warnings.length)} aviso(s) de lectura</summary><ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></details>` : ''}
@@ -487,6 +543,7 @@
         <li>Réplica de los métodos de comparación (<code>/proposal-implementation</code> → <code>paper-replicator</code>): primero el código publicado, auditado; si no existe, reimplementación (<code>REPLICATION.md</code>).</li>
         <li><code>/proposal-implementation</code> construye la <strong>prueba de concepto</strong> (carpeta con <code>AGREED.md</code>).</li>
         <li>Sonda de tiempo corta (una época de un fold por brazo) en <code>Results/timing.json</code>, antes del piloto y otra vez antes de la corrida completa: la tabla <em>Opciones de corrida</em> estima cada etapa por host (±20%); <code>/remote-parallelism estimate</code> y luego <code>assess --owners &lt;propietarios distintos&gt;</code> deciden si repartir.</li>
+        <li>Opcional, solo si la deliberación lo estimó conveniente: búsqueda de hiperparámetros con Optuna (<code>/hyperparameter-search plan|report|status</code>), anidada dentro de los sujetos de entrenamiento de cada fold externo, con el mismo presupuesto de trials para cada brazo y baseline y el evaluador de importancia declarado; sus contornos e importancias aparecen en cada producto.</li>
         <li><code>/experimental-implementation</code> construye los <strong>experimentos completos</strong> del protocolo (carpeta con <code>Experimental_AGREED.md</code>).</li>
         <li><code>experiments-reviewer</code> revisa el código (calidad, optimización, uso de GPU, pruebas estadísticas) antes de cualquier ensayo; su informe va al operador.</li>
         <li><strong>Local</strong>: corre directo con el <code>.venv</code> del objetivo o el entorno micromamba del workspace (tabla <em>Entorno local</em>); no necesita ensayo ni ledger.</li>

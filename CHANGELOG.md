@@ -11,6 +11,28 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.23.0
+
+### Added
+
+- **Hyperparameter search with Optuna, when the deliberation judges it
+  worthwhile.** A new `hyperparameter-search` skill validates a plan
+  (`<Name>/hpo/plan.json`: one trial budget for every arm, baselines
+  included; a seeded sampler; a search nested inside each outer fold's
+  training subjects; nothing the experiments test tuned; the importance
+  evaluator always named, because Optuna 5 defaults to PED-ANOVA), estimates
+  its cost from `Results/timing.json` as an upper bound, and after the search
+  ran writes one `Results/hpo/<arm>-fold<k>/summary.json` per study with
+  hyperparameter importance, contour and optimization-history figures. It
+  never launches a search: remote runs still go through `remote-execution`
+  and the operator's launch.
+- **The Experimentos tab shows the search.** Best parameters per arm and
+  fold, importance bars labelled with their evaluator, and the contour,
+  importance and history figures; Phase 5 lists the optional search as
+  sub-phase 5.10 (the later sub-phases move to 5.11–5.13).
+- The experimental-deliberation and experimental-implementation skills say
+  when a search is worth declaring and where its step sits.
+
 ## 0.22.1
 
 ### Fixed
