@@ -61,7 +61,7 @@ agent is used as a copilot, the ones already defined are in
 
 ## Use flow — the short path
 
-Thirteen skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
+Fourteen skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
 Spanish (*"ingiere los papers"*). **Not all of them have to be used, or in this order**: each
 one declares what it needs first and refuses if it's missing, so an invocation from the middle
 of the flow reports which input is missing.
@@ -74,21 +74,23 @@ The full path, from a PDF to a compiled paper:
 | 2 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
 | 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
 | 3b | `/math-tutor` | Before implementing a revision: a Socratic tutor that discusses its concept map and mathematics with you, reads the pages you draw by hand, and checks your understanding of why the novelty holds | nothing on disk but its thread (`.papersmith/math-tutor/`); used from the dashboard's Mapa Conceptual & Modelo tab |
-| 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
-| 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
-| 6 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
-| 7 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
-| 8 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
-| 9 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
-| 10 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
-| 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
-| 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `smith upgrade` | the workspace itself |
+| 4 | `/datasets` | Gives the proof of concept and the full experiments their data: a seeded toy set always (`synth`), then an official dataset searched for (`search`) across the paper's own repository and the open dataset hosts, its source license decided (`license`), its quality measured (`qc`) and one subject-wise preparation both stages read (`prepare`); `publish` uploads it privately only with your explicit consent. Agents `dataset-scout` and `dataset-curator` | `datasets/` (registry, toy and prepared sets) |
+| 5 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
+| 5b | `/proposal-implementation` (replication) | Replicates each comparison or baseline paper through the `paper-replicator` agent: it looks for the paper's published code first and, when it exists, adopts it pinned to a commit and audits that it corresponds to the paper and is implemented correctly; only when no code exists does it reimplement the method from the ingested Markdown | the target repo, with a `REPLICATION.md` correspondence table |
+| 6 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
+| 7 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
+| 8 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
+| 9 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
+| 10 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
+| 11 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
+| 12 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
+| 13 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `smith upgrade` | the workspace itself |
 
 The minimum to try the forge is step 1: with the idea in two sentences,
 `/plausibility` tracks the SOTA and returns the constellation plus the top-5. Only
 afterwards, if desired, a PDF can be placed in `guidance/reference-papers/` and run
 through `/paper-ingestion`; the deliberation is then carried out with
-`/proposal-deliberation`. Steps 4 and 6 only make sense once there's a published proposal
+`/proposal-deliberation`. Steps 5 to 7 only make sense once there's a published proposal
 and a target repository to implement it in.
 
 The diagram shows the full flow: every stage in this order with
@@ -101,7 +103,10 @@ and its source and its recipe are versioned in
 [`docs/diagrams/`](docs/diagrams/README.md)).
 
 The dashboard (`smith ui`) opens on this flow and shows the same order as
-eleven phases under **Pipeline y Avance**. Clicking a phase opens its console:
+eleven phases under **Pipeline y Avance**. Below the diagram, the **Flujo Archify**
+tab lists every agent the workspace ships (`/api/agents`): its role, the skill it
+loads, its stretch, its tools, the phase(s) it acts in and the harnesses it is
+projected to, in a table you can sort and filter. Clicking a phase opens its console:
 a text box with the stage's rules as a guide that sends `/<skill> <text>` to an
 agent in the support terminal (for `/plausibility`, the idea in at least two
 sentences), the real `smith` command for the phase, or a link to the panel
@@ -455,7 +460,7 @@ my-paper/
 │   ├── manifest.json            #   hashes of everything the framework generated
 │   ├── runs_ledger.jsonl        #   every dispatched run, in order
 │   └── version                  #   framework version that created it
-├── .claude/agents/              # the nineteen subagents (single source of truth)
+├── .claude/agents/              # the twenty-four subagents (single source of truth)
 ├── skills/                      # the kit copy: the skills + _core
 │   └── _core/                   #   the two shared engines (deliberation, implementation)
 ├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
@@ -677,7 +682,7 @@ repo-only).
 
 ## The agents
 
-A workspace ships **nineteen subagents** in `.claude/agents/`. They are short
+A workspace ships **twenty-four subagents** in `.claude/agents/`. They are short
 bursts of work that a harness launches (for example, with the Task tool) on
 request, not replacements for the CLI. The shape is always the
 same — **one burst between two operator gates**: the agent decides
@@ -688,11 +693,16 @@ to establish it. The operator opens and closes the gates.
 |-------|----------------|----------------|
 | `implementation-build` | From the approved object→module map to the findings report: materializes the scaffolding, writes one module per object with its provenance and its invariant tests, and validates the admitted remedies. | `proposal-implementation` |
 | `implementation-walk` | Walks the declared flow act by act, in order: runs the local steps, records each product and stops at the rehearsal before launch. It has no path to submit a campaign. | `proposal-implementation` |
+| `paper-replicator` | The `fidelity` stage for a comparison or baseline paper: it first searches for the paper's published code; when it exists, it adopts it pinned to a commit with its license and audits correspondence with the paper (match, deviation, unspecified) and implementation correctness; otherwise it reimplements the method from the ingested Markdown. It ends at code in the target layout, a `REPLICATION.md` table, invariant tests and a toy-set smoke run, and never launches a remote run. | `proposal-implementation` |
+| `dataset-scout` | From a research question or paper to ranked dataset candidates with their source licenses decided: it searches the paper's official repository and the dataset hosts (`search`) and records a `license` decision per candidate. It never downloads what it cannot license and never uploads anything. | `datasets` |
+| `dataset-curator` | From a dataset need to its arrival: the seeded toy set, a licensed source measured with `qc`, the one official subject-wise preparation (`prepare`), and `publish` run for real only with the operator's own consent tokens. | `datasets` |
 | `deliberation-publish` | From the moment you accept a change until the successor revision is published and in force — the only way the mathematics travels. The deliberation itself is not here: only you close it. | `proposal-deliberation` |
 | `experimental-publish` | The same as `deliberation-publish`, over the experiments document. | `experimental-deliberation` |
 | `experimental-validation` | The `validated` stage: it looks for the area's evaluation protocol —metrics, baselines, dataset, seeds, significance test—, verifies each baseline against its repo and its venue, and dates every URL it uses. | `experimental-deliberation` |
 | `experiments-build` | From the approved map of protocol steps to executable commands: materializes whatever is needed, wires each step and instruments each measurement so that it can be run and read. | `experimental-implementation` |
 | `experiments-walk` | The walk of the protocol, with the same gates and the same stop at the rehearsal. | `experimental-implementation` |
+| `experiments-reviewer` | From an instrumented implementation to a findings report read before any rehearsal or launch: reviews the code against the experiments protocol for code quality, the simulation and data path, remote GPU use and the declared statistical tests. It runs only the target's own tests and linters; it never repairs nor launches. | `experimental-implementation` |
+| `math-tutor` | One turn of the Socratic tutor from the dashboard's math panel: reads the hand-drawn page back as LaTeX, gives one hint, asks one question and assesses understanding quoted from your own words, always tied to why the novelty holds. It never writes the workspace. | `math-tutor` |
 | `paper-ingestion` | Turns a paper into the form in which it can really be used: LaTeX equations, tables as tables, figures as files. Stages: `filed`, `extracted`, `readable`. It asks nobody anything. | `paper-ingestion` |
 | `contract-auditor` | Reads the `## Disqualifiers` of a contract, literally, and judges a draft block against each one: `fires`/`clear`/`undecidable`, with the passage quoted in each `fires`. | `paper-writing` |
 | `redactor` | Writes the LaTeX of a block from exactly four inputs (the contract's prose, its evidence set, its mode and its style set) and returns a binding map: where each sentence comes from. | `paper-writing` |
@@ -711,7 +721,7 @@ Three rules that order everything else:
 - **The source of truth is `.claude/agents/`.** Each harness's routing docs
   (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
   `.agents/AGENTS.md`) list
-  all nineteen, and they are generated: an agent is changed
+  all twenty-four, and they are generated: an agent is changed
   there, not in the projection.
 - **Each agent declares the skill it loads** (`skills/<name>/SKILL.md`), and that
   binding is verified: an agent that points at a skill the workspace does not

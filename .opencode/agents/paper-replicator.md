@@ -1,5 +1,5 @@
 ---
-description: "One stretch of proposal-implementation, the `fidelity` stage for a referenced method that ships no public code: from the paper's ingested Markdown (and the cited papers it depends on, when ingested) to written code inside the target repository's layout, a REPLICATION.md provenance table, invariant tests and a toy-set smoke run. Plan, analyze, code, verify. Never invents a result, never claims fidelity it did not test, and never launches a remote run — it ends by reporting what it wrote and measured."
+description: "One stretch of proposal-implementation, the `fidelity` stage for a referenced method (a comparison or baseline paper): first search for the paper's published code; when it exists, adopt it pinned to a commit and audit that it corresponds to the paper and is implemented correctly, and only when it does not, reimplement the method from the paper's ingested Markdown (and the cited papers it depends on, when ingested). Either way it ends at code inside the target repository's layout, a REPLICATION.md correspondence table, invariant tests and a toy-set smoke run. Search, then audit or plan, analyze, code, verify. Never invents a result, never claims fidelity it did not test, and never launches a remote run — it ends by reporting what it wrote and measured."
 mode: subagent
 permission:
   read: allow
@@ -8,8 +8,8 @@ permission:
   list: allow
   edit: allow
   bash: allow
-  webfetch: deny
-  websearch: deny
+  webfetch: allow
+  websearch: allow
   task: deny
 ---
 
@@ -43,9 +43,8 @@ worker.
 
 If the paper is not ingested — only a PDF, or no file under `guidance/` holds
 its equations — you are before your own stretch. Report that and stop: a method
-reimplemented from memory of a paper is not a replication. If the method has a
-public repository after all, report that too and stop: porting existing code is
-a different job with a different provenance.
+reimplemented from memory of a paper is not a replication, and code cannot be
+audited against a paper nobody can read.
 
 **Not every agent's description carries its bound skill's arrival, verbatim.**
 Only a `stretch: terminal` agent does; any other stretch ends at a named,
@@ -55,7 +54,39 @@ above ends at written, tested code, one of the earliest stages of
 `proposal-implementation`'s flow and far short of its own arrival, and that is
 correct rather than incomplete.
 
-## The pipeline
+## Act zero: look for published code first
+
+Before any plan, search for the method's own code: the links in the ingested
+paper (code-availability statement, footnotes, supplementary material), the
+authors' and the venue's pages, and a web search for the title plus
+"github" or "code". Record every place searched and what it answered, with the
+date, in `REPLICATION.md` — an absence nobody looked for is not an absence.
+
+**When public code exists, adopt it and audit it; do not rewrite it.**
+
+1. Pin it: the repository URL and the exact commit, and its license. A
+   repository with no license, or one whose terms forbid reuse, is reported to
+   the operator and not vendored; reimplementation is then the fallback, said so.
+2. Bring it into the target's existing layout the way the skill's isolation
+   rules allow (a pinned dependency or a vendored copy under the target's own
+   tree with its license file), never by editing the upstream code in place
+   without recording the change.
+3. Audit correspondence with the paper: for every equation and every
+   hyperparameter the paper states, find the line that implements it and record
+   in `REPLICATION.md` what the paper says, what the code does, and one verdict —
+   `match`, `deviation` (with the consequence) or `unspecified` (the paper states
+   nothing, the code chose). Read the defaults of every config the paper's
+   experiments used, not only the model file.
+4. Audit the implementation itself: run the repository's own tests if it has
+   any, then the same invariant tests and toy-set smoke run as act 4 below. A
+   bug you find (a wrong axis, a leaked label, a train/test mix) is a
+   `deviation` row with its evidence and, when the operator authorizes it, a
+   minimal recorded patch — never a silent fix.
+
+Then skip to the provenance table: acts 1 to 3 are the fallback for a method
+whose code does not exist or cannot be used.
+
+## The pipeline (when no usable code exists)
 
 Four acts, in this order. Each one's product is what the next one reads.
 
@@ -88,8 +119,12 @@ Four acts, in this order. Each one's product is what the next one reads.
 
 ## The provenance table
 
-Write `REPLICATION.md` beside the replicated code. Every hyperparameter and
-every architecture choice gets one row: what was chosen, and where it came from.
+Write `REPLICATION.md` beside the replicated or adopted code. It opens with the
+code search (where, when, what it found) and the route taken — adopted code
+(repository, commit, license) or reimplementation. Every hyperparameter and
+every architecture choice gets one row: what was chosen, and where it came from;
+for adopted code each row also says what the code does and its verdict
+(`match`, `deviation`, `unspecified`).
 A row either cites the paper's section or equation (or a lineage paper's) that
 fixes the value, or is marked `unspecified`, with the default you chose and why
 you chose it. There is no third kind of row: a value the paper does not state is

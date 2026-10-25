@@ -93,6 +93,22 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         self.assertIn(("pipeline", "gates"),
                       {(a["tab"], a["section"]) for a in audit if a["kind"] == "redirect"})
 
+    def test_the_experiments_phase_offers_data_and_replication_steps(self) -> None:
+        entry = phase_actions.ACTIONS["poc_experiments"]
+        data = next(a for a in entry["actions"] if a.get("slash") == "/datasets")
+        self.assertTrue(data["label"].startswith("Datos: toy set siempre y dataset oficial"))
+        guide = " ".join(data["guide"])
+        for verb in ("synth", "search", "license", "qc", "prepare", "publish"):
+            self.assertIn(verb, guide)
+        self.assertIn("dataset-scout", guide)
+        self.assertIn("dataset-curator", guide)
+        self.assertIn("consentimiento", guide)
+        replica = next(a for a in entry["actions"] if a.get("label") == "Réplica de métodos de comparación")
+        self.assertEqual(replica["slash"], "/proposal-implementation")
+        guide = " ".join(replica["guide"])
+        self.assertIn("paper-replicator", guide)
+        self.assertIn("código publicado", guide)
+
     def test_phase_ids_resolve_to_stages(self) -> None:
         self.assertEqual(phase_actions.stage_for("Fase 8"), "writing")
         self.assertEqual(phase_actions.stage_for("Fase 10"), "paper")
@@ -141,6 +157,20 @@ class ServerPhaseTests(unittest.TestCase):
                 self.assertTrue(phase["actions"])
                 self.assertNotIn("--stage", phase["cli_command"])
         self.assertEqual(status["fases"][1]["cli_command"], "/plausibility <texto>")
+
+    def test_phase_five_lists_data_and_replication_sub_phases_in_order(self) -> None:
+        status = json.loads(bytes(self.route("/api/status")().body))
+        fase5 = next(f for f in status["fases"] if f["stage_id"] == "poc_experiments")
+        ids = [s["id"] for s in fase5["subfases"]]
+        self.assertEqual(ids, [f"5.{i}" for i in range(1, len(ids) + 1)])
+        names = [s["name"] for s in fase5["subfases"]]
+        data = names.index("Datos: toy set siempre y dataset oficial")
+        replica = names.index("Réplica de métodos de comparación")
+        build = names.index("Implementación PoC y experimental")
+        self.assertLess(data, build)
+        self.assertLess(replica, build)
+        self.assertIn("paper-replicator", fase5["subfases"][replica]["detail"])
+        self.assertIn("/datasets", fase5["subfases"][data]["detail"])
 
     def test_each_phase_runs_its_own_check(self) -> None:
         self.assertIn("bloques en paper/main.tex", self.run_phase("Fase 8")["message"])

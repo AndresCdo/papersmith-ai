@@ -36,7 +36,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from . import atlas, atlas_build, decisions, experiments_view, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
+from . import agents_view, atlas, atlas_build, decisions, experiments_view, math_view, phase_actions, terminal, tutor, history, paper_preview, novelty_graph, model_spec
 from .health_inspector import get_wiring_health
 from .state_extractor import get_workspace_state, memo_by_file
 from .watcher import EventBus, WorkspaceWatcher, is_health_path
@@ -724,9 +724,9 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "name": "Fase 5: Deliberación & Planeación Experimental (PoC)",
                 "gate": "G-EXP-POC",
                 "agent": "experimental-deliberation & experimental-validation",
-                "desc": "Diseño y deliberación del protocolo experimental, implementación de la prueba de concepto y de los experimentos, y ejecución local o remota de sus mediciones.",
+                "desc": "Diseño y deliberación del protocolo experimental, datos (toy set y dataset oficial), réplica de los métodos de comparación, implementación de la prueba de concepto y de los experimentos, y ejecución local o remota de sus mediciones.",
                 "tools": ["read", "write", "validate"],
-                "skills": ["experimental-deliberation", "experimental-implementation"],
+                "skills": ["experimental-deliberation", "datasets", "proposal-implementation", "experimental-implementation"],
                 "cli_command": "smith deliberate experiments/",
                 "outputs": ["experiments/"],
                 "status": fase5_status,
@@ -738,8 +738,10 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                     {"id": "5.3", "name": "Stage deliberated: Diseño Metrológico & Protocolos", "status": fase5_status, "detail": "Protocolos de ensayo y validación"},
                     {"id": "5.4", "name": "Stage composed: Especificación de Experimentos", "status": fase5_status, "detail": "Formalización de experimentos con instrumentación"},
                     {"id": "5.5", "name": "Stage published: Aprobación de Gate", "status": fase5_status, "detail": "Superación de compuerta G-EXP-POC"},
-                    {"id": "5.6", "name": "Implementación PoC y experimental", "status": fase5_status, "detail": "proposal-implementation y experimental-implementation contra el repositorio objetivo"},
-                    {"id": "5.7", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
+                    {"id": "5.6", "name": "Datos: toy set siempre y dataset oficial", "status": fase5_status, "detail": "/datasets synth|search|license|qc|prepare|publish con dataset-scout y dataset-curator; publicación privada solo con consentimiento del operador"},
+                    {"id": "5.7", "name": "Réplica de métodos de comparación", "status": fase5_status, "detail": "/proposal-implementation → paper-replicator: primero el código publicado, adoptado y auditado; si no existe, reimplementación"},
+                    {"id": "5.8", "name": "Implementación PoC y experimental", "status": fase5_status, "detail": "proposal-implementation y experimental-implementation contra el repositorio objetivo"},
+                    {"id": "5.9", "name": "Ejecución remota y cuentas", "status": fase5_status, "detail": "remote-execution y kaggle-accounts cuando la medición corre fuera de la máquina"}
                 ]
             },
             {
@@ -1243,6 +1245,11 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
         if flow_path.is_file():
             return HTMLResponse(flow_path.read_text(encoding="utf-8"))
         return JSONResponse({"detail": "flow diagram not found"}, status_code=404)
+
+    @app.get("/api/agents")
+    def api_agents() -> JSONResponse:
+        # The agents table under the Flujo Archify diagram.
+        return JSONResponse(agents_view.get_agents_view(root_path))
 
     @app.get("/api/state")
     def api_state() -> JSONResponse:

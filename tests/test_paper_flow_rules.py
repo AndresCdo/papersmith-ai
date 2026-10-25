@@ -40,6 +40,10 @@ class PaperFlowRulesTests(unittest.TestCase):
                     with self.subTest(stage=stage, slash=action["slash"]):
                         self.assertIn(f"`{action['slash']}", FLOW)
         self.assertIn("/math-tutor", FLOW)
+        phase5 = FLOW[FLOW.index("5. **"):FLOW.index("6. **")]
+        for needle in ("`/datasets", "toy", "paper-replicator", "published code"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, phase5)
         self.assertIn("Mapa Conceptual", FLOW)
 
 

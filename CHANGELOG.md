@@ -15,6 +15,21 @@ number is `0`, breaking changes can still arrive without a major bump.
 
 ### Added
 
+- **Data and comparison-method replication in the paper flow.** Phase 5 gains
+  two explicit steps, "Datos: toy set siempre y dataset oficial" (`/datasets`)
+  and "Réplica de métodos de comparación" (`paper-replicator`), in the phase
+  actions, the dashboard sub-phases (5.6 and 5.7) and the entrypoints' paper
+  flow. The Flujo Archify diagram draws a datasets lane (`dataset-scout`,
+  `dataset-curator`, the upload-consent gate), the replication row and
+  `experiments-reviewer`, and the same pane lists every agent of the project
+  (`GET /api/agents`): role, skill, stage, tools, the phase or phases it acts
+  in, and the harnesses it is projected to.
+- **`paper-replicator` adopts published code first.** It searches for the
+  paper's own code and records the search; when code exists it is pinned to a
+  commit with its license and audited against the paper (`match`,
+  `deviation`, `unspecified`) and run through its own tests plus the
+  invariant tests and toy-set smoke run; reimplementation from the paper is
+  the fallback.
 - **`paper-replicator` agent.** A `proposal-implementation` stretch
   (`fidelity`) that reimplements a referenced method with no public code from
   its ingested Markdown and the cited papers it depends on: plan, analyze,
