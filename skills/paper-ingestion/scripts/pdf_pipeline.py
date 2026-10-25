@@ -28,6 +28,7 @@ import ctypes
 import re
 import statistics
 from dataclasses import dataclass, field
+from itertools import chain
 from pathlib import Path
 
 #: Bumped whenever routing or fast-path output changes, so cached pages from an
@@ -212,7 +213,7 @@ def probe_page(page, number: int) -> PageProbe:
         lines: list[tuple[int, int, dict[str, int]]] = []  # (math, visible, fonts) per line
         line_math = line_visible = 0
         line_fonts: dict[str, int] = {}
-        for index, code in (*_code_points(textpage, count), (count, 0x0A)):
+        for index, code in chain(_code_points(textpage, count), [(count, 0x0A)]):
             if code == 0x0A:
                 lines.append((line_math, line_visible, line_fonts))
                 line_math = line_visible = 0
