@@ -11,6 +11,15 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## Unreleased
+
+### Added
+
+- **`datasets synth --profile theta-beta`.** An EEG toy set whose Theta (6 Hz)
+  to Beta (20 Hz) power ratio depends on the class, for proofs of concept of
+  methods that rest on that biomarker. The default `alpha` profile is
+  unchanged byte for byte.
+
 ## 0.21.0
 
 ### Added

@@ -185,8 +185,16 @@ def sha256(path: Path) -> str:
 
 
 # --------------------------------------------------------------------- synth
+#: EEG toy profiles. `alpha`: one 10 Hz rhythm whose amplitude depends on the
+#: class. `theta-beta`: a Theta (6 Hz) and a Beta (20 Hz) rhythm whose ratio
+#: depends on the class -- class 1 carries the elevated Theta/Beta ratio.
+EEG_PROFILES = ("alpha", "theta-beta")
+THETA_HZ, BETA_HZ = 6.0, 20.0
+
+
 def synth_rows(kind: str, seed: int, n_subjects: int, n_per_subject: int,
-               channels: int, length: int, sfreq: float) -> tuple[list[str], list[list[str]]]:
+               channels: int, length: int, sfreq: float,
+               profile: str = "alpha") -> tuple[list[str], list[list[str]]]:
     rng = random.Random(seed)
     rows: list[list[str]] = []
     if kind == "eeg":
@@ -197,7 +205,18 @@ def synth_rows(kind: str, seed: int, n_subjects: int, n_per_subject: int,
                 label = (trial + subject) % 2
                 values = []
                 for channel in range(channels):
-                    amplitude = (1.0 if label else 0.4) * abs(gain) * (1.0 + 0.1 * channel)
+                    scale = abs(gain) * (1.0 + 0.1 * channel)
+                    if profile == "theta-beta":
+                        theta = (1.0 if label else 0.5) * scale
+                        beta = (0.35 if label else 0.7) * scale
+                        phase_t = rng.uniform(0.0, 2.0 * math.pi)
+                        phase_b = rng.uniform(0.0, 2.0 * math.pi)
+                        for t in range(length):
+                            signal = (theta * math.sin(2.0 * math.pi * THETA_HZ * t / sfreq + phase_t)
+                                      + beta * math.sin(2.0 * math.pi * BETA_HZ * t / sfreq + phase_b))
+                            values.append(f"{signal + rng.gauss(0.0, 0.3):.6f}")
+                        continue
+                    amplitude = (1.0 if label else 0.4) * scale
                     phase = rng.uniform(0.0, 2.0 * math.pi)
                     for t in range(length):
                         signal = amplitude * math.sin(2.0 * math.pi * 10.0 * t / sfreq + phase)
@@ -223,8 +242,10 @@ def cmd_synth(args, root: Path, **_inject) -> dict:
                         ("--channels", args.channels), ("--length", args.length)):
         if value < 1:
             raise Refusal("bad-argument", f"{name} must be positive")
+    if args.kind == "eeg" and args.profile == "theta-beta" and args.sfreq <= 2 * BETA_HZ:
+        raise Refusal("bad-argument", f"--sfreq must exceed {2 * BETA_HZ:g} Hz for the {BETA_HZ:g} Hz Beta rhythm")
     header, rows = synth_rows(args.kind, args.seed, args.n_subjects, args.n_per_subject,
-                              args.channels, args.length, args.sfreq)
+                              args.channels, args.length, args.sfreq, args.profile)
     folder = datasets_dir(root) / slug
     folder.mkdir(parents=True, exist_ok=True)
     data = folder / f"{slug}.csv"
@@ -235,7 +256,7 @@ def cmd_synth(args, root: Path, **_inject) -> dict:
     params = {"kind": args.kind, "seed": args.seed, "n_subjects": args.n_subjects,
               "n_per_subject": args.n_per_subject, "channels": args.channels}
     if args.kind == "eeg":
-        params.update({"length": args.length, "sfreq": args.sfreq})
+        params.update({"length": args.length, "sfreq": args.sfreq, "profile": args.profile})
     lines = [f"# Toy dataset `{slug}`", "",
              "Seeded synthetic data for the proof of concept. Same parameters, same bytes.", "",
              "| Parameter | Value |", "|---|---|"]
@@ -644,6 +665,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--channels", type=int, default=4)
     p.add_argument("--length", type=int, default=128)
     p.add_argument("--sfreq", type=float, default=128.0)
+    p.add_argument("--profile", choices=EEG_PROFILES, default="alpha",
+                   help="eeg only: alpha (one 10 Hz rhythm) or theta-beta (class-dependent 6 Hz / 20 Hz ratio)")
     p.add_argument("--force", action="store_true", help="regenerate an existing slug")
     p.set_defaults(func=cmd_synth)
 
