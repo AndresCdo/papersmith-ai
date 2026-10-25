@@ -13,6 +13,7 @@ Branch: feat/experiments-panel · Delivery: ask-on-risk · Runners: `npm run tes
 - S7 (QMLEEG review): "revisa la deliberacion experimental que tenemos actualmente". The review is reported to the operator; any revision of the managed experiments document needs operator acceptance (human gate).
 
 - S8 (Kaggle MCP): "primero revisa el mcp de kaggle, con cual podemos hacer pruebas, para que quede parte del proyecto paper smith y se instale al instalar paper smith y al iniciar un proyecto". Decision: the official remote server https://www.kaggle.com/mcp, registered by init/upgrade for every harness; token from `KAGGLE_API_TOKEN`.
+- S9 (activation from the dashboard): "aesgurate que en el panel de experimentos del tablero, queden las instrucciones de como activar kaggle por mcp y que se pueda hacer dicha activacion con el asistente cli smith que aprece en el tablero". Decision: `smith mcp kaggle activate|status|deactivate`, token stored per user outside workspaces (0600), injected by the dashboard into CLI-assistant sessions; panel box with buttons that run the commands in the assistant.
 
 Assumption: the panel classifies a product folder that holds `Experimental_AGREED.md` as full experiments and one that holds `AGREED.md` as proof of concept.
 
@@ -24,6 +25,7 @@ Assumption: the panel classifies a product folder that holds `Experimental_AGREE
 - T4 [S6,S7] upgrade QMLEEG and report the deliberation review — route: inline — done (upgrade); revision of the experiments document pending operator acceptance
 
 - T5 [S8] Kaggle MCP registration (generators.py, opencode.json.tpl, tests, README, panel help, CHANGELOG) — route: inline — done
+- T6 [S9] Kaggle MCP activation (src/papersmith/core/kaggle_mcp.py, mcp/cli.py, terminal.py, experiments_view.py, experiments-panel.js, tests, README, CHANGELOG) — route: inline; branch feat/kaggle-mcp-activation — RED import error → GREEN 30 passed
 
 ## Log
 
@@ -33,3 +35,4 @@ Assumption: the panel classifies a product folder that holds `Experimental_AGREE
 - L4 QMLEEG upgraded to kit 44be101f; the panel reads experiments v01 (E1-E4, 0 products yet).
 - L5 (2026-10-24, user verbatim): "primero revisa el mcp de kaggle, con cual podemos hacer pruebas, para que quede parte del proyecto paper smith y se instale al instalar paper smith y al iniciar un proyecto, luego comit, mergea y push a papersmith con los cambios, actualizar el proyecto QQMLEEG co los cambios, reinicia el tabler y redacta v02 para discutirlos con experimental deliberation"
 - L6 Evidence: official MCP answers initialize as `Kaggle.Web` with 76 tools; `save_notebook` takes `enableGpuNullable` and `machineShapeNullable`; `search_datasets` works unauthenticated (found `danizo/eeg-dataset-for-adhd`), `get_accelerator_quota` returns `Unauthenticated` without a token; `mcp-remote@0.14.3` bridge verified end to end. RED 2 failed → GREEN 74 passed.
+- L7 (2026-10-24, user verbatim): "sostenemos los 5 folds agrupados, sigue con la deliberación, y aesgurate que en el panel de experimentos del tablero, queden las instrucciones de como activar kaggle por mcp y que se pueda hacer dicha activacion con el asistente cli smith que aprece en el tablero"

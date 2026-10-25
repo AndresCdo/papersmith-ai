@@ -3925,7 +3925,7 @@ The route answers `200`, `404` (no `atlas.json` or no scripts), `422` (the
 checker or renderer refused) or `504` (timeout), always with
 `{ok, stage, detail}` plus the system, planet and link counts on success.
 
-### `smith mcp {serve,inspect,print-config}`
+### `smith mcp {serve,inspect,print-config,kaggle}`
 
 ```bash
 smith mcp serve --workspace ~/papers/sparse-ae
@@ -3939,6 +3939,12 @@ Context Protocol client over `stdio` (JSON-RPC 2.0).
 - `serve --workspace <dir>` — starts the MCP server over `stdio`, bound to a single workspace.
 - `inspect` — prints the capability catalogue as JSON (the source of truth).
 - `print-config [--workspace <dir>]` — emits the configuration fragment for the host being configured (Claude Code, OpenCode).
+
+- `kaggle activate [--token-stdin] [--no-verify] [--workspace <dir>]` — activates Kaggle's official MCP server (`https://www.kaggle.com/mcp`, registered as `kaggle` by `init` and `upgrade`). It reads a `KGAT_` token from a hidden prompt, verifies it with a read-only `get_accelerator_quota` call, and stores it once per user in `$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token` (default `~/.config`, directory `0700`, file `0600`), never inside a workspace. The dashboard injects it as `KAGGLE_API_TOKEN` into the sessions its CLI assistant starts, unless that variable is already exported; a stored file that is a symlink or readable by others is never used.
+- `kaggle status [--verify]` — reports whether the token comes from the environment or the stored file, never its value.
+- `kaggle deactivate` — removes the stored token.
+
+The dashboard's Experimentos tab shows the activation state and runs `smith mcp kaggle activate` in the CLI assistant.
 
 The full catalogue of 38 tools (15 read-only and 23 mutating), the
 `papersmith://` resources and the security model are documented in detail in

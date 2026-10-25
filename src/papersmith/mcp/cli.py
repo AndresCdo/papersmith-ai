@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from ..core import fs
+from ..core import kaggle_mcp
 from ..errors import UserError
 from .server import Server, catalog
 
@@ -45,6 +46,8 @@ def register(subparsers) -> None:
     )
     config.add_argument("--workspace", default=None)
     config.set_defaults(handler=run_print_config)
+
+    kaggle_mcp.register(commands)
 
 
 def run_serve(args) -> int:

@@ -35,6 +35,7 @@ from typing import Any
 
 from .atlas import _locate
 from .state_extractor import credentials_store, inbox_directory
+from .terminal import remote_mcp_status
 from .decisions import LEDGER_MAX_BYTES, MAX_LEDGER_LINES, _discover_ledgers, _read_bytes
 
 MAX_PRODUCTS = 50
@@ -666,4 +667,5 @@ def get_experiments_view(root: Path | str) -> dict[str, Any]:
     by_folder = {path.parent.parent: path for path in ledgers}
     products = [_product(root, repo, folder, by_folder.get(folder), warnings)
                 for repo, folder in _product_dirs(root, reader)]
-    return {"protocol": protocol, "products": products, "remote_accounts": _remote_accounts(root), "warnings": warnings}
+    return {"protocol": protocol, "products": products, "remote_accounts": _remote_accounts(root),
+            "remote_mcp": remote_mcp_status(root), "warnings": warnings}
