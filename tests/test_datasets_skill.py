@@ -724,3 +724,30 @@ class ThetaBetaProfileTests(Base):
         result = self.run_cli("synth", "--slug", "low", "--kind", "eeg", "--profile", "theta-beta", "--sfreq", "32")
         self.assertEqual(result.code, 2)
         self.assertEqual(result.error["error"], "bad-argument")
+
+
+class LabelPerSubjectTests(Base):
+    """`--label-per subject`: one diagnosis per subject, for subject-level protocols."""
+
+    def test_every_subject_carries_one_label_and_classes_are_balanced(self) -> None:
+        result = self.run_cli("synth", "--slug", "subj", "--kind", "eeg", "--profile", "theta-beta",
+                              "--label-per", "subject", "--seed", "3", "--n-subjects", "6",
+                              "--n-per-subject", "4", "--channels", "2", "--length", "64", "--sfreq", "128")
+        self.assertEqual(result.code, 0, result.err)
+        rows = list(csv.reader((self.root / "datasets" / "subj" / "subj.csv").open(encoding="utf-8")))[1:]
+        labels: dict[str, set] = {}
+        for row in rows:
+            labels.setdefault(row[0], set()).add(row[2])
+        self.assertTrue(all(len(v) == 1 for v in labels.values()), labels)
+        per_class = [sum(1 for v in labels.values() if v == {c}) for c in ("0", "1")]
+        self.assertEqual(per_class, [3, 3])
+        toy = (self.root / "datasets" / "subj" / "TOY.md").read_text(encoding="utf-8")
+        self.assertIn("| label_per | subject |", toy)
+
+    def test_the_default_still_alternates_within_a_subject(self) -> None:
+        args = ["synth", "--slug", "d", "--kind", "eeg", "--seed", "9", "--n-subjects", "2",
+                "--n-per-subject", "2", "--channels", "1", "--length", "16"]
+        self.run_cli(*args)
+        default = (self.root / "datasets" / "d" / "d.csv").read_bytes()
+        self.run_cli(*args, "--label-per", "trial", "--force")
+        self.assertEqual((self.root / "datasets" / "d" / "d.csv").read_bytes(), default)
