@@ -11,6 +11,16 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
+## 0.22.1
+
+### Fixed
+
+- **Toy sets for subject-level protocols.** `datasets synth --label-per
+  subject` gives every subject one class, balanced across subjects; the
+  default `trial` (classes alternating within each subject) is unchanged byte
+  for byte. A protocol that decides per subject could not be piloted on the
+  old shape, because a subject carrying both classes has no label to score.
+
 ## 0.22.0
 
 ### Added

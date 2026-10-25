@@ -1,0 +1,23 @@
+name: PR check
+
+# Issue-first: every PR names the issue(s) it resolves, so each change can be
+# traced to a root in maintainer/backlog/roots.json and each closure to a PR.
+# The body is passed through the environment, never interpolated into the
+# script, so a crafted PR body cannot inject shell.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  issue-link:
+    name: PR links an issue
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require Closes/Fixes/Resolves/Refs #N in the PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 maintainer/backlog.py pr-link --body-env PR_BODY
