@@ -522,6 +522,27 @@ Three modules exist so far, each service-blind and stdlib-only:
   exit or an expired timeout is a refusal (`KaggleAdapterError`), never a
   fabricated `Status`, `Submission` or `Fetched`.
 
+  **Team accounts: only owner-mapped Kaggle accounts are workers.** When
+  `<workspace>/.papersmith/team.json` maps at least one owner to a Kaggle
+  username (`accounts.kaggle.username`), `workers()` returns only the
+  accounts kaggle-accounts lists whose username an owner maps — one per
+  owner. Every other listed account stays in kaggle-accounts but is never
+  a worker, and `submit` to it refuses before any credential is asked for:
+  it is "not mapped to a team owner: one account per person — Kaggle
+  staff: 'the one account per person applies to all Kaggle site use'"
+  (https://www.kaggle.com/discussions/general/192527, verified
+  2026-10-25). Registering a second account under a different email does
+  not make it a different person's account. An owner whose mapped
+  username kaggle-accounts does not list is reported as not validated and
+  yields no worker until that account is taken in and validated.
+  `KaggleAdapter.team_report()` returns all three lists (`workers`,
+  `excluded` with each reason, `not_validated`), and the declared capacity
+  counts mapped workers only. The adapter reads two fields per member
+  (`owner`, `accounts.kaggle.username`) and nothing else; it refuses a
+  registry that is not schema 1, an owner listed twice, and the same
+  username under two owners. With no registry, or one mapping no Kaggle
+  account, every listed account is a worker exactly as before.
+
   **`fetch()` owns its own time budget, `KAGGLE_FETCH_TIMEOUT_SECONDS`
   (1800s) — a SEPARATE constant from `SUBPROCESS_TIMEOUT_SECONDS` (120s),
   never the same one reused.** This is the same finding as
@@ -1603,7 +1624,7 @@ rather than surfacing a raw traceback and leaving a reader to guess.
 headless CLI, pinned exactly:
 
 ```
-uv tool install --force --python 3.14 google-colab-cli --with "jupyter-kernel-client<1"
+uv tool install --force --python 3.14 "google-colab-cli==0.6.0" --with "jupyter-kernel-client<1"
 ```
 
 The pin is not decorative: `google-colab-cli` 0.6.0 with
@@ -1614,11 +1635,77 @@ resolution does not pick. The adapter shells out to `colab` on `PATH` by
 default; a non-default location can be supplied as `colab_executable` when
 constructing `ColabAdapter` directly.
 
-Authentication is the CLI's own oauth2 consent ritual — run any `colab`
-command once in a terminal and approve it — and the adapter never reads
-`~/.config/colab-cli/token.json`: the CLI's own child process resolves it
-from the `HOME` the adapter forwards, and no module above the seam learns a
-path to it.
+`google-colab-cli` 0.7.5 is **untested live** and the pin stays at 0.6.0.
+Read from 0.7.5's own `--help` and installed source (never authenticated):
+it depends on `jupyter-kernel-client==0.9.0` and resolves either kernel
+client class name, so #94 looks fixed there; the `sessions` line gained a
+`Shape:` field, which the adapter's line parser still reads; `new`,
+`exec`, `upload`, `download`, `install`, `status` and `stop` keep the flags
+the adapter passes. But 0.7.5 no longer ships the hidden `keep-alive`
+command the adapter spawns (0.6.0 does), so on 0.7.5 that best-effort
+keep-alive would silently do nothing and a long run could be idle-reclaimed.
+Moving the pin waits for a live rehearsal that settles that.
+
+Authentication is the CLI's own oauth2 copy-paste ritual, and the adapter
+never reads the token file the CLI writes: the CLI's own child process
+resolves it from the `HOME` the adapter forwards, and no module above the
+seam learns a path to it. Measured in the CLI's source (0.6.0 and 0.7.5
+alike): the token lives at `~/.config/colab-cli/token.json`, resolved from
+`HOME` when the CLI starts, and the global `--config PATH` flag names the
+session state FILE (`sessions.json`) only — it never moves the token. No
+OAuth client file is needed: the CLI ships Google's public installed-app
+client (`colab_cli/oauth_config.json`) and uses it whenever
+`~/.colab-cli-oauth-config.json` does not exist; its copy-paste redirect
+is registered to that client, so substituting your own client would break
+the flow (`redirect_uri_mismatch`, per the CLI's own `auth.py`).
+
+**Team accounts: one worker per owner.** When
+`<workspace>/.papersmith/team.json` declares Colab accounts, the adapter
+exposes one worker per owner, `colab:<owner>`, and runs every child for
+that worker with `HOME=<configDir>` (the owner's own state directory)
+plus `--config <configDir>/.config/colab-cli/sessions.json` — still only
+`PATH` and `HOME` are forwarded. It reads three fields per member
+(`owner`, `accounts.colab.tier`, `accounts.colab.configDir`), checks that
+the directory exists with mode 0700, and never opens anything inside it.
+It refuses a registry that is not schema 1, an owner listed twice, an
+unknown tier, a relative `configDir`, and the same `configDir` under two
+owners. With no registry (or one declaring no Colab account) the single
+`colab` worker on the operator's own `HOME` is unchanged. Each owner signs
+in once, on their own Google account, in a terminal:
+
+```
+mkdir -p -m 700 ~/.config/papersmith/colab/<owner>
+HOME=~/.config/papersmith/colab/<owner> colab \
+  --config ~/.config/papersmith/colab/<owner>/.config/colab-cli/sessions.json sessions
+```
+
+The CLI prints an authorization URL; the owner opens it, approves, and
+pastes back the code Google shows. `--auth adc` (Application Default
+Credentials) also resolves from `HOME`, so it isolates per owner the same
+way.
+
+The team rule, enforced at the adapter: one account per person, and a
+`free` account is never a worker of a split campaign. The Colab FAQ
+(https://research.google.com/colaboratory/faq.html, verified 2026-10-25)
+disallows "using multiple accounts to work around access or resource usage
+restrictions" on every managed runtime and, on free runtimes without a
+positive compute-unit balance, "running distributed computing workers". So
+a submission carrying campaign `units` on a free worker refuses by name,
+citing that rule, before any CLI call; a single send (interactive work or
+a proof-of-concept pilot) on a free worker is allowed; a campaign whose
+units land on `pro`, `payg` or `enterprise` workers is allowed.
+`workers()` lists free accounts first, so a campaign that would place a
+unit on one refuses at its first assignment, before any paid account has
+launched. `ColabAdapter.campaign_refusal(worker)` returns that reason (or
+`None`) without a subprocess, for a planner that wants to exclude rather
+than refuse. The declared capacity counts distinct owners on paid tiers.
+
+GPU variants by tier: `colab new --gpu` accepts `T4`, `L4`, `G4`, `A100`
+and `H100` (0.7.5 help). Expect `T4` on a free account and `L4`, `A100`
+or `H100` on paid compute; the FAQ itself names no models — free access to
+GPUs "is heavily restricted", premium GPUs come with a paid plan "subject
+to availability", and the types "vary over time". The adapter maps only
+`sm_75 → T4`, `sm_80 → A100`, `sm_90 → H100` (`COLAB_ACCELERATOR_VARIANTS`).
 
 Sessions are expensive and idle-reclaimed, so release is part of the flow,
 not housekeeping: `fetch` stops a session only AFTER the manifest has

@@ -14,9 +14,13 @@ from ..generators import (
     context_for_workspace,
     read_workspace_version,
     render_files,
+    PI_SETTINGS_FILE,
+    ensure_mcp_servers,
+    seed_pi_settings,
 )
 from ..kit import resolve_and_validate_origin
 from ..schema import validate_tools
+from . import kaggle_mcp
 from . import config, fs, manifest, migrations, provenance, wiring
 from .exit_codes import EXECUTION_ERROR
 
@@ -275,6 +279,14 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
     for relpath in generated:
         if relpath not in changed:
             changed.append(relpath)
+    # Workspaces made before Pi's web tools were declared get the settings
+    # file once; an existing one is the workspace's own and stays as it is.
+    if "pi" in active_tools and seed_pi_settings(root):
+        changed.append(PI_SETTINGS_FILE)
+    # Each harness's MCP file is the workspace's own; upgrade only adds or
+    # refreshes the banco-lia entry and keeps every other server.
+    mcp_warnings: list[str] = []
+    changed.extend(ensure_mcp_servers(root, active_tools, warnings=mcp_warnings))
 
     # Remove previously-baselined dynamic outputs that stopped being derivable
     # (a workspace-local skill that was removed or renamed). The baseline is the
@@ -411,6 +423,7 @@ def upgrade(workspace: str | Path = ".", *, tools: Sequence[str] | None = None,
         "stranded": stranded,
         "unsynchronized": unsynchronized,
         "link_warnings": manifest.link_warnings(link_report),
+        "mcp_warnings": mcp_warnings,
         "wiring": wiring.summarize(root, active_tools, link_report, unsynchronized),
     }
 
@@ -493,8 +506,10 @@ def run_cli(args) -> int:
     print("Harness wiring:")
     for line in wiring.format_summary(result["wiring"]):
         print(f"  {line}")
-    for warning in result["link_warnings"]:
+    for warning in result["link_warnings"] + result.get("mcp_warnings", []):
         print(f"Warning: {warning}")
+    for line in kaggle_mcp.summary_lines(_active_tools_of(result)):
+        print(line)
 
     report = result["migrations"]
     lines = _migration_lines(report)
@@ -508,9 +523,19 @@ def run_cli(args) -> int:
     if result["recorded_version"] != result["version"]:
         print(f"Recorded version stays at {result['recorded_version'] or '(none)'}: "
               f"the artifact migrations for {result['version']} are not done. "
-              "Re-run `papersmith upgrade` once their cause is fixed.")
+              "Re-run `smith upgrade` once their cause is fixed.")
     if report["failures"]:
         for failure in report["failures"]:
             print(f"Migration failed: {failure}", file=sys.stderr)
         return EXECUTION_ERROR
     return 0
+
+
+def _active_tools_of(result: dict) -> list[str]:
+    """The harnesses this run wired, for the offline Kaggle MCP summary."""
+    wiring = result.get("wiring")
+    if isinstance(wiring, dict):
+        return [str(tool) for tool in wiring]
+    if isinstance(wiring, list):
+        return [str(item.get("tool")) for item in wiring if isinstance(item, dict) and item.get("tool")]
+    return []

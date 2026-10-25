@@ -11,7 +11,7 @@
 </p>
 
 This README is the **complete manual, in English**: installation, the workspace from the
-inside, the twelve CLI commands, the twelve skills, the nineteen agents,
+inside, the thirteen CLI commands, the thirteen skills, the twenty agents,
 remote compute, development and troubleshooting.
 
 ## Contents
@@ -38,12 +38,12 @@ Welcome. This forge is built to take a PDF to a compiled paper
 without guessing the order. The minimum path:
 
 1. **Install the CLI and set up the environment** — see [Getting started](#getting-started).
-2. **Create your workspace** — `papersmith init ~/papers/my-paper --title "…" --topic "…"`.
+2. **Create your workspace** — `smith init ~/papers/my-paper --title "…" --topic "…"`.
    What it leaves inside, in [Inside the workspace](#inside-the-workspace).
 3. **Check that the idea is plausible** — with your idea in two sentences,
    `/plausibility` tracks the SOTA and returns the constellation plus a ranked top 5.
 4. **Put a reference PDF** in `guidance/reference-papers/` and run
-   `papersmith ingest <pdf>` — or ask for `/paper-ingestion` inside your harness.
+   `smith ingest <pdf>` — or ask for `/paper-ingestion` inside your harness.
 5. **Open the deliberation** with `/proposal-deliberation` and discuss the mathematics
    with the agent.
 
@@ -61,7 +61,7 @@ agent is used as a copilot, the ones already defined are in
 
 ## Use flow — the short path
 
-Twelve skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
+Fourteen skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
 Spanish (*"ingiere los papers"*). **Not all of them have to be used, or in this order**: each
 one declares what it needs first and refuses if it's missing, so an invocation from the middle
 of the flow reports which input is missing.
@@ -73,21 +73,24 @@ The full path, from a PDF to a compiled paper:
 | 1 | `/plausibility` | Explores the idea before any ingestion, in three stretches: it tracks ~25 references through their abstracts, maps the constellation in a single HTML and discusses the plausibility of the hypothesis against that SOTA | `sota-pool/` (ignored, like `guidance/`) |
 | 2 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
 | 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
-| 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
-| 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
-| 6 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
-| 7 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
-| 8 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
-| 9 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
-| 10 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
-| 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
-| 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `papersmith upgrade` | the workspace itself |
+| 3b | `/math-tutor` | Before implementing a revision: a Socratic tutor that discusses its concept map and mathematics with you, reads the pages you draw by hand, and checks your understanding of why the novelty holds | nothing on disk but its thread (`.papersmith/math-tutor/`); used from the dashboard's Mapa Conceptual & Modelo tab |
+| 4 | `/datasets` | Gives the proof of concept and the full experiments their data: a seeded toy set always (`synth`), then an official dataset searched for (`search`) across the paper's own repository and the open dataset hosts, its source license decided (`license`), its quality measured (`qc`) and one subject-wise preparation both stages read (`prepare`); `publish` uploads it privately only with your explicit consent. Agents `dataset-scout` and `dataset-curator` | `datasets/` (registry, toy and prepared sets) |
+| 5 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
+| 5b | `/proposal-implementation` (replication) | Replicates each comparison or baseline paper through the `paper-replicator` agent: it looks for the paper's published code first and, when it exists, adopts it pinned to a commit and audits that it corresponds to the paper and is implemented correctly; only when no code exists does it reimplement the method from the ingested Markdown | the target repo, with a `REPLICATION.md` correspondence table |
+| 6 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
+| 7 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
+| 8 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
+| 9 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
+| 10 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
+| 11 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
+| 12 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
+| 13 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `smith upgrade` | the workspace itself |
 
 The minimum to try the forge is step 1: with the idea in two sentences,
 `/plausibility` tracks the SOTA and returns the constellation plus the top-5. Only
 afterwards, if desired, a PDF can be placed in `guidance/reference-papers/` and run
 through `/paper-ingestion`; the deliberation is then carried out with
-`/proposal-deliberation`. Steps 4 and 6 only make sense once there's a published proposal
+`/proposal-deliberation`. Steps 5 to 7 only make sense once there's a published proposal
 and a target repository to implement it in.
 
 The diagram shows the full flow: every stage in this order with
@@ -98,6 +101,26 @@ the source of each node, is in
 (opens in the browser; generated with [Archify](https://github.com/tt-a1i/archify),
 and its source and its recipe are versioned in
 [`docs/diagrams/`](docs/diagrams/README.md)).
+
+The dashboard (`smith ui`) opens on this flow and shows the same order as
+eleven phases under **Pipeline y Avance**. Below the diagram, the **Flujo Archify**
+tab lists every agent the workspace ships (`/api/agents`): its role, the skill it
+loads, its stretch, its tools, the phase(s) it acts in and the harnesses it is
+projected to, in a table you can sort and filter. Clicking a phase opens its console:
+a text box with the stage's rules as a guide that sends `/<skill> <text>` to an
+agent in the support terminal (for `/plausibility`, the idea in at least two
+sentences), the real `smith` command for the phase, or a link to the panel
+that owns the work: the concept map, the math tutor, the PoC board, the
+sections, the PDF preview or the gates. After "Ejecutar", the drawer tracks the run
+step by step until the server finds the phase's evidence on disk and marks it
+verified; the next phase then unlocks and lights up. Each phase is locked until
+the one before it passes (override available). A running phase also shows in a
+dock at the bottom left on every tab. A click opens its tracking panel in place, with
+the checkpoints, the agent's terminal and **⏹ Detener proceso**, which interrupts the
+agent's turn and keeps its session. Closing the CLI, changing tabs or reloading the
+page never ends the session of a running phase: a reload reattaches to it. The same eleven phases are written into
+every harness entrypoint (`CLAUDE.md`, `OPENCODE.md`, `.pi/APPEND_SYSTEM.md`,
+`.agents/AGENTS.md`) under "Paper construction flow".
 
 [![papersmith-ai flow in Pi: commands, skills and agents](docs/diagrams/papersmith-pi-flow.png)](docs/diagrams/papersmith-pi-flow.html)
 
@@ -128,7 +151,7 @@ start.
 
 | Runtime | Version | What for | If it's missing |
 | --- | --- | --- | --- |
-| **Python** | ≥ 3.11 | the `papersmith` CLI and all the Python skills | there's no possible installation |
+| **Python** | ≥ 3.11 | the `smith` CLI and all the Python skills | there's no possible installation |
 | **Node.js** | ≥ 21 | the deliberation engine (`jiti`, `typebox`) and the dashboard | `init` warns and `deliberate` refuses |
 | `npm` | whatever Node ships | installing those two dependencies in the workspace | same as above |
 
@@ -138,7 +161,7 @@ Both are checked at once:
 python3 --version && node --version && npm --version
 ```
 
-If Node is missing, `papersmith init` doesn't fail: it warns with
+If Node is missing, `smith init` doesn't fail: it warns with
 `npm was not found; deliberate requires npm install for jiti/typebox` and moves
 on, because the rest of the workspace can be created. But `proposal-deliberation`
 and `experimental-deliberation` —the two skills that propose and discuss before
@@ -170,9 +193,9 @@ pipx install --force git+https://github.com/LIAUNAL/papersmith-ai.git
 pip install --upgrade --force-reinstall "papersmith-ai @ git+https://github.com/LIAUNAL/papersmith-ai.git"
 
 # 1d. Bring existing workspaces up to that version
-papersmith upgrade --plan-migrations ~/papers/sparse-ae  # which artifacts are missing, without writing anything
-papersmith upgrade ~/papers/sparse-ae                    # syncs the files and migrates the artifacts
-papersmith status ~/papers/sparse-ae                     # drift and pending migrations
+smith upgrade --plan-migrations ~/papers/sparse-ae  # which artifacts are missing, without writing anything
+smith upgrade ~/papers/sparse-ae                    # syncs the files and migrates the artifacts
+smith status ~/papers/sparse-ae                     # drift and pending migrations
 
 # 2. Isolated ingestion runtime (micromamba: Python 3.12, PyTorch, Surya OCR, llama-server)
 python3 scripts/setup_env.py install
@@ -181,6 +204,12 @@ python3 scripts/setup_env.py install
 npm install
 npm run setup:harnesses
 ```
+
+**The command is `smith`.** Installing `papersmith-ai` puts `smith` on `PATH`,
+and every command in this README uses it (`smith init`, `smith upgrade`,
+`smith status`, …). The older `papersmith` entry point is still installed as a
+compatibility alias for existing scripts; it runs the same CLI and reports itself
+as `smith`.
 
 **The package is published on PyPI.** `pipx install papersmith-ai` brings the
 latest release, which `pipx upgrade papersmith-ai` in **1c** updates. The git URL
@@ -191,20 +220,20 @@ this forge.
 
 `main` is the only branch that's maintained, and each release also gets its tag,
 so an exact build is frozen by pinning it in the URL — for example
-`pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.15.0"`.
+`pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.23.0"`.
 **1b** takes the clone as it is, including uncommitted changes; a reproducible
 build comes from **1a** or a tag. The changelog is in [CHANGELOG.md](CHANGELOG.md).
 
 Updating is two steps and they're two different objects. **1c** reinstalls the
-CLI from `main`; `papersmith --version` confirms the installed version. **1d**
+CLI from `main`; `smith --version` confirms the installed version. **1d**
 moves each **workspace** that already exists, and it isn't optional: a release
 can change the shape of an artifact a workspace has already produced —the graph
 pool's `atlas.html`, for example—, so syncing the framework files without
 migrating the artifacts leaves the new scaffolding reading old state.
 
-`papersmith upgrade` syncs the workspace with the installed version and applies
+`smith upgrade` syncs the workspace with the installed version and applies
 that version's artifact migrations. The version the workspace records doesn't
-advance until those migrations are done, so `papersmith status` may report that
+advance until those migrations are done, so `smith status` may report that
 it hasn't yet reached the release just installed. `--plan-migrations` reports
 what's pending and finishes without writing anything; it isn't called
 `--dry-run`, because it doesn't preview the kit copy. `--no-migrate`
@@ -212,7 +241,7 @@ syncs the files and leaves the artifacts as they are, with the version marker
 where it was.
 
 **Which workspaces can be upgraded.** Re-initializing a live workspace is never
-the answer: `papersmith init` in a fresh directory leaves behind every ledger,
+the answer: `smith init` in a fresh directory leaves behind every ledger,
 receipt, seal, managed revision and lock the paper has accumulated. Workspaces
 recorded at 0.12.0 or later are supported, and since 0.14.0 every release that
 changes the shape of something a workspace already has ships its migration in
@@ -227,7 +256,7 @@ maintainer-side policy is in
 [`docs/releasing.md`](docs/releasing.md#workspace-support-policy).
 
 The two `upgrade`s are separate: neither one touches the other.
-`papersmith upgrade` refuses to take a workspace to a version older than the one
+`smith upgrade` refuses to take a workspace to a version older than the one
 it records, unless `--allow-downgrade` is passed.
 
 `scripts/setup_env.py install` provisions **the whole** ingestion stack in a
@@ -237,33 +266,33 @@ nor a Homebrew installation. `npm run setup:harnesses` symlinks the canonical
 `skills/` tree into `.claude/skills`, `.pi/skills`, `.opencode/skills`
 and `.agents/skills`, with relative, idempotent symlinks (see
 [Harnesses and skill projection](#harnesses-and-skill-projection)). The first
-run of `papersmith ingest` downloads ~1.5 GB of Surya weights if the
+run of `smith ingest` downloads ~1.5 GB of Surya weights if the
 environment wasn't pre-provisioned.
 
 ### 2. Create a workspace
 
 ```bash
-papersmith init ~/papers/sparse-ae \
+smith init ~/papers/sparse-ae \
   --title "Sparse Autoencoder Audit" \
   --topic "mechanistic interpretability" \
   --remote kaggle
 
 cd ~/papers/sparse-ae
-papersmith status
-papersmith status --json          # machine-readable snapshot
+smith status
+smith status --json          # machine-readable snapshot
 ```
 
 The workspace stays decoupled from the framework checkout: the scaffolding is
-synced with `papersmith upgrade`, and the research artifacts are protected by
+synced with `smith upgrade`, and the research artifacts are protected by
 contract. What `init` creates exactly —and what gets versioned— in
 [Inside the workspace](#inside-the-workspace).
 
 ### 3. Ingest literature
 
 ```bash
-papersmith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview or URL
-papersmith ingest ~/Downloads/reference-paper.pdf     # local PDF
-papersmith ingest ~/Downloads/scan.pdf --ocr       # scanned: balanced OCR mode
+smith ingest https://arxiv.org/abs/2309.08600    # arXiv, OpenReview or URL
+smith ingest ~/Downloads/reference-paper.pdf     # local PDF
+smith ingest ~/Downloads/scan.pdf --ocr       # scanned: balanced OCR mode
 ```
 
 Each loose PDF ends up in its own folder, next to its Markdown (text + LaTeX +
@@ -274,9 +303,9 @@ pipeline's details, in the `paper-ingestion` section of the
 ### 4. Deliberate, implement and run
 
 ```bash
-papersmith deliberate . --action status                                   # state of the managed proposal
-papersmith implement . --action verify --target implementations/my-repo   # over an already materialized repo
-papersmith run smoke_and_invariants --dry-run                             # plans; dispatches nothing
+smith deliberate . --action status                                   # state of the managed proposal
+smith implement . --action verify --target implementations/my-repo   # over an already materialized repo
+smith run smoke_and_invariants --dry-run                             # plans; dispatches nothing
 ```
 
 Inside a harness, the same capabilities are requested by skill name:
@@ -421,7 +450,7 @@ skill](#anatomy-of-each-skill). For the literal contract, each one's
 
 ## Inside the workspace
 
-`papersmith init` creates a self-contained directory —with no git initialized and
+`smith init` creates a self-contained directory —with no git initialized and
 without touching the framework checkout— with this shape:
 
 ```
@@ -431,7 +460,7 @@ my-paper/
 │   ├── manifest.json            #   hashes of everything the framework generated
 │   ├── runs_ledger.jsonl        #   every dispatched run, in order
 │   └── version                  #   framework version that created it
-├── .claude/agents/              # the nineteen subagents (single source of truth)
+├── .claude/agents/              # the twenty-four subagents (single source of truth)
 ├── skills/                      # the kit copy: the skills + _core
 │   └── _core/                   #   the two shared engines (deliberation, implementation)
 ├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
@@ -478,8 +507,8 @@ execution_profiles:
   benchmark_evaluation:  { target: "kaggle-gpu-pool", entrypoint: "papermill …/benchmark.ipynb" }
 
 paper_ingestion:
-  engine: marker
-  mode: fast            # fast (CPU) | balanced (GPU, maximum fidelity)
+  engine: auto          # route each page: pypdfium2 fast path, Docling only where needed
+  mode: fast            # fast (route pages) | balanced (every page through Docling)
   strip_references: true
   source_base: guidance
 ```
@@ -491,7 +520,7 @@ by hand).
 
 ### What is versioned and what is not
 
-`papersmith upgrade`'s preservation contract is explicit: it never touches
+`smith upgrade`'s preservation contract is explicit: it never touches
 `guidance/`, `proposals/`, `paper/`, `experiments/`, `implementations/`,
 `kaggle-inbox/`, `papersmith.yaml`, `package.json`, `README.md`
 nor the `.env*` files. Everything else is framework scaffolding and `upgrade`
@@ -514,8 +543,8 @@ migrations](#artifact-migrations), and it is also the reason
 
 - **`manifest.json`** stores the hash of every generated file. `papersmith
   audit --check-drift` compares against the disk and names what drifted; the
-  repair is `papersmith upgrade`, never a hand edit.
-- **`runs_ledger.jsonl`** is append-only: every `papersmith run` that gets
+  repair is `smith upgrade`, never a hand edit.
+- **`runs_ledger.jsonl`** is append-only: every `smith run` that gets
   dispatched is recorded with its target, its profile and its result.
 - **`config.json`** stores the active target, the active profile and the ledger's
   configuration paths.
@@ -551,7 +580,7 @@ npm run setup:harnesses      # = bash scripts/setup-harnesses.sh
 
 ### What each harness wires
 
-`papersmith init` and `papersmith upgrade` generate, for each harness the
+`smith init` and `smith upgrade` generate, for each harness the
 workspace declares, what this table shows. It is the same matrix as
 `HARNESS_CAPABILITIES` in `src/papersmith/generators.py`, and a test
 (`tests/test_harness_parity.py`) verifies that both match. `wired` is what
@@ -573,6 +602,13 @@ add the `wiring` key to its result. If a skill symlink could not be created, or
 there is a real directory where the symlink would go, they report it as a warning
 (`failed` / `blocked`) instead of silently omitting it.
 
+Pi's agents use the web tools `web_search` and `fetch_content` from the
+[`pi-web-access`](https://www.npmjs.com/package/pi-web-access) package. The
+workspace declares it in `.pi/settings.json`, which Pi reads once you trust the
+project and installs from there; nothing needs installing by hand. `init` writes
+that file, `upgrade` adds it to an older workspace that lacks it, and neither
+touches an existing one (add packages to it with `pi install -l <source>`).
+
 What the table does not promise:
 
 - **Pi:** the agents in `.pi/agents` are only read by the third-party package
@@ -592,7 +628,7 @@ What the table does not promise:
 - **Antigravity, documented locations only:** `.antigravity/rules.md` and
   `.antigravity/skills` are no longer generated. Antigravity uses `.agents/skills`,
   `.agents/agents/` and `.agents/AGENTS.md` (plain text, no frontmatter). Existing
-  workspaces are not migrated: `papersmith init` must be run in a new workspace.
+  workspaces are not migrated: `smith init` must be run in a new workspace.
 
 #### Verified support matrix
 
@@ -606,7 +642,7 @@ tool documents, not what Papersmith generates (that is the table above).
 | OpenCode | supported: `.opencode/skills` | supported: `.opencode/commands` | supported: `.opencode/agents` | supported: `.opencode/plugins/` | supported: `opencode.json` | <https://opencode.ai/docs/skills/>, <https://opencode.ai/docs/commands/>, <https://opencode.ai/docs/agents/>, <https://opencode.ai/docs/plugins/>, <https://opencode.ai/docs/config/> |
 | Pi | supported: `.pi/skills`, `.agents/skills` | supported: `.pi/prompts/*.md` | unsupported in the core; third-party only (`.pi/agents`, `pi-subagents`) | supported: `.pi/extensions/` | supported: `.pi/mcp.json` | <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/configuration.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/prompt-templates.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>, <https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/mcp.md>, <https://github.com/nicobailon/pi-subagents/blob/main/docs/agents.md> |
 | Google Antigravity | supported: `.agents/skills` | supported but deprecated (workflows); path `.agents/workflows` unverified | supported: `.agents/agents` | supported: `.agents/hooks.json` (input schema unverified) | supported: `.agents/mcp_config.json` | <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/ide/workflows>, <https://antigravity.google/docs/subagents>, <https://antigravity.google/docs/hooks>, <https://antigravity.google/docs/mcp> |
-| Claude Code | supported: `.claude/skills` | supported (legacy format): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith never writes it) | supported: `.mcp.json` (Papersmith does not generate it) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
+| Claude Code | supported: `.claude/skills` | supported (legacy format): `.claude/commands` | supported: `.claude/agents` | supported: `.claude/settings.json` (Papersmith never writes it) | supported: `.mcp.json` (Papersmith registers only the lab's `banco-lia` server and Kaggle's official `kaggle` server there) | <https://code.claude.com/docs/en/skills>, <https://code.claude.com/docs/en/sub-agents>, <https://code.claude.com/docs/en/hooks>, <https://code.claude.com/docs/en/mcp> |
 
 - `.antigravity/skills` and `.antigravity/rules.md`: unsupported (no source found)
   and no longer generated; Antigravity uses `.agents/skills`, `.agents/agents/` and
@@ -627,7 +663,7 @@ tree (`.claude/agents/`), and its routing docs point at the canonical tree
 `skills/*/SKILL.md`. The routing documents are generated projections: the
 real source of each agent is `.claude/agents/*.md` and the source of each skill is its
 `SKILL.md`. The projections must not be edited by hand; they regenerate (and
-`papersmith audit --check-drift` warns if one drifted). `init` and `upgrade` generate one slash command per skill
+`smith audit --check-drift` warns if one drifted). `init` and `upgrade` generate one slash command per skill
 in `.claude/commands/`, `.opencode/commands/` and `.pi/prompts/`; Antigravity does not
 receive command files and reads skills through its symlinks. Agents are
 projected from `.claude/agents/` to `.opencode/agents/`, `.pi/agents/` and
@@ -646,7 +682,7 @@ repo-only).
 
 ## The agents
 
-A workspace ships **nineteen subagents** in `.claude/agents/`. They are short
+A workspace ships **twenty-four subagents** in `.claude/agents/`. They are short
 bursts of work that a harness launches (for example, with the Task tool) on
 request, not replacements for the CLI. The shape is always the
 same — **one burst between two operator gates**: the agent decides
@@ -657,11 +693,16 @@ to establish it. The operator opens and closes the gates.
 |-------|----------------|----------------|
 | `implementation-build` | From the approved object→module map to the findings report: materializes the scaffolding, writes one module per object with its provenance and its invariant tests, and validates the admitted remedies. | `proposal-implementation` |
 | `implementation-walk` | Walks the declared flow act by act, in order: runs the local steps, records each product and stops at the rehearsal before launch. It has no path to submit a campaign. | `proposal-implementation` |
+| `paper-replicator` | The `fidelity` stage for a comparison or baseline paper: it first searches for the paper's published code; when it exists, it adopts it pinned to a commit with its license and audits correspondence with the paper (match, deviation, unspecified) and implementation correctness; otherwise it reimplements the method from the ingested Markdown. It ends at code in the target layout, a `REPLICATION.md` table, invariant tests and a toy-set smoke run, and never launches a remote run. | `proposal-implementation` |
+| `dataset-scout` | From a research question or paper to ranked dataset candidates with their source licenses decided: it searches the paper's official repository and the dataset hosts (`search`) and records a `license` decision per candidate. It never downloads what it cannot license and never uploads anything. | `datasets` |
+| `dataset-curator` | From a dataset need to its arrival: the seeded toy set, a licensed source measured with `qc`, the one official subject-wise preparation (`prepare`), and `publish` run for real only with the operator's own consent tokens. | `datasets` |
 | `deliberation-publish` | From the moment you accept a change until the successor revision is published and in force — the only way the mathematics travels. The deliberation itself is not here: only you close it. | `proposal-deliberation` |
 | `experimental-publish` | The same as `deliberation-publish`, over the experiments document. | `experimental-deliberation` |
 | `experimental-validation` | The `validated` stage: it looks for the area's evaluation protocol —metrics, baselines, dataset, seeds, significance test—, verifies each baseline against its repo and its venue, and dates every URL it uses. | `experimental-deliberation` |
 | `experiments-build` | From the approved map of protocol steps to executable commands: materializes whatever is needed, wires each step and instruments each measurement so that it can be run and read. | `experimental-implementation` |
 | `experiments-walk` | The walk of the protocol, with the same gates and the same stop at the rehearsal. | `experimental-implementation` |
+| `experiments-reviewer` | From an instrumented implementation to a findings report read before any rehearsal or launch: reviews the code against the experiments protocol for code quality, the simulation and data path, remote GPU use and the declared statistical tests. It runs only the target's own tests and linters; it never repairs nor launches. | `experimental-implementation` |
+| `math-tutor` | One turn of the Socratic tutor from the dashboard's math panel: reads the hand-drawn page back as LaTeX, gives one hint, asks one question and assesses understanding quoted from your own words, always tied to why the novelty holds. It never writes the workspace. | `math-tutor` |
 | `paper-ingestion` | Turns a paper into the form in which it can really be used: LaTeX equations, tables as tables, figures as files. Stages: `filed`, `extracted`, `readable`. It asks nobody anything. | `paper-ingestion` |
 | `contract-auditor` | Reads the `## Disqualifiers` of a contract, literally, and judges a draft block against each one: `fires`/`clear`/`undecidable`, with the passage quoted in each `fires`. | `paper-writing` |
 | `redactor` | Writes the LaTeX of a block from exactly four inputs (the contract's prose, its evidence set, its mode and its style set) and returns a binding map: where each sentence comes from. | `paper-writing` |
@@ -680,7 +721,7 @@ Three rules that order everything else:
 - **The source of truth is `.claude/agents/`.** Each harness's routing docs
   (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
   `.agents/AGENTS.md`) list
-  all nineteen, and they are generated: an agent is changed
+  all twenty-four, and they are generated: an agent is changed
   there, not in the projection.
 - **Each agent declares the skill it loads** (`skills/<name>/SKILL.md`), and that
   binding is verified: an agent that points at a skill the workspace does not
@@ -870,10 +911,29 @@ consequence that matters before it is used:
 > unrepeatable by design. Ingestion comes first, deliberation after.
 
 **What it needs first.** A single per-machine preparation: running
-`./.claude/skills/paper-ingestion/setup.sh`. It is idempotent and does two things:
-it installs the `llama-server` binary (the OCR engine; it is not a pip package) and
-creates the virtual environment with `marker-pdf` inside. The first real ingestion
-downloads the models (~1.5 GB) and caches them; from then on it works offline.
+`./.claude/skills/paper-ingestion/setup.sh`. It is idempotent and provisions the
+`papersmith` environment with `pypdfium2` (the fast path), `docling` (the heavy
+pages) and, on Apple Silicon, `mlx-vlm` (the formula model on the GPU). The first
+page that needs Docling downloads its models (about 1 GB) and caches them; from
+then on it works offline. A paper with no heavy page loads no model at all.
+
+**Page routing, and why it is fast.** Most pages of a paper are prose with an
+exact digital text layer. The default engine, `auto`, probes every page without
+loading a model — characters, fonts, images — and reads prose pages with
+**pypdfium2** in milliseconds. Only pages with a display equation, a table or no
+text layer go to **Docling**, through its page range: equations become LaTeX
+(Granite-Docling-258M on MLX on Apple Silicon, CodeFormulaV2 on CUDA), tables
+become Markdown (TableFormer, run only on pages with a table), scanned pages are
+OCR'd (RapidOCR). Every page is cached by the PDF's SHA-256, so the same PDF never
+converts twice. Measured on two arXiv papers (Apple Silicon, warm models):
+21.5 s and 28.6 s, against 6.8 s and 28.2 s for Marker, with more display
+equations as LaTeX (6 and 30, against 1 and 23); a cached re-ingestion takes 0.2 s.
+
+**Licenses.** Every default engine is license-unrestricted — no copyleft, no
+revenue or user threshold: pypdfium2 (Apache-2.0/BSD-3), Docling (MIT) and its
+models (Apache-2.0, CDLA-Permissive-2.0), RapidOCR (Apache-2.0), MLX (MIT).
+`engine: marker` stays as an explicit opt-in (`pip install marker-pdf==2.0.0`):
+its weights are free only below USD 5M in funding or revenue, and the run says so.
 
 **The stages it declares.** The flow is not the list of commands: it is what each
 stage establishes, and when it can be considered passed. This table is read
@@ -922,8 +982,8 @@ so that there is a moment of consent.
 6. The agent runs the script again with exactly the approved paths. Each path is
    validated **before** the engine loads: that it exists, that it is a `.pdf`, that
    it is still loose. That way a misspelled argument does not cost a model load.
-7. The Marker converter is built explicitly **without an LLM service** — which keeps
-   it local and keyless.
+7. The engine is built locally and keyless — no LLM service. With `auto`, each page
+   is probed and routed; Docling loads only when a page needs it.
 8. For each paper, the conversion is **transactional**: everything is staged in a
    temporary directory beside the PDF, and only when the `.md` and the figures are
    complete is the final folder created, the files moved, and **the PDF moved last**.
@@ -942,29 +1002,34 @@ PDF becomes loose again for the next run.
 | File | What it does and why it exists |
 |---------|---------------------------|
 | `SKILL.md` | The behavioral contract: run `--list` first, ask for approval per paper, how to handle an unfiled PDF. The script says none of this — it only returns exit codes. |
-| `setup.sh` | Environment provisioning, idempotent: it installs `llama-server` and builds the `.venv`. It exists because the OCR needs a system binary that pip cannot install. |
-| `requirements.txt` | Pins `marker-pdf==2.0.0`. Without that pin, a new version could change the converter API and break extraction silently. |
-| `scripts/extract_pdf.py` | The complete engine: config validation, discovery, listing, filing, transactional conversion, reference stripping, figure writing, and the exit-code contract. |
+| `setup.sh` | Environment provisioning, idempotent: a thin wrapper over `scripts/setup_env.py`. |
+| `requirements.txt` | Pins `docling==2.141.0` and `mlx-vlm==0.7.10` (Apple Silicon), and lists each engine's license. Without the pin, a new version could change the converter API and break extraction silently. |
+| `scripts/extract_pdf.py` | The orchestration: config validation, discovery, listing, filing, engine selection, transactional conversion, reference stripping and capture, figure writing, the `.json` page map, and the exit-code contract. |
+| `scripts/pdf_pipeline.py` | The page probe and router, the pypdfium2 fast path, the Docling adapter (page ranges, formula model by hardware, OCR only for scans) and the verified per-page cache. |
+| `scripts/pdf_fragment.py` | One page, heading section, equation or search hit of an ingested paper, never the whole document; also the MCP tool `papersmith.ingest_fragment`. |
 
 The functions that matter, if the code is going to be read: `is_loose()` —the whole
 idempotence check, in one line—, `discover_source_roots()`, `find_loose_pdfs()`,
 `resolve_single_target()` (the validation before loading the engine),
-`build_converter()`, `ingest_loose()` (the transaction) and `file_into()` (the filing
-of a PDF with no topic).
+`build_engine()`, `RoutedEngine.render()` (routing, cache and the page map),
+`ingest_loose()` (the transaction) and `file_into()` (the filing of a PDF with no topic).
 
 **What it writes to disk.**
 
 ```
 guidance/reference-papers/<name>/
 ├── <name>.pdf                the original PDF, moved here at the end
-├── <name>.md                 text + LaTeX + tables, no bibliography
-└── _page_4_Figure_2.jpeg     the figures that the .md references
+├── <name>.md                 text + LaTeX + tables, no bibliography; <!-- page N --> per page
+├── <name>.json               page map: routes, engines, offsets, headings, equations, references by page
+└── _page_4_Figure_2.png      the figures that the .md references
 ```
 
 Keys it honors from `papersmith.yaml`, under the `paper_ingestion:` block: `engine`
-(only `marker`), `mode` (`fast` or `balanced`), `strip_references` (bool, default
-`true`), `force_ocr` (bool, default `false`; same as the `--force-ocr` flag),
-`source_base` (default `guidance`) and `source_roots`.
+(`auto` by default, `pdfium`, `docling`, or the opt-in `marker`), `mode` (`fast` or
+`balanced`), `strip_references` (bool, default `true`), `force_ocr` (bool, default
+`false`; same as the `--force-ocr` flag), `cache` (bool, default `true`),
+`formulas_on_cpu` (bool, default `false`), `source_base` (default `guidance`) and
+`source_roots`.
 
 **The safeguards.**
 
@@ -1008,7 +1073,7 @@ flowchart TD
     M -- Yes --> O["Script with the approved paths"]
     O --> P{"Does each path exist, is it a PDF and still loose?"}
     P -- No --> E
-    P -- Yes --> Q["Loads Marker without an LLM service"]
+    P -- Yes --> Q["Probes each page; loads Docling only if a page needs it"]
     Q --> R["For each paper"]
     R --> S{"Does the paper folder already exist?"}
     S -- Yes --> T["This paper is refused. The batch continues"]
@@ -3066,7 +3131,7 @@ never created, and that note pointed at nothing; this paragraph replaces it.
 
 ### 12. `upgrade-project` — the upgrade, reachable from inside the workspace
 
-A workspace is not a checkout. `papersmith init` copies a release's skills, renders
+A workspace is not a checkout. `smith init` copies a release's skills, renders
 its slash commands and agents for every harness, and records which release the
 workspace received in `.papersmith/version`. None of that is live: when the
 installed distribution moves ahead, the workspace keeps the release it was born
@@ -3077,7 +3142,7 @@ work was reachable only from a terminal, so an agent working inside a workspace
 could see that it was stale and could not act on it.
 
 **It performs no upgrade of its own.** Every byte written is written by
-`papersmith upgrade`, and that is deliberate: the upgrade is not a file copy. It is
+`smith upgrade`, and that is deliberate: the upgrade is not a file copy. It is
 a kit copy, a symlink repair, a re-derivation of every projection, an orphan sweep
 over previously baselined dynamic paths, and an ordered run of artifact migrations
 -- with the version marker written last, and only when the artifacts actually
@@ -3093,20 +3158,20 @@ better before a write than during one.
 - **Is this a workspace?** `.papersmith/manifest.json` must exist. The CLI checks
   it too, but checking here lets the refusal name the directory the user is
   actually in. When it is absent, the answer is that this directory was not
-  created by `papersmith init`, and `papersmith init .` is what creates one.
+  created by `smith init`, and `smith init .` is what creates one.
   Running `init` as a recovery is not offered: initializing a directory somebody
   believed was already a workspace is how a misunderstanding becomes a tree of
   files.
-- **Is the CLI reachable?** `papersmith --version`, then
+- **Is the CLI reachable?** `smith --version`, then
   `python -m papersmith.cli --version`. The module path matters: it is
   `papersmith.cli`, not `papersmith`, because the package ships no `__main__.py`,
   and `python -m papersmith` fails with a message that looks like a broken install
   and is not one.
 
-**The verbs.** `plan` runs `papersmith upgrade . --plan-migrations` and writes
+**The verbs.** `plan` runs `smith upgrade . --plan-migrations` and writes
 nothing. It previews migrations only, and the flag is deliberately not called
 `--dry-run` for that reason: the kit copy, the projections and the orphan sweep are
-not previewed and have no preview at all. `apply` runs `papersmith upgrade .` with
+not previewed and have no preview at all. `apply` runs `smith upgrade .` with
 the flags that matter — `--tools` replaces the active harness set, `--force`
 rewrites kit files whose hashes already match, `--no-migrate` syncs files and leaves
 the version marker where it was, and `--allow-downgrade` installs an older kit over
@@ -3152,10 +3217,10 @@ to the current directory and has to point at an initialized workspace, except fo
 | `ui` | Serves the local Paper Command Center (DAG, gates, sections, wiring) |
 | `mcp` | Exposes the orchestrator and the paper verbs over Model Context Protocol |
 
-### `papersmith init <dir>`
+### `smith init [<dir>]`
 
 ```bash
-papersmith init ~/papers/sparse-ae \
+smith init ~/papers/sparse-ae \
   --title "Sparse Autoencoder Audit" \
   --topic "mechanistic interpretability" \
   --remote kaggle
@@ -3167,11 +3232,29 @@ papersmith init ~/papers/sparse-ae \
 | `--topic TEXT` | Research topic |
 | `--tools TEXT` | Runtimes to provision, comma-separated |
 | `--remote {kaggle,local,slurm}` | Default compute target (default: `kaggle`) |
+| `<dir>` | Where the workspace goes; omitted, it is the current directory (`smith init` alone sets up the folder you are in, on every operating system) |
+| `--import-existing` | Explicitly initialize a nonempty directory while preserving existing files: keeps its `README.md`, merges papersmith's block into its `.gitignore`, and refuses any other file or symlink collision before copying |
 | `--no-npm` | Skips the best-effort `npm install` (offline/hermetic use) |
-| `--no-env` | Skips provisioning the workspace's Python environment; `papersmith ui` refuses until `python3 scripts/setup_env.py install` is run |
+| `--no-env` | Skips provisioning the workspace's Python environment; `smith ui` refuses until `python3 scripts/setup_env.py install` is run |
 | `--progress` | Forces a plain-text progress log with an estimate of the time left; useful in CI, where the bar is noise and the log is what matters |
 | `--no-progress` | Draws no progress even when the output is a terminal |
 | `--allow-dirty-kit` | Initializes even when the kit has uncommitted changes in its distributed paths, or when its git state cannot be read; the workspace records that it came from such a kit (see [Kit provenance](#kit-provenance)) |
+
+By default `smith init` refuses a nonempty destination. For a directory with
+existing research files, use `smith init <dir> --import-existing` (or
+`smith init --import-existing` from inside it): it scaffolds alongside them.
+Two root files nearly every repository has are not collisions: an existing
+`README.md` is kept as it is, and an existing `.gitignore` keeps every line and
+gains papersmith's managed block on top (the same merge `smith upgrade` does).
+Any other existing generated path (`CLAUDE.md`, a `.gitkeep`, `package.json`…)
+is refused rather than replaced. It is not an upgrade of an existing
+Papersmith workspace; use `smith upgrade` for that. The merge requires filesystem
+support for no-follow, directory-relative operations and fails closed if it is
+unavailable. A failed merge attempts to remove only scaffold paths it can still
+identify; concurrent directory moves or later npm/environment provisioning may
+leave new artifacts requiring manual cleanup. Filesystem races and external
+installers mean this is not an atomic transaction or a guarantee against other
+processes changing the destination.
 
 The step that dominates the run is environment provisioning, and until 0.9.0 it
 ran with its output captured: several minutes with no signal at all. `init` now
@@ -3187,10 +3270,10 @@ Creates `.papersmith/`, `guidance/{paper-guide,reference-papers,data-paper}/`,
 plus the kit copy and its manifest. The full shape of the tree is in
 [Inside the workspace](#inside-the-workspace).
 
-### `papersmith upgrade [<dir>]`
+### `smith upgrade [<dir>]`
 
 ```bash
-papersmith upgrade ~/papers/sparse-ae
+smith upgrade ~/papers/sparse-ae
 ```
 
 | Flag | Effect |
@@ -3206,14 +3289,14 @@ It only touches files the framework manages — never `guidance/`,
 `proposals/`, `paper/`, `experiments/`, `implementations/`, `kaggle-inbox/`,
 `papersmith.yaml`, `package.json`, `README.md` or the `.env*` files.
 Against a kit checkout without reinstalling:
-`PAPERSMITH_KIT_ROOT=/path/to/papersmith-ai papersmith upgrade <dir>`.
+`PAPERSMITH_KIT_ROOT=/path/to/papersmith-ai smith upgrade <dir>`.
 
 #### Kit provenance
 
 Since 0.14.0, `init` and every `upgrade` write `.papersmith/kit-source.json`:
 the framework version, the commit the kit came from, whether it had uncommitted
 changes (`dirty`) and where the CLI resolved it from (`checkout`, `bundled` or
-`override`). `papersmith status` shows it on the `Kit source:` line. A workspace
+`override`). `smith status` shows it on the `Kit source:` line. A workspace
 created before 0.14.0 does not have it and `status` says
 `unknown (recorded before 0.14.0)`; the next `upgrade` writes it, so no
 migration is needed.
@@ -3289,10 +3372,10 @@ would re-apply every migration it was recording. `status` answers differently on
 purpose: it reports it as a warning, because a command that only informs and
 also crashes leaves the workspace with no way to ask what is wrong with it.
 
-### `papersmith status [<dir>]`
+### `smith status [<dir>]`
 
 ```bash
-papersmith status --json
+smith status --json
 ```
 
 | Flag | Effect |
@@ -3320,11 +3403,11 @@ are still read first, for old workspaces.
 Reports the drifted files by name; the exit code stays `0` while drift is
 reported (a non-zero code is a known gap, recorded as a follow-up).
 
-### `papersmith ingest <file_or_url> [<dir>]`
+### `smith ingest <file_or_url> [<dir>]`
 
 ```bash
-papersmith ingest https://arxiv.org/abs/2309.08600
-papersmith ingest ~/Downloads/reference-paper.pdf --ocr
+smith ingest https://arxiv.org/abs/2309.08600
+smith ingest ~/Downloads/reference-paper.pdf --ocr
 ```
 
 | Flag | Effect |
@@ -3342,13 +3425,13 @@ proposal goes in `guidance/paper-guide/` (read by `CREATE_INITIAL_REVISION`),
 and an existing draft that must become v1 as it stands goes in `proposals/` and
 is adopted with `ADOPT_INITIAL_REVISION`.
 
-### `papersmith deliberate [<dir>]`
+### `smith deliberate [<dir>]`
 
 ```bash
-papersmith deliberate . --action status
-papersmith deliberate . --action init --instruction "First sentence. Second sentence."
-papersmith deliberate . --action adopt --revision draft.md --instruction "Adopt as v1."
-papersmith deliberate . --request-file request.json
+smith deliberate . --action status
+smith deliberate . --action init --instruction "First sentence. Second sentence."
+smith deliberate . --action adopt --revision draft.md --instruction "Adopt as v1."
+smith deliberate . --request-file request.json
 ```
 
 | Flag | Effect |
@@ -3373,14 +3456,14 @@ state operation calls a model).
 `"dryRun": true`, which the bridge passes to the engine unchanged:
 
 ```bash
-papersmith deliberate . --request '{"operation":"ADOPT_INITIAL_REVISION","sourceFilename":"draft.md","instruction":"Adopt as v1.","dryRun":true}'
+smith deliberate . --request '{"operation":"ADOPT_INITIAL_REVISION","sourceFilename":"draft.md","instruction":"Adopt as v1.","dryRun":true}'
 ```
 
-### `papersmith implement [<dir>]`
+### `smith implement [<dir>]`
 
 ```bash
-papersmith implement . --action verify --target implementations/demo
-papersmith implement . --action probe --target implementations/demo
+smith implement . --action verify --target implementations/demo
+smith implement . --action probe --target implementations/demo
 ```
 
 `--action` is required. The bridge runs only these actions: `env`, `name`,
@@ -3413,11 +3496,11 @@ ledger (`position`, `propose`, `gate`, `offer`, `close`, `step`, `settle`,
 `defect`, `walk`) require `--session <id>`; what that id is is in
 `skills/proposal-implementation/references/usage.md`, "Session ids".
 
-### `papersmith run <profile> [<dir>]`
+### `smith run <profile> [<dir>]`
 
 ```bash
-papersmith run smoke_and_invariants --dry-run
-papersmith run sweep_training --target kaggle-gpu-pool --consent <token>
+smith run smoke_and_invariants --dry-run
+smith run sweep_training --target kaggle-gpu-pool --consent <token>
 ```
 
 | Flag | Effect |
@@ -3447,12 +3530,12 @@ launches on the local machine (the local job and the Kaggle submit) run with
 `PYTHONDONTWRITEBYTECODE=1`, as do the skill scripts the CLI invokes: they leave
 no `__pycache__` inside the workspace.
 
-### `papersmith remote {pack,push,status,pull,sync} [<dir>]`
+### `smith remote {pack,push,status,pull,sync} [<dir>]`
 
 ```bash
-papersmith remote pack --target kaggle-gpu-pool --entrypoint train.py
-papersmith remote status --job <job-id>
-papersmith remote pull --job <job-id> --dest ./results
+smith remote pack --target kaggle-gpu-pool --entrypoint train.py
+smith remote status --job <job-id>
+smith remote pull --job <job-id> --dest ./results
 ```
 
 Key flags: `--target`, `--entrypoint`, `--backend`, `--account`, `--job`,
@@ -3464,13 +3547,13 @@ are forwarded to `remote_cli.py`. A real submission spends quota: prefer
 `--smoke` and `--dry-run` first (see
 [Remote compute, carefully](#remote-compute-carefully)).
 
-### `papersmith target {list,set,check}`
+### `smith target {list,set,check}`
 
 ```bash
-papersmith target list
-papersmith target set kaggle-gpu-pool
-papersmith target check
-papersmith target check slurm-cluster
+smith target list
+smith target set kaggle-gpu-pool
+smith target check
+smith target check slurm-cluster
 ```
 
 - `list [<dir>]` — configured targets, marking the active one with `*`.
@@ -3479,10 +3562,10 @@ papersmith target check slurm-cluster
   goes through the accounts helper, `remote-ssh` tries
   `ssh -o BatchMode=yes -o ConnectTimeout=5 <host> true`.
 
-### `papersmith audit [<dir>]`
+### `smith audit [<dir>]`
 
 ```bash
-papersmith audit --check-drift
+smith audit --check-drift
 ```
 
 | Flag | Effect |
@@ -3494,16 +3577,16 @@ Audits the workspace's structure and consistency. It is bound to the `skill-audi
 subject today; drift is reported, not fixed.
 
 > **Note:** `kaggle-accounts` (validate/remove/list/discover/materialize) has no
-> `papersmith` subcommand yet — it runs as
+> `smith` subcommand yet — it runs as
 > `python3 skills/kaggle-accounts/scripts/accounts_cli.py …` or indirectly
 > through `target check`.
 
-### `papersmith ui [<dir>]`
+### `smith ui [<dir>]`
 
 ```bash
-papersmith ui --port 8080
-papersmith ui ~/papers/sparse-ae --no-browser
-papersmith ui --export-static ./dashboard-static
+smith ui --port 8080
+smith ui ~/papers/sparse-ae --no-browser
+smith ui --export-static ./dashboard-static
 ```
 
 | Flag | Effect |
@@ -3513,6 +3596,7 @@ papersmith ui --export-static ./dashboard-static
 | `--no-browser` | Does not open the browser |
 | `--export-static <dir>` | Copies the dashboard build to `<dir>` and exits |
 | `--allowed-host HOST:PORT` | Also accepts that `Host` header (repeatable); only forwarded to the backend when supplied |
+| `--no-terminal` | Does not offer the dashboard's support terminal (it is only ever offered on a loopback bind) |
 
 Serves the **Paper Command Center**: a local dashboard inside the workspace with
 its two flows, the four quality gates, the ten-section matrix and the health of
@@ -3571,13 +3655,107 @@ is needed) and `gap` (older entries were dropped). New entries arrive over SSE a
 headers `127.0.0.1:<port>`, `localhost:<port>` and `[::1]:<port>` and answers 421
 to any other, which stops DNS-rebinding pages. Another host (when forwarding a
 port, for instance) is accepted with the repeatable flag
-`papersmith ui --allowed-host HOST:PORT`. With `npm --prefix ui run dev` the Vite
+`smith ui --allowed-host HOST:PORT`. With `npm --prefix ui run dev` the Vite
 proxy keeps the `Host` `localhost:5173`; the backend is started like this (the
 module accepts the same flag):
 
 ```bash
 python -m skills._core.command_center.server --port 8080 --allowed-host localhost:5173
 ```
+
+**A new workspace starts clean.** `smith init` copies only the framework (the
+kit's skills, section contracts, agents and setup scripts) into an empty folder
+and seeds `papersmith.yaml`; it never copies artifacts, graphs or data from
+another project. The dashboard draws every part of the *Mapa Conceptual &
+Modelo* tab — novelty pillars, hypotheses, concept-map layers, proof-of-concept
+experiments, equations — from the workspace itself, and shows a neutral "pending
+deliberation" state until its own proposal and experiments exist. A workspace may
+provide `.papersmith/model_spec.json` and `.papersmith/novelty_graph.json` to
+draw its own model and novelty graph; nothing project-specific ships with the
+framework (`tests/test_clean_init.py` scans the kit and a fresh workspace's
+dashboard for traces of earlier projects).
+
+**Math panel and Socratic tutor.** *Mapa Conceptual & Modelo → Matemática &
+Tutor* shows the paper's own mathematics as LaTeX rendered by KaTeX 0.16.22
+(vendored, offline): a lema, then one card per equation (heading, display
+equation, a one-line *Conexión*, variables), beside a compact *Idea y novedad*
+card (central idea, novelty, problem, contributions, key equation).
+`GET /api/model/math` builds it from the latest
+`proposals/research-concept-<slug>-rNN.md` (every `$$`-fenced block with its
+`\tag{N}`, the heading above it and the first sentence after it) and its
+`.sky.json` overlay, else from `.papersmith/model_spec.json`; an empty
+workspace says so instead of inventing equations. The **tutor** beside it is
+the `math-tutor` skill: drop, paste or pick photos of your hand-written pages
+(PNG/JPEG/WebP, up to 8 MiB, at most 6 per turn), write, choose *Preguntar*,
+*Explícame* or *Evalúame*, and each turn runs the `math-tutor` agent headless
+with your own agent CLI — `claude -p` with only the `Read` tool, the turn's JSON
+schema, no MCP and only local settings, or `pi -p` as a fallback — so no API key
+lives in the dashboard. The tutor reads the image back as LaTeX and parts, asks
+one question at a time, rates understanding 0–4 (*reconoce*, *explica*,
+*deriva*, *justifica*) with evidence quoted from you, and ties every step to the
+paper's novelty. Uploads and the thread live in `.papersmith/math-tutor/`. Routes
+(behind the terminal's secret cookie and origin guards):
+`GET|DELETE /api/terminal/tutor/thread`, `POST /api/terminal/tutor/images`,
+`GET /api/terminal/tutor/images/<id>` and `POST /api/terminal/tutor/turn`.
+
+**Graph toolbar and cross-panel links.** The *Atlas* tab keeps its three graph
+switches and adds **⚡ Regenerar grafo** (the SOTA atlas through
+`POST /api/atlas/build`, same as `smith atlas build`; on the novelty graph it
+rebuilds the view) and **🧩 Disposición de grupos**, which asks the atlas frame to
+rearrange its systems by family cluster and back. The dashboard and the
+sandboxed atlas frame talk through `postMessage`: the dashboard sends
+`{type: 'atlas-command', command: 'group-layout' | 'sky-layout' | 'toggle-layout' | 'reset' | 'pause' | 'resume' | 'view-2d' | 'view-3d'}`
+(`pause` while another tab is shown, so the atlas stops drawing; it loads the
+first time its tab opens, and it also stops while the browser hides the page) and the atlas answers `{type: 'atlas-layout', mode}` and, on a click,
+`{type: 'atlas-planet-selected', key, label, slot, system: {id, title}}`. A
+selected node shows **📄 Ver en PDF** (finds the node's label, or its system's
+title, in the compiled PDF's text and jumps to that page) and **🗂️ Ver
+artefacto** (opens `sota-pool/atlas.json` in the artifact viewer).
+
+**Smith CLI assistant ("CLI de apoyo").** The round button at the bottom right,
+with Smith's face, opens a floating xterm.js console (780×520, maximizable;
+closing it only hides it, the session keeps running) bound to a pseudo-terminal
+in the workspace root. The agent picker offers **herdr** (default: it focuses or
+creates the herdr workspace labelled after the project, so the console mirrors
+your herdr panes), `claude`, `opencode`, `pi` and a login shell; binaries are also
+found in `~/.local/bin`, `~/.npm-global/bin`, Homebrew and `~/.cargo/bin`, and the
+choice is remembered. **🖥️ Ghostty** (or WezTerm) opens herdr on the project in a
+native terminal. The footer shows the agent and project path, a *Comandos smith…*
+menu (`smith status`, `smith atlas build`, `smith audit` in the shell; the projected
+slash commands in an agent) and *Limpiar*. The server answers the terminal
+capability queries full-screen TUIs send (DA1, OSC 10/11, `?u`, `?996n`, `16t`) on
+the PTY itself and strips them from the output, keystrokes are coalesced, and the
+console refits and repaints when the tab regains focus. Each phase card has
+**⌨️ Enviar a CLI**, which types that phase's command and waits for your Enter;
+**▶ Ejecutar** keeps its own path. Routes: `GET /api/terminal/agents`,
+`GET /api/terminal/tools`, `POST /api/terminal/launch-external`,
+`POST /api/terminal/sessions`, `GET /api/terminal/sessions/<id>` (agent and
+liveness, for a reload to reattach), `POST /api/terminal/sessions/<id>/input` (`data`, or
+`cols`/`rows` to resize), `DELETE /api/terminal/sessions/<id>` and
+`GET /api/terminal/sessions/<id>/stream` (SSE, base64 `output` frames then `exit`;
+it waits for output and pings every 15 s). A closed console drops its stream
+unless a phase is running, and reattaches when opened again.
+At most four live sessions; they close with the server. The console is a shell
+with your privileges, so it is only offered on a loopback bind
+(`smith ui --no-terminal` turns it off). Each server start creates a secret: the
+browser it opens (or the `dashboard login URL` it prints, for `--no-browser`) goes
+through `GET /api/terminal/login?token=…`, which sets an HttpOnly, SameSite=Strict
+cookie, and every terminal route requires it, so another local user or a `curl`
+without the token gets `403`. Every call must also be same-origin: a foreign
+`Origin` or `Sec-Fetch-Site`, a missing `X-Papersmith-Terminal: 1` header or a
+non-JSON body answers `403`.
+
+**Branding.** The LabIA UNAL logo appears once, centred in the footer on a white
+badge; the header carries Smith's avatar and the laboratory line only. The footer
+names the framework version the workspace was last initialized or upgraded to
+(`/api/status` → `framework_version`).
+
+**Live PDF preview.** The *Previsualización PDF* tab renders `paper/main.pdf`
+with pdf.js 3.11.174, vendored in `skills/_core/command_center/static/vendor/`
+(no network). `GET /api/pdf` answers with an `ETag` and `Cache-Control: no-cache`
+(`304` when `If-None-Match` matches), and `/api/status` reports
+`run_details.pdf_mtime`; when a recompile moves that token the open preview
+reloads in place and keeps the page you were reading.
 
 **Paper preview (read-only).** Two GET routes, no writes:
 `GET /api/paper/preview` returns the sections in the same order and with the same
@@ -3736,12 +3914,33 @@ node scripts/command-center-visual-check.mjs --out /tmp/shots --full-page --clic
 It is a development tool (it needs Chromium); it does not run in CI. The UI tests
 (`npm --prefix ui test`) do run in CI.
 
-### `papersmith mcp {serve,inspect,print-config}`
+### `smith atlas build [<dir>]`
 
 ```bash
-papersmith mcp serve --workspace ~/papers/sparse-ae
-papersmith mcp inspect
-papersmith mcp print-config --workspace ~/papers/sparse-ae
+smith atlas build
+smith atlas build ~/papers/sparse-ae --json
+```
+
+| Flag | Effect |
+|------|--------|
+| `--json` | Prints the result object instead of one line |
+
+Regenerates the SOTA atlas page, the same action as the dashboard's
+**⚡ Regenerar grafo** button (`POST /api/atlas/build`). It runs the workspace's
+own `skills/plausibility/scripts/check_atlas.py` on `sota-pool/atlas.json` (with
+`--pool sota-pool/candidates.json` when the pool exists) and, only when the
+checker is green, `render_atlas.py` to `sota-pool/atlas.html`. A failing atlas
+never replaces a good page. Exit `0` when the page was written, `1` otherwise.
+The route answers `200`, `404` (no `atlas.json` or no scripts), `422` (the
+checker or renderer refused) or `504` (timeout), always with
+`{ok, stage, detail}` plus the system, planet and link counts on success.
+
+### `smith mcp {serve,inspect,print-config,kaggle}`
+
+```bash
+smith mcp serve --workspace ~/papers/sparse-ae
+smith mcp inspect
+smith mcp print-config --workspace ~/papers/sparse-ae
 ```
 
 Exposes the workspace orchestrator and the `paper-writing` verbs to any Model
@@ -3750,6 +3949,14 @@ Context Protocol client over `stdio` (JSON-RPC 2.0).
 - `serve --workspace <dir>` — starts the MCP server over `stdio`, bound to a single workspace.
 - `inspect` — prints the capability catalogue as JSON (the source of truth).
 - `print-config [--workspace <dir>]` — emits the configuration fragment for the host being configured (Claude Code, OpenCode).
+
+- `kaggle activate [--token-stdin] [--no-verify] [--replace] [--workspace <dir>]` — activates Kaggle's official MCP server (`https://www.kaggle.com/mcp`, registered as `kaggle` by `init` and `upgrade`). It reads a `KGAT_` token (kaggle.com/settings → Account → API → Generate New Token) from a hidden prompt, verifies it with a read-only `get_accelerator_quota` call, and stores it where Kaggle's own client reads it, `~/.kaggle/access_token` (directory `0700`, file `0600` on POSIX), so the same token serves the `kaggle` CLI and `kagglesdk`. A different token already there is kept unless `--replace`. A token the official client left in `access_token` or `access_token.txt` is used as is, and the location 0.20 used (`$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token`) still reads. The dashboard injects it as `KAGGLE_API_TOKEN` into the sessions its CLI assistant starts, unless that variable is already exported; on POSIX a stored file that is a symlink or readable by others is never used.
+- `kaggle status [--verify]` — reports where the token comes from, never its value, plus the detected environment (macOS, Linux, WSL or Windows; zsh, bash, fish or PowerShell) and the exact command and profile file to export it outside the dashboard.
+- `kaggle deactivate` — removes the stored token files (the official client reads the same file, so this signs out the `kaggle` CLI too).
+
+`smith init` and `smith upgrade` print one offline line about the activation state (no network call) and warn when Pi or Antigravity are wired but `npx`, which their `mcp-remote` bridge needs, is missing. `pip install` runs no post-install step, so nothing is checked there.
+
+The dashboard's Experimentos tab shows the activation state and runs `smith mcp kaggle activate` in the CLI assistant.
 
 The full catalogue of 38 tools (15 read-only and 23 mutating), the
 `papersmith://` resources and the security model are documented in detail in
@@ -3762,25 +3969,25 @@ The full catalogue of 38 tools (15 read-only and 23 mutating), the
 Before a job touches a real worker, the forge offers a ladder of cheap
 rehearsals, worked down in order and not skipped:
 
-1. `papersmith target list` — which targets exist and which one is active.
-2. `papersmith target check [<name>]` — does that target answer?
-3. `papersmith run <profile> --dry-run` — plans and records the command in the
+1. `smith target list` — which targets exist and which one is active.
+2. `smith target check [<name>]` — does that target answer?
+3. `smith run <profile> --dry-run` — plans and records the command in the
    ledger; **dispatches nothing**.
-4. `papersmith remote … --smoke` — a real rehearsal against the backend, without
+4. `smith remote … --smoke` — a real rehearsal against the backend, without
    spending a campaign.
 5. Only then, the real run (`--consent <token>` where applicable).
 
 The targets and profiles are those of the workspace's `papersmith.yaml` (see
 [Inside the workspace](#inside-the-workspace)). The ledger
 `.papersmith/runs_ledger.jsonl` is append-only: every dispatched run is recorded
-with its target, its profile and its outcome. And `papersmith remote status` /
+with its target, its profile and its outcome. And `smith remote status` /
 `pull` is the memory of what was sent out and what came back — the detail of that
 contract lives in the `remote-execution` section of the
 [Anatomy](#anatomy-of-each-skill).
 
 **Credentials and backends.** `remote-execution` supports several backends (`kaggle`, `colab`):
-- **Kaggle**: runs against the configured worker pool. Its credentials live in the `kaggle-accounts` store (`skills/kaggle-accounts/store/accounts.json`), never leave the disk and are never printed: `materialize` writes a worker's token to a text file and reports **where**, never **what**. `/kaggle-accounts` validates or removes accounts, and `papersmith target check kaggle` tests them from the side. A `papersmith accounts` subcommand does not exist yet (recorded follow-up): it is invoked as `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
-- **Colab**: runs against sessions managed by `google-colab-cli` (`papersmith remote push --backend colab ...`). It is not a workspace target (it is not passed to `init --remote` or to `target check`), but a direct backend of `remote-execution`. It requires `google-colab-cli` on `PATH` and the token resolved in `~/.config/colab-cli/token.json`.
+- **Kaggle**: runs against the configured worker pool. Its credentials live in the `kaggle-accounts` store (`skills/kaggle-accounts/store/accounts.json`), never leave the disk and are never printed: `materialize` writes a worker's token to a text file and reports **where**, never **what**. `/kaggle-accounts` validates or removes accounts, and `smith target check kaggle` tests them from the side. A `papersmith accounts` subcommand does not exist yet (recorded follow-up): it is invoked as `python3 skills/kaggle-accounts/scripts/accounts_cli.py {list,discover,validate,remove,materialize}`.
+- **Colab**: runs against sessions managed by `google-colab-cli` (`smith remote push --backend colab ...`). It is not a workspace target (it is not passed to `init --remote` or to `target check`), but a direct backend of `remote-execution`. It requires `google-colab-cli` on `PATH` and the token resolved in `~/.config/colab-cli/token.json`.
 
 **Real quota.** A real submission spends quota and GPU hours. The house rule is
 simple: everything that can be rehearsed with `--dry-run` and `--smoke` is
@@ -3812,6 +4019,20 @@ papersmith-ai/
 ├── tests/                      # Node.js + pytest suites (meta-audits included)
 └── scripts/                    # environment provisioning and harness setup
 ```
+
+
+### `smith team {list,add,remove}` and `smith colab {login,status}`
+
+```bash
+smith team add --owner ana --name "Ana" --kaggle-username ana_k --colab --colab-tier pro --attest
+smith team list
+smith colab login --owner ana
+smith colab status
+```
+
+Several remote accounts are supported as a **team**: one account per person per service. `team add` records an owner in `.papersmith/team.json` (git-ignored, no secrets) and refuses without `--attest`, the person's confirmation that they own and operate exactly one account per listed service, and refuses an account already listed under someone else. Google's Colab FAQ disallows "using multiple accounts to work around access or resource usage restrictions", and on free runtimes without compute units "running distributed computing workers"; Kaggle's terms could not be read, so the same rule applies. A Colab owner on the `free` tier may run interactive or proof-of-concept work in one session, never a worker of a split campaign.
+
+`colab login --owner <slug>` runs the official `google-colab-cli` (pinned `0.6.0`) consent for that owner under a private `HOME` of its own (`~/.config/papersmith/colab/<owner>/`, mode `0700`): the CLI keeps its token under `HOME`, so a private `HOME` is what isolates one person's account from another's, and papersmith never opens a file inside it. `colab status` reports, per owner, the CLI version, whether the sign-in still answers, the tier and whether the owner may take part in a split campaign. `smith init` and `smith upgrade` also register Google's official Colab MCP server (`colab`), which drives a notebook the person has open in the browser.
 
 ### Engineering guarantees
 
@@ -3924,8 +4145,8 @@ skills from there. For a harness to list them as `/` commands, run
 `npm run setup:harnesses` inside the workspace: it creates the projections of the
 four harnesses, relative and idempotent.
 
-**"`papersmith audit` reports drift."** Some generated file changed with respect
-to the manifest. It is not edited by hand: run `papersmith upgrade` (and `--force`
+**"`smith audit` reports drift."** Some generated file changed with respect
+to the manifest. It is not edited by hand: run `smith upgrade` (and `--force`
 if needed) to return to the framework's version.
 
 **"`papersmith accounts` cannot be run."** It does not exist yet (recorded
@@ -3937,7 +4158,7 @@ code is not strict today. For a CI gate, read the JSON (`--json`) rather than th
 exit code.
 
 **"The first ingestion downloads ~1.5 GB."** Those are the Surya weights when the
-environment was not pre-provisioned. `papersmith init` already provisions the
+environment was not pre-provisioned. `smith init` already provisions the
 environment unless `--no-env` was passed; in that case, run
 `python3 scripts/setup_env.py install` before the first ingestion.
 

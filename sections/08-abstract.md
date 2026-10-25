@@ -340,6 +340,25 @@ or a confirmation formula.
 
 It introduces nothing: no new property, no new number, no new claim.
 
+## LIA house style
+
+Measured on the group's ten Q1 method papers of 2025–2026 (SJR 2025): items A003, A006, A007, A009, A012, A013, A021, A022, A023 and A026 of the lab's bank of articles. Ranges are minimum–median–maximum across the papers that have the section; a typeset line is about 12 words in a single-column layout. The ranges describe how the group writes; the extent at the top of this contract stays the target.
+
+**Measured size.** One paragraph of 139–236–311 words, without headings.
+
+**The moves, in order:** context; the challenge, opened by *However* or *Yet*; the
+limitation of existing methods; the proposal, introduced by *To address …, we propose*
+or *This work introduces* with the full name and the acronym; the mechanism in two to
+four sentences, its components often numbered (i)–(iv); the data and the protocol; the
+comparative result; and a closing implication (*These results support …*).
+
+**Writing.**
+
+- **Sentences average 21–27 words.** Long enough to carry one claim and its qualifier, never a chain of three clauses.
+- **One voice for the whole paper.** First person plural (*we propose*) or impersonal (*this work introduces*), chosen once; procedures that were run go in the passive past (*was evaluated using*).
+- **Connectives the group uses** to move between claims: *However*, *Specifically*, *In particular*, *Moreover*, *Notably*, *Overall*. Each opens a sentence and does one job: contrast, narrowing, addition, emphasis, synthesis.
+- **The method has one name.** Expanded with its acronym at first use in each of the abstract and the body, then *the proposed* followed by the acronym.
+
 ## Cross-cutting conventions
 
 - **One paragraph.** No line breaks, no bullets, no headings.

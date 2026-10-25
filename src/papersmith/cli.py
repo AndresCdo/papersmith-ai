@@ -14,20 +14,24 @@ from .bridges import deliberation as deliberation_command
 from .bridges import implementation as implementation_command
 from .bridges import audit as audit_command
 from .bridges import remote as remote_command
+from .core import atlas as atlas_command
+from .core import colab as colab_command
+from .core import env as env_command
 from .core import executor as executor_command
 from .core import init as init_command
 from .core import ingest as ingest_command
 from .core import status as status_command
 from .core import target as target_command
+from .core import team as team_command
 from .core import ui as ui_command
 from .core import upgrade as upgrade_command
 from .errors import PapersmithError
 from .mcp import cli as mcp_command
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(prog: str = "smith") -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="papersmith",
+        prog=prog,
         description="CLI workspace orchestrator for the papersmith-ai framework: "
         "initialize, upgrade, and run decoupled paper research workspaces.",
     )
@@ -40,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 _REGISTRY: list = [
     init_command.register,
+    env_command.register,
     upgrade_command.register,
     status_command.register,
     ingest_command.register,
@@ -50,7 +55,10 @@ _REGISTRY: list = [
     target_command.register,
     audit_command.register,
     ui_command.register,
+    atlas_command.register,
     mcp_command.register,
+    team_command.register,
+    colab_command.register,
 ]
 
 
@@ -62,7 +70,7 @@ def command(register):
 
 def parse_argv(parser: argparse.ArgumentParser, argv: list[str] | None):
     """Parse ``argv`` letting the chosen subcommand interleave its positionals
-    with its optionals (``papersmith run smoke --dry-run <dir>``).
+    with its optionals (``smith run smoke --dry-run <dir>``).
 
     Native argparse only mixes the two freely from 3.13 on; on 3.11/3.12 a
     trailing positional after the optionals is rejected as unrecognized, which
@@ -93,8 +101,12 @@ def parse_argv(parser: argparse.ArgumentParser, argv: list[str] | None):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+    # `smith` is the canonical command name; the `papersmith` entry point stays
+    # installed as a compatibility alias but reports itself as `smith`.
+    prog = "smith"
+    parser = build_parser(prog=prog)
     args = parse_argv(parser, argv)
+    setattr(args, "_prog", prog)
     handler = getattr(args, "handler", None)
     if handler is None:
         parser.print_help()
@@ -102,10 +114,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return handler(args)
     except PapersmithError as exc:
-        print(f"papersmith: error: {exc}", file=sys.stderr)
+        print(f"{prog}: error: {exc}", file=sys.stderr)
         return exc.exit_code
     except KeyboardInterrupt:
-        print("papersmith: interrupted", file=sys.stderr)
+        print(f"{prog}: interrupted", file=sys.stderr)
         return 1
 
 

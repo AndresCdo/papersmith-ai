@@ -5,6 +5,8 @@ tools:
   - read
   - find
   - grep
+  - web_search
+  - fetch_content
   - write
   - bash
 ---

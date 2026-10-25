@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
-"""Paper ingestion via Marker — one self-contained folder per paper.
+"""Paper ingestion — one self-contained folder per paper.
 
 For each **loose** ``<root>/<stem>.pdf`` (a PDF sitting directly in a source
-root), this creates ``<root>/<stem>/``, converts the PDF with Marker, strips the
+root), this creates ``<root>/<stem>/``, converts the PDF, strips the
 references/bibliography section, writes each figure as its own image file,
-writes ``<stem>.md`` that references those files, and finally moves the PDF in.
-So a paper's whole footprint lives in one folder: ``pdf + md + figure images``.
+writes ``<stem>.md`` that references those files and ``<stem>.json`` that maps
+it (pages, headings, equations, references, figures), and finally moves the PDF
+in. So a paper's whole footprint lives in one folder: ``pdf + md + json +
+figure images``.
+
+The default engine, ``auto``, routes page by page (``pdf_pipeline.py``): a
+digital prose page is read from its text layer by pypdfium2 in milliseconds,
+and only pages with display mathematics, tables or no text layer go to Docling,
+through its page range, with formulas as LaTeX and OCR only for scanned pages.
+Every page is cached by the PDF's SHA-256, so re-ingesting a paper, or the same
+PDF fetched again, converts nothing twice. Every default engine is
+license-unrestricted (Apache-2.0, BSD, MIT, CDLA-Permissive-2.0: no copyleft,
+no revenue or user threshold). ``marker`` remains as an explicit opt-in whose
+model weights are free only below a funding/revenue threshold.
 
 A loose PDF = not yet ingested. Once ingested, the PDF lives inside its folder,
 so it is no longer loose and is skipped on the next run.
@@ -37,6 +49,8 @@ Usage:
     python extract_pdf.py                 # ingest every loose PDF under every source root
     python extract_pdf.py <pdf> [<pdf>…]  # ingest exactly these loose PDFs
     python extract_pdf.py --force-ocr <pdf>  # OCR every page, ignore the text layer
+    python extract_pdf.py --engine pdfium <pdf>  # fast path only, no model
+    python extract_pdf.py --verify-cache  # re-check every cached page, ingest nothing
     python extract_pdf.py --file <pdf> --into <topic>  # file an unfiled PDF, ingest nothing
 
 Exit codes: 0 success (or nothing to do), 1 at least one paper failed,
@@ -51,6 +65,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # Apple Silicon (MPS) needs CPU fallback for the handful of ops surya/torch
@@ -60,11 +75,21 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 # skills/paper-ingestion/scripts/extract_pdf.py -> repo root is parents[3]
 REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # pdf_pipeline beside this script
 CONFIG_PATH = REPO_ROOT / "papersmith.yaml"
 SETUP_SCRIPT = "./skills/paper-ingestion/setup.sh"
 
 VALID_MODES = ("fast", "balanced")
-VALID_ENGINES = ("marker",)
+#: auto: route each page; pdfium: fast path only; docling: every page through
+#: Docling; marker: the former whole-document engine, opt-in (weights licensed
+#: under a modified OpenRAIL-M, free only below USD 5M funding or revenue).
+VALID_ENGINES = ("auto", "pdfium", "docling", "marker")
+DEFAULT_ENGINE = "auto"
+CACHE_DIR = Path(".papersmith") / "cache" / "ingestion"
+MARKER_LICENSE_NOTE = (
+    "engine 'marker': its model weights are licensed under a modified OpenRAIL-M that is "
+    "free only for research, personal use and organizations under USD 5M in funding or "
+    "revenue; set engine: auto in papersmith.yaml for the license-unrestricted engines")
 
 # A references/bibliography heading (EN or ES). Marker decorates headings with
 # bold (**References**), anchor <span> wrappers, and leading numbers, so match
@@ -82,7 +107,7 @@ class ConfigError(Exception):
 
 
 class EngineError(Exception):
-    """The Marker engine is not usable in this environment."""
+    """The configured engine is not usable in this environment."""
 
 
 class IngestionError(Exception):
@@ -138,6 +163,11 @@ def load_config(path: Path | None = None) -> dict:
     force_ocr = cfg.get("force_ocr")
     if force_ocr is not None and not isinstance(force_ocr, bool):
         raise ConfigError(f"force_ocr must be true or false, got {force_ocr!r}")
+
+    for flag in ("cache", "formulas_on_cpu"):
+        value = cfg.get(flag)
+        if value is not None and not isinstance(value, bool):
+            raise ConfigError(f"{flag} must be true or false, got {value!r}")
 
     roots = cfg.get("source_roots")
     if roots is not None:
@@ -366,6 +396,31 @@ def _is_references_heading(match: "re.Match[str]") -> bool:
     return bool(_REFERENCES_TITLE.match(title))
 
 
+def reference_spans(text: str) -> list[tuple[int, int]]:
+    """The ``(begin, end)`` offsets of every references section (see below)."""
+    headings = list(_HEADING_LINE.finditer(text))
+    spans: list[tuple[int, int]] = []
+    index = 0
+    while index < len(headings):
+        if not _is_references_heading(headings[index]):
+            index += 1
+            continue
+        run_end = index
+        while (run_end + 1 < len(headings)
+               and _is_references_heading(headings[run_end + 1])):
+            run_end += 1
+        after = headings[run_end + 1] if run_end + 1 < len(headings) else None
+        spans.append((headings[index].start(),
+                      after.start() if after else len(text)))
+        index = run_end + 1
+    return spans
+
+
+#: The page markers ``pdf_pipeline`` writes; a cut keeps them so the pages after
+#: a references section still know where they start.
+_PAGE_MARKER = re.compile(r"^<!-- page \d+ -->$", re.MULTILINE)
+
+
 def strip_references(text: str) -> str:
     """Drop EVERY references/bibliography section, and only those sections.
 
@@ -400,31 +455,16 @@ def strip_references(text: str) -> str:
     A consecutive run of references headings is cut as one span, since a
     two-column render can emit the same heading twice.
 
+    Page markers (``<!-- page N -->``) inside a cut survive it, so a page that
+    begins inside the references still has its start in the Markdown.
+
     Stopping at the first following heading can leave part of a references
     section behind when a bibliography carries sub-headings of its own. That
     is the safe direction and it is chosen on purpose: surviving reference
     lines are a nuisance a reader skips, while a deleted appendix costs a
     PDF re-ingestion to recover.
     """
-    headings = list(_HEADING_LINE.finditer(text))
-    if not headings:
-        return text
-
-    spans: list[tuple[int, int]] = []
-    index = 0
-    while index < len(headings):
-        if not _is_references_heading(headings[index]):
-            index += 1
-            continue
-        run_end = index
-        while (run_end + 1 < len(headings)
-               and _is_references_heading(headings[run_end + 1])):
-            run_end += 1
-        after = headings[run_end + 1] if run_end + 1 < len(headings) else None
-        spans.append((headings[index].start(),
-                      after.start() if after else len(text)))
-        index = run_end + 1
-
+    spans = reference_spans(text)
     if not spans:
         return text
 
@@ -432,6 +472,9 @@ def strip_references(text: str) -> str:
     cursor = 0
     for begin, finish in spans:
         kept.append(text[cursor:begin].rstrip())
+        markers = _PAGE_MARKER.findall(text, begin, finish)
+        if markers:
+            kept.append("\n\n".join(markers))
         cursor = finish
     if cursor < len(text):
         kept.append(text[cursor:])
@@ -457,6 +500,14 @@ def marker_options(mode: str | None, force_ocr: bool) -> dict:
     return options
 
 
+def _marker_unavailable(exc: ImportError) -> EngineError:
+    return EngineError(
+        f"the Marker engine is not available in this interpreter ({exc}). "
+        f"Provision it with {SETUP_SCRIPT} and run the script through "
+        "skills/paper-ingestion/.venv/bin/python"
+    )
+
+
 def build_converter(mode: str | None, force_ocr: bool = False):
     """Construct a keyless Marker PDF->markdown converter (models loaded once)."""
     try:
@@ -464,11 +515,7 @@ def build_converter(mode: str | None, force_ocr: bool = False):
         from marker.models import create_model_dict
         from marker.config.parser import ConfigParser
     except ImportError as exc:
-        raise EngineError(
-            f"the Marker engine is not available in this interpreter ({exc}). "
-            f"Provision it with {SETUP_SCRIPT} and run the script through "
-            "skills/paper-ingestion/.venv/bin/python"
-        ) from None
+        raise _marker_unavailable(exc) from None
 
     config_parser = ConfigParser(marker_options(mode, force_ocr))
     return PdfConverter(
@@ -493,16 +540,295 @@ def write_figures(images: dict, folder: Path) -> None:
 
 
 def render_paper(converter, pdf_path: Path, strip_refs: bool, staging: Path) -> None:
-    """Convert ``pdf_path`` and write the `.md` + figures into ``staging``."""
-    from marker.output import text_from_rendered
+    """Convert ``pdf_path`` and write the `.md` + figures (+ `.json`) into ``staging``."""
+    if isinstance(converter, RoutedEngine):
+        converter.render(pdf_path, strip_refs, staging)
+        return
+    # Marker is opt-in: guarded here as in build_converter, so the forge gate
+    # does not count it as a package every interpreter must carry.
+    try:
+        from marker.output import text_from_rendered
+    except ImportError as exc:
+        raise _marker_unavailable(exc) from None
 
+    started = time.monotonic()
     rendered = converter(str(pdf_path))
     text, _ext, images = text_from_rendered(rendered)
+    references = [(None, text[a:b]) for a, b in reference_spans(text)]
     if strip_refs:
         text = strip_references(text)
     if images:
         write_figures(images, staging)
     (staging / f"{pdf_path.stem}.md").write_text(text, encoding="utf-8")
+    write_sidecar(staging / f"{pdf_path.stem}.json", pdf_path, text, references,
+                  engine={"name": "marker"}, pages=[], seconds=time.monotonic() - started)
+
+
+class RoutedEngine:
+    """The page-routed engines: ``auto``, ``pdfium`` and ``docling``.
+
+    ``auto`` sends each page where the probe says (``pdf_pipeline``); ``pdfium``
+    keeps every page on the fast path; ``docling`` sends every page with text
+    or images to Docling. ``force_ocr`` OCRs every page through Docling, and
+    ``mode: balanced`` means fidelity first: every page through Docling.
+    When Docling is not installed, ``auto`` reads every page on the fast path
+    and says so, so ingestion still works on a core install.
+    """
+
+    def __init__(self, engine: str, mode: str | None, force_ocr: bool, cache_root: Path | None,
+                 formulas_on_cpu: bool = False, table_mode: str = "fast"):
+        import pdf_pipeline
+
+        self.pipeline = pdf_pipeline
+        self.engine = engine
+        self.all_heavy = engine == "docling" or mode == "balanced" or force_ocr
+        self.force_ocr = force_ocr
+        self.cache = pdf_pipeline.PageCache(cache_root) if cache_root else None
+        self.heavy = pdf_pipeline.HeavyEngine(formulas_on_cpu=formulas_on_cpu, table_mode=table_mode)
+        self.heavy_missing: str | None = None
+
+    def _plan(self, probes: list) -> None:
+        for probe in probes:
+            if self.engine == "pdfium":
+                if probe.route in self.pipeline.HEAVY_ROUTES:
+                    probe.reason += "; fast path forced by engine pdfium"
+                    probe.route = "text"
+            elif self.force_ocr:
+                probe.route, probe.reason = "scan", "force_ocr"
+            elif self.all_heavy and probe.route in ("text", "table", "math"):
+                probe.reason += "; every page to Docling"
+                probe.route = probe.route if probe.route != "text" else "math"
+            elif probe.route == "math" and self.heavy.formula_preset is None:
+                # Without a formula model Docling would only box the equations;
+                # the text layer reads them better, and in milliseconds.
+                probe.reason += f"; {self.heavy.formula_why}"
+                probe.route = "text"
+
+    def render(self, pdf_path: Path, strip_refs: bool, staging: Path) -> None:
+        import pypdfium2
+
+        pp = self.pipeline
+        started = time.monotonic()
+        pdf_sha = pp.sha256_file(pdf_path)
+        document = pypdfium2.PdfDocument(pdf_path)
+        try:
+            probes = pp.probe_document(document)
+            self._plan(probes)
+            line_groups = {p.page: pp.page_lines(document, p.page) for p in probes if p.route not in pp.HEAVY_ROUTES}
+            body = pp.body_size(list(line_groups.values()))
+            pages: dict[int, object] = {}
+            engines: dict[int, str] = {}
+            cached: set[int] = set()
+            fast_version = f"pypdfium2-{_version('pypdfium2')}"
+            for probe in probes:
+                if probe.route in pp.HEAVY_ROUTES:
+                    continue  # heavy pages are cached and converted by run, below
+                key = self._key(pdf_sha, probe, None, body, fast_version)
+                hit = self.cache.get(pdf_sha, key) if self.cache else None
+                if hit is not None:
+                    pages[probe.page] = hit
+                    engines[probe.page] = "pdfium"
+                    cached.add(probe.page)
+                else:
+                    page = document[probe.page - 1]
+                    try:
+                        pages[probe.page] = pp.fast_page_markdown(page, probe.page, body, line_groups[probe.page])
+                    finally:
+                        page.close()
+                    engines[probe.page] = "pdfium"
+                    self._store(pdf_sha, key, probe, pages[probe.page], "pdfium")
+            heavy_seconds = 0.0
+            for run in pp.heavy_runs(probes):
+                first, last, ocr, tables = run
+                # Docling lays a page out with its neighbours in the same run, so
+                # a page is only reused when its whole run is: one missing entry
+                # reconverts the run, never one page alone with other neighbours.
+                keys = {n: self._key(pdf_sha, probes[n - 1], run, body, fast_version) for n in range(first, last + 1)}
+                hits = {n: self.cache.get(pdf_sha, key) for n, key in keys.items()} if self.cache else {}
+                if hits and all(hit is not None for hit in hits.values()):
+                    for number, hit in hits.items():
+                        pages[number] = hit
+                        engines[number] = "docling"
+                        cached.add(number)
+                    continue
+                run_started = time.monotonic()
+                try:
+                    produced = self.heavy.convert(pdf_path, first, last, ocr, tables)
+                except ImportError as exc:
+                    if self.engine == "docling":
+                        raise EngineError(f"the Docling engine is not installed ({exc}); "
+                                          f"provision it with {SETUP_SCRIPT}") from None
+                    self.heavy_missing = str(exc)
+                    produced = {}
+                heavy_seconds += time.monotonic() - run_started
+                for number in range(first, last + 1):
+                    probe = probes[number - 1]
+                    if number in produced:
+                        pages[number] = produced[number]
+                        engines[number] = "docling"
+                        self._store(pdf_sha, keys[number], probe, produced[number], "docling")
+                    else:
+                        if number not in line_groups:
+                            line_groups[number] = pp.page_lines(document, number)
+                        page = document[number - 1]
+                        try:
+                            pages[number] = pp.fast_page_markdown(page, number, body, line_groups[number])
+                        finally:
+                            page.close()
+                        engines[number] = "pdfium"
+                        probe.reason += "; Docling unavailable, read on the fast path"
+        finally:
+            document.close()
+
+        blocks = []
+        for probe in probes:
+            page = pages[probe.page]
+            for name, image in page.figures.items():
+                pp.write_figure(image, staging / name)
+            blocks.append(pp.page_marker(probe.page) + ("\n\n" + page.markdown if page.markdown else ""))
+        text = "\n\n".join(blocks) + "\n"
+        references = [(_page_before(text, a), text[a:b]) for a, b in reference_spans(text)]
+        if strip_refs:
+            text = strip_references(text)
+        (staging / f"{pdf_path.stem}.md").write_text(text, encoding="utf-8")
+        page_rows = [dict(p.as_dict(), engine=engines[p.page], cached=p.page in cached) for p in probes]
+        engine = {"name": self.engine, "fast": fast_version, "heavy": None if self.heavy_missing else self._heavy_version(),
+                  "heavy_unavailable": self.heavy_missing,
+                  "formulas": None if self.engine == "pdfium" else self.heavy.formula_why,
+                  "pipeline": pp.PIPELINE_VERSION}
+        write_sidecar(staging / f"{pdf_path.stem}.json", pdf_path, text, references, engine=engine,
+                      pages=page_rows, seconds=time.monotonic() - started, heavy_seconds=heavy_seconds,
+                      pdf_sha=pdf_sha)
+        if self.heavy_missing:
+            print(f"NOTE {pdf_path.name}: Docling is not installed, so its math/table/scanned pages "
+                  f"were read on the fast path (formulas as Unicode, tables as text). "
+                  f"Provision it with {SETUP_SCRIPT}.", file=sys.stderr)
+
+    def _heavy_version(self) -> str | None:
+        try:
+            return f"docling-{self.heavy.version()}"
+        except Exception:
+            return None
+
+    def _key(self, pdf_sha: str, probe, run: tuple | None, body: float, fast_version: str) -> str:
+        """A heavy page's key carries its run: the same page laid out in another
+        run is another entry."""
+        if run is not None:
+            version = self._heavy_version() or "docling-missing"
+            options = dict(self.heavy.options(run[2], run[3]), run=[run[0], run[1]])
+            return self.pipeline.PageCache.key(pdf_sha, probe.page, probe.route, "docling", version, options)
+        return self.pipeline.PageCache.key(pdf_sha, probe.page, probe.route, "pdfium", fast_version, {"body": body})
+
+    def _store(self, pdf_sha: str, key: str, probe, page, engine: str) -> None:
+        if self.cache:
+            self.cache.put(pdf_sha, key, page, {"pdf_sha256": pdf_sha, "page": probe.page,
+                                                "route": probe.route, "engine": engine})
+
+
+def _version(package: str) -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def _page_before(text: str, offset: int) -> int | None:
+    """The page whose marker last precedes ``offset`` in ``text``."""
+    import pdf_pipeline as pp
+
+    pages = [int(m.group(1)) for m in pp.PAGE_MARKER.finditer(text, 0, offset)]
+    return pages[-1] if pages else None
+
+
+#: Where a numbered reference entry begins inside a joined line: "[12] ".
+_REFERENCE_START = re.compile(r"\s(?=\[\d{1,3}\]\s)")
+_DISPLAY_MATH = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+
+
+def write_sidecar(path: Path, pdf_path: Path, text: str, references: list[tuple[int | None, str]], *, engine: dict,
+                  pages: list[dict], seconds: float, heavy_seconds: float = 0.0, pdf_sha: str | None = None) -> None:
+    """The map of ``<stem>.md`` that lets a reader fetch one piece of it.
+
+    Offsets are character offsets into the final Markdown. Page ranges come
+    from the page markers; headings, equations and figures carry the page
+    they sit on. References are kept here, by page, even when the Markdown
+    drops them.
+    """
+    import pdf_pipeline as pp
+
+    markers = [(int(m.group(1)), m.start(), m.end()) for m in pp.PAGE_MARKER.finditer(text)]
+
+    def page_at(offset: int) -> int | None:
+        current = None
+        for number, start, _end in markers:
+            if start > offset:
+                break
+            current = number
+        return current
+
+    by_page = {row["page"]: row for row in pages}
+    page_rows = []
+    for index, (number, _start, end) in enumerate(markers):
+        stop = markers[index + 1][1] if index + 1 < len(markers) else len(text)
+        page_rows.append(dict(by_page.get(number, {"page": number}), md_start=end, md_end=stop))
+    headings = [{"level": len(m.group(0)) - len(m.group(0).lstrip("#")), "text": m.group(1).strip(),
+                 "md_offset": m.start(), "page": page_at(m.start())}
+                for m in _HEADING_LINE.finditer(text)]
+    equations = [{"index": i, "latex": m.group(1).strip(), "md_offset": m.start(), "page": page_at(m.start())}
+                 for i, m in enumerate(_DISPLAY_MATH.finditer(text))]
+    figures = [{"file": m.group(1), "md_offset": m.start(), "page": page_at(m.start())}
+               for m in re.finditer(r"!\[[^\]]*\]\(([^)\s]+)\)", text)]
+    reference_rows = []
+    for page, block in references:
+        for line in block.splitlines():
+            marker = pp.PAGE_MARKER.match(line.strip())
+            if marker:
+                page = int(marker.group(1))
+                continue
+            entry = line.strip()
+            if not entry or entry.startswith("#"):
+                continue
+            # The fast path joins a bibliography into one paragraph and Docling
+            # bullets it; one row per entry either way.
+            for part in _REFERENCE_START.split(entry):
+                part = part.strip().lstrip("-").strip()  # a Docling bullet, alone or before its entry
+                if part:
+                    reference_rows.append({"text": part, "page": page})
+    sidecar = {
+        "schema": "papersmith.ingestion/v1",
+        "source": {"file": pdf_path.name, "sha256": pdf_sha or _sha256_of(pdf_path), "pages": len(pages) or None},
+        "markdown": {"file": f"{pdf_path.stem}.md", "chars": len(text)},
+        "engine": engine,
+        "pages": page_rows,
+        "headings": headings,
+        "equations": equations,
+        "figures": figures,
+        "references": reference_rows,
+        "timing": {"seconds": round(seconds, 2), "heavy_seconds": round(heavy_seconds, 2)},
+    }
+    path.write_text(json.dumps(sidecar, indent=1, ensure_ascii=False), encoding="utf-8")
+
+
+def _sha256_of(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def build_engine(engine: str, mode: str | None, force_ocr: bool, cache_root: Path | None,
+                 formulas_on_cpu: bool = False):
+    """The converter for one run: Marker's, or the page-routed engine."""
+    if engine == "marker":
+        print(f"NOTE {MARKER_LICENSE_NOTE}", file=sys.stderr)
+        return build_converter(mode, force_ocr)
+    try:
+        import pypdfium2  # noqa: F401 -- the fast path is the core and always required
+    except ImportError as exc:
+        raise EngineError(f"pypdfium2 is not available in this interpreter ({exc}); "
+                          f"provision the environment with {SETUP_SCRIPT}") from None
+    return RoutedEngine(engine, mode, force_ocr, cache_root, formulas_on_cpu)
 
 
 def ingest_loose(converter, loose_pdf: Path, strip_refs: bool) -> Path:
@@ -592,7 +918,7 @@ def main() -> int:
     # its closed flag roster from this single line, and a wrapped usage would
     # bury a flag behind a newline the roster's own split cannot see.
     os.environ.setdefault("COLUMNS", "240")
-    parser = argparse.ArgumentParser(description="Per-paper-folder PDF -> Markdown ingestion (Marker).")
+    parser = argparse.ArgumentParser(description="Per-paper-folder PDF -> Markdown ingestion (page-routed).")
     parser.add_argument(
         "pdf", nargs="*", help="the loose PDFs to ingest (default: every loose PDF found)"
     )
@@ -617,6 +943,18 @@ def main() -> int:
         "--force-ocr", action="store_true",
         help="OCR every page instead of reading the PDF's text layer (for a poor text layer that garbles tables)",
     )
+    parser.add_argument(
+        "--engine", choices=VALID_ENGINES, default=None,
+        help="override papersmith.yaml's engine for this run (auto routes each page)",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true",
+        help="convert every page again and do not store the result in the page cache",
+    )
+    parser.add_argument(
+        "--verify-cache", action="store_true",
+        help="re-check every cached page against its recorded hashes and exit; ingests nothing",
+    )
     args = parser.parse_args()
 
     if bool(args.file) != bool(args.into):
@@ -626,6 +964,16 @@ def main() -> int:
     try:
         cfg = load_config()
         mode = args.mode if args.mode is not None else cfg.get("mode")  # None -> Marker auto-selects by device
+        engine = args.engine or cfg.get("engine") or DEFAULT_ENGINE
+        use_cache = not args.no_cache and cfg.get("cache", True)
+        if args.verify_cache:
+            import pdf_pipeline
+
+            checked, bad = pdf_pipeline.PageCache(REPO_ROOT / CACHE_DIR).verify()
+            print(f"Page cache: {checked} entr{'y' if checked == 1 else 'ies'} checked, {len(bad)} failing.")
+            for folder in bad:
+                print(f"  FAILING {_relative(folder)}")
+            return 1 if bad else 0
         strip_refs = bool(cfg.get("strip_references", True))
         force_ocr = bool(args.force_ocr or cfg.get("force_ocr", False))
         # Filing is not ingestion: it moves one PDF into a topic and loads no model,
@@ -671,7 +1019,8 @@ def main() -> int:
         return 0
 
     try:
-        converter = build_converter(mode, force_ocr)
+        converter = build_engine(engine, mode, force_ocr, REPO_ROOT / CACHE_DIR if use_cache else None,
+                                 bool(cfg.get("formulas_on_cpu", False)))
     except EngineError as exc:
         print(f"Environment error: {exc}", file=sys.stderr)
         return 2

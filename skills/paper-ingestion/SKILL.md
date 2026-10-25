@@ -1,6 +1,6 @@
 ---
 name: paper-ingestion
-description: "Trigger: ingest reference PDFs into high-fidelity Markdown (LaTeX equations, Markdown tables, figures as files) using Marker, locally and keyless. One folder per paper: pdf + lean .md + figure images."
+description: "Trigger: ingest reference PDFs into high-fidelity Markdown (LaTeX equations, Markdown tables, figures as files), locally and keyless, routing each page to a fast text-layer path or to Docling only when it needs it. License-unrestricted engines. One folder per paper: pdf + lean .md + .json page map + figure images."
 ---
 
 # Paper Ingestion
@@ -12,8 +12,8 @@ images`. Figures are separate image files the `.md` references (loaded on demand
 not embedded), and the references/bibliography section is dropped. Runs locally
 with no API keys.
 
-**PDFs only.** Neither this skill nor `papersmith ingest` (its workspace
-bridge) reads Markdown, text or HTML; `papersmith ingest` refuses any other
+**PDFs only.** Neither this skill nor `smith ingest` (its workspace
+bridge) reads Markdown, text or HTML; `smith ingest` refuses any other
 source and names the two routes that do. Material that is already text goes
 through `proposal-deliberation` instead: Markdown a new proposal should be
 seeded from goes under `guidance/paper-guide/` (`CREATE_INITIAL_REVISION`
@@ -81,9 +81,52 @@ Accept an optional loose PDF path, or discover the source roots from
 Extraction is performed by the bundled script running inside the skill's
 dedicated virtualenv.
 
+## Engines, routing and licenses
+
+The default engine, `auto`, decides **page by page** (`scripts/pdf_pipeline.py`),
+loading no model to decide:
+
+| Page | Route | Engine |
+| --- | --- | --- |
+| digital prose (inline math reads as Unicode) | `text` | pypdfium2, milliseconds per page |
+| no text and no page-sized image | `empty` | pypdfium2 |
+| a display equation (a line set mostly in math fonts) | `math` | Docling + formula model → LaTeX |
+| a table caption or numeric rows | `table` | Docling + TableFormer (fast mode) |
+| an image and no text layer | `scan` | Docling + RapidOCR |
+
+Consecutive heavy pages go to Docling in one call, through its page range, and
+table structure and OCR run only on the pages that need them. Every page is
+cached under `.papersmith/cache/ingestion/`, keyed by the PDF's SHA-256, the
+route, the engine version and its options; an entry records the hashes of its
+Markdown and figures and is re-checked before use (`--verify-cache` checks them
+all). Re-ingesting a paper, or the same PDF fetched again under another name,
+converts nothing twice.
+
+The formula model depends on the hardware, because on the wrong device it is
+unusable: Granite-Docling-258M on MLX on Apple Silicon (7 s for a page of six
+equations), CodeFormulaV2 on CUDA. On a CPU-only machine it takes about 40 s per
+formula, so math pages stay on the fast path there unless `formulas_on_cpu: true`.
+When Docling is not installed (`--no-ingestion`), `auto` reads every page on the
+fast path and says so; `engine: docling` refuses instead.
+
+**Every default engine is license-unrestricted** — no copyleft and no revenue or
+user threshold: pypdfium2 (Apache-2.0 / BSD-3-Clause; PDFium BSD), Docling and
+docling-core/-parse/-ibm-models (MIT), docling-layout-heron (Apache-2.0),
+Granite-Docling-258M (Apache-2.0), CodeFormulaV2 (CDLA-Permissive-2.0), RapidOCR
+(Apache-2.0), mlx / mlx-vlm (MIT). `engine: marker` remains as an explicit
+opt-in: its code is Apache-2.0 but its model weights use a modified OpenRAIL-M
+license, free only for research, personal use and organizations under USD 5M in
+funding or revenue; the run prints that notice. MinerU was ruled out for the
+same reason (a license required above USD 20M monthly revenue or 100M MAU).
+
+Measured on Apple Silicon (arXiv 1706.03762, 15 pages; 1312.6114, 14 pages),
+warm models: `auto` 21.5 s and 28.6 s, with 7 and 10 pages on Docling; Marker
+`fast` 6.8 s and 28.2 s. `auto` returned more display equations as LaTeX (6 and
+30, against Marker's 1 and 23). A cached re-ingestion took 0.2 s.
+
 ## Environment (one-time)
 
-The engine (Marker + torch + surya) lives in an isolated micromamba environment
+The engines live in an isolated micromamba environment
 (`papersmith`) so it never pollutes system Python. A new machine is provisioned
 with one idempotent command that works on macOS, Linux, and Windows:
 
@@ -94,17 +137,18 @@ python scripts/setup_env.py install
 
 The provisioner installs both dependency kinds a `requirements.txt` alone cannot:
 
-- **Python deps** (`requirements.txt`): `marker-pdf`, `PyYAML`, and the ML stack
-  they pull in — plus `pytorch`/`torchvision`, `numpy`, `pymupdf`, `jsonschema`,
-  and `kagglesdk` from conda-forge.
-- **System binary**: `llama-server` (the surya-ocr OCR backend) from conda-forge's
-  `llama.cpp` package — no Homebrew needed. This is **not** a pip package, so it
-  can never live in `requirements.txt` — the setup script is what makes it
-  reproducible.
+- **Python deps** (`requirements.txt`): `pypdfium2` (the fast path, from
+  conda-forge with the base packages, so it is always there), `docling` (the heavy
+  pages), `mlx-vlm` on Apple Silicon, `PyYAML` — plus `pytorch`/`torchvision`,
+  `numpy`, `jsonschema` and `kagglesdk` from conda-forge.
+- **Marker, opt-in only**: `pip install marker-pdf==2.0.0` inside the environment
+  (see the license note above); its OCR backend `llama-server` still comes from
+  conda-forge's `llama.cpp`.
 
 The script detects the hardware and installs the matching PyTorch build:
 `pytorch-gpu` when an NVIDIA GPU is present, `pytorch-cpu` otherwise. Override the
-choice with `--cpu` or `--cuda`. Skip the ingestion engine with `--no-ingestion`,
+choice with `--cpu` or `--cuda`. Skip the heavy ingestion engine with `--no-ingestion`
+(the pypdfium2 fast path stays, so digital PDFs still ingest),
 and tear everything down with `python scripts/setup_env.py clean` (`--full`
 also removes the bootstrapped micromamba).
 
@@ -121,7 +165,7 @@ Always invoke through the environment:
 
 ```
 micromamba run -n papersmith python \
-  skills/paper-ingestion/scripts/extract_pdf.py [--list] [--mode {fast,balanced}] [--force-ocr] [<loose-pdf>…]
+  skills/paper-ingestion/scripts/extract_pdf.py [--list] [--engine {auto,pdfium,docling,marker}] [--mode {fast,balanced}] [--force-ocr] [--no-cache] [<loose-pdf>…]
 ```
 
 - `--list`: report the pending loose PDFs and exit. Loads no model, moves no file.
@@ -132,6 +176,11 @@ micromamba run -n papersmith python \
 - `--mode {fast,balanced}`: override the configured `mode` for this run.
 - `--force-ocr`: OCR every page instead of reading the PDF's text layer, for this
   run. See [Tables from a poor text layer](#tables-from-a-poor-text-layer).
+- `--engine {auto,pdfium,docling,marker}`: override the configured engine for this
+  run. `pdfium` keeps every page on the fast path and loads no model.
+- `--no-cache`: convert every page again and store nothing.
+- `--verify-cache`: re-check every cached page against its recorded hashes and exit
+  (`1` when any fails); ingests nothing.
 
 ## Confirmation (required)
 
@@ -185,7 +234,9 @@ PDF loose) and run again — that deletion is the only forced re-ingestion path,
 because an existing non-empty `<stem>/` folder is refused rather than merged
 into.
 
-First run downloads the Surya layout/OCR models (~1–2 GB), cached thereafter.
+The first page that needs Docling downloads its models (layout, TableFormer, the
+formula model; about 1 GB with the MLX formula model), cached thereafter. A paper
+with no heavy page loads no model at all.
 
 ## Failure Semantics
 
@@ -207,16 +258,37 @@ For a loose `<root>/foo.pdf`, produce `<root>/foo/` containing:
 - `foo.md` — lean Markdown: text, LaTeX equations, Markdown tables. The
   references/bibliography section is stripped. Figures are **referenced**
   (`![](_page_4_Figure_2.jpeg)`), not embedded.
+- `foo.json` — the page map (`schema: papersmith.ingestion/v1`): the PDF's SHA-256;
+  per page its route, the reason, the engine that read it, whether it came from the
+  cache, and its character range in the `.md`; headings, display equations (LaTeX)
+  and figures with their page; the references **kept here by page** even though
+  the `.md` drops them; the engines and versions; timings.
 - the figure image files the `.md` references, flat in the same folder.
 
-No `normalized/`, no base64, no manifest.
+Each page's block in the `.md` opens with `<!-- page N -->`. No `normalized/`, no
+base64, no manifest.
+
+## Reading part of a paper
+
+`scripts/pdf_fragment.py` answers with one piece of an ingested paper, never the
+whole document, from its `.json` map (stdlib only, read-only):
+
+```
+python skills/paper-ingestion/scripts/pdf_fragment.py guidance/<topic>/<paper> \
+  {--page N | --heading TEXT | --equation K | --search TEXT | --outline} [--max-chars 6000] [--json]
+```
+
+Exit `0` found, `1` nothing matched, `2` usage error or unreadable paper. Agents
+reach the same through the MCP tool `papersmith.ingest_fragment` (read-only).
 
 ## Configuration (`papersmith.yaml`)
 
 ```yaml
 paper_ingestion:
-  engine: marker
-  mode: fast              # fast (CPU/MPS) | balanced (highest fidelity, GPU-oriented)
+  engine: auto            # auto | pdfium | docling | marker (opt-in, see licenses)
+  mode: fast              # fast: route pages | balanced: every page through Docling
+  formulas_on_cpu: false  # optional: run the formula model on a CPU-only machine (slow)
+  cache: true             # optional: per-page cache keyed by the PDF's SHA-256
   strip_references: true  # drop the references/bibliography section at the end
   force_ocr: false        # optional: OCR every page, never read the PDF's text layer
   source_base: guidance   # source roots are discovered under here, every run
@@ -253,12 +325,16 @@ folder is a configuration error, not an empty discovery.
 This skill **interprets** content for maximum fidelity — it reconstructs
 equations as LaTeX and tables as Markdown cells. That interpretation can be
 wrong (a misread digit, a garbled symbol). The source PDF sits in the same
-folder as the `.md`: verify anything load-bearing against it. Prefer `balanced`
-mode when fidelity matters more than speed.
+folder as the `.md`: verify anything load-bearing against it, and the `.json`
+says which engine read each page. Prefer `balanced` mode when fidelity matters
+more than speed. Known limits of the fast path: inline mathematics reads as
+Unicode, a vector figure (drawn, not embedded as an image) is not written as a
+file, and a table the probe missed reads as text lines.
 
 ### Tables from a poor text layer
 
-In **both** modes Marker rebuilds a digital table from the PDF's own text layer
+With `engine: auto`, `--force-ocr` sends every page to Docling with RapidOCR.
+With `engine: marker`: in **both** modes Marker rebuilds a digital table from the PDF's own text layer
 (`tables_pdftext`) and falls back to OCR only when its reconstruction scores low.
 A text layer that is present but poor — split ligatures, interleaved columns, a
 broken font map — therefore yields a table that is confidently wrong, and
@@ -277,14 +353,15 @@ the flag.
 | `source_base` set to something that is not a folder | Report the error; do nothing |
 | Neither `source_base` nor `source_roots` configured | Report the error; do nothing |
 | A folder under `source_base` with no loose PDF | Not a source root; leave it untouched |
-| Unknown `engine`/`mode`, or a value of the wrong type (`strip_references`/`force_ocr` not a boolean) | Report the error before loading the engine; do nothing |
+| Unknown `engine`/`mode`, or a value of the wrong type (`strip_references`/`force_ocr`/`cache`/`formulas_on_cpu` not a boolean) | Report the error before loading the engine; do nothing |
 | Loose PDFs present | List them, ask which to ingest, ingest only those |
 | User approves a subset | Ingest exactly the approved paths; leave the rest loose |
 | User approves nothing | Stop; move no file |
 | No loose PDFs (all in folders) | Report nothing to do; do not re-ingest |
 | Argument that is missing, not a PDF, a directory, or already ingested | Refuse before loading the engine; move nothing |
 | A paper's `<stem>/` folder already exists and is not empty | Refuse that paper; say to delete the folder to re-ingest |
-| Marker not installed in the interpreter | Report it and point at `setup.sh`; move nothing |
+| pypdfium2 missing, or the named engine (`docling`, `marker`) not installed | Report it and point at `setup.sh`; move nothing |
+| `engine: auto` and Docling not installed | Read every page on the fast path; say so on stderr and in the `.json` |
 | A single file fails | Report that file; leave it loose; continue with the rest |
 
 ## Output Reporting

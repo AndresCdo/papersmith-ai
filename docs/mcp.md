@@ -1,22 +1,44 @@
 # PaperSmith as an MCP server
 
-`papersmith mcp serve` exposes the workspace orchestrator and the paper-writing
+`smith mcp serve` exposes the workspace orchestrator and the paper-writing
 verbs to any Model Context Protocol host over stdio. It is a thin projection:
-every tool wraps an existing `papersmith` CLI contract, so nothing is
+every tool wraps an existing `smith` CLI contract, so nothing is
 reimplemented and no new runtime dependency is added.
 
 ## Requirements
 
 - Python 3.11 or newer.
-- `papersmith` on `PATH` (`pipx install git+https://github.com/LIAUNAL/papersmith-ai.git`,
+- `smith` on `PATH` (`pipx install git+https://github.com/LIAUNAL/papersmith-ai.git`,
   always the latest `main`, or the workspace's own environment).
 - An initialized workspace. The server binds to one workspace root, and every
   path argument it accepts must resolve inside that root.
 
+## The lab bank (`banco-lia`)
+
+`smith init` and `smith upgrade` register the lab's article and project bank
+([LIAUNAL/bancoProyectosPapersLIA](https://github.com/LIAUNAL/bancoProyectosPapersLIA))
+for every declared harness, served by `uvx --from
+git+https://github.com/LIAUNAL/bancoProyectosPapersLIA banco-lia-mcp`:
+
+| Harness | File | Entry |
+|---|---|---|
+| Claude Code | `.mcp.json` | `mcpServers.banco-lia` (`type: stdio`) |
+| OpenCode | `opencode.json` | `mcp.banco-lia` (`type: local`) |
+| Pi | `.pi/mcp.json` | `mcpServers.banco-lia` |
+| Antigravity / agy | `.agents/mcp_config.json` | `mcpServers.banco-lia` |
+
+`.mcp.json`, `.pi/mcp.json` and `.agents/mcp_config.json` belong to the
+workspace: upgrade adds or refreshes only the `banco-lia` entry and keeps every
+other server. A file that is not valid JSON is left untouched and reported as a
+warning. `opencode.json` is a rendered file, so upgrade rewrites it whole.
+The `papersmith` server itself is never written to any of them; use
+`smith mcp print-config` for it. `uv` must be on `PATH` for the harness to
+start the bank.
+
 ## Wiring
 
 The server is launched by the client as a subprocess; there is nothing to run
-by hand. `papersmith mcp print-config` emits the snippet for the host you are
+by hand. `smith mcp print-config` emits the snippet for the host you are
 configuring, with the bound workspace filled in — treat its output as
 authoritative.
 
@@ -26,7 +48,7 @@ authoritative.
 {
   "mcpServers": {
     "papersmith": {
-      "command": "papersmith",
+      "command": "smith",
       "args": ["mcp", "serve", "--workspace", "/path/to/your/workspace"]
     }
   }
@@ -41,7 +63,7 @@ authoritative.
   "mcp": {
     "papersmith": {
       "type": "local",
-      "command": ["papersmith", "mcp", "serve", "--workspace", "/path/to/your/workspace"],
+      "command": ["smith", "mcp", "serve", "--workspace", "/path/to/your/workspace"],
       "enabled": true
     }
   }
@@ -54,7 +76,7 @@ authoritative.
 {
   "mcpServers": {
     "papersmith": {
-      "command": "papersmith",
+      "command": "smith",
       "args": ["mcp", "serve", "--workspace", "/path/to/your/workspace"]
     }
   }
@@ -63,7 +85,7 @@ authoritative.
 
 Or register via CLI:
 ```bash
-agy mcp add papersmith -- papersmith mcp serve --workspace /path/to/your/workspace
+agy mcp add papersmith -- smith mcp serve --workspace /path/to/your/workspace
 ```
 
 ## Protocol
@@ -86,8 +108,9 @@ and auto-approve sensibly.
 
 | Tool | What it wraps | readOnly | destructive | openWorld |
 |---|---|---|---|---|
-| `papersmith.workspace_status` | `papersmith status --json` | ✅ | — | — |
-| `papersmith.workspace_audit` | `papersmith audit --check-drift`; reports drift, never repairs it | ✅ | — | — |
+| `papersmith.workspace_status` | `smith status --json` | ✅ | — | — |
+| `papersmith.workspace_audit` | `smith audit --check-drift`; reports drift, never repairs it | ✅ | — | — |
+| `papersmith.ingest_fragment` | `pdf_fragment.py`: one page, heading section, display equation (LaTeX), search hits or the outline of an ingested paper, never the whole document | ✅ | — | — |
 | `papersmith.target_list` | configured compute targets | ✅ | — | — |
 | `papersmith.target_check` | target connectivity — runs `ssh` for a remote-ssh target | ✅ | — | ✅ |
 | `papersmith.paper_status` | the paper's block table | ✅ | — | — |
@@ -109,7 +132,7 @@ and auto-approve sensibly.
 | `papersmith.workspace_init` | create a workspace under the bound root; skips npm and the environment download unless asked | — | — | ✅ |
 | `papersmith.workspace_upgrade` | sync framework files, preserving all research artifacts | — | ✅ | — |
 | `papersmith.target_set` | persist the default compute target | — | — | — |
-| `papersmith.ingest_add` | ingest a PDF or URL; long-running, may download model weights | — | — | ✅ |
+| `papersmith.ingest_add` | ingest a PDF or URL; long-running, may download model weights the first time a page needs the heavy engine | — | — | ✅ |
 | `papersmith.paper_scaffold` | create/re-enter `paper/` idempotently | — | — | — |
 | `papersmith.paper_open` | insert an empty block pair | — | — | — |
 | `papersmith.paper_substitute` | replace one block's body, or adopt a hand edit | — | ✅ | — |
@@ -175,10 +198,10 @@ records a remote dispatch command verbatim, including its `--consent` operand.
 ## Verifying a build
 
 ```bash
-papersmith mcp inspect          # the capability catalog as JSON — the source of truth
-papersmith mcp print-config     # the wiring snippet for the bound workspace
+smith mcp inspect          # the capability catalog as JSON — the source of truth
+smith mcp print-config     # the wiring snippet for the bound workspace
 pytest tests/test_mcp_*.py      # protocol, seam guard, drift, confinement, wiring
 ```
 
-`papersmith mcp inspect` is what this document's tool list is checked against:
+`smith mcp inspect` is what this document's tool list is checked against:
 a drift test fails if the two disagree.

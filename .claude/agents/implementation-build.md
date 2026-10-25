@@ -43,6 +43,17 @@ remedy before ruling it admissible: numbers produced that way read as evidence
 and lend the sweep's rigour to something that should never have reached the
 bench.
 
+## Estimate when you instrument
+
+When you instrument the flow, make sure the timing probe exists — one epoch of
+one fold per arm, on the target's own interpreter, device recorded — and that
+it writes `Results/timing.json` in the product folder, declared among the
+step's `produces` roots, with `scales` copied from the approved protocol and
+the declared pilot. Run it, then load
+`.claude/skills/remote-parallelism/SKILL.md`, run its `estimate` over that
+record and report the range per stage and host. The estimate is never
+authorization.
+
 ## What you return
 
 Your report is not shown to the operator. It reaches the orchestrator, which

@@ -17,7 +17,7 @@
 | --- | --- |
 | Runtime | Mixed Python (>=3.11) + Node.js (ESM, `type: module`) repository |
 | Python | src-layout package `papersmith` (`src/papersmith/{core,bridges,mcp}`, `pipx install .`, entrypoint `papersmith.cli:main`) |
-| Python deps | `requests`, `nbformat`, `nbclient`, `ipykernel`, `numpy`, `pytest`, `torch`, `PyMuPDF`, `PyYAML`, `jsonschema`, `kagglesdk==0.1.37`, `fastapi`, `uvicorn`, `watchfiles`, `pydantic` (the Paper Command Center server) (`requirements.txt`) |
+| Python deps | `requests`, `nbformat`, `nbclient`, `ipykernel`, `numpy`, `pytest`, `torch`, `pypdfium2`, `PyYAML`, `jsonschema`, `kagglesdk==0.1.37`, `fastapi`, `uvicorn`, `watchfiles`, `pydantic` (the Paper Command Center server) (`requirements.txt`) |
 | Node deps | `jiti`, `typebox`, `typescript`, `@types/node` (`package.json`, `tsconfig.json`); `npm run typecheck` (`tsc`); no eslint/prettier |
 | Config | `pyproject.toml` (setuptools src-layout, pytest `testpaths`, ruff lint `E,F,W,I`), `papersmith.yaml` (ingestion engine/mode) |
 | Measured runtime (2026-09-09, on the machine that initialized this file — a measurement, never a requirement) | `node v26.8.1`, `.venv` Python `3.14.7`, `pytest 9.1.0` |
@@ -47,7 +47,7 @@
 - The artifact store is file-backed only (`openspec`), and `openspec/config.yaml`'s
   `store:` key is where that is declared. Changed 2026-05-18: this file named a
   memory provider as half the store, which made its own instructions
-  unexecutable on a machine that has none, and `papersmith init` ships no
+  unexecutable on a machine that has none, and `smith init` ships no
   `openspec/` at all, so that half reached nobody. `tests/test_no_personal_context_dependency.py`
   derives its expectation from the configuration key and refuses a
   provider-shaped store, a provider mirror declaration, or a provider call in

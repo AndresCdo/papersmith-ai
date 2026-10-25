@@ -4,7 +4,7 @@
 // `test_*.py`, so `pytest tests/` never collects them.
 //
 // The plugin under test is the real generated artifact: a throwaway workspace is
-// produced by the real `papersmith init`, and the plugin bytes are imported from
+// produced by the real `smith init`, and the plugin bytes are imported from
 // `<workspace>/.opencode/plugins/refuse-offpath-push.js`. The workspace's
 // adapters directory is then replaced with one trivially importable synthetic
 // adapter so the surface set — and therefore every assertion — is deterministic
@@ -62,7 +62,7 @@ function generateWorkspace() {
 //: Built once: the corpus generator is an environment precondition, not the
 //: subject under test, so an absent interpreter skips rather than fails.
 const WORKSPACE = generateWorkspace();
-const UNAVAILABLE = WORKSPACE ? false : "papersmith init unavailable in this environment";
+const UNAVAILABLE = WORKSPACE ? false : "smith init unavailable in this environment";
 
 function plantAdapters(root, modules) {
   const directory = path.join(root, ADAPTERS_RELATIVE);
