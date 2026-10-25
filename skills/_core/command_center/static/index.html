@@ -19,6 +19,7 @@
   <script src="./math-panel.js?v=0.19.6"></script>
   <script src="./model-panel.js?v=0.19.6"></script>
   <script src="./experiments-panel.js?v=0.20.0"></script>
+  <script src="./agents-panel.js?v=0.20.0"></script>
   <script src="./phase-console.js?v=0.19.1"></script>
   <script src="./phase-run.js?v=0.18.8"></script>
   <style>
@@ -2586,6 +2587,26 @@
     #pane-experiments .exp-runs ul, #pane-experiments .exp-warnings ul { list-style: none; font-size: 0.75rem; padding: 0.25rem 0; }
     #pane-experiments .exp-reason { color: var(--bad); font-size: 0.72rem; }
     #pane-experiments .exp-warnings { font-size: 0.75rem; color: var(--warn); margin-top: 0.75rem; }
+  
+    /* Agents table of the Flujo Archify pane (agents-panel.js) */
+    .agents-panel { margin-top: 1rem; }
+    .agents-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; }
+    .agents-toolbar input { flex: 1 1 260px; max-width: 420px; padding: 0.4rem 0.6rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+    .agents-table-wrap { overflow-x: auto; }
+    .agents-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .agents-table th, .agents-table td { text-align: left; vertical-align: top; padding: 0.45rem 0.55rem;
+      border-bottom: 1px solid var(--border-subtle); color: var(--text); }
+    .agents-table th { cursor: pointer; user-select: none; color: var(--text-muted); white-space: nowrap; }
+    .agents-table th:hover { color: var(--accent); }
+    .agents-table tbody tr:hover { background: var(--surface-hover); }
+    .agents-role { min-width: 260px; max-width: 480px; }
+    .agents-role details summary { cursor: pointer; color: var(--text-dim); font-size: 0.75rem; }
+    .agents-role details p { color: var(--text-muted); margin: 0.3rem 0 0; }
+    .agents-phase { display: inline-block; white-space: nowrap; padding: 0.05rem 0.4rem; margin: 0 0.2rem 0.2rem 0;
+      border-radius: 999px; background: var(--accent-dim); color: var(--accent); }
+    .agents-empty { color: var(--text-dim); }
+    .agents-warnings { color: var(--warn); font-size: 0.78rem; margin: 0.5rem 0 0; }
   </style>
 </head>
 <body>
@@ -2716,6 +2737,13 @@
           </div>
         </div>
         <iframe id="flowIframe" class="iframe-viewer" src="/api/flow"></iframe>
+      </div>
+      <div class="panel agents-panel">
+        <div class="panel__header">
+          <div class="panel__title">Agentes del proyecto smith</div>
+          <span class="panel__meta">Rol, skill, etapa, herramientas y fase(s) donde interviene cada agente · ordena con un clic en la columna</span>
+        </div>
+        <div id="agentsPanel"><p class="agents-empty">Cargando agentes…</p></div>
       </div>
     </div>
 
@@ -3541,6 +3569,9 @@
       // The atlas stops drawing while its tab is not shown.
       if (graphFramePath() !== 'blank') {
         postToGraph({ type: 'atlas-command', command: tabId === 'atlas' ? 'resume' : 'pause' });
+      }
+      if (tabId === 'flow') {
+        window.refreshAgentsPanel?.();
       }
       if (tabId === 'experiments') {
         window.refreshExperimentsPanel?.();

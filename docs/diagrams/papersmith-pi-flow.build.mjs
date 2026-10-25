@@ -87,11 +87,21 @@ const nodes=[
  n('implWalk','impl',2,'backend','implementation-walk',agentMeta('implementation-walk').sub,{...(agentMeta('implementation-walk').tag?{tag:agentMeta('implementation-walk').tag}:{}),sources:A('implementation-walk')}),
  n('implGate','impl',3,'security','Authorizes a launch','operator only',{sources:S('README.md',1570)}),
  n('repo','impl',4,'database','implementations/<repo>','its own git + .venv',{sources:S('README.md',76)}),
+ n('replicator','impl',1,'backend','paper-replicator',agentMeta('paper-replicator').sub,{rowOff:1,...(agentMeta('paper-replicator').tag?{tag:agentMeta('paper-replicator').tag}:{}),sources:[...A('paper-replicator'),{path:'skills/proposal-implementation/SKILL.md',line:166,end_line:178}]}),
+ n('pubCode','impl',2,'messagebus','Published code?','adopt + audit, else rebuild',{rowOff:1,sources:S('skills/proposal-implementation/SKILL.md',166,176)}),
+ n('replication','impl',3,'database','REPLICATION.md','equation → line provenance',{rowOff:1,sources:S('skills/proposal-implementation/SKILL.md',145,145)}),
+
+ n('dataCmd','data',0,'frontend','/datasets','toy → published',{tag:'.pi/prompts',sources:K('datasets',18,32)}),
+ n('dataScout','data',1,'backend','dataset-scout',agentMeta('dataset-scout').sub,{tag:'sourced → licensed',sources:A('dataset-scout')}),
+ n('dataCurator','data',2,'backend','dataset-curator',agentMeta('dataset-curator').sub,{tag:'toy → published',sources:A('dataset-curator')}),
+ n('dataGate','data',3,'security','Upload consent','private · --consent <slug>',{sources:S('skills/datasets/SKILL.md',34,45)}),
+ n('dataStore','data',4,'database','datasets/','registry · splits.json',{sources:S('skills/datasets/SKILL.md',89,100)}),
 
  n('expImpl','expimpl',0,'frontend','/experimental-implementation','binding → full-scale',{tag:'.pi/prompts',sources:K('experimental-implementation',116,120)}),
  n('expBuild','expimpl',1,'backend','experiments-build',agentMeta('experiments-build').sub,{...(agentMeta('experiments-build').tag?{tag:agentMeta('experiments-build').tag}:{}),sources:A('experiments-build')}),
- n('expWalk','expimpl',2,'backend','experiments-walk',agentMeta('experiments-walk').sub,{...(agentMeta('experiments-walk').tag?{tag:agentMeta('experiments-walk').tag}:{}),sources:A('experiments-walk')}),
- n('expImplGate','expimpl',3,'security','Authorizes a launch','whole campaign',{sources:S('skills/experimental-implementation/SKILL.md',116,120)}),
+ n('expRev','expimpl',2,'backend','experiments-reviewer',agentMeta('experiments-reviewer').sub,{...(agentMeta('experiments-reviewer').tag?{tag:agentMeta('experiments-reviewer').tag}:{}),sources:A('experiments-reviewer')}),
+ n('expWalk','expimpl',3,'backend','experiments-walk',agentMeta('experiments-walk').sub,{...(agentMeta('experiments-walk').tag?{tag:agentMeta('experiments-walk').tag}:{}),sources:A('experiments-walk')}),
+ n('expImplGate','expimpl',4,'security','Authorizes a launch','whole campaign',{sources:S('skills/experimental-implementation/SKILL.md',116,120)}),
 
  n('kaggle','creds',0,'frontend','/kaggle-accounts','taken-in → decided',{tag:'.pi/prompts',sources:K('kaggle-accounts',28,30)}),
  n('accCli','creds',1,'security','accounts_cli.py','validate --interactive',{tag:'TTY only',sources:S('skills/kaggle-accounts/SKILL.md',218,244)}),
@@ -144,7 +154,12 @@ const edges=[
  e('proposals','mathApi','$$ \\tag{N}',{variant:'dashed'}),
  e('expDelib','expVal'), e('expVal','expGate'), e('expGate','expPub',null,{variant:'security'}), e('expPub','experiments'),
  e('impl','implBuild'), e('implBuild','implWalk'), e('implWalk','implGate'), e('implGate','repo',null,{variant:'security'}),
- e('expImpl','expBuild'), e('expBuild','expWalk'), e('expWalk','expImplGate'),
+ e('expImpl','expBuild'), e('expBuild','expRev'), e('expRev','expWalk'), e('expWalk','expImplGate'),
+ e('impl','replicator','fidelity'), e('replicator','pubCode'), e('pubCode','replication'),
+ e('replication','expBuild','comparison baselines',{variant:'dashed'}),
+ e('dataCmd','dataScout'), e('dataScout','dataCurator'), e('dataCurator','dataGate'), e('dataGate','dataStore',null,{variant:'security'}),
+ e('dataStore','implBuild','toy set',{variant:'dashed',fromSide:'bottom',toSide:'top'}),
+ e('dataStore','expBuild','official set · mounted by notebooks',{variant:'dashed',fromSide:'right',toSide:'top'}),
  e('kaggle','accCli'), e('accCli','store'),
  e('remote','readiness'), e('readiness','remoteCli',null,{variant:'security'}), e('remoteCli','inbox'),
  e('store','remoteCli','credentials',{variant:'dashed'}),
@@ -156,28 +171,31 @@ const edges=[
 ];
 const lanes=[
  ['pi','0 · Pi harness'], ['plaus','1 · Plausibility'],['ingest','2 · Ingestion'],['delib','3 · Proposal deliberation'],['dash','3b · Concept map and math (dashboard)'],
- ['impl','4 · Implementation (proof of concept)'],['expdelib','5 · Experimental deliberation'],['expimpl','6 · Experimental implementation'],
+ ['data','4a · Datasets (toy set → official preparation)'],['impl','4 · Implementation (proof of concept + replication)'],['expdelib','5 · Experimental deliberation'],['expimpl','6 · Experimental implementation'],
  ['creds','7 · Credentials'],['remote','8 · Remote execution'],['write','9 · Writing'],['figs','10 · Figures and grounding'],['out','11 · Paper'],
  ['audit','Transversal · Audit']].map(([id,label])=>({id,label}));
 
-const laneIdx=Object.fromEntries(lanes.map((l,i)=>[l.id,i]));
-const components=nodes.map(({lane,col,width,...r})=>({...r,row:laneIdx[lane],col,size:[182,58]}));
+// A lane takes one grid row per row offset its nodes use (implementation draws
+// replication on a second row: five columns is the readability cap above).
+const laneIdx={};let nextRow=0;
+for(const l of lanes){laneIdx[l.id]=nextRow;nextRow+=1+Math.max(0,...nodes.filter(x=>x.lane===l.id).map(x=>x.rowOff||0));}
+const components=nodes.map(({lane,col,width,rowOff,...r})=>({...r,row:laneIdx[lane]+(rowOff||0),col,size:[182,58]}));
 const connections=edges.map(({role,...r})=>r);
 const boundaries=lanes.map(l=>({kind:'region',label:l.label,wraps:nodes.filter(x=>x.lane===l.id).map(x=>x.id)}));
 const doc={schema_version:1,diagram_type:'architecture',meta:{
   title:'Papersmith AI in Pi — commands, skills and agents',
   quality_profile:'showcase',
   output:'docs/diagrams/papersmith-pi-flow.html',
-  repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'1c3f78c9faa4452fadecf240caf4a1e91a73b3e7'},
+  repository:{url:'https://github.com/LIAUNAL/papersmith-ai',provider:'github',link_mode:'web',revision:'770d81dba23b11781075d5b68abce49a3573ffb9'},
   legend:{mode:'auto',entries:{frontend:{label:'Pi command /skill'},backend:{label:'Pi subagent'},messagebus:{label:'CLI'},security:{label:'Gate (human)'},database:{label:'Artifact on disk'},external:{label:'Pi harness'}}}
  },
  layout:{mode:'grid',origin:[30,48],cols:5,cellW:182,cellH:58,gapX:24,gapY:62},
  components, boundaries, connections,
  cards:[
-  {dot:'cyan',title:'How Pi sees it',items:['.pi/APPEND_SYSTEM.md is the system prompt: Pi appends it to the project one','/<skill> = .pi/prompts/<skill>.md: it loads the SKILL.md and passes $ARGUMENTS','The 19 .pi/agents/ are projected from .claude/agents/; Pi core has no subagents, so they need pi-subagents','Each agent declares tools (read, find, grep, write, edit, bash, mcp) and its stretch','refuse-offpath-push.js intercepts bash tool_call; it is a warning that fails open, not a gate']},
+  {dot:'cyan',title:'How Pi sees it',items:['.pi/APPEND_SYSTEM.md is the system prompt: Pi appends it to the project one','/<skill> = .pi/prompts/<skill>.md: it loads the SKILL.md and passes $ARGUMENTS',`The ${fs.readdirSync(`${REPO}/.pi/agents`).filter(f=>f.endsWith('.md')).length} .pi/agents/ are projected from .claude/agents/; Pi core has no subagents, so they need pi-subagents`,'Each agent declares tools (read, find, grep, write, edit, bash, mcp) and its stretch','refuse-offpath-push.js intercepts bash tool_call; it is a warning that fails open, not a gate']},
   {dot:'emerald',title:'Harness commands',items:['npm run setup:harnesses — links .pi/skills -> ../skills','python scripts/sync-repo-harness.py — regenerates .pi/prompts, .pi/agents, .pi/extensions (--check detects drift)','smith init · status · ingest · deliberate · implement · run · remote · audit · ui','npm run test:all — the quality gate']},
-  {dot:'violet',title:'Per-skill CLIs',items:['paper-ingestion: python scripts/setup_env.py install','deliberation: node skills/<skill>/cli.mjs --serve','the proposal graph: merge_proposal_sky.py → check_atlas.py → render_atlas.py','implementation: implementation_cli.py materialize · verify · fidelity · audit · step','kaggle-accounts: accounts_cli.py list · discover · validate · remove · materialize','remote-execution: remote_cli.py submit · status · poll · fetch · readiness …','paper-writing: paper_cli.py status · plan · write · verify … (28 verbs)','figure-review: review_cli.py probe · raster · skill-audit: audit_cli.py']},
-  {dot:'amber',title:'Flow rules',items:['The order is optional: each skill refuses with a code when its input is missing','Starting with /plausibility, before ingestion, is the recommendation','After a proposal revision, discuss its concept map and mathematics (dashboard Mapa Conceptual tab, /math-tutor) before implementing it','No walk can launch a campaign: the operator authorizes it','contract-auditor, redactor and style-sampler have no code path: the orchestrator launches them and write judges','/figure-review and /skill-audit only report; they never repair','smith ui: each pipeline phase card sends its /<skill> with the rules as a guide, or opens the panel that owns the work']}
+  {dot:'violet',title:'Per-skill CLIs',items:['paper-ingestion: python scripts/setup_env.py install','deliberation: node skills/<skill>/cli.mjs --serve','the proposal graph: merge_proposal_sky.py → check_atlas.py → render_atlas.py','implementation: implementation_cli.py materialize · verify · fidelity · audit · step','kaggle-accounts: accounts_cli.py list · discover · validate · remove · materialize','remote-execution: remote_cli.py submit · status · poll · fetch · readiness …','paper-writing: paper_cli.py status · plan · write · verify … (28 verbs)','datasets: datasets_cli.py synth · search · license · qc · prepare · publish','figure-review: review_cli.py probe · raster · skill-audit: audit_cli.py']},
+  {dot:'amber',title:'Flow rules',items:['The order is optional: each skill refuses with a code when its input is missing','Starting with /plausibility, before ingestion, is the recommendation','After a proposal revision, discuss its concept map and mathematics (dashboard Mapa Conceptual tab, /math-tutor) before implementing it','/datasets gives a seeded toy set first (dataset-scout: sourced → licensed; dataset-curator: toy → checked → prepared → published); publishing is private and only on the operator\'s consent','The proof of concept reads the toy set; the full experiments read the one official subject-wise preparation, mounted by remote notebooks','paper-replicator (implementation fidelity) searches for published code first: adopt it and audit its correspondence to the paper, else reimplement from the ingested paper; its baselines feed the experiments','experiments-reviewer reviews the instrumented code before any rehearsal or launch','No walk can launch a campaign: the operator authorizes it','contract-auditor, redactor and style-sampler have no code path: the orchestrator launches them and write judges','/figure-review and /skill-audit only report; they never repair','smith ui: each pipeline phase card sends its /<skill> with the rules as a guide, or opens the panel that owns the work']}
  ]};
 const out = path.resolve(process.argv[2] || fileURLToPath(new URL('./candidate.json', import.meta.url)));
 fs.mkdirSync(path.dirname(out), { recursive: true });

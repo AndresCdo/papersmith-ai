@@ -26,6 +26,22 @@ STAGES: tuple[str, ...] = (
     "scaffolding", "declarations", "writing", "figures", "paper", "audit",
 )
 
+#: Short Spanish label of each phase, in ``STAGES`` order; the agents table of
+#: the Flujo Archify pane reads "Fase N — <label>" from here.
+PHASE_LABELS: dict[str, str] = {
+    "harness": "Harness",
+    "plausibility": "Plausibilidad",
+    "ingestion": "Ingestión",
+    "proposal": "Deliberación de la propuesta",
+    "poc_experiments": "Prueba de concepto y experimentos",
+    "scaffolding": "Andamiaje",
+    "declarations": "Declaraciones",
+    "writing": "Redacción",
+    "figures": "Figuras",
+    "paper": "Paper",
+    "audit": "Auditoría",
+}
+
 
 def _prompt(slash: str, label: str, guide: list[str], placeholder: str, *,
             min_sentences: int = 0, optional: bool = False, prefix: str = "") -> dict[str, Any]:
@@ -120,6 +136,18 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Cada experimento declara la afirmación que prueba, su métrica y su baseline SOTA.",
                 "Pide la primera versión, un cambio o una operación de revisión; nada se aplica sin tu aprobación.",
             ], "Ej.: diseña el experimento que prueba la afirmación C1 contra el baseline más fuerte del SOTA."),
+            _prompt("/datasets", "Datos: toy set siempre y dataset oficial", [
+                "Verbos: synth (toy set sembrado, siempre), search, license, qc, prepare y publish.",
+                "dataset-scout busca en repositorios oficiales del paper, Kaggle, Hugging Face, OpenNeuro y Zenodo, y decide la licencia.",
+                "dataset-curator mide la calidad (qc) y escribe una sola preparación oficial por sujeto que leen la PoC y los experimentos.",
+                "publish sube un dataset privado solo con tu consentimiento explícito; hacerlo público pide un consentimiento aparte.",
+            ], "Ej.: synth un toy set de 8 sujetos y busca un dataset oficial para la tarea.", optional=True),
+            _prompt("/proposal-implementation", "Réplica de métodos de comparación", [
+                "El agente paper-replicator replica cada baseline o paper de comparación ingerido en guidance/.",
+                "Primero busca el código publicado del paper: si existe, lo adopta fijado a un commit con su licencia y audita que corresponda con el paper y esté bien implementado.",
+                "Si no hay código publicado, reimplementa el método desde el Markdown ingerido; cada hiperparámetro cita su sección o ecuación.",
+                "Termina con REPLICATION.md, pruebas de invariantes y una corrida corta sobre el toy set; nunca lanza una corrida remota.",
+            ], "Ej.: replica el baseline de guidance/smith-2024 en ../mi-poc", optional=True),
             _prompt("/proposal-implementation", "Implementar la prueba de concepto", [
                 "Convierte la última propuesta en Python contra un repositorio objetivo, o verifica una implementación existente.",
                 "Indica el repositorio objetivo y si es primera pasada o una pasada posterior.",

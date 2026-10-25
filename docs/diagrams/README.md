@@ -2,7 +2,13 @@
 
 `papersmith-pi-flow.html` is this repository's flow of record: the twelve
 numbered tramos plus the transversal audit lane, drawn from the repository's own
-files. The dashboard's *Pipeline* tab transcribes it — `PIPELINE_STAGES`,
+files. Two sub-lanes sit beside the numbered ones without being
+tramos of their own: `3b` (the concept map and the math tutor) and `4a`
+(datasets: `dataset-scout`, `dataset-curator`, the operator's upload consent and
+`datasets/`, feeding the toy set to the proof of concept and the official
+preparation to the experiments). The implementation lane takes a second row for
+`paper-replicator` -- published code first, reimplementation otherwise -- since
+a sixth column would break the width cap below. The dashboard's *Pipeline* tab transcribes it — `PIPELINE_STAGES`,
 `PIPELINE_CHAIN`, `GATE_SOURCES` and `AGENT_STAGES` in
 `skills/_core/command_center/state_extractor.py` — and
 `tests/test_command_center_state.py` holds the transcription, so the drawing and
