@@ -9,6 +9,7 @@ to the canonical sources of truth so a single set of docs drives every harness.
 - **Domain guidelines**: `guidance/paper-guide/` (user drop-zone; loaded automatically by `proposal-deliberation`, optional at rest)
 - **Available capabilities (skills)**: `skills/*/SKILL.md`
 - **Release procedure**: `docs/releasing.md`
+- **Repository maintenance (issues and PRs)**: `maintainer/skills/backlog-steward/SKILL.md` (repo-only; never shipped to workspaces)
 
 ## Skills
 
@@ -48,10 +49,37 @@ skill refuses when its input is missing.
      its pillars, hypotheses and concept layers (dashboard: Mapa Conceptual &
      Modelo) and its equations with `/math-tutor`, the Socratic tutor that
      also reads hand-written pages.
-5. **Proof of concept and experiments**: `/proposal-implementation` builds the
-   proof of concept, `/experimental-deliberation` writes the protocol in
-   `experiments/`, and `/experimental-implementation` runs its measurements.
-   Use `/kaggle-accounts` and `/remote-execution` when they run remotely.
+5. **Proof of concept and experiments**, in this order:
+   `/experimental-deliberation` writes the protocol in `experiments/`; a toy
+   set (`/datasets synth`); replication of the comparison methods;
+   the proof of concept (`/proposal-implementation`); a timing estimate;
+   an optional hyperparameter search (`/hyperparameter-search`);
+   the full experiments (`/experimental-implementation`); the code review
+   (`experiments-reviewer`); the remote rehearsal; and the operator's launch.
+   - **Data**: `/datasets synth|search|license|qc|prepare|publish` gives both
+     stages a seeded toy set always and one official dataset (agents
+     `dataset-scout`, `dataset-curator`): license checked, quality measured,
+     one subject-wise preparation, published privately only with the
+     operator's consent.
+   - **Replication of comparison methods**: `/proposal-implementation` hands
+     each baseline paper to `paper-replicator`, which looks for the paper's
+     published code first, adopts it pinned and audits it against the paper,
+     and reimplements the method only when no code exists.
+   - **Timing and placement**: a short timing probe in `Results/timing.json`
+     before the pilot and again before the full run; the dashboard's
+     Experimentos tab lists the local, Kaggle and Colab options, and
+     `/remote-parallelism` (`estimate`, then `assess --owners <distinct
+     owners>`) decides whether to split a campaign.
+   - **Hyperparameter search** (only when the deliberation judged it
+     worthwhile): `/hyperparameter-search plan|report|status` runs an
+     Optuna search nested inside each outer fold, with the same trial
+     budget for every arm and a declared importance evaluator; its contour
+     and importance plots land in `Results/hpo/` and the Experimentos tab
+     shows them. It runs remotely like the full runs.
+   - **Remote runs**: one account per person and service
+     (`smith team add … --attest`), `/kaggle-accounts validate`, then
+     `/remote-execution`: generate-job → submit --smoke → fetch --smoke /
+     smoke record → readiness → gate → submit → status / poll → fetch.
    Only the operator authorizes a launch.
 6. **Scaffolding**: `/paper-writing` opens the `paper/` tree and its section
    contracts.

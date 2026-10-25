@@ -26,6 +26,7 @@ from ..generators import (
 from ..kit import resolve_and_validate_origin
 from ..render import render_package_template
 from ..schema import REMOTE_CHOICES, REMOTE_TARGETS, validate_tools
+from . import kaggle_mcp
 from . import config, fs
 from . import manifest, progress, provenance, wiring
 
@@ -620,6 +621,8 @@ def run_cli(args) -> int:
     print("Harness wiring:")
     for line in wiring.format_summary(result["wiring"]):
         print(f"  {line}")
+    for line in kaggle_mcp.summary_lines(_active_tools_of(result)):
+        print(line)
     if not run_env:
         print("\nNote: Python environment provisioning was deferred for a fast init.")
         print("To provision the micromamba environment for experiments and ingestion:")
@@ -627,3 +630,13 @@ def run_cli(args) -> int:
     for warning in result["warnings"]:
         print(f"Warning: {warning}", file=__import__("sys").stderr)
     return 0
+
+
+def _active_tools_of(result: dict) -> list[str]:
+    """The harnesses this run wired, for the offline Kaggle MCP summary."""
+    wiring = result.get("wiring")
+    if isinstance(wiring, dict):
+        return [str(tool) for tool in wiring]
+    if isinstance(wiring, list):
+        return [str(item.get("tool")) for item in wiring if isinstance(item, dict) and item.get("tool")]
+    return []

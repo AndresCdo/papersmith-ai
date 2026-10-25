@@ -61,7 +61,7 @@ agent is used as a copilot, the ones already defined are in
 
 ## Use flow — the short path
 
-Thirteen skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
+Fourteen skills. They are invoked by name in Claude Code (`/paper-ingestion`) or requested in
 Spanish (*"ingiere los papers"*). **Not all of them have to be used, or in this order**: each
 one declares what it needs first and refuses if it's missing, so an invocation from the middle
 of the flow reports which input is missing.
@@ -74,21 +74,23 @@ The full path, from a PDF to a compiled paper:
 | 2 | `/paper-ingestion` | Converts the reference PDFs into readable Markdown (equations in LaTeX, tables as tables, figures as files) | `guidance/<folder>/` |
 | 3 | `/proposal-deliberation` | Discusses the mathematics with you and publishes each agreement as a managed revision, with the SOTA constellation alongside | `proposals/` (the revision and its `graph.html`) |
 | 3b | `/math-tutor` | Before implementing a revision: a Socratic tutor that discusses its concept map and mathematics with you, reads the pages you draw by hand, and checks your understanding of why the novelty holds | nothing on disk but its thread (`.papersmith/math-tutor/`); used from the dashboard's Mapa Conceptual & Modelo tab |
-| 4 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
-| 5 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
-| 6 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
-| 7 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
-| 8 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
-| 9 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
-| 10 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
-| 11 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
-| 12 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `smith upgrade` | the workspace itself |
+| 4 | `/datasets` | Gives the proof of concept and the full experiments their data: a seeded toy set always (`synth`), then an official dataset searched for (`search`) across the paper's own repository and the open dataset hosts, its source license decided (`license`), its quality measured (`qc`) and one subject-wise preparation both stages read (`prepare`); `publish` uploads it privately only with your explicit consent. Agents `dataset-scout` and `dataset-curator` | `datasets/` (registry, toy and prepared sets) |
+| 5 | `/proposal-implementation` | Proof of concept: turns the proposal into Python that verifies itself against the document | `implementations/<repo>/` |
+| 5b | `/proposal-implementation` (replication) | Replicates each comparison or baseline paper through the `paper-replicator` agent: it looks for the paper's published code first and, when it exists, adopts it pinned to a commit and audits that it corresponds to the paper and is implemented correctly; only when no code exists does it reimplement the method from the ingested Markdown | the target repo, with a `REPLICATION.md` correspondence table |
+| 6 | `/experimental-deliberation` | Discusses the experimental design that will put that mathematics to the test | `experiments/` |
+| 7 | `/experimental-implementation` | Turns the protocol into code and runs its measurements | the same target repo |
+| 8 | `/kaggle-accounts` | Proves that the Kaggle credentials really authenticate | `store/` (never leaves the disk) |
+| 9 | `/remote-execution` | Sends work to a remote worker and keeps the record of what came back | the target repo's ledger |
+| 10 | `/paper-writing` | Writes the paper block by block, with every claim tied to its evidence | `paper/` |
+| 11 | `/figure-review` | Looks at the render: rasterizes every `Figures/<id>.pdf` and measures what a raster can support (ink outside the canvas, collisions) | a visual report, never a change |
+| 12 | `/skill-audit` | Audits any of the above: what the code accepts versus what its documentation promises | a report, never a change |
+| 13 | `/upgrade-project` | Brings the workspace to the version of the CLI you have installed: it syncs the kit files and migrates the artifacts, delegating everything to `smith upgrade` | the workspace itself |
 
 The minimum to try the forge is step 1: with the idea in two sentences,
 `/plausibility` tracks the SOTA and returns the constellation plus the top-5. Only
 afterwards, if desired, a PDF can be placed in `guidance/reference-papers/` and run
 through `/paper-ingestion`; the deliberation is then carried out with
-`/proposal-deliberation`. Steps 4 and 6 only make sense once there's a published proposal
+`/proposal-deliberation`. Steps 5 to 7 only make sense once there's a published proposal
 and a target repository to implement it in.
 
 The diagram shows the full flow: every stage in this order with
@@ -101,7 +103,10 @@ and its source and its recipe are versioned in
 [`docs/diagrams/`](docs/diagrams/README.md)).
 
 The dashboard (`smith ui`) opens on this flow and shows the same order as
-eleven phases under **Pipeline y Avance**. Clicking a phase opens its console:
+eleven phases under **Pipeline y Avance**. Below the diagram, the **Flujo Archify**
+tab lists every agent the workspace ships (`/api/agents`): its role, the skill it
+loads, its stretch, its tools, the phase(s) it acts in and the harnesses it is
+projected to, in a table you can sort and filter. Clicking a phase opens its console:
 a text box with the stage's rules as a guide that sends `/<skill> <text>` to an
 agent in the support terminal (for `/plausibility`, the idea in at least two
 sentences), the real `smith` command for the phase, or a link to the panel
@@ -215,7 +220,7 @@ this forge.
 
 `main` is the only branch that's maintained, and each release also gets its tag,
 so an exact build is frozen by pinning it in the URL — for example
-`pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.20.0"`.
+`pipx install --force "git+https://github.com/LIAUNAL/papersmith-ai@v0.23.0"`.
 **1b** takes the clone as it is, including uncommitted changes; a reproducible
 build comes from **1a** or a tag. The changelog is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -455,7 +460,7 @@ my-paper/
 │   ├── manifest.json            #   hashes of everything the framework generated
 │   ├── runs_ledger.jsonl        #   every dispatched run, in order
 │   └── version                  #   framework version that created it
-├── .claude/agents/              # the nineteen subagents (single source of truth)
+├── .claude/agents/              # the twenty-four subagents (single source of truth)
 ├── skills/                      # the kit copy: the skills + _core
 │   └── _core/                   #   the two shared engines (deliberation, implementation)
 ├── sections/                    # the ten section contracts (they travel WITH content, like skills/)
@@ -677,7 +682,7 @@ repo-only).
 
 ## The agents
 
-A workspace ships **nineteen subagents** in `.claude/agents/`. They are short
+A workspace ships **twenty-four subagents** in `.claude/agents/`. They are short
 bursts of work that a harness launches (for example, with the Task tool) on
 request, not replacements for the CLI. The shape is always the
 same — **one burst between two operator gates**: the agent decides
@@ -688,11 +693,16 @@ to establish it. The operator opens and closes the gates.
 |-------|----------------|----------------|
 | `implementation-build` | From the approved object→module map to the findings report: materializes the scaffolding, writes one module per object with its provenance and its invariant tests, and validates the admitted remedies. | `proposal-implementation` |
 | `implementation-walk` | Walks the declared flow act by act, in order: runs the local steps, records each product and stops at the rehearsal before launch. It has no path to submit a campaign. | `proposal-implementation` |
+| `paper-replicator` | The `fidelity` stage for a comparison or baseline paper: it first searches for the paper's published code; when it exists, it adopts it pinned to a commit with its license and audits correspondence with the paper (match, deviation, unspecified) and implementation correctness; otherwise it reimplements the method from the ingested Markdown. It ends at code in the target layout, a `REPLICATION.md` table, invariant tests and a toy-set smoke run, and never launches a remote run. | `proposal-implementation` |
+| `dataset-scout` | From a research question or paper to ranked dataset candidates with their source licenses decided: it searches the paper's official repository and the dataset hosts (`search`) and records a `license` decision per candidate. It never downloads what it cannot license and never uploads anything. | `datasets` |
+| `dataset-curator` | From a dataset need to its arrival: the seeded toy set, a licensed source measured with `qc`, the one official subject-wise preparation (`prepare`), and `publish` run for real only with the operator's own consent tokens. | `datasets` |
 | `deliberation-publish` | From the moment you accept a change until the successor revision is published and in force — the only way the mathematics travels. The deliberation itself is not here: only you close it. | `proposal-deliberation` |
 | `experimental-publish` | The same as `deliberation-publish`, over the experiments document. | `experimental-deliberation` |
 | `experimental-validation` | The `validated` stage: it looks for the area's evaluation protocol —metrics, baselines, dataset, seeds, significance test—, verifies each baseline against its repo and its venue, and dates every URL it uses. | `experimental-deliberation` |
 | `experiments-build` | From the approved map of protocol steps to executable commands: materializes whatever is needed, wires each step and instruments each measurement so that it can be run and read. | `experimental-implementation` |
 | `experiments-walk` | The walk of the protocol, with the same gates and the same stop at the rehearsal. | `experimental-implementation` |
+| `experiments-reviewer` | From an instrumented implementation to a findings report read before any rehearsal or launch: reviews the code against the experiments protocol for code quality, the simulation and data path, remote GPU use and the declared statistical tests. It runs only the target's own tests and linters; it never repairs nor launches. | `experimental-implementation` |
+| `math-tutor` | One turn of the Socratic tutor from the dashboard's math panel: reads the hand-drawn page back as LaTeX, gives one hint, asks one question and assesses understanding quoted from your own words, always tied to why the novelty holds. It never writes the workspace. | `math-tutor` |
 | `paper-ingestion` | Turns a paper into the form in which it can really be used: LaTeX equations, tables as tables, figures as files. Stages: `filed`, `extracted`, `readable`. It asks nobody anything. | `paper-ingestion` |
 | `contract-auditor` | Reads the `## Disqualifiers` of a contract, literally, and judges a draft block against each one: `fires`/`clear`/`undecidable`, with the passage quoted in each `fires`. | `paper-writing` |
 | `redactor` | Writes the LaTeX of a block from exactly four inputs (the contract's prose, its evidence set, its mode and its style set) and returns a binding map: where each sentence comes from. | `paper-writing` |
@@ -711,7 +721,7 @@ Three rules that order everything else:
 - **The source of truth is `.claude/agents/`.** Each harness's routing docs
   (`CLAUDE.md`, `.pi/APPEND_SYSTEM.md`, `OPENCODE.md`,
   `.agents/AGENTS.md`) list
-  all nineteen, and they are generated: an agent is changed
+  all twenty-four, and they are generated: an agent is changed
   there, not in the projection.
 - **Each agent declares the skill it loads** (`skills/<name>/SKILL.md`), and that
   binding is verified: an agent that points at a skill the workspace does not
@@ -3940,9 +3950,11 @@ Context Protocol client over `stdio` (JSON-RPC 2.0).
 - `inspect` — prints the capability catalogue as JSON (the source of truth).
 - `print-config [--workspace <dir>]` — emits the configuration fragment for the host being configured (Claude Code, OpenCode).
 
-- `kaggle activate [--token-stdin] [--no-verify] [--workspace <dir>]` — activates Kaggle's official MCP server (`https://www.kaggle.com/mcp`, registered as `kaggle` by `init` and `upgrade`). It reads a `KGAT_` token from a hidden prompt, verifies it with a read-only `get_accelerator_quota` call, and stores it once per user in `$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token` (default `~/.config`, directory `0700`, file `0600`), never inside a workspace. The dashboard injects it as `KAGGLE_API_TOKEN` into the sessions its CLI assistant starts, unless that variable is already exported; a stored file that is a symlink or readable by others is never used.
-- `kaggle status [--verify]` — reports whether the token comes from the environment or the stored file, never its value.
-- `kaggle deactivate` — removes the stored token.
+- `kaggle activate [--token-stdin] [--no-verify] [--replace] [--workspace <dir>]` — activates Kaggle's official MCP server (`https://www.kaggle.com/mcp`, registered as `kaggle` by `init` and `upgrade`). It reads a `KGAT_` token (kaggle.com/settings → Account → API → Generate New Token) from a hidden prompt, verifies it with a read-only `get_accelerator_quota` call, and stores it where Kaggle's own client reads it, `~/.kaggle/access_token` (directory `0700`, file `0600` on POSIX), so the same token serves the `kaggle` CLI and `kagglesdk`. A different token already there is kept unless `--replace`. A token the official client left in `access_token` or `access_token.txt` is used as is, and the location 0.20 used (`$XDG_CONFIG_HOME/papersmith/kaggle-mcp-token`) still reads. The dashboard injects it as `KAGGLE_API_TOKEN` into the sessions its CLI assistant starts, unless that variable is already exported; on POSIX a stored file that is a symlink or readable by others is never used.
+- `kaggle status [--verify]` — reports where the token comes from, never its value, plus the detected environment (macOS, Linux, WSL or Windows; zsh, bash, fish or PowerShell) and the exact command and profile file to export it outside the dashboard.
+- `kaggle deactivate` — removes the stored token files (the official client reads the same file, so this signs out the `kaggle` CLI too).
+
+`smith init` and `smith upgrade` print one offline line about the activation state (no network call) and warn when Pi or Antigravity are wired but `npx`, which their `mcp-remote` bridge needs, is missing. `pip install` runs no post-install step, so nothing is checked there.
 
 The dashboard's Experimentos tab shows the activation state and runs `smith mcp kaggle activate` in the CLI assistant.
 
@@ -4007,6 +4019,20 @@ papersmith-ai/
 ├── tests/                      # Node.js + pytest suites (meta-audits included)
 └── scripts/                    # environment provisioning and harness setup
 ```
+
+
+### `smith team {list,add,remove}` and `smith colab {login,status}`
+
+```bash
+smith team add --owner ana --name "Ana" --kaggle-username ana_k --colab --colab-tier pro --attest
+smith team list
+smith colab login --owner ana
+smith colab status
+```
+
+Several remote accounts are supported as a **team**: one account per person per service. `team add` records an owner in `.papersmith/team.json` (git-ignored, no secrets) and refuses without `--attest`, the person's confirmation that they own and operate exactly one account per listed service, and refuses an account already listed under someone else. Google's Colab FAQ disallows "using multiple accounts to work around access or resource usage restrictions", and on free runtimes without compute units "running distributed computing workers"; Kaggle's terms could not be read, so the same rule applies. A Colab owner on the `free` tier may run interactive or proof-of-concept work in one session, never a worker of a split campaign.
+
+`colab login --owner <slug>` runs the official `google-colab-cli` (pinned `0.6.0`) consent for that owner under a private `HOME` of its own (`~/.config/papersmith/colab/<owner>/`, mode `0700`): the CLI keeps its token under `HOME`, so a private `HOME` is what isolates one person's account from another's, and papersmith never opens a file inside it. `colab status` reports, per owner, the CLI version, whether the sign-in still answers, the tier and whether the owner may take part in a split campaign. `smith init` and `smith upgrade` also register Google's official Colab MCP server (`colab`), which drives a notebook the person has open in the browser.
 
 ### Engineering guarantees
 

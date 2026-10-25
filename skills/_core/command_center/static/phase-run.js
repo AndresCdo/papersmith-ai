@@ -92,10 +92,20 @@
     const list = fases(data);
     let touched = false;
     for (const run of Object.values(runs)) {
-      if (!live(run)) continue;
-      // A run nothing has touched for QUIET_MS stops being followed.
-      if (now() - run.lastChangeAt > QUIET_MS) { run.expiredAt = now(); touched = true; continue; }
+      if (run.verifiedAt) continue;
       const phase = list.find((f) => f.stage_id === run.stage);
+      // A run that was stopped or stopped being followed is still reconciled
+      // with the server's verdict: when its phase passes later (another
+      // session, a closed dashboard), it reads verified rather than stuck.
+      if (!live(run)) {
+        if (phase && phase.status === 'PASS' && run.startStatus !== 'PASS') {
+          run.status = phase.status;
+          run.verifiedAt = now();
+          run.unlocked = [];
+          touched = true;
+        }
+        continue;
+      }
       if (!phase) continue;
       const changed = changedEvidence(run, phase).map((e) => ({ label: e.label, path: e.path, count: e.count }));
       if (JSON.stringify(changed) !== JSON.stringify(run.changed)) {
@@ -106,6 +116,11 @@
       if (phase.status !== run.status) { run.status = phase.status; touched = true; }
       // A phase that already passed is verified again only by new evidence.
       const fresh = run.startStatus !== 'PASS' || changed.length > 0;
+      // The verdict is read before the quiet expiry, so a phase that passed
+      // while nobody was watching is verified, never expired.
+      if (phase.status !== 'PASS' && now() - run.lastChangeAt > QUIET_MS) {
+        run.expiredAt = now(); touched = true; continue;
+      }
       if (phase.status === 'PASS' && fresh) {
         run.verifiedAt = now();
         run.unlocked = list

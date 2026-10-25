@@ -11,10 +11,162 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
-## Unreleased
+## 0.23.0
 
 ### Added
 
+- **Hyperparameter search with Optuna, when the deliberation judges it
+  worthwhile.** A new `hyperparameter-search` skill validates a plan
+  (`<Name>/hpo/plan.json`: one trial budget for every arm, baselines
+  included; a seeded sampler; a search nested inside each outer fold's
+  training subjects; nothing the experiments test tuned; the importance
+  evaluator always named, because Optuna 5 defaults to PED-ANOVA), estimates
+  its cost from `Results/timing.json` as an upper bound, and after the search
+  ran writes one `Results/hpo/<arm>-fold<k>/summary.json` per study with
+  hyperparameter importance, contour and optimization-history figures. It
+  never launches a search: remote runs still go through `remote-execution`
+  and the operator's launch.
+- **The Experimentos tab shows the search.** Best parameters per arm and
+  fold, importance bars labelled with their evaluator, and the contour,
+  importance and history figures; Phase 5 lists the optional search as
+  sub-phase 5.10 (the later sub-phases move to 5.11–5.13).
+- The experimental-deliberation and experimental-implementation skills say
+  when a search is worth declaring and where its step sits.
+
+## 0.22.1
+
+### Fixed
+
+- **Toy sets for subject-level protocols.** `datasets synth --label-per
+  subject` gives every subject one class, balanced across subjects; the
+  default `trial` (classes alternating within each subject) is unchanged byte
+  for byte. A protocol that decides per subject could not be piloted on the
+  old shape, because a subject carrying both classes has no label to score.
+
+## 0.22.0
+
+### Added
+
+- **Processing-time estimates for the proof of concept and the full run.** A
+  short timing probe (one epoch of one fold per arm, on the target's own
+  interpreter) writes `Results/timing.json` with the device and the scales
+  copied from the approved protocol; `remote-parallelism estimate` turns it
+  into a range per stage and per host (mean of per-arm means × epochs × folds
+  × seeds × arms, plus measured setup, ±20%), and a remote host is estimated
+  only from its own measurements, never from local timings. The
+  implementation skills and the walk and build agents report the estimate
+  before asking for a pilot or a launch.
+- **Local environment and run options in the Experimentos tab.** "Entorno
+  local" shows the workspace micromamba environment, each implementation
+  venv with its Python version, the libraries it declares and which are
+  installed or missing, and the device torch sees (one isolated probe per
+  interpreter, cached). "Opciones de corrida" lists, for the proof of concept
+  and the full experiments, local, Kaggle and Colab with availability, the
+  estimate or "sin medir", the reason and a recommendation. Fase 5 gains
+  "Estimar tiempo y elegir dónde correr".
+- **Google Colab beside Kaggle, under a team model.** Several accounts per
+  service, one per person: `smith team add|list|remove` keeps
+  `.papersmith/team.json` (owners, their Kaggle username and Colab tier; no
+  secrets, git-ignored) and refuses a member without `--attest` or an
+  account already owned by someone else. `smith colab login|status` signs
+  each owner in with the official `google-colab-cli` (pinned 0.6.0) under a
+  private per-owner `HOME`, the only thing that isolates its token; papersmith
+  never opens a file inside it. The remote-execution Colab backend exposes one
+  worker per owner and refuses a free-tier account as a worker of a split
+  campaign, quoting the Colab FAQ, which disallows "using multiple accounts to
+  work around access or resource usage restrictions" and distributed workers
+  on free runtimes. Kaggle's own terms could not be read, so the same
+  one-account-per-person rule applies. `smith init` and `smith upgrade`
+  register Google's official Colab MCP server (pinned commit) for every
+  harness; it drives a notebook open in the browser, for interactive work.
+  `remote-parallelism` now counts distinct owners, excludes free Colab tiers
+  from splits and refuses mixing services in one campaign unless the shard
+  stamps are declared identical. The Experimentos tab adds Colab rows to the
+  services table, a team table and a Colab activation box with
+  environment-specific steps.
+- **Remote services table in the Experimentos tab.** A short table states, for
+  the official MCP server, the official CLI, the token, the worker accounts,
+  the remote rehearsals and the weekly GPU quota, whether each is active,
+  inactive, not installed or unverified, with the one command that activates
+  it run through the CLI assistant. Offline on every poll; the CLI version is
+  cached and the quota is read only on `smith mcp kaggle status --verify`.
+- **`remote-parallelism` skill.** `assess` decides from measured inputs (unit
+  duration, units, accounts, sessions per account, session limit, weekly
+  quota, setup cost) whether a proof of concept or a campaign is worth
+  spreading over several remote GPU accounts: serial, single-account and
+  parallel makespans, speed-up, quota per account and a verdict
+  (`parallelize`, `single-account`, `split-first`). `checklist` and
+  `stamp-fields` state the reproducibility rules: split only along the
+  declared axis and never by arm, seed from the unit id, identical commit,
+  environment and accelerator on every account, a per-shard environment
+  stamp declared identical across shards, deterministic flags, one rehearsal
+  per account. The walk, build, reviewer and replicator agents run it before
+  generating jobs for more than one unit; the verdict never authorizes a
+  launch.
+
+### Fixed
+
+- **A stopped or expired phase run no longer stays stuck.** The tracker reads
+  the server's verdict before its quiet expiry, and a run that was stopped or
+  stopped being followed reads verified once its phase passes, instead of
+  showing "detenida" for a phase that is already PASS.
+
+## 0.21.1
+
+### Added
+
+- **`datasets synth --profile theta-beta`.** An EEG toy set whose Theta (6 Hz)
+  to Beta (20 Hz) power ratio depends on the class, for proofs of concept of
+  methods that rest on that biomarker. The default `alpha` profile is
+  unchanged byte for byte.
+
+## 0.21.0
+
+### Added
+
+- **Data and comparison-method replication in the paper flow.** Phase 5 gains
+  two explicit steps, "Datos: toy set siempre y dataset oficial" (`/datasets`)
+  and "Réplica de métodos de comparación" (`paper-replicator`), in the phase
+  actions, the dashboard sub-phases (5.6 and 5.7) and the entrypoints' paper
+  flow. The Flujo Archify diagram draws a datasets lane (`dataset-scout`,
+  `dataset-curator`, the upload-consent gate), the replication row and
+  `experiments-reviewer`, and the same pane lists every agent of the project
+  (`GET /api/agents`): role, skill, stage, tools, the phase or phases it acts
+  in, and the harnesses it is projected to.
+- **`paper-replicator` adopts published code first.** It searches for the
+  paper's own code and records the search; when code exists it is pinned to a
+  commit with its license and audited against the paper (`match`,
+  `deviation`, `unspecified`) and run through its own tests plus the
+  invariant tests and toy-set smoke run; reimplementation from the paper is
+  the fallback.
+- **`paper-replicator` agent.** A `proposal-implementation` stretch
+  (`fidelity`) that reimplements a referenced method with no public code from
+  its ingested Markdown and the cited papers it depends on: plan, analyze,
+  code, then invariant tests and a toy-set smoke run before any GPU run, with a
+  `REPLICATION.md` table tying every hyperparameter to a section or equation or
+  marking it `unspecified`. It runs as a subagent of the active Claude Code,
+  OpenCode or Pi session on that session's model: no API key and no external
+  LLM service.
+- **`datasets` skill with `dataset-scout` and `dataset-curator`.** A stdlib
+  CLI (`synth`, `search`, `license`, `qc`, `prepare`, `publish`, `status`)
+  over a `datasets/registry.json`: a seeded toy set for every proof of
+  concept, search across the remote dataset host's MCP, Hugging Face,
+  OpenNeuro and Zenodo (Google Dataset Search only as a manual link), license
+  decisions that refuse NC, ND and credentialed sources unless overridden,
+  quality reports, one stratified group split shared by the proof of concept
+  and the full experiments, and private publishing through the official
+  client with an explicit consent per dataset and a separate one before it
+  becomes public. The Experimentos tab lists the registered datasets.
+- **Kaggle MCP instructions follow the environment.** The activation box and
+  `smith mcp kaggle status` detect macOS, Linux, WSL or Windows, the login
+  shell (zsh, bash, fish, PowerShell) and the user, and print the export
+  command and profile file for that combination instead of fixed text; WSL and
+  Windows get a note on where the token lives. The token now lives where
+  Kaggle's own client keeps it, `~/.kaggle/access_token`, so one token serves
+  the MCP server, the `kaggle` CLI and `kagglesdk`; a token already there is
+  reused, a different one is never overwritten without `--replace`, and the
+  0.20 location still reads. `smith init` and `smith upgrade` print an offline
+  activation line and warn when `npx` is missing for Pi or Antigravity.
 - **`smith mcp kaggle activate|status|deactivate`.** Activates the official
   Kaggle MCP server for this user: a hidden prompt (or `--token-stdin`) takes
   a `KGAT_` token, a read-only `get_accelerator_quota` call verifies it

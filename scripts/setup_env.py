@@ -74,7 +74,10 @@ CONDA_BASE_PACKAGES = [
     "pypdfium2",
     "pyyaml",
     "jsonschema",
-    "kagglesdk",
+    # Pinned to requirements.txt's version (tests/test_env_pins.py): the doctrine
+    # pin test requires exactly that version, and a bare name took conda-forge's
+    # newest build the day 0.1.38 was published (#108).
+    "kagglesdk==0.1.37",
     "llama.cpp",
     # remote-execution reads and executes notebooks. `nbformat` parses them
     # and `nbclient` drives them, but driving a notebook means talking to a

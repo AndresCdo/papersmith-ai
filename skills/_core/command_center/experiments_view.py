@@ -9,11 +9,27 @@
   when it holds ``AGREED.md``, a full experiment when it holds
   ``Experimental_AGREED.md`` — with its convergence histories, figures,
   tables, significance tests, pinned artifacts and remote runs folded from
-  its ``.remote-execution/ledger.jsonl``;
+  its ``.remote-execution/ledger.jsonl``, plus one row per hyperparameter
+  study the ``hyperparameter-search`` skill reported under
+  ``Results/hpo/<study>/summary.json`` (schema 1) with its figures;
+* the ``datasets`` skill's registry (``datasets/registry.json``): per dataset
+  its role (toy or full), title, license decision, qc status, preparation
+  version and remote ref/visibility, plus the search files beside it;
 * a cheap remote-accounts readiness hint (the credential store its owning
   skill declares is present; credential files waiting in the drop-zone that
   skill declares), read through ``state_extractor``'s declaration readers so
-  no service name is restated here.
+  no service name is restated here;
+* the remote-services table (``remote_services``): one offline, bounded row
+  per service the remote path depends on, with its state and the one action
+  that activates it, plus the team table (one account per person and service);
+* the local environment (``local_env``): the workspace micromamba env and
+  each target's ``.venv`` with its declared libraries, installed or missing,
+  and the device torch sees;
+* the run options (``run_options``): per stage (proof of concept, full) and
+  host family, availability and an estimate from each product's
+  ``Results/timing.json`` (±20%), plus one recommendation per stage;
+* the Colab box state (``terminal.colab_mcp_status``): which MCP files register
+  the official Colab MCP, the box's constant commands and the environment.
 
 Every read is bounded (files per product, bytes per file, points per series,
 series per history) and contained under ``root``: a symlink resolving outside
@@ -35,7 +51,10 @@ from typing import Any
 
 from .atlas import _locate
 from .state_extractor import credentials_store, inbox_directory
-from .terminal import remote_mcp_status
+from .terminal import colab_mcp_status, remote_mcp_status
+from .remote_services import remote_services
+from .local_env import local_environment
+from .run_options import parse_timing, run_options
 from .decisions import LEDGER_MAX_BYTES, MAX_LEDGER_LINES, _discover_ledgers, _read_bytes
 
 MAX_PRODUCTS = 50
@@ -52,7 +71,13 @@ MAX_SIGNIFICANCE_ROWS = 200
 MAX_PINNED = 30
 MAX_LATEST_RUNS = 10
 MAX_WARNINGS = 100
+MAX_DATASETS = 100
+MAX_SEARCHES = 20
 MAX_PROTOCOL_BYTES = 1024 * 1024
+MAX_HPO_STUDIES = 24
+MAX_HPO_PARAMS = 40
+MAX_HPO_NOTES = 10
+HPO_FIGURES = ("contour", "importance", "history")
 TEXT_MAX = 600
 
 FIGURE_EXTS = {".png", ".svg", ".jpg", ".jpeg", ".pdf"}
@@ -537,18 +562,120 @@ def _fold_runs(root: Path, ledger: Path | None, reader: _Reader) -> dict[str, An
 # --------------------------------------------------------------------------
 # products
 # --------------------------------------------------------------------------
-def _scan(folder: Path, cap: int) -> tuple[list[Path], bool]:
-    """Files under ``folder`` without following directory symlinks."""
+def _scan(folder: Path, cap: int, skip: tuple[str, ...] = ()) -> tuple[list[Path], bool]:
+    """Files under ``folder`` without following directory symlinks; top-level
+    directories named in ``skip`` are read by their own reader instead."""
     found: list[Path] = []
     if not folder.is_dir() or folder.is_symlink():
         return found, False
     for current, dirs, files in os.walk(folder, followlinks=False):
-        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        top = Path(current) == folder
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (top and d in skip))
         for name in sorted(files):
             if len(found) >= cap:
                 return found, True
             found.append(Path(current) / name)
     return found, False
+
+
+# --------------------------------------------------------------------------
+# hyperparameter search
+# --------------------------------------------------------------------------
+def _scalar(value: Any) -> Any:
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        return _clip(value, 200)
+    return _clip(json.dumps(value)[:200], 200)
+
+
+def _importance(data: Any) -> dict[str, Any] | None:
+    if not isinstance(data, dict):
+        return None
+    values = data.get("values")
+    pairs = values.items() if isinstance(values, dict) else ()
+    clean = {_clip(k, 80): n for k, v in list(pairs)[:MAX_HPO_PARAMS] if (n := _number(v)) is not None}
+    return {"evaluator": _clip(data.get("evaluator"), 60) or None, "values": clean}
+
+
+def _hpo_figure(root: Path, study: Path, value: Any, reader: _Reader) -> str | None:
+    """A figure path relative to the study folder, kept only while it stays a
+    contained figure file inside that folder."""
+    if not isinstance(value, str) or not value:
+        return None
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts or relative.suffix.lower() not in FIGURE_EXTS:
+        reader.warn(f"{reader.label(study)}: a figure path leaving its study folder was refused")
+        return None
+    candidate = study / relative
+    status, _resolved, _size, _mtime = _locate(root, candidate, MAX_FILE_BYTES * 64)
+    if status not in ("ok", "too_large"):
+        if status != "unsafe":
+            reader.warn(f"{reader.label(candidate)}: figure missing")
+        return None
+    return _rel(root, candidate)
+
+
+def _hpo_studies(root: Path, results: Path, reader: _Reader) -> list[dict[str, Any]]:
+    """One row per ``Results/hpo/<study>/summary.json`` (schema 1); never raises."""
+    folder = results / "hpo"
+    if not folder.is_dir() or folder.is_symlink():
+        return []
+    try:
+        folder.resolve(strict=True).relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        return []  # Results/ itself resolves outside the workspace.
+    try:
+        names = sorted(e.name for e in os.scandir(folder)
+                       if e.is_dir(follow_symlinks=False) and not e.name.startswith("."))
+    except OSError:
+        return []
+    out: list[dict[str, Any]] = []
+    for name in names:
+        study = folder / name
+        path = study / "summary.json"
+        if not path.is_file() and not path.is_symlink():
+            continue
+        if len(out) >= MAX_HPO_STUDIES:
+            reader.warn(f"{reader.label(folder)}: studies capped at {MAX_HPO_STUDIES}")
+            break
+        data = reader.json(path)
+        if data is None:
+            continue
+        if not isinstance(data, dict) or data.get("schema") != 1:
+            reader.warn(f"{reader.label(path)}: not a schema-1 hyperparameter summary")
+            continue
+        objective = data.get("objective") if isinstance(data.get("objective"), dict) else {}
+        params = data.get("bestParams") if isinstance(data.get("bestParams"), dict) else {}
+        figures = data.get("figures") if isinstance(data.get("figures"), dict) else {}
+        notes = data.get("notes") if isinstance(data.get("notes"), list) else []
+        contour = data.get("contourParams") if isinstance(data.get("contourParams"), list) else []
+        fold = data.get("fold")
+        count = lambda key: int(n) if (n := _number(data.get(key))) is not None else None  # noqa: E731
+        out.append({
+            "study": _clip(data.get("study") or name, 120),
+            "arm": _clip(data.get("arm"), 120),
+            "fold": fold if isinstance(fold, int) and not isinstance(fold, bool) else None,
+            "nTrials": count("nTrials"),
+            "complete": count("complete"),
+            "pruned": count("pruned"),
+            "failed": count("failed"),
+            "bestValue": _number(data.get("bestValue")),
+            "bestParams": {_clip(k, 80): _scalar(v) for k, v in list(params.items())[:MAX_HPO_PARAMS]},
+            "objective": {"metric": _clip(objective.get("metric"), 120) or None,
+                          "direction": _clip(objective.get("direction"), 20) or None},
+            "importance": _importance(data.get("importance")),
+            "importanceCheck": _importance(data.get("importanceCheck")),
+            "contourParams": [_clip(p, 80) for p in contour[:MAX_HPO_PARAMS] if isinstance(p, str)],
+            "figures": {key: _hpo_figure(root, study, figures.get(key), reader) for key in HPO_FIGURES},
+            "notes": [_clip(n) for n in notes[:MAX_HPO_NOTES] if isinstance(n, str)],
+            "file": _rel(root, path),
+        })
+    return out
 
 
 def _product_dirs(root: Path, reader: _Reader) -> list[tuple[str, Path]]:
@@ -594,7 +721,7 @@ def _product(root: Path, repo: str, folder: Path, ledger: Path | None,
     else:
         kind = "unknown"
     results = folder / "Results"
-    files, cut = _scan(results, MAX_FILES_PER_PRODUCT)
+    files, cut = _scan(results, MAX_FILES_PER_PRODUCT, skip=("hpo",))
     if cut:
         reader.warn(f"{reader.label(results)}: only the first {MAX_FILES_PER_PRODUCT} files were scanned")
     convergence: list[dict[str, Any]] = []
@@ -624,6 +751,15 @@ def _product(root: Path, repo: str, folder: Path, ledger: Path | None,
                 table = _read_table(path, reader)
                 if table:
                     tables.append(table)
+    timing = None
+    timing_path = results / "timing.json"
+    if timing_path.is_file() or timing_path.is_symlink():
+        timing = parse_timing(reader.json(timing_path))
+        if timing is not None:
+            timing["file"] = _rel(root, timing_path)
+        else:
+            reader.warn(f"{reader.label(timing_path)}: not a schema-1 timing record")
+    hpo = _hpo_studies(root, results, reader)
     for message in warnings:
         if len(global_warnings) < MAX_WARNINGS:
             global_warnings.append(message)
@@ -638,6 +774,8 @@ def _product(root: Path, repo: str, folder: Path, ledger: Path | None,
         "significance": significance[:MAX_SIGNIFICANCE_ROWS],
         "pinned": _pinned(root, folder, reader, panel),
         "runs": _fold_runs(root, ledger, reader),
+        "timing": timing,
+        "hpo": hpo,
         "warnings": warnings,
     }
 
@@ -658,6 +796,46 @@ def _remote_accounts(root: Path) -> dict[str, Any]:
             "inbox": inbox_name, "inbox_count": count}
 
 
+def _datasets(root: Path, reader: _Reader) -> dict[str, Any]:
+    """The ``datasets`` registry as one row per dataset; never raises."""
+    folder = root / "datasets"
+    path = folder / "registry.json"
+    out: dict[str, Any] = {"registry": None, "items": [], "searches": []}
+    if not path.is_file() and not path.is_symlink():
+        return out
+    data = reader.json(path)
+    if isinstance(data, list):
+        out["registry"] = _rel(root, path)
+        for entry in data[:MAX_DATASETS]:
+            if not isinstance(entry, dict) or not isinstance(entry.get("slug"), str):
+                continue
+            pick = lambda key: entry.get(key) if isinstance(entry.get(key), dict) else {}  # noqa: E731
+            lic, qc, prep, remote = pick("license"), pick("qc"), pick("preparation"), pick("remote")
+            out["items"].append({
+                "slug": _clip(entry["slug"], 80),
+                "role": _clip(entry.get("role"), 20),
+                "title": _clip(entry.get("title"), 200),
+                "license": lic.get("decision") or None,
+                "host_license": lic.get("host_license") or None,
+                "qc": qc.get("status") or None,
+                "prepared": bool(prep),
+                "preparation_version": prep.get("version"),
+                "remote_ref": remote.get("ref") or None,
+                "visibility": remote.get("visibility") or None,
+                "remote_version": remote.get("version"),
+            })
+        out["items"].sort(key=lambda item: item["slug"])
+    elif data is not None:
+        reader.warn(f"{_rel(root, path)}: not a list")
+    try:
+        searches = sorted((p for p in folder.glob("search-*.json") if reader.contained(p)),
+                          key=lambda p: (p.stat().st_mtime, p.name))
+    except OSError:
+        searches = []
+    out["searches"] = [_rel(root, p) for p in searches[-MAX_SEARCHES:]]
+    return out
+
+
 def get_experiments_view(root: Path | str) -> dict[str, Any]:
     root = Path(root).expanduser().resolve()
     warnings: list[str] = []
@@ -667,5 +845,18 @@ def get_experiments_view(root: Path | str) -> dict[str, Any]:
     by_folder = {path.parent.parent: path for path in ledgers}
     products = [_product(root, repo, folder, by_folder.get(folder), warnings)
                 for repo, folder in _product_dirs(root, reader)]
-    return {"protocol": protocol, "products": products, "remote_accounts": _remote_accounts(root),
-            "remote_mcp": remote_mcp_status(root), "warnings": warnings}
+    view = {"protocol": protocol, "products": products, "datasets": _datasets(root, reader),
+            "remote_accounts": _remote_accounts(root),
+            "remote_mcp": remote_mcp_status(root), "remote_colab": colab_mcp_status(root),
+            "remote_services": remote_services(root),
+            "warnings": warnings}
+    try:
+        view["local_environment"] = local_environment(root)
+    except Exception:  # noqa: BLE001 - a failing probe is an empty table, never an error
+        view["local_environment"] = {"workspace": None, "targets": [], "note": "No se pudo sondear."}
+    try:
+        view["run_options"] = run_options(root, view)
+    except Exception:  # noqa: BLE001
+        view["run_options"] = {"rows": [], "recommendations": {}, "note": "", "sources": [],
+                               "empty": True, "empty_hint": ""}
+    return view

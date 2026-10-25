@@ -164,6 +164,27 @@ class UpgradeTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             assert main(["audit", str(workspace), "--check-drift"]) == 0
 
+    def test_upgrade_adds_the_colab_mcp_and_keeps_the_other_servers(self) -> None:
+        tmp_path = self.new_tmp()
+        workspace = _workspace(tmp_path)
+        args = ["git+https://github.com/googlecolab/colab-mcp@b9ab3899e0f1fa493390b1fd6d54aa2e464ecdf1"]
+        for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
+            path = workspace / relpath
+            data = json.loads(path.read_text())
+            data["mcpServers"].pop("colab", None)
+            data["mcpServers"]["mine"] = {"command": "my-server", "args": []}
+            path.write_text(json.dumps(data), encoding="utf-8")
+        result = upgrade_module.upgrade(workspace)
+        claude = json.loads((workspace / ".mcp.json").read_text())["mcpServers"]
+        assert claude["colab"] == {"type": "stdio", "command": "uvx", "args": args, "timeout": 30000}
+        for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
+            assert relpath in result["changed_files"], relpath
+            servers = json.loads((workspace / relpath).read_text())["mcpServers"]
+            assert {"banco-lia", "kaggle", "colab", "mine"} <= set(servers), relpath
+        result = upgrade_module.upgrade(workspace)
+        for relpath in (".mcp.json", ".pi/mcp.json", ".agents/mcp_config.json"):
+            assert relpath not in result["changed_files"], relpath
+
     def test_upgrade_leaves_a_malformed_mcp_config_untouched_and_warns(self) -> None:
         tmp_path = self.new_tmp()
         workspace = _workspace(tmp_path)
