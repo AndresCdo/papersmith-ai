@@ -763,6 +763,9 @@ QUOTED_FLAG = re.compile(r"""['"`](--[a-z][a-z0-9-]*)['"`]""")
 CODE_SPAN = re.compile(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", re.DOTALL)
 # A skill directory a command names by path, `.claude/skills/<name>/` too.
 NAMED_SKILL = re.compile(r"skills/([\w-]+)/")
+# Programs no skill's code defines: a span that runs one (`git diff --stat`)
+# cites that program's flags, not a skill's.
+FOREIGN_PROGRAMS = frozenset({"git"})
 # A shared-core directory code names: `_core/<name>` or `"_core", "<name>"`.
 CORE_REFERENCE = re.compile(r"""_core[/"', ]+([\w-]+)""")
 # A schema or format version as prose writes one: `v1`, `v1.1`.
@@ -857,10 +860,13 @@ def cited_commands(body: str) -> list:
 def undefined_flags(body: str, bound: str) -> tuple:
     """`(checked, undefined)` for the flags `body` cites: how many there are,
     and each one no code of its owner defines, as `(flag, owner, command)`.
-    A command that names a skill's path is that skill's to answer for; any
+    A command that runs a foreign program is that program's, and not checked
+    here; one that names a skill's path is that skill's to answer for; any
     other span is `bound`'s."""
     checked, undefined = 0, []
     for command in cited_commands(body):
+        if (command.split() or [""])[0] in FOREIGN_PROGRAMS:
+            continue
         named = NAMED_SKILL.findall(command)
         owner = named[0] if named else bound
         for flag in CITED_FLAG.findall(command):
@@ -938,8 +944,9 @@ class AgentCliContractTests(unittest.TestCase):
 
     def test_every_flag_an_agent_cites_is_one_its_skill_defines(self) -> None:
         """A command that names a skill's path is that skill's to answer for
-        (`figure-auditor` runs `figure-review`'s `review_cli.py`); any other
-        span is the agent's own skill's."""
+        (`figure-auditor` runs `figure-review`'s `review_cli.py`), one that
+        runs a foreign program is that program's (`git diff --stat`), and any
+        other span is the agent's own skill's."""
         checked, undefined = 0, []
         for path in sorted(AGENTS.glob("*.md")):
             count, missing = undefined_flags(
@@ -962,6 +969,19 @@ class AgentCliContractTests(unittest.TestCase):
                          ["--force", "--output-dir", "--force"])
         self.assertEqual(
             undefined_flags("`extract_pdf.py --list`", "paper-ingestion"), (1, []))
+
+    def test_a_foreign_programs_flags_are_not_a_skills(self) -> None:
+        """The control for the exemption: `experiments-reviewer` cites
+        `git diff --stat`, a git flag no skill defines, and a skill's path in a
+        git command does not make it the skill's. A subcommand of the skill's
+        own CLI, cited without its script's path, still is."""
+        self.assertEqual(
+            undefined_flags("`git diff --stat`", "experimental-implementation"), (0, []))
+        self.assertEqual(
+            undefined_flags("`git log --stat skills/paper-writing/`", "paper-writing"), (0, []))
+        self.assertEqual(
+            undefined_flags("`write --no-such-flag`", "paper-writing"),
+            (1, [("--no-such-flag", "paper-writing", "write --no-such-flag")]))
 
     def test_every_schema_version_an_agent_cites_is_one_its_skill_knows(
             self) -> None:
