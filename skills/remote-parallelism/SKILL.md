@@ -1,6 +1,6 @@
 ---
 name: remote-parallelism
-description: "Trigger: decide whether a proof of concept or an experiment campaign is worth spreading over several remote GPU accounts, and how to keep the split reproducible. Turns measured inputs (a pilot's per-unit duration, a rehearsal's setup overhead, each account's concurrent sessions, session wall-time limit and weekly GPU quota) into serial and parallel makespans, speed-up, quota per account and a verdict with its threshold stated, plus the reproducibility checklist a split must satisfy before any job is generated. Reuses remote-execution's placement and launch gate; never places, generates or launches anything. Stdlib-only CLI, no network, no credentials."
+description: "Trigger: decide whether a proof of concept or an experiment campaign is worth spreading over several remote GPU accounts, and how to keep the split reproducible. Turns measured inputs (a pilot's per-unit duration, a rehearsal's setup overhead, each account's concurrent sessions, session wall-time limit and weekly GPU quota) into serial and parallel makespans, speed-up, quota per account and a verdict with its threshold stated, plus the reproducibility checklist a split must satisfy before any job is generated, and estimates a stage's processing time from a timing probe before the pilot and before the full run. Reuses remote-execution's placement and launch gate; never places, generates or launches anything. Stdlib-only CLI, no network, no credentials."
 ---
 
 # Remote parallelism
@@ -155,6 +155,53 @@ input, and `--accounts` beyond one per owner never add a session.
   around per-user limits. If the terms of the service do not allow it, the
   verdict does not matter.
 
+## Estimate before you scale
+
+The pilot and the full run are each preceded by an **estimate shown to the
+operator**: before the pilot and before the full run, `estimate` turns a short
+timing probe into a processing-time range per stage (`poc`, `full`) and per
+host. The range is measurement-derived and never a promise, and it is never
+launch authorization.
+
+**The timing probe.** A short run of one epoch of one fold per arm, on the
+target's own interpreter (its isolated venv, never the system Python), with the
+device it actually ran on recorded. It writes `Results/timing.json` inside the
+product folder, declared among the step's produces roots:
+
+```json
+{"schema": 1,
+ "measurements": [{"measuredAt": "<ISO-8601>", "host": "local" | "<host>:<owner>",
+                   "device": "cpu" | "mps" | "cuda:<gpu name>", "arm": "<arm id>",
+                   "unit": "epoch", "secondsPerUnit": <float>, "unitsMeasured": <int>,
+                   "setupSeconds": <float, optional>}],
+ "scales": {"poc":  {"arms": <int>, "folds": <int>, "seeds": <int>, "epochs": <int>},
+            "full": {"arms": <int>, "folds": <int>, "seeds": <int>, "epochs": <int>}}}
+```
+
+`scales` is copied by the agent from the approved protocol (the experiments
+revision) for `full` and from the declared pilot for `poc`; nothing guesses
+it. A record with any other shape is refused (`timing-invalid`).
+
+**The one formula.** For a stage `s` and a host `h` with measurements:
+
+```
+seconds = mean(secondsPerUnit over h's measurements, per arm)
+          × epochs_s × folds_s × seeds_s × arms_s
+        + setupSeconds_h × folds_s × seeds_s
+```
+
+The mean is taken per arm first and then over the arms, so an arm timed twice
+does not outweigh one timed once; `setupSeconds_h` is the mean of the
+measurements that record it, 0 when none does. The output is a range, `low`
+to `high`, ±20%, single-probe extrapolation — never a point claim.
+
+**Remote hosts are measured, never scaled.** A host with no measurement reads
+`unmeasured`; a remote estimate requires a measured rehearsal on that host,
+whose timing lands in the same record under its own `host` slug. Local timings
+are never multiplied by a guessed factor to stand in for a remote one, and one
+host timed on two devices is refused (`mixed-devices`), because timing never
+pools across machines.
+
 ## Accepted operations
 
 ```
@@ -164,6 +211,7 @@ python3 skills/remote-parallelism/scripts/parallelism_cli.py [--root <workspace>
 | Verb | What it does |
 |---|---|
 | `assess` | `--units N --unit-minutes M --owners N --sessions-per-account S --session-limit-hours H --quota-hours Q --setup-minutes O [--accounts A] [--service kaggle\|colab[,...]] [--tiers free,pro,...] [--stamps-identical] [--units-file units.json] [--axis <name>] [--quota-source <text>] [--quota-date YYYY-MM-DD] [--record <dir>]`: JSON `{inputs, thresholds, serialMinutes, singleAccountMinutes, parallelMinutes, speedup, savedMinutes, accountsUsed, recommendedAccounts, perAccount[{account, units, gpuHours, overQuota}], quotaOk, unitsOverSessionLimit, eligibleOwners, excludedOwners[{owner, tier}], verdict, reasons, unitSeeds?, reproducibilityChecklist, stampFields, launchAuthorization: false}`; each `perAccount` entry is one eligible owner's account. `--record <dir>` writes `<dir>/.remote-parallelism/assessment-<date>.json` (a second one the same day gets `-2`, never an overwrite); `<dir>` must resolve inside the workspace, through no symlink that leaves it |
+| `estimate` | `--timing <path to timing.json> [--stage poc\|full\|both] [--host <host>:<owner> ...] [--record <dir>] [--json]`: JSON `{estimates: {stage: {host: {seconds, low, high, formula, measurements, device, secondsPerUnit, perArm, setupSeconds} \| "unmeasured"}}, timing, range, unmeasuredMeans, launchAuthorization: false}`; `local` and every host the record measured are always reported, and each `--host` named adds a row (`unmeasured` when the record has no measurement of it). `--record <dir>` writes `<dir>/.remote-parallelism/estimate-<date>.json` under the same containment as `assess`, and then `--timing` too must resolve inside the workspace, through no symlink that leaves it |
 | `checklist` | the reproducibility checklist as JSON |
 | `stamp-fields` | the shard stamp fields to declare `identicalAcrossShards` |
 
@@ -183,6 +231,10 @@ Success prints one JSON object on stdout. A refusal prints
 | `axis-is-comparison` | `--axis` is an arm or a comparison |
 | `record-outside-workspace` | `--record` resolves outside the workspace, or its record folder is a link |
 | `record-missing` | `--record` is not an existing directory |
+| `timing-missing` | `--timing` names no file: run the timing probe first |
+| `timing-invalid` | the timing record is not schema 1: wrong schema, a missing or unknown key, a non-positive duration, a unit other than `epoch`, a bad host or device, or `scales` without both stages |
+| `mixed-devices` | one host was timed on more than one device; timing is never pooled across machines |
+| `timing-outside-workspace` | with `--record`, `--timing` resolves outside the workspace |
 
 ## Compatibility
 
@@ -193,7 +245,10 @@ than one unit.
 
 ## Output Reporting
 
-Report the verdict, the speed-up and saved minutes against their thresholds,
+For `estimate`, report each stage's range per host with its formula and
+device, every host that reads `unmeasured`, and that the range is an estimate
+shown before the pilot or the launch, never authorization. For `assess`,
+report the verdict, the speed-up and saved minutes against their thresholds,
 each account's units and GPU hours, every reason, the checklist items still
 unmet, and the recorded path. Speak the user's language; flags, paths and
 field names are never translated.

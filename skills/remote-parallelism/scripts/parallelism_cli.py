@@ -4,7 +4,10 @@ accounts, and what keeps the split reproducible.
 
 Stdlib only, no network, no credentials. This CLI decides from MEASURED
 numbers -- a pilot's per-unit duration, a rehearsal's setup overhead, the
-accounts' own limits -- and writes nothing but an optional assessment record.
+accounts' own limits -- and writes nothing but an optional assessment or
+estimate record. `estimate` turns a timing probe's `Results/timing.json` into a
+processing-time range per stage and per host, and never estimates a host it has
+no measurement of.
 
 Accounts are counted under the team rule: one account per person per service,
 so parallelism counts DISTINCT OWNERS (`--owners`), never accounts. On Colab
@@ -23,6 +26,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -51,12 +55,13 @@ OBJECTIVE_FLOW = {
     ],
 }
 
-VERBS = ("assess", "checklist", "stamp-fields")
+VERBS = ("assess", "estimate", "checklist", "stamp-fields")
 
 ERROR_CODES = (
     "missing-input", "bad-argument", "units-file-missing", "units-file-invalid",
     "duplicate-unit", "units-mismatch", "axis-is-comparison",
-    "record-outside-workspace", "record-missing",
+    "record-outside-workspace", "record-missing", "timing-missing", "timing-invalid",
+    "mixed-devices", "timing-outside-workspace",
 )
 
 #: The verdict's thresholds. Stated in every output so the verdict can be read
@@ -132,6 +137,21 @@ CHECKLIST = (
      "rule": "The verdict is never launch authorization: placement stays with distribute and the launch with submit behind the operator's consent.",
      "why": "a campaign is hours of somebody's quota"},
 )
+
+
+#: The estimate's one formula, its stages and its stated range.
+STAGES = ("poc", "full")
+SCALE_KEYS = ("arms", "folds", "seeds", "epochs")
+ESTIMATE_RANGE = 0.20
+RANGE_NOTE = "±20%, single-probe extrapolation"
+UNMEASURED = "unmeasured"
+TIMING_KEYS = {"schema", "measurements", "scales"}
+MEASUREMENT_REQUIRED = ("measuredAt", "host", "device", "arm", "unit", "secondsPerUnit", "unitsMeasured")
+MEASUREMENT_KEYS = set(MEASUREMENT_REQUIRED) | {"setupSeconds"}
+#: `local`, or `<host slug>:<owner slug>` for a remote host. The slug is never
+#: a fixed list: this CLI does not name the services a team rents.
+HOST_PATTERN = re.compile(r"^(local|[a-z0-9][a-z0-9-]*:[A-Za-z0-9][A-Za-z0-9._-]*)$")
+DEVICE_PATTERN = re.compile(r"^(cpu|mps|cuda:\S.*)$")
 
 
 class Refusal(Exception):
@@ -363,17 +383,15 @@ def cmd_assess(args, root: Path, today: str) -> dict:
     return result
 
 
-def record(root: Path, name: str, result: dict, today: str) -> str:
+def record(root: Path, name: str, result: dict, today: str, prefix: str = "assessment") -> str:
     """Write the assessment inside `name`, which must stay inside `root`.
 
     Real paths are compared, so a symlink anywhere on the way that leads out of
     the workspace is refused, and the record folder itself may not be a link.
     A same-day record never overwrites an earlier one.
     """
-    candidate = Path(name)
-    candidate = candidate if candidate.is_absolute() else root / candidate
-    real = Path(os.path.realpath(candidate))
-    if real != root and root not in real.parents:
+    real, inside = resolved(root, name)
+    if not inside:
         raise Refusal("record-outside-workspace", f"{name} resolves outside the workspace {root}")
     if not real.is_dir():
         raise Refusal("record-missing", f"{name} is not an existing directory inside the workspace")
@@ -384,7 +402,7 @@ def record(root: Path, name: str, result: dict, today: str) -> str:
     payload = dict(result, recordedOn=today)
     suffix = 1
     while True:
-        path = folder / (f"assessment-{today}.json" if suffix == 1 else f"assessment-{today}-{suffix}.json")
+        path = folder / (f"{prefix}-{today}.json" if suffix == 1 else f"{prefix}-{today}-{suffix}.json")
         try:
             with path.open("x", encoding="utf-8") as handle:
                 handle.write(json.dumps(payload, indent=2) + "\n")
@@ -392,6 +410,156 @@ def record(root: Path, name: str, result: dict, today: str) -> str:
         except FileExistsError:
             suffix += 1
     return path.relative_to(root).as_posix()
+
+
+def resolved(root: Path, name: str) -> tuple[Path, bool]:
+    """`name` as a real path, symlinks resolved, and whether it stays inside `root`."""
+    candidate = Path(name)
+    candidate = candidate if candidate.is_absolute() else root / candidate
+    real = Path(os.path.realpath(candidate))
+    return real, real == root or root in real.parents
+
+
+def is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def is_count(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def load_timing(path: Path, name: str) -> dict:
+    """The timing record, schema 1 exactly, or a `timing-invalid` refusal."""
+    if not path.is_file():
+        raise Refusal("timing-missing", f"{name} does not exist; run the timing probe first")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise Refusal("timing-invalid", f"{name} is not JSON: {exc}")
+
+    def bad(message: str):
+        raise Refusal("timing-invalid", f"{name}: {message}")
+
+    if not isinstance(data, dict):
+        bad("the record must be a JSON object")
+    unknown = sorted(set(data) - TIMING_KEYS)
+    if unknown:
+        bad(f"unknown key(s) {', '.join(unknown)}; schema 1 holds schema, measurements and scales")
+    if data.get("schema") != 1 or isinstance(data.get("schema"), bool):
+        bad(f"schema must be 1, got {data.get('schema')!r}")
+    measurements = data.get("measurements")
+    if not isinstance(measurements, list) or not measurements:
+        bad("measurements must be a non-empty list")
+    for index, item in enumerate(measurements):
+        where = f"measurements[{index}]"
+        if not isinstance(item, dict):
+            bad(f"{where} must be an object")
+        missing = [key for key in MEASUREMENT_REQUIRED if key not in item]
+        if missing:
+            bad(f"{where} is missing {', '.join(missing)}")
+        extra = sorted(set(item) - MEASUREMENT_KEYS)
+        if extra:
+            bad(f"{where} has unknown key(s) {', '.join(extra)}")
+        stamp = item["measuredAt"]
+        try:
+            if not isinstance(stamp, str):
+                raise ValueError
+            datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        except ValueError:
+            bad(f"{where}.measuredAt must be an ISO-8601 timestamp, got {stamp!r}")
+        if not isinstance(item["host"], str) or not HOST_PATTERN.match(item["host"]):
+            bad(f"{where}.host must be local or <host>:<owner>, got {item['host']!r}")
+        if not isinstance(item["device"], str) or not DEVICE_PATTERN.match(item["device"]):
+            bad(f"{where}.device must be cpu, mps or cuda:<gpu name>, got {item['device']!r}")
+        if not isinstance(item["arm"], str) or not item["arm"].strip():
+            bad(f"{where}.arm must be a non-empty arm id")
+        if item["unit"] != "epoch":
+            bad(f"{where}.unit must be epoch, got {item['unit']!r}")
+        if not is_number(item["secondsPerUnit"]) or item["secondsPerUnit"] <= 0:
+            bad(f"{where}.secondsPerUnit must be a positive number, got {item['secondsPerUnit']!r}")
+        if not is_count(item["unitsMeasured"]):
+            bad(f"{where}.unitsMeasured must be a positive whole number, got {item['unitsMeasured']!r}")
+        if "setupSeconds" in item and (not is_number(item["setupSeconds"]) or item["setupSeconds"] < 0):
+            bad(f"{where}.setupSeconds must be a non-negative number, got {item['setupSeconds']!r}")
+    scales = data.get("scales")
+    if not isinstance(scales, dict) or sorted(scales) != sorted(STAGES):
+        bad("scales must hold exactly poc and full, copied from the approved protocol and the declared pilot")
+    for stage in STAGES:
+        scale = scales[stage]
+        if not isinstance(scale, dict) or sorted(scale) != sorted(SCALE_KEYS):
+            bad(f"scales.{stage} must hold exactly {', '.join(SCALE_KEYS)}")
+        for key in SCALE_KEYS:
+            if not is_count(scale[key]):
+                bad(f"scales.{stage}.{key} must be a positive whole number, got {scale[key]!r}")
+    return data
+
+
+def host_estimate(measurements: list[dict], scale: dict) -> dict:
+    """The one formula: mean(secondsPerUnit, per arm) x epochs x folds x seeds x
+    arms + setupSeconds x folds x seeds, reported as a +/-20% range."""
+    by_arm: dict[str, list[float]] = {}
+    for item in measurements:
+        by_arm.setdefault(item["arm"], []).append(float(item["secondsPerUnit"]))
+    per_arm = {arm: sum(values) / len(values) for arm, values in sorted(by_arm.items())}
+    per_unit = sum(per_arm.values()) / len(per_arm)
+    setups = [float(item["setupSeconds"]) for item in measurements if "setupSeconds" in item]
+    setup = sum(setups) / len(setups) if setups else 0.0
+    arms, folds, seeds, epochs = (scale[key] for key in SCALE_KEYS)
+    seconds = per_unit * epochs * folds * seeds * arms + setup * folds * seeds
+    formula = (f"mean secondsPerUnit per arm {num(per_unit)} s x {epochs} epochs x {folds} folds x "
+               f"{seeds} seeds x {arms} arms + setupSeconds {num(setup)} s x {folds} folds x "
+               f"{seeds} seeds = {num(seconds)} s; {RANGE_NOTE}")
+    return {"seconds": num(seconds), "low": num(seconds * (1 - ESTIMATE_RANGE)),
+            "high": num(seconds * (1 + ESTIMATE_RANGE)), "formula": formula,
+            "measurements": len(measurements), "device": measurements[0]["device"],
+            "secondsPerUnit": num(per_unit), "perArm": {arm: num(value) for arm, value in per_arm.items()},
+            "setupSeconds": num(setup)}
+
+
+def cmd_estimate(args, root: Path, today: str) -> dict:
+    if args.timing is None:
+        raise Refusal("missing-input", "--timing is required: the timing probe's Results/timing.json")
+    stage = (args.stage or "both").strip().lower()
+    if stage not in (*STAGES, "both"):
+        raise Refusal("bad-argument", f"--stage {args.stage!r}: one of poc, full or both")
+    stages = STAGES if stage == "both" else (stage,)
+    asked = []
+    for raw in args.host or []:
+        for host in (part.strip() for part in raw.split(",")):
+            if not HOST_PATTERN.match(host):
+                raise Refusal("bad-argument", f"--host {host!r}: local or <host>:<owner>")
+            asked.append(host)
+    if args.record is not None:
+        path, inside = resolved(root, args.timing)
+        if not inside:
+            raise Refusal("timing-outside-workspace", f"--timing {args.timing} resolves outside the "
+                                                      f"workspace {root}; --record reads only a timing "
+                                                      "record inside it")
+    else:
+        path = Path(args.timing)
+        path = path if path.is_absolute() else root / path
+    data = load_timing(path, args.timing)
+
+    by_host: dict[str, list[dict]] = {}
+    for item in data["measurements"]:
+        by_host.setdefault(item["host"], []).append(item)
+    for host, items in by_host.items():
+        devices = sorted({item["device"] for item in items})
+        if len(devices) > 1:
+            raise Refusal("mixed-devices", f"host {host} was timed on {', '.join(devices)}: timing is never "
+                                           "pooled across machines; keep one device per host in the record")
+    hosts = ["local", *sorted(host for host in by_host if host != "local")]
+    hosts += [host for host in asked if host not in hosts]
+    estimates = {
+        name: {host: host_estimate(by_host[host], data["scales"][name]) if host in by_host else UNMEASURED
+               for host in hosts}
+        for name in stages}
+    result = {"estimates": estimates, "timing": args.timing, "range": RANGE_NOTE,
+              "unmeasuredMeans": "no measurement on that host; a remote host is never estimated from local timings",
+              "launchAuthorization": False}
+    if args.record is not None:
+        result["recorded"] = record(root, args.record, result, today, prefix="estimate")
+    return result
 
 
 def team_policy(args, owners: int) -> tuple[list[str], list[str] | None, list[dict]]:
@@ -444,6 +612,13 @@ def build_parser() -> argparse.ArgumentParser:
     assess.add_argument("--stamps-identical", action="store_true",
                         help="the shards of a mixed-service campaign declare identical environment stamps")
     assess.set_defaults(func=cmd_assess)
+    estimate = verbs.add_parser("estimate", help="processing-time range per stage and host from a timing probe")
+    estimate.add_argument("--timing", default=None)
+    estimate.add_argument("--stage", default=None)
+    estimate.add_argument("--host", action="append", default=None)
+    estimate.add_argument("--record", default=None)
+    estimate.add_argument("--json", action="store_true", help="JSON output (the only output; accepted for symmetry)")
+    estimate.set_defaults(func=cmd_estimate)
     verbs.add_parser("checklist", help="the reproducibility checklist").set_defaults(func=cmd_checklist)
     verbs.add_parser("stamp-fields", help="the fields to declare identicalAcrossShards").set_defaults(
         func=cmd_stamp_fields)

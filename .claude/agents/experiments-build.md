@@ -42,6 +42,17 @@ blocker is a detour and never a destination.
 Do not decide anything the operator has not decided. Do not run the flow,
 submit anything, or authorize a launch — that is another stretch.
 
+## Estimate when you instrument
+
+When you instrument the flow, make sure the timing probe exists — one epoch of
+one fold per arm, on the target's own interpreter, device recorded — and that
+it writes `Results/timing.json` in the product folder, declared among the
+step's `produces` roots, with `scales` copied from the approved protocol and
+the declared pilot. Run it, then load
+`.claude/skills/remote-parallelism/SKILL.md`, run its `estimate` over that
+record and report the range per stage and host. The estimate is never
+authorization.
+
 ## Whether to split a campaign
 
 Before generating jobs for more than one unit, load

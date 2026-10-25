@@ -157,6 +157,10 @@ ACTIONS: dict[str, dict[str, Any]] = {
                 "Convierte el protocolo experimental vigente en Python y corre sus mediciones declaradas.",
                 "Indica el repositorio objetivo; la verificación compara contra el protocolo y la propuesta.",
             ], "Ej.: implementa E1 y E2 y reporta las métricas.", optional=True),
+            _redirect("Estimar tiempo y elegir dónde correr", "experiments",
+                      "Sonda de tiempo corta (una época de un fold por brazo) en Results/timing.json; la "
+                      "pestaña Experimentos estima la PoC y la corrida completa (±20%), muestra el entorno "
+                      "local y las opciones de corrida local o remota."),
             _prompt("/remote-execution", "Ejecución remota (Kaggle / workers)", [
                 "Envía entrypoints a un worker remoto y lee lo que regresó; el ledger es de solo anexar.",
                 "Si las cuentas no autentican, usa primero /kaggle-accounts.",

@@ -20,6 +20,12 @@
 * the remote-services table (``remote_services``): one offline, bounded row
   per service the remote path depends on, with its state and the one action
   that activates it, plus the team table (one account per person and service);
+* the local environment (``local_env``): the workspace micromamba env and
+  each target's ``.venv`` with its declared libraries, installed or missing,
+  and the device torch sees;
+* the run options (``run_options``): per stage (proof of concept, full) and
+  host family, availability and an estimate from each product's
+  ``Results/timing.json`` (±20%), plus one recommendation per stage;
 * the Colab box state (``terminal.colab_mcp_status``): which MCP files register
   the official Colab MCP, the box's constant commands and the environment.
 
@@ -45,6 +51,8 @@ from .atlas import _locate
 from .state_extractor import credentials_store, inbox_directory
 from .terminal import colab_mcp_status, remote_mcp_status
 from .remote_services import remote_services
+from .local_env import local_environment
+from .run_options import parse_timing, run_options
 from .decisions import LEDGER_MAX_BYTES, MAX_LEDGER_LINES, _discover_ledgers, _read_bytes
 
 MAX_PRODUCTS = 50
@@ -635,6 +643,14 @@ def _product(root: Path, repo: str, folder: Path, ledger: Path | None,
                 table = _read_table(path, reader)
                 if table:
                     tables.append(table)
+    timing = None
+    timing_path = results / "timing.json"
+    if timing_path.is_file() or timing_path.is_symlink():
+        timing = parse_timing(reader.json(timing_path))
+        if timing is not None:
+            timing["file"] = _rel(root, timing_path)
+        else:
+            reader.warn(f"{reader.label(timing_path)}: not a schema-1 timing record")
     for message in warnings:
         if len(global_warnings) < MAX_WARNINGS:
             global_warnings.append(message)
@@ -649,6 +665,7 @@ def _product(root: Path, repo: str, folder: Path, ledger: Path | None,
         "significance": significance[:MAX_SIGNIFICANCE_ROWS],
         "pinned": _pinned(root, folder, reader, panel),
         "runs": _fold_runs(root, ledger, reader),
+        "timing": timing,
         "warnings": warnings,
     }
 
@@ -718,8 +735,18 @@ def get_experiments_view(root: Path | str) -> dict[str, Any]:
     by_folder = {path.parent.parent: path for path in ledgers}
     products = [_product(root, repo, folder, by_folder.get(folder), warnings)
                 for repo, folder in _product_dirs(root, reader)]
-    return {"protocol": protocol, "products": products, "datasets": _datasets(root, reader),
+    view = {"protocol": protocol, "products": products, "datasets": _datasets(root, reader),
             "remote_accounts": _remote_accounts(root),
             "remote_mcp": remote_mcp_status(root), "remote_colab": colab_mcp_status(root),
             "remote_services": remote_services(root),
             "warnings": warnings}
+    try:
+        view["local_environment"] = local_environment(root)
+    except Exception:  # noqa: BLE001 - a failing probe is an empty table, never an error
+        view["local_environment"] = {"workspace": None, "targets": [], "note": "No se pudo sondear."}
+    try:
+        view["run_options"] = run_options(root, view)
+    except Exception:  # noqa: BLE001
+        view["run_options"] = {"rows": [], "recommendations": {}, "note": "", "sources": [],
+                               "empty": True, "empty_hint": ""}
+    return view

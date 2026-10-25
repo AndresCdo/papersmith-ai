@@ -403,6 +403,193 @@ class MainTests(unittest.TestCase):
         self.assertEqual(json.loads(proc.stderr)["error"], "missing-input")
 
 
+# ------------------------------------------------------------- estimate
+def timing_record(**overrides) -> dict:
+    """A timing probe's record: two arms measured locally, one on a remote host."""
+    record = {
+        "schema": 1,
+        "measurements": [
+            {"measuredAt": "2026-10-25T10:00:00Z", "host": "local", "device": "cpu",
+             "arm": "a", "unit": "epoch", "secondsPerUnit": 10.0, "unitsMeasured": 1,
+             "setupSeconds": 30.0},
+            {"measuredAt": "2026-10-25T10:05:00+00:00", "host": "local", "device": "cpu",
+             "arm": "a", "unit": "epoch", "secondsPerUnit": 14.0, "unitsMeasured": 1},
+            {"measuredAt": "2026-10-25T10:10:00", "host": "local", "device": "cpu",
+             "arm": "b", "unit": "epoch", "secondsPerUnit": 20.0, "unitsMeasured": 1},
+            {"measuredAt": "2026-10-25T11:00:00Z", "host": "svc:alice", "device": "cuda:A100",
+             "arm": "a", "unit": "epoch", "secondsPerUnit": 2.0, "unitsMeasured": 3},
+        ],
+        "scales": {"poc": {"arms": 2, "folds": 2, "seeds": 1, "epochs": 5},
+                   "full": {"arms": 2, "folds": 5, "seeds": 3, "epochs": 50}},
+    }
+    record.update(overrides)
+    return record
+
+
+class EstimateTests(Base):
+    def write(self, record, name: str = "timing.json") -> Path:
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record) if not isinstance(record, str) else record, encoding="utf-8")
+        return path
+
+    def estimate(self, *extra, record=None) -> Run:
+        path = self.write(timing_record() if record is None else record)
+        return Run(["--root", str(self.root), "estimate", "--timing", str(path), *extra])
+
+    def refused(self, run: Run, code: str) -> None:
+        self.assertEqual(run.code, 2, run.out)
+        self.assertEqual(run.error["error"], code, run.err)
+        self.assertIn("objective", run.error)
+
+    def test_the_local_estimate_follows_the_one_formula(self) -> None:
+        run = self.estimate()
+        self.assertEqual(run.code, 0, run.err)
+        poc = run.json["estimates"]["poc"]["local"]
+        # mean of per-arm means: a -> (10 + 14) / 2 = 12, b -> 20, so 16 s/epoch;
+        # 16 x 5 epochs x 2 folds x 1 seed x 2 arms = 320, plus setup 30 x 2 folds x 1 seed = 60.
+        self.assertEqual(poc["seconds"], 380)
+        self.assertEqual(poc["low"], 304)
+        self.assertEqual(poc["high"], 456)
+        self.assertEqual(poc["measurements"], 3)
+        self.assertEqual(poc["device"], "cpu")
+        self.assertEqual(poc["perArm"], {"a": 12, "b": 20})
+        self.assertIn("±20%, single-probe extrapolation", poc["formula"])
+        full = run.json["estimates"]["full"]["local"]
+        # 16 x 50 x 5 x 3 x 2 = 24000, plus 30 x 5 x 3 = 450.
+        self.assertEqual((full["seconds"], full["low"], full["high"]), (24450, 19560, 29340))
+        self.assertIs(run.json["launchAuthorization"], False)
+
+    def test_the_mean_is_taken_per_arm_not_over_all_measurements(self) -> None:
+        run = self.estimate("--stage", "poc")
+        # An overall mean would read (10 + 14 + 20) / 3 = 14.67 s/epoch.
+        self.assertEqual(run.json["estimates"]["poc"]["local"]["secondsPerUnit"], 16)
+
+    def test_setup_is_zero_when_no_measurement_records_it(self) -> None:
+        run = self.estimate("--stage", "poc")
+        remote = run.json["estimates"]["poc"]["svc:alice"]
+        # 2 s/epoch x 5 x 2 x 1 x 2 = 40, no setup recorded.
+        self.assertEqual((remote["seconds"], remote["low"], remote["high"]), (40, 32, 48))
+        self.assertEqual(remote["setupSeconds"], 0)
+        self.assertEqual(remote["device"], "cuda:A100")
+
+    def test_a_remote_host_without_measurements_reads_unmeasured(self) -> None:
+        run = self.estimate("--host", "other:bob")
+        self.assertEqual(run.code, 0, run.err)
+        for stage in ("poc", "full"):
+            self.assertEqual(run.json["estimates"][stage]["other:bob"], "unmeasured")
+            # never estimated from local timings scaled by a guessed factor
+            self.assertNotEqual(run.json["estimates"][stage]["local"], "unmeasured")
+
+    def test_local_reads_unmeasured_when_only_a_remote_host_was_timed(self) -> None:
+        record = timing_record()
+        record["measurements"] = [m for m in record["measurements"] if m["host"] != "local"]
+        run = self.estimate(record=record)
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["estimates"]["full"]["local"], "unmeasured")
+        self.assertIsInstance(run.json["estimates"]["full"]["svc:alice"], dict)
+
+    def test_one_stage_reports_only_that_stage(self) -> None:
+        run = self.estimate("--stage", "full")
+        self.assertEqual(sorted(run.json["estimates"]), ["full"])
+
+    def test_the_json_flag_is_accepted(self) -> None:
+        self.assertEqual(self.estimate("--json").code, 0)
+
+    def test_missing_timing_is_refused(self) -> None:
+        self.refused(Run(["--root", str(self.root), "estimate"]), "missing-input")
+
+    def test_a_timing_file_that_does_not_exist_is_refused(self) -> None:
+        self.refused(Run(["--root", str(self.root), "estimate", "--timing",
+                          str(self.root / "nope.json")]), "timing-missing")
+
+    def test_a_bad_stage_is_refused(self) -> None:
+        self.refused(self.estimate("--stage", "pilot"), "bad-argument")
+
+    def test_a_bad_host_slug_is_refused(self) -> None:
+        self.refused(self.estimate("--host", "Not A Host"), "bad-argument")
+
+    def test_malformed_records_are_refused(self) -> None:
+        def measurement(**change):
+            record = timing_record()
+            record["measurements"][0].update(change)
+            return record
+
+        def without(key):
+            record = timing_record()
+            del record["measurements"][0][key]
+            return record
+
+        cases = {
+            "not json": "{nope",
+            "not an object": [],
+            "schema 2": timing_record(schema=2),
+            "schema as text": timing_record(schema="1"),
+            "no measurements": timing_record(measurements=[]),
+            "unknown key": timing_record(extra=True),
+            "bad unit": measurement(unit="step"),
+            "zero seconds": measurement(secondsPerUnit=0),
+            "negative seconds": measurement(secondsPerUnit=-1.0),
+            "boolean seconds": measurement(secondsPerUnit=True),
+            "fractional units": measurement(unitsMeasured=1.5),
+            "negative setup": measurement(setupSeconds=-5),
+            "bad host": measurement(host="Some Host"),
+            "bad device": measurement(device="gpu"),
+            "empty cuda name": measurement(device="cuda:"),
+            "bad date": measurement(measuredAt="yesterday"),
+            "empty arm": measurement(arm=""),
+            "missing arm": without("arm"),
+            "unknown measurement key": measurement(note="x"),
+            "scales without full": timing_record(scales={"poc": {"arms": 1, "folds": 1, "seeds": 1, "epochs": 1}}),
+            "zero epochs": timing_record(scales={"poc": {"arms": 1, "folds": 1, "seeds": 1, "epochs": 0},
+                                                 "full": {"arms": 1, "folds": 1, "seeds": 1, "epochs": 1}}),
+            "missing folds": timing_record(scales={"poc": {"arms": 1, "seeds": 1, "epochs": 1},
+                                                   "full": {"arms": 1, "folds": 1, "seeds": 1, "epochs": 1}}),
+        }
+        for label, record in cases.items():
+            with self.subTest(label):
+                self.refused(self.estimate(record=record), "timing-invalid")
+
+    def test_one_host_on_two_devices_is_never_pooled(self) -> None:
+        record = timing_record()
+        record["measurements"][2]["device"] = "mps"
+        self.refused(self.estimate(record=record), "mixed-devices")
+
+    def test_record_writes_the_estimate_inside_the_workspace(self) -> None:
+        tree = self.root / "Product"
+        tree.mkdir()
+        path = self.write(timing_record(), "Product/Results/timing.json")
+        run = Run(["--root", str(self.root), "estimate", "--timing", str(path), "--record", "Product"])
+        self.assertEqual(run.code, 0, run.err)
+        self.assertEqual(run.json["recorded"], f"Product/.remote-parallelism/estimate-{TODAY}.json")
+        saved = json.loads((self.root / run.json["recorded"]).read_text(encoding="utf-8"))
+        self.assertEqual(saved["estimates"], run.json["estimates"])
+        again = Run(["--root", str(self.root), "estimate", "--timing", str(path), "--record", "Product"])
+        self.assertEqual(again.json["recorded"], f"Product/.remote-parallelism/estimate-{TODAY}-2.json")
+
+    def test_record_refuses_a_timing_file_outside_the_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as other:
+            outside = Path(other) / "timing.json"
+            outside.write_text(json.dumps(timing_record()), encoding="utf-8")
+            (self.root / "Product").mkdir()
+            run = Run(["--root", str(self.root), "estimate", "--timing", str(outside),
+                       "--record", "Product"])
+            self.refused(run, "timing-outside-workspace")
+            link = self.root / "link.json"
+            os.symlink(outside, link)
+            run = Run(["--root", str(self.root), "estimate", "--timing", str(link),
+                       "--record", "Product"])
+            self.refused(run, "timing-outside-workspace")
+            self.assertFalse((self.root / "Product" / ".remote-parallelism").exists())
+
+    def test_without_record_a_timing_file_anywhere_is_read(self) -> None:
+        with tempfile.TemporaryDirectory() as other:
+            outside = Path(other) / "timing.json"
+            outside.write_text(json.dumps(timing_record()), encoding="utf-8")
+            run = Run(["--root", str(self.root), "estimate", "--timing", str(outside)])
+            self.assertEqual(run.code, 0, run.err)
+
+
 # ------------------------------------------------------------- doctrine
 def _table_rows(doc: str, heading: str) -> list[list[str]]:
     """The cells of the first Markdown table after `heading`."""
@@ -464,6 +651,15 @@ class DoctrineTests(unittest.TestCase):
                          "one account per person per service", "distinct owners",
                          "https://research.google.com/colaboratory/faq.html",
                          "running distributed computing workers", "`--owners`"):
+            self.assertIn(fragment, self.flat, fragment)
+
+    def test_the_doctrine_says_how_to_estimate_before_scaling(self) -> None:
+        self.assertIn("## Estimate before you scale", self.doc)
+        for fragment in ("Results/timing.json", "one epoch of one fold per arm",
+                         "own interpreter", "`scales`", "approved protocol", "declared pilot",
+                         "±20%, single-probe extrapolation", "`unmeasured`",
+                         "measured rehearsal on that host", "before the pilot",
+                         "before the full run", "never launch authorization"):
             self.assertIn(fragment, self.flat, fragment)
 
     def test_the_skill_delegates_to_no_agent(self) -> None:

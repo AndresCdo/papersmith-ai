@@ -82,6 +82,17 @@ class PhaseActionCatalogueTests(unittest.TestCase):
         remote = next(a for a in entry["actions"] if a.get("slash") == "/remote-execution")
         self.assertIn("/kaggle-accounts", " ".join(remote["guide"]))
 
+    def test_the_experiments_phase_offers_the_estimate_step_before_remote_runs(self) -> None:
+        actions = phase_actions.ACTIONS["poc_experiments"]["actions"]
+        labels = [a["label"] for a in actions]
+        estimate = actions[labels.index("Estimar tiempo y elegir dónde correr")]
+        self.assertEqual((estimate["kind"], estimate["tab"]), ("redirect", "experiments"))
+        self.assertIn("Results/timing.json", estimate["desc"])
+        remote = next(i for i, a in enumerate(actions) if a.get("slash") == "/remote-execution")
+        build = next(i for i, a in enumerate(actions) if a.get("slash") == "/experimental-implementation")
+        self.assertLess(build, labels.index("Estimar tiempo y elegir dónde correr"))
+        self.assertLess(labels.index("Estimar tiempo y elegir dónde correr"), remote)
+
     def test_the_gates_live_in_the_pipeline_tab_and_telemetry_comes_last(self) -> None:
         tabs = re.findall(r"onclick=\"navigateTab\('([a-z]+)'\)\">", PAGE)
         self.assertNotIn("gates", tabs)
@@ -170,6 +181,12 @@ class ServerPhaseTests(unittest.TestCase):
         self.assertLess(data, build)
         self.assertLess(replica, build)
         self.assertIn("paper-replicator", fase5["subfases"][replica]["detail"])
+        estimate = names.index("Estimar tiempo y elegir dónde correr")
+        remote = names.index("Ejecución remota y cuentas")
+        self.assertLess(build, estimate)
+        self.assertLess(estimate, remote)
+        self.assertIn("Results/timing.json", fase5["subfases"][estimate]["detail"])
+        self.assertEqual(fase5["subfases"][remote]["id"], "5.10")
         self.assertIn("/datasets", fase5["subfases"][data]["detail"])
 
     def test_each_phase_runs_its_own_check(self) -> None:

@@ -378,6 +378,55 @@ def _team_rows(team: dict[str, Any]) -> list[dict[str, Any]]:
     return [accounts, eligible, whole]
 
 
+# --------------------------------------------------------------------------
+# run hosts (read by run_options, which names no service itself)
+# --------------------------------------------------------------------------
+#: Host families a run may be placed on. Each id is the prefix of a timing
+#: record's ``host`` (``local``, ``kaggle:<owner>``, ``colab:<owner>``).
+RUN_HOSTS = ("local", "kaggle", "colab")
+HOST_LABELS = {"local": "Local", "kaggle": "Kaggle", "colab": "Colab"}
+
+
+def remote_host_readiness(services: Any, stage: str) -> dict[str, dict[str, Any]]:
+    """Whether each remote host family can take ``stage`` (``poc`` or ``full``).
+
+    Read from the rows ``remote_services`` already built, never re-probed.
+    Kaggle needs an active token, the official CLI and at least one stored
+    worker account. Colab needs the official CLI and at least one team owner
+    signed in (their config directory exists); a full run also needs one of
+    them on a paid tier. Never raises.
+    """
+    services = services if isinstance(services, dict) else {}
+    rows = {row.get("id"): row for row in services.get("rows") or [] if isinstance(row, dict)}
+    team = services.get("team") if isinstance(services.get("team"), dict) else {}
+    members = [m for m in team.get("members") or [] if isinstance(m, dict)]
+
+    def active(row_id: str) -> bool:
+        return (rows.get(row_id) or {}).get("state") == "active"
+
+    accounts = (rows.get("accounts") or {}).get("count")
+    accounts = accounts if isinstance(accounts, int) else 0
+    gaps = [text for ok, text in ((active("token"), "sin token activo"),
+                                  (active("cli"), "CLI oficial no instalada"),
+                                  (accounts >= 1, "sin cuentas worker validadas")) if not ok]
+    kaggle = {"available": not gaps,
+              "reason": (f"Token activo, CLI oficial y {accounts} cuenta(s) worker." if not gaps
+                         else "Kaggle: " + "; ".join(gaps) + ".")}
+    signed = [m for m in members if m.get("colab_tier") and m.get("colab_config_present")]
+    paid = [m for m in signed if m.get("colab_tier") in COLAB_PAID_TIERS]
+    gaps = [] if active("colab_cli") else ["CLI oficial de Colab no instalada"]
+    if not signed:
+        gaps.append("ningún propietario del equipo con sesión iniciada")
+    elif stage == "full" and not paid:
+        gaps.append("ningún propietario con sesión en un nivel de pago (pro, payg o enterprise)")
+    owners = len(paid) if stage == "full" else len(signed)
+    colab = {"available": not gaps,
+             "reason": (f"CLI oficial y {owners} propietario(s) con sesión"
+                        f"{' en nivel de pago' if stage == 'full' else ''}." if not gaps
+                        else "Colab: " + "; ".join(gaps) + ".")}
+    return {"kaggle": kaggle, "colab": colab}
+
+
 def _guarded(row_id: str, service: str, probe: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     try:
         return probe()

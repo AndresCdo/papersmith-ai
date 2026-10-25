@@ -11,10 +11,27 @@ reader expects a kept one.
 Versions follow [semantic versioning](https://semver.org): while the first
 number is `0`, breaking changes can still arrive without a major bump.
 
-## Unreleased
+## 0.22.0
 
 ### Added
 
+- **Processing-time estimates for the proof of concept and the full run.** A
+  short timing probe (one epoch of one fold per arm, on the target's own
+  interpreter) writes `Results/timing.json` with the device and the scales
+  copied from the approved protocol; `remote-parallelism estimate` turns it
+  into a range per stage and per host (mean of per-arm means × epochs × folds
+  × seeds × arms, plus measured setup, ±20%), and a remote host is estimated
+  only from its own measurements, never from local timings. The
+  implementation skills and the walk and build agents report the estimate
+  before asking for a pilot or a launch.
+- **Local environment and run options in the Experimentos tab.** "Entorno
+  local" shows the workspace micromamba environment, each implementation
+  venv with its Python version, the libraries it declares and which are
+  installed or missing, and the device torch sees (one isolated probe per
+  interpreter, cached). "Opciones de corrida" lists, for the proof of concept
+  and the full experiments, local, Kaggle and Colab with availability, the
+  estimate or "sin medir", the reason and a recommendation. Fase 5 gains
+  "Estimar tiempo y elegir dónde correr".
 - **Google Colab beside Kaggle, under a team model.** Several accounts per
   service, one per person: `smith team add|list|remove` keeps
   `.papersmith/team.json` (owners, their Kaggle username and Colab tier; no
