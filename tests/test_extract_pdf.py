@@ -11,6 +11,8 @@ Run with the skill's venv:
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -600,6 +602,40 @@ class EngineSelectionTests(_BaseFixture):
         self.assertEqual(calls, [("fast", False)])
         self.assertIn("USD 5M", err.getvalue())
         self.assertIsInstance(routed, EXTRACTOR.RoutedEngine)
+
+
+class IntelMacDeviceTests(unittest.TestCase):
+    """surya, the marker engine's OCR, picks MPS whenever torch reports it,
+    and an Intel Mac with an AMD GPU does. Its OCR backend then refuses MPS
+    without unified memory, which no Intel Mac has."""
+
+    def device(self, system: str, machine: str, **environ: str) -> dict:
+        EXTRACTOR._default_torch_device(environ, system, machine)
+        return environ
+
+    def test_an_intel_mac_runs_surya_on_the_cpu(self) -> None:
+        self.assertEqual(self.device("Darwin", "x86_64"), {"TORCH_DEVICE": "cpu"})
+
+    def test_an_explicit_device_is_kept(self) -> None:
+        self.assertEqual(self.device("Darwin", "x86_64", TORCH_DEVICE="mps"), {"TORCH_DEVICE": "mps"})
+
+    def test_other_machines_keep_surya_s_own_choice(self) -> None:
+        for system, machine in (("Darwin", "arm64"), ("Linux", "x86_64"), ("Windows", "AMD64")):
+            with self.subTest(system=system, machine=machine):
+                self.assertEqual(self.device(system, machine), {})
+
+    def test_importing_the_script_applies_it(self) -> None:
+        """The wiring, not only the rule: the script imported on an Intel Mac,
+        with `TORCH_DEVICE` unset, leaves it at `cpu` for surya to read."""
+        probe = ("import os, platform, runpy, sys\n"
+                 "platform.system = lambda: 'Darwin'\n"
+                 "platform.machine = lambda: 'x86_64'\n"
+                 "runpy.run_path(sys.argv[1], run_name='extract_pdf_probe')\n"
+                 "print(os.environ.get('TORCH_DEVICE'))\n")
+        env = {key: value for key, value in os.environ.items() if key != "TORCH_DEVICE"}
+        done = subprocess.run([sys.executable, "-c", probe, str(SCRIPT)], env=env,
+                              capture_output=True, text=True, timeout=60, check=True)
+        self.assertEqual(done.stdout.strip(), "cpu")
 
 
 if __name__ == "__main__":

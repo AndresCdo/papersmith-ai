@@ -61,6 +61,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shutil
 import sys
@@ -71,6 +72,21 @@ from pathlib import Path
 # Apple Silicon (MPS) needs CPU fallback for the handful of ops surya/torch
 # do not yet implement on the Metal backend.
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+
+def _default_torch_device(environ, system: str, machine: str) -> None:
+    """On an Intel Mac, run surya (the marker engine's OCR) on the CPU.
+
+    An Intel Mac with an AMD GPU reports MPS as available, so surya picks it
+    when ``TORCH_DEVICE`` is unset, and its OCR backend then fails: that
+    backend runs MPS only on unified memory, which no Intel Mac has. An
+    explicit ``TORCH_DEVICE`` is kept.
+    """
+    if system == "Darwin" and machine == "x86_64":
+        environ.setdefault("TORCH_DEVICE", "cpu")
+
+
+_default_torch_device(os.environ, platform.system(), platform.machine())
 
 
 # skills/paper-ingestion/scripts/extract_pdf.py -> repo root is parents[3]

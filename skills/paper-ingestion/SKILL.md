@@ -155,9 +155,11 @@ also removes the bootstrapped micromamba).
 Requirements: Python 3.10+ to run the provisioner itself; micromamba is
 downloaded automatically if missing.
 
-**No `.env` / no keys.** Ingestion is fully keyless — the only runtime env var,
-`PYTORCH_ENABLE_MPS_FALLBACK=1` (Apple Silicon), is set by the script itself. To
-point at a llama.cpp outside the environment, export `LLAMA_CPP_BINARY`.
+**No `.env` / no keys.** Ingestion is fully keyless. The script sets its own
+runtime env vars: `PYTORCH_ENABLE_MPS_FALLBACK=1` (Apple Silicon) and, on an
+Intel Mac, `TORCH_DEVICE=cpu`, because the marker engine's OCR backend cannot
+run on MPS without unified memory; an exported `TORCH_DEVICE` wins. To point at
+a llama.cpp outside the environment, export `LLAMA_CPP_BINARY`.
 
 ## How to execute
 
