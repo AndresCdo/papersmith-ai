@@ -301,6 +301,28 @@ def _candidate_count(root: Path) -> int:
 
 AUDIT_TIMEOUT_SECONDS = 120
 _AUDIT_LOCK = threading.Lock()
+#: Each TeX run of a dashboard compile (pdflatex, bibtex) gets this long.
+COMPILE_RUN_TIMEOUT_SECONDS = 35
+#: One paper job at a time: a compile and a manuscript build both write paper/.
+_PAPER_LOCK = threading.Lock()
+PAPER_BUSY = "Ya hay una compilación o transposición del paper en curso: espera su resultado."
+
+
+async def _paper_job(job: Callable[[], Any]) -> Any:
+    """Run a blocking paper job off the event loop, one at a time.
+
+    On the loop, its subprocesses would stall every other request and event
+    stream until they finished. ``None`` means another paper job is running.
+    """
+    def locked() -> Any:
+        if not _PAPER_LOCK.acquire(blocking=False):
+            return None
+        try:
+            return job()
+        finally:
+            _PAPER_LOCK.release()
+
+    return await asyncio.to_thread(locked)
 
 
 def _audit_verdict(root: Path) -> bool | None:
@@ -1436,14 +1458,22 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
                 "outputs": []
             })
         if stage == "paper":
-            try:
+            def compile_paper() -> subprocess.CompletedProcess:
                 env = os.environ.copy()
                 env["PATH"] = f"/Library/TeX/texbin:/opt/homebrew/bin:{env.get('PATH', '')}"
                 p_dir = str(root_path / "paper")
-                res = subprocess.run(["pdflatex", "-interaction=nonstopmode", "main.tex"], cwd=p_dir, capture_output=True, text=True, env=env, timeout=35)
-                subprocess.run(["bibtex", "main"], cwd=p_dir, capture_output=True, env=env)
-                subprocess.run(["pdflatex", "-interaction=nonstopmode", "main.tex"], cwd=p_dir, capture_output=True, env=env)
-                subprocess.run(["pdflatex", "-interaction=nonstopmode", "main.tex"], cwd=p_dir, capture_output=True, env=env)
+                res = subprocess.run(["pdflatex", "-interaction=nonstopmode", "main.tex"], cwd=p_dir, capture_output=True, text=True, env=env, timeout=COMPILE_RUN_TIMEOUT_SECONDS)
+                for argv in (["bibtex", "main"], ["pdflatex", "-interaction=nonstopmode", "main.tex"],
+                             ["pdflatex", "-interaction=nonstopmode", "main.tex"]):
+                    subprocess.run(argv, cwd=p_dir, capture_output=True, env=env,
+                                   timeout=COMPILE_RUN_TIMEOUT_SECONDS)
+                return res
+
+            try:
+                res = await _paper_job(compile_paper)
+                if res is None:
+                    return JSONResponse({"ok": True, "phase_id": phase_id, "stage": stage,
+                                         "message": PAPER_BUSY, "outputs": []})
                 return JSONResponse({
                     "ok": True,
                     "phase_id": phase_id, "stage": stage,
@@ -1460,7 +1490,12 @@ def create_app(root: Path | str, *, debounce_ms: int = 300,
             try:
                 b_script = root_path / "scripts" / "build_manuscript.py"
                 if b_script.is_file():
-                    res = subprocess.run([sys.executable, str(b_script)], cwd=str(root_path), capture_output=True, text=True, timeout=20)
+                    res = await _paper_job(lambda: subprocess.run(
+                        [sys.executable, str(b_script)], cwd=str(root_path),
+                        capture_output=True, text=True, timeout=20))
+                    if res is None:
+                        return JSONResponse({"ok": True, "phase_id": phase_id, "stage": stage,
+                                             "message": PAPER_BUSY, "outputs": []})
                     msg = (f"Transposición ejecutada: {_block_count(root_path)} bloques en paper/main.tex "
                            f"(build_manuscript.py terminó con código {res.returncode}).")
                 else:

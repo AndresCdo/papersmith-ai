@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -184,6 +185,82 @@ class PhaseRunCompileTests(unittest.TestCase):
         self.assertTrue(calls, "the compiler was never invoked")
         self.assertEqual(calls[0][0][0], "pdflatex")
         self.assertIn("PATH", calls[0][1]["env"])
+
+
+#: How long the fake compiler blocks per run, and the longest the event loop may
+#: then go without a turn. On the loop, one run alone stalls it BLOCK_SECONDS.
+BLOCK_SECONDS = 0.4
+STALL_LIMIT = 0.2
+
+
+class PhaseRunOffLoopTests(unittest.TestCase):
+    """`/api/phase/run` runs a stage's subprocesses off the event loop, each one bounded.
+
+    Regression: the compile ran pdflatex, bibtex and pdflatex twice on the event
+    loop, three of them with no timeout, so every other request and the event
+    streams stalled until TeX finished, or for good when a run hung.
+    """
+
+    def setUp(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name).resolve()
+        (root / "paper").mkdir()
+        (root / "paper" / "main.tex").write_text("\\documentclass{article}\n", encoding="utf-8")
+        (root / "scripts").mkdir()
+        (root / "scripts" / "build_manuscript.py").write_text("", encoding="utf-8")
+        self.endpoint = next(r.endpoint for r in server.create_app(root).routes
+                             if getattr(r, "path", None) == "/api/phase/run")
+        self.timeouts: list = []
+
+    def fake_run(self, argv, **kwargs):
+        # Blocks like a real compiler would.
+        self.timeouts.append(kwargs.get("timeout"))
+        time.sleep(BLOCK_SECONDS)
+        return SimpleNamespace(stdout="", returncode=0)
+
+    def run_stage(self, phase_id: str) -> tuple[dict, float]:
+        """The stage's answer, and the longest the event loop went without a turn."""
+        async def scenario():
+            loop = asyncio.get_running_loop()
+            ticks, done = [loop.time()], asyncio.Event()
+
+            async def probe() -> None:
+                while not done.is_set():
+                    await asyncio.sleep(0.01)
+                    ticks.append(loop.time())
+
+            task = asyncio.create_task(probe())
+            try:
+                return await self.endpoint(_JsonRequest({"phase_id": phase_id})), ticks
+            finally:
+                done.set()
+                await task
+                ticks.append(loop.time())  # a loop the endpoint never left gives one long gap
+
+        with mock.patch.object(server.subprocess, "run", side_effect=self.fake_run):
+            response, ticks = asyncio.run(scenario())
+        stall = max(later - earlier for earlier, later in zip(ticks, ticks[1:]))
+        return json.loads(bytes(response.body).decode("utf-8")), stall
+
+    def test_a_compile_leaves_the_event_loop_free_and_bounds_every_run(self) -> None:
+        body, stall = self.run_stage("paper")
+        self.assertTrue(body.get("ok"), body)
+        self.assertLess(stall, STALL_LIMIT)
+        self.assertEqual(self.timeouts, [server.COMPILE_RUN_TIMEOUT_SECONDS] * 4)
+
+    def test_a_manuscript_build_leaves_the_event_loop_free(self) -> None:
+        body, stall = self.run_stage("writing")
+        self.assertTrue(body.get("ok"), body)
+        self.assertLess(stall, STALL_LIMIT)
+        self.assertEqual(self.timeouts, [20])
+
+    def test_a_second_paper_job_is_turned_away_while_one_runs(self) -> None:
+        # Off the loop, two compiles could otherwise write paper/ at once.
+        with server._PAPER_LOCK:
+            body, _ = self.run_stage("paper")
+        self.assertEqual(body.get("message"), server.PAPER_BUSY)
+        self.assertEqual(self.timeouts, [])
 
 
 if __name__ == "__main__":
